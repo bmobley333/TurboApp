@@ -90,7 +90,7 @@ const gUI = {
 
 // fLogStatus //////////////////////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Logs status messages with timing info to the browser's Developer Console.
-const fLogStatus = (msg) => {
+function fLogStatus(msg) {
     const now = performance.now();
     const delta = ((now - gUI.lastLogTime) / 1000).toFixed(2); // Updated reference
     const total = ((now - gUI.startTime) / 1000).toFixed(2);   // Updated reference
@@ -132,7 +132,7 @@ const resolveCol = v => {
 // fGetContrastColor //////////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Determines if black ('#000000') or white ('#ffffff') text has better contrast against a given background hex color.
 // From current scripts.html
-const fGetContrastColor = (hexColor) => {
+function fGetContrastColor(hexColor) {
     const defaultColor = '#000000'; // Default to black text
     if (!hexColor || typeof hexColor !== 'string') return defaultColor;
 
@@ -172,7 +172,7 @@ const fGetContrastColor = (hexColor) => {
 // fColToA1 //////////////////////////////////////////////////////////////////////////////////////////////////
 // Convert numeric column index (0-based) to Excel-style A1 notation (e.g., 0 -> 'A', 25 -> 'Z', 26 -> 'AA')
 // From current scripts.html
-const fColToA1 = (col) => {
+function fColToA1(col) {
     let label = '';
     let c = col; // Use local variable
     while (c >= 0) {
@@ -188,7 +188,7 @@ const fColToA1 = (col) => {
 // getBorderStyleCSS //////////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Helper to generate CSS border string from border side data {style: 'STYLE', color?: '#hex'}
 // Extracted from current scripts.html fSetCellBorders helper
-const getBorderStyleCSS = (borderSideData) => {
+function getBorderStyleCSS(borderSideData) {
     if (!borderSideData || !borderSideData.style) return null; // Return null if no explicit border style
 
     const styleStr = borderSideData.style; // e.g., 'SOLID', 'DOTTED'
@@ -225,7 +225,7 @@ const getBorderStyleCSS = (borderSideData) => {
 // Inputs -> r (Number): The 0-based row index.
 //        -> c (Number): The 0-based column index.
 // Outputs -> (Boolean): True if the cell is part of the Sk1/Sk2 radio group ranges, false otherwise.
-const fIsSkRadioGroupMember = (r, c) => {
+function fIsSkRadioGroupMember(r, c) {
     const ranges = gUI.sk1sk2CheckBoxes; // Reads all defined ranges
     if (!Array.isArray(ranges)) {
         console.warn("fIsSkRadioGroupMember: gUI.sk1sk2CheckBoxes is not a valid array.");
@@ -272,7 +272,7 @@ const fIsSkRadioGroupMember = (r, c) => {
 // Purpose -> Returns a checkbox element reflecting boolean value in gUI.arr[r][c].
 // MODIFIED: Sets 'disabled' based on cell background color.
 // MODIFIED: Adds 'data-sk-group' attribute if checkbox is part of the Sk1/Sk2 radio group.
-const fMakeCheckBox = (r, c) => {
+function fMakeCheckBox(r, c) {
     const value = gUI.arr[r]?.[c];
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
@@ -312,7 +312,7 @@ const fMakeCheckBox = (r, c) => {
 
 // fCheckIfEditable ///////////////////////////////////////////////////////////////////
 // Returns true if cell should be editable based on background and type.
-const fCheckIfEditable = (bgColor, isCheckbox) => {
+function fCheckIfEditable(bgColor, isCheckbox) {
     const isWhiteBg = (!bgColor || bgColor.toLowerCase() === '#ffffff' || bgColor === 'white');
     return isWhiteBg && !isCheckbox;
 };
@@ -321,7 +321,7 @@ const fCheckIfEditable = (bgColor, isCheckbox) => {
 
 // fSetCellAttributes ////////////////////////////////////////////////////////////////
 // Sets row, col, and contentEditable attributes if applicable.
-const fSetCellAttributes = (cell, r, c, isEditable) => {
+function fSetCellAttributes(cell, r, c, isEditable) {
     cell.dataset.r = r;
     cell.dataset.c = c;
     if (isEditable) {
@@ -336,7 +336,7 @@ const fSetCellAttributes = (cell, r, c, isEditable) => {
 
 // fCheckAndTagNote //////////////////////////////////////////////////////////////////
 // Adds 'has-note' class if gUI.notes contains a non-empty value for this cell.
-const fCheckAndTagNote = (cell, r, c) => {
+function fCheckAndTagNote(cell, r, c) {
     const noteText = gUI.notes?.[r]?.[c]?.trim();
     if (noteText) cell.classList.add('has-note');
 };
@@ -346,7 +346,7 @@ const fCheckAndTagNote = (cell, r, c) => {
 // fCheckAndTagUrl ///////////////////////////////////////////////////////////////////
 // Checks for URLs and images, adds relevant classes and dataset props.
 // Returns { displayValue, isUrl }
-const fCheckAndTagUrl = (cell, value) => {
+function fCheckAndTagUrl(cell, value) {
     const trimmed = typeof value === 'string' ? value.trim() : '';
     const isUrl = trimmed.startsWith('http://') || trimmed.startsWith('https://');
     let displayValue = value;
@@ -375,7 +375,7 @@ const fCheckAndTagUrl = (cell, value) => {
 
 // fPopulateCellContent /////////////////////////////////////////////////////////////
 // Adds checkbox or text content to the cell, stripping IDs if needed.
-const fPopulateCellContent = (cell, r, c, displayValue, isCheckbox) => {
+function fPopulateCellContent(cell, r, c, displayValue, isCheckbox) {
     if (isCheckbox) {
         cell.appendChild(fMakeCheckBox(r, c));
     } else {
@@ -393,7 +393,7 @@ const fPopulateCellContent = (cell, r, c, displayValue, isCheckbox) => {
 
 // fApplyCellFormatting /////////////////////////////////////////////////////////////
 // Applies bgColor, font styles, wrap, etc.
-const fApplyCellFormatting = (cell, c, bgColor, rowFormat, isUrl) => {
+function fApplyCellFormatting(cell, c, bgColor, rowFormat, isUrl) {
     if (bgColor) cell.style.backgroundColor = bgColor;
     const finalFontColor = null; // Placeholder if color logic is ever needed
     cell.style.color = finalFontColor || '';
@@ -413,7 +413,7 @@ const fApplyCellFormatting = (cell, c, bgColor, rowFormat, isUrl) => {
 // Purpose -> Creates and formats a single cell div with content, URL/image/note tags, and style.
 // Inputs  -> r, c, value, rowFormat (see original for detailed descriptions)
 // Outputs -> HTMLElement: Configured cell div
-const fCreateAndFormatCell = (r, c, value, rowFormat) => {
+function fCreateAndFormatCell(r, c, value, rowFormat) {
     const cell = document.createElement("div");
     cell.className = "cell";
 
@@ -441,7 +441,7 @@ const fCreateAndFormatCell = (r, c, value, rowFormat) => {
 // fSetGridTagsFromHeaders //////////////////////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Populates gUI.rowTag and gUI.colTag from tag headers in gUI.arr (Col 0 for rows, Row 0 for columns)
 // Note: Uses more robust version from current scripts.html
-const fSetGridTagsFromHeaders = () => {
+function fSetGridTagsFromHeaders() {
     fLogStatus("⚙️ Parsing Grid Tags...");
     gUI.rowTag = {};
     gUI.colTag = {};
@@ -492,7 +492,7 @@ const fSetGridTagsFromHeaders = () => {
 
 // fInitGridAndSettings ///////////////////////////////////////////////////////////////////////////////
 // Validates DOM/grid array, clears DOM, and logs errors if necessary.
-const fInitGridAndSettings = (grid, gameArr) => {
+function fInitGridAndSettings(grid, gameArr) {
     if (!grid) {
         console.error("❌ Grid container #grid not found!");
         return false;
@@ -513,7 +513,7 @@ const fInitGridAndSettings = (grid, gameArr) => {
 
 // fSetGridColumnWidths /////////////////////////////////////////////////////////////////////////////
 // Applies gridTemplateColumns to the #grid container from colWidths in format.
-const fSetGridColumnWidths = (grid, format, numCols) => {
+function fSetGridColumnWidths(grid, format, numCols) {
     const colWidths = format.colWidths || [];
     const gridTemplateColumns = colWidths.map(w => `${w || 60}px`).join(' ');
     grid.style.gridTemplateColumns = gridTemplateColumns;
@@ -525,7 +525,7 @@ const fSetGridColumnWidths = (grid, format, numCols) => {
 
 // fBuildRowFormat /////////////////////////////////////////////////////////////////////////////////
 // Extracts the row format object from the full format object for one row.
-const fBuildRowFormat = (format, rowIdx) => {
+function fBuildRowFormat(format, rowIdx) {
     return {
         bg: format.bg?.[rowIdx],
         fontColorHex: format.fontColorHex?.[rowIdx],
@@ -541,7 +541,7 @@ const fBuildRowFormat = (format, rowIdx) => {
 
 // fAppendRowCells /////////////////////////////////////////////////////////////////////////////////
 // Renders one row of cells and appends to fragment and gUI.grid2D.
-const fAppendRowCells = (fragment, rowIdx, rowData, rowFormat, numCols) => {
+function fAppendRowCells(fragment, rowIdx, rowData, rowFormat, numCols) {
     for (let c = 0; c < numCols; c++) {
         const value = rowData?.[c];
         const cell = fCreateAndFormatCell(rowIdx, c, value, rowFormat);
@@ -555,7 +555,7 @@ const fAppendRowCells = (fragment, rowIdx, rowData, rowFormat, numCols) => {
 
 // fRenderChunkFactory /////////////////////////////////////////////////////////////////////////////
 // Returns a closure that handles chunked rendering using requestAnimationFrame.
-const fRenderChunkFactory = (grid, gameArr, format, chunkSize, callback) => {
+function fRenderChunkFactory(grid, gameArr, format, chunkSize, callback) {
     let r = 0;
     const numRows = gameArr.length;
     const numCols = gameArr[0].length;
@@ -591,7 +591,7 @@ const fRenderChunkFactory = (grid, gameArr, format, chunkSize, callback) => {
 
 // fRenderFullGrid /////////////////////////////////////////////////////////////////////////////////
 // Main controller that handles grid rendering logic using helpers.
-const fRenderFullGrid = (callback) => {
+function fRenderFullGrid(callback) {
     fLogStatus("⚙️ Rendering Full Grid...");
     const grid = document.getElementById("grid");
     const gameArr = gUI.arr;
@@ -630,7 +630,7 @@ const fRenderFullGrid = (callback) => {
 // fSetHeader //////////////////////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Hides rows 0-1, offsets the grid, and freezes rows 2-4 as sticky headers.
 // Adapted from older scripts.html, uses classes from style.html
-const fSetHeader = () => {
+function fSetHeader() {
     fLogStatus("🔒 Applying Sticky Header...");
     const numRows = gUI.grid2D.length;
     if (numRows < 5) { // Need at least rows 0, 1, 2, 3, 4
@@ -684,7 +684,7 @@ const fSetHeader = () => {
 // fUpdateGridColumnTemplate //////////////////////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Recalculates and applies the grid-template-columns style based on gUI.hiddenColumns
 // MODIFIED: Added console logs for debugging
-const fUpdateGridColumnTemplate = () => {
+function fUpdateGridColumnTemplate() {
     const grid = document.getElementById("grid");
     if (!grid || !gUI.format.colWidths || !gUI.arr || gUI.arr.length === 0) {
         console.error("   -> fUpdateGridColumnTemplate: Missing prerequisites."); return;
@@ -716,7 +716,7 @@ const fUpdateGridColumnTemplate = () => {
 // fSetColumnVisibility //////////////////////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Hides or shows a single column by index and updates grid template
 // MODIFIED: Reverted to visibility:collapse, kept updateTemplate param and logs
-const fSetColumnVisibility = (colIndex, isVisible, updateTemplate = true) => {
+function fSetColumnVisibility(colIndex, isVisible, updateTemplate = true) {
     if (isNaN(colIndex) || colIndex < 0 || !gUI.grid2D[0] || colIndex >= gUI.grid2D[0].length) {
         console.warn(`   -> Invalid column index ${colIndex}`); return;
     }
@@ -758,7 +758,7 @@ const fSetColumnVisibility = (colIndex, isVisible, updateTemplate = true) => {
 
 // fSetRowVisibility //////////////////////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Hides or shows a single row by index by setting cell display style.
-const fSetRowVisibility = (rowIndex, isVisible) => {
+function fSetRowVisibility(rowIndex, isVisible) {
      if (isNaN(rowIndex) || rowIndex < 0 || rowIndex >= gUI.grid2D.length) {
         console.warn(`Invalid row index ${rowIndex} for fSetRowVisibility`);
         return;
@@ -807,7 +807,7 @@ const fSetRowVisibility = (rowIndex, isVisible) => {
 // fApplyDynamicMerges //////////////////////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Merges cells based on gUI.format.merges data using grid span and hiding covered cells.
 // New function replacing older fMergeAllCellBlocks / fMergeCells logic
-const fApplyDynamicMerges = () => {
+function fApplyDynamicMerges() {
     fLogStatus("🧩 Applying Merges...");
     const merges = gUI.format?.merges || []; // Array of {row, col, rowspan, colspan}
 
@@ -849,7 +849,7 @@ const fApplyDynamicMerges = () => {
 // fApplyManualBorders //////////////////////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Applies border styles to ALL cells within predefined sections using tags,
 //            replicating the old fSetBorderColor behavior (top/left on all, optional right/bottom on edges).
-const fApplyManualBorders = () => {
+function fApplyManualBorders() {
     fLogStatus("🖌️ Applying Manual Borders (Old Style)...");
     let appliedCount = 0;
 
@@ -912,7 +912,7 @@ const fApplyManualBorders = () => {
 // Purpose -> Resolve a cell element in gUI.grid2D from rowTag and colTag.
 // Inputs  -> rowTag: string, colTag: string
 // Outputs -> Cell element or null
-const fGetResolvedCell = (rowTag, colTag) => {
+function fGetResolvedCell(rowTag, colTag) {
     const r = resolveRow(rowTag);
     const c = resolveCol(colTag);
 
@@ -937,7 +937,7 @@ const fGetResolvedCell = (rowTag, colTag) => {
 // Purpose -> Create and return a styled <img> element for a header button.
 // Inputs  -> config: button config object with imageUrl, altText, titleText, action
 // Outputs -> <img> element
-const fCreateHeaderButtonImage = (config) => {
+function fCreateHeaderButtonImage(config) {
     const img = document.createElement('img');
     img.src = config.imageUrl;
     img.alt = config.altText;
@@ -954,7 +954,7 @@ const fCreateHeaderButtonImage = (config) => {
 // Purpose -> Clear the cell, insert image, apply styling.
 // Inputs  -> cell: HTMLElement, img: HTMLElement
 // Outputs -> None (modifies DOM)
-const fApplyHeaderButtonToCell = (cell, img) => {
+function fApplyHeaderButtonToCell(cell, img) {
     cell.innerHTML = '';
     cell.appendChild(img);
 
@@ -970,7 +970,7 @@ const fApplyHeaderButtonToCell = (cell, img) => {
 // Purpose -> Finds specific cells designated as header buttons and inserts them.
 // Inputs  -> None
 // Outputs -> None (Modifies DOM)
-const fAddHeaderButtons = () => {
+function fAddHeaderButtons() {
     fLogStatus("⚙️ Adding Header Buttons...");
     let buttonsAdded = 0;
 
@@ -1041,7 +1041,7 @@ const fAddHeaderButtons = () => {
 // fMarkOverflowingCells //////////////////////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Adds 'overflow-left' class to cells where content width exceeds cell width.
 // From older scripts.html - Run AFTER merges and column widths are set.
-const fMarkOverflowingCells = () => {
+function fMarkOverflowingCells() {
     fLogStatus("↔️ Checking Cell Overflow...");
     // Query all rendered cells that are not part of a hidden merge area
     const cells = document.querySelectorAll('#grid .cell:not([style*="display: none"])');
@@ -1065,7 +1065,7 @@ const fMarkOverflowingCells = () => {
 // fHideColumnRange //////////////////////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Hides multiple ranges of columns defined by an array of objects. Updates template once.
 // MODIFIED: Added console logs for debugging
-const fHideColumnRange = (rangeArray) => {
+function fHideColumnRange(rangeArray) {
     fLogStatus(`👁️ Hiding Column Ranges...`);
     if (!Array.isArray(rangeArray)) {
         console.error("   -> ❌ Invalid input: fHideColumnRange requires an array.", rangeArray);
@@ -1117,7 +1117,7 @@ const fHideColumnRange = (rangeArray) => {
 
 // fShowColumnRange //////////////////////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Shows multiple ranges of columns defined by an array of objects. Updates template once.
-const fShowColumnRange = (rangeArray) => {
+function fShowColumnRange(rangeArray) {
     fLogStatus(`👁️ Showing Column Ranges...`);
     if (!Array.isArray(rangeArray)) {
         console.error("❌ Invalid input: fShowColumnRange requires an array.", rangeArray);
@@ -1169,7 +1169,7 @@ const fShowColumnRange = (rangeArray) => {
 // fToggleGearColumns ///////////////////////////////////////////////////////////////
 // Purpose -> Checks if gear columns (defined in gUI.gearTblCols) are currently visible
 //          and calls the appropriate show/hide range function to toggle their state.
-const fToggleGearColumns = () => {
+function fToggleGearColumns() {
     const gearRanges = gUI.gearTblCols;
 
     // Basic validation of the configuration
@@ -1228,7 +1228,7 @@ const fToggleGearColumns = () => {
 // fApplyInitialVisibility //////////////////////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Applies the initial hidden state for columns and rows based on gUI definitions
 // MODIFIED: Added console logs for debugging
-const fApplyInitialVisibility = () => {
+function fApplyInitialVisibility() {
     fLogStatus("👁️ Applying Initial Visibility...");
 
     // Initial Columns - Use fHideColumnRange
@@ -1269,7 +1269,7 @@ const fApplyInitialVisibility = () => {
 // Purpose -> Calculates and sets the position of the tooltip, keeping it within the viewport.
 // Inputs -> tooltip (HTMLElement): The tooltip element.
 //       -> event (MouseEvent): The mouse event that triggered the hover.
-const fPositionTooltip = (tooltip, event) => {
+function fPositionTooltip(tooltip, event) {
     if (!tooltip || !event) return;
 
     // Get cursor position from the event
@@ -1321,7 +1321,7 @@ const fPositionTooltip = (tooltip, event) => {
 
 // fGetValidTargetCell ////////////////////////////////////////////////////////////////////////////////
 // Returns the closest .cell from the event or null if invalid.
-const fGetValidTargetCell = (event) => {
+function fGetValidTargetCell(event) {
     return event.target.closest('.cell');
 };
 
@@ -1330,7 +1330,7 @@ const fGetValidTargetCell = (event) => {
 
 // fHideTooltip ///////////////////////////////////////////////////////////////////////////////////////
 // Clears timeout and hides tooltip.
-const fHideTooltip = () => {
+function fHideTooltip() {
     clearTimeout(gUI.tooltipTimeoutId); // Updated reference
     gUI.tooltipTimeoutId = null; // Clear the stored ID as well
     if (gUI.tooltipElement) gUI.tooltipElement.style.display = 'none'; // Updated reference
@@ -1341,7 +1341,7 @@ const fHideTooltip = () => {
 
 // fShouldShowTooltip ////////////////////////////////////////////////////////////////////////////////
 // Returns boolean: true if cell is overflowing or has a note.
-const fShouldShowTooltip = (r, c, cell) => {
+function fShouldShowTooltip(r, c, cell) {
     const isOverflowing = cell.scrollWidth > cell.clientWidth + 1;
     const noteText = gUI.notes?.[r]?.[c]?.trim();
     return isOverflowing || !!noteText;
@@ -1352,7 +1352,7 @@ const fShouldShowTooltip = (r, c, cell) => {
 
 // fBuildTooltipContent /////////////////////////////////////////////////////////////////////////////
 // Builds tooltip HTML content from overflow text and note.
-const fBuildTooltipContent = (r, c, cell) => {
+function fBuildTooltipContent(r, c, cell) {
     const isOverflowing = cell.scrollWidth > cell.clientWidth + 1;
     const noteText = gUI.notes?.[r]?.[c]?.trim();
     let tooltipContent = '';
@@ -1374,7 +1374,7 @@ const fBuildTooltipContent = (r, c, cell) => {
 
 // fStartTooltipTimer /////////////////////////////////////////////////////////////////////////////
 // Sets a timeout to show tooltip after HOVER_DELAY_MS.
-const fStartTooltipTimer = (cell, event) => {
+function fStartTooltipTimer(cell, event) {
     // Clear any existing timeout before starting a new one
     clearTimeout(gUI.tooltipTimeoutId); // Updated reference
 
@@ -1404,7 +1404,7 @@ const fStartTooltipTimer = (cell, event) => {
 
 // fHandleCellHover /////////////////////////////////////////////////////////////////////////////////
 // Delegated mouseenter/mouseover handler for grid cells (shows tooltips for overflow + notes)
-const fHandleCellHover = (event) => {
+function fHandleCellHover(event) {
     if (!gUI.tooltipElement) return; // Updated reference
 
     const cell = fGetValidTargetCell(event);
@@ -1427,7 +1427,7 @@ const fHandleCellHover = (event) => {
 // fHandleCellMouseOut //////////////////////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Handles mouseout/mouseleave events delegated from the grid to hide the tooltip.
 // Inputs -> event (MouseEvent): The mouse event.
-const fHandleCellMouseOut = (event) => {
+function fHandleCellMouseOut(event) {
     // Clear the pending timeout *immediately* if the mouse leaves before the delay finishes
     clearTimeout(gUI.tooltipTimeoutId); // Updated reference
     gUI.tooltipTimeoutId = null; // Reset the timeout ID // Updated reference
@@ -1454,7 +1454,7 @@ const fHandleCellMouseOut = (event) => {
 // Inputs -> message (String): The text or HTML content to prepend.
 // Outputs -> None (Modifies DOM).
 // MODIFIED: Uses prepend. Removed scroll-to-bottom. Uses innerHTML.
-const fPrependToSidebar = (message) => {
+function fPrependToSidebar(message) {
     const sidebarContent = document.getElementById('sidebar-content');
     if (!sidebarContent) {
         console.error("❌ Cannot find sidebar content element (#sidebar-content)");
@@ -1482,7 +1482,7 @@ const fPrependToSidebar = (message) => {
 // fShowImageModal //////////////////////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Displays the image modal with the specified image URL in the img tag.
 // Inputs -> imageUrl (String): The direct URL of the image to display.
-const fShowImageModal = (imageUrl) => { 
+function fShowImageModal(imageUrl) { 
     console.log("--- fShowImageModal Start ---");
     console.log(" Image URL:", imageUrl);
     // Check renamed global variables within gUI object
@@ -1523,7 +1523,7 @@ const fShowImageModal = (imageUrl) => {
 // Purpose -> Ensure the clicked element is a valid checkbox inside a grid cell.
 // Inputs  -> checkbox (HTMLElement)
 // Outputs -> true if valid, false otherwise
-const fIsValidGridCheckbox = (checkbox) => {
+function fIsValidGridCheckbox(checkbox) {
     return checkbox &&
            checkbox.tagName === 'INPUT' &&
            checkbox.type === 'checkbox' &&
@@ -1538,7 +1538,7 @@ const fIsValidGridCheckbox = (checkbox) => {
 // Purpose -> Ensure the coordinates are valid integers and point to existing grid rows.
 // Inputs  -> r: row index, c: col index
 // Outputs -> true if valid, false otherwise
-const fIsValidGridCoords = (r, c) => {
+function fIsValidGridCoords(r, c) {
     return !isNaN(r) && !isNaN(c) &&
            r >= 0 && c >= 0 &&
            gUI.arr[r] && gUI.grid2D[r];
@@ -1551,7 +1551,7 @@ const fIsValidGridCoords = (r, c) => {
 // Purpose -> Logic for checkboxes that are part of an sk-radio group.
 // Inputs  -> r, c: current coordinates, isChecked: boolean
 // Outputs -> None (modifies gUI.arr and gUI.currentSkRadioChecked)
-const fHandleSkGroupCheckboxClick = (r, c, isChecked) => {
+function fHandleSkGroupCheckboxClick(r, c, isChecked) {
     const oldR = gUI.currentSkRadioChecked.r;
     const oldC = gUI.currentSkRadioChecked.c;
 
@@ -1578,7 +1578,7 @@ const fHandleSkGroupCheckboxClick = (r, c, isChecked) => {
 // Purpose -> Uncheck the previously checked box in the sk-radio group, if one exists.
 // Inputs  -> oldR, oldC: previous coordinates
 // Outputs -> None (modifies DOM and gUI.arr)
-const fUncheckOldSkGroupBox = (oldR, oldC) => {
+function fUncheckOldSkGroupBox(oldR, oldC) {
     const oldCellDiv = gUI.grid2D[oldR]?.[oldC];
     const oldCheckbox = oldCellDiv?.querySelector('input[data-sk-group="true"]');
 
@@ -1597,7 +1597,7 @@ const fUncheckOldSkGroupBox = (oldR, oldC) => {
 // Purpose -> Handles checkbox click events from fHandleGridClick.
 // Inputs  -> event (MouseEvent)
 // Outputs -> None (modifies gUI.arr and DOM)
-const fHandleGridCheckboxClick = (event) => {
+function fHandleGridCheckboxClick(event) {
     const checkbox = event.target;
     if (!fIsValidGridCheckbox(checkbox)) return;
 
@@ -1635,7 +1635,7 @@ const fHandleGridCheckboxClick = (event) => {
 // Purpose -> Ensure a radio checkbox is selected (Sk1/Sk2).
 // Inputs  -> row, col indices
 // Outputs -> true if valid, false otherwise
-const fValidateRollSelection = (row, col) => {
+function fValidateRollSelection(row, col) {
     const isValid = row !== null && !isNaN(row) && col !== null && !isNaN(col);
     if (!isValid) {
         const msg = "⚠️ Please select an Ability/Skill first!";
@@ -1653,7 +1653,7 @@ const fValidateRollSelection = (row, col) => {
 // Purpose -> Check if all critical column tags are resolved.
 // Inputs  -> array of column indices
 // Outputs -> true if valid, false otherwise
-const fValidateRollColumnIndices = (cols) => {
+function fValidateRollColumnIndices(cols) {
     const allResolved = cols.every(col => !isNaN(col));
     if (!allResolved) {
         const msg = "❌ Error: Could not resolve required column tags.";
@@ -1671,7 +1671,7 @@ const fValidateRollColumnIndices = (cols) => {
 // Purpose -> Given selected skill col and row, extract type, value, and target.
 // Inputs  -> row index, selected col index, col references
 // Outputs -> { skillType, skillVal, skillTarget, logMsg }
-const fExtractSkillInfo = (r, selectedC, cols) => {
+function fExtractSkillInfo(r, selectedC, cols) {
     const idPattern = /\s{2,}_\w{6}$/;
     let skillType = '', skillVal = '', skillTarget = NaN;
     let logMsg = '';
@@ -1704,7 +1704,7 @@ const fExtractSkillInfo = (r, selectedC, cols) => {
 // Purpose -> Roll a number between 1 and target (inclusive) and return as formatted string.
 // Inputs  -> skillTarget
 // Outputs -> { roll, rollStr }
-const fGetRollResult = (skillTarget) => {
+function fGetRollResult(skillTarget) {
     if (!isNaN(skillTarget) && skillTarget > 0) {
         const roll = Math.floor(Math.random() * skillTarget) + 1;
         const rollStr = `~${roll}`;
@@ -1722,7 +1722,7 @@ const fGetRollResult = (skillTarget) => {
 // Purpose -> Construct sidebar output HTML from ability, skill, roll.
 // Inputs  -> abilityStr, skillType, skillVal, rollStr
 // Outputs -> HTML string
-const fBuildRollHTML = (abilityStr, skillType, skillVal, rollStr) => {
+function fBuildRollHTML(abilityStr, skillType, skillVal, rollStr) {
     const abilityHTML = `<span class="sidebar-ability-name">${abilityStr}</span>`;
     let line1 = abilityHTML;
     let line2 = '';
@@ -1745,7 +1745,7 @@ const fBuildRollHTML = (abilityStr, skillType, skillVal, rollStr) => {
 // Purpose -> Top-level handler for "Roll Dice" action. Validates, rolls, displays.
 // Inputs  -> None (uses gUI)
 // Outputs -> None (DOM + gUI changes)
-const fHandleRollDiceAction = () => {
+function fHandleRollDiceAction() {
     fLogStatus("🎲 Roll Dice Action Triggered");
 
     const r = gUI.currentSkRadioChecked.r;
@@ -1790,7 +1790,7 @@ const fHandleRollDiceAction = () => {
 
 // fIsCheckboxClick ////////////////////////////////////////////////////////////////////////////////
 // Returns true if target is a checkbox input.
-const fIsCheckboxClick = (target) => {
+function fIsCheckboxClick(target) {
     return target.tagName === 'INPUT' && target.type === 'checkbox';
 };
 
@@ -1799,7 +1799,7 @@ const fIsCheckboxClick = (target) => {
 
 // fIsEditableCell /////////////////////////////////////////////////////////////////////////////////
 // Returns true if the clicked cell is contentEditable.
-const fIsEditableCell = (cellDiv) => {
+function fIsEditableCell(cellDiv) {
     return cellDiv?.isContentEditable;
 };
 
@@ -1808,7 +1808,7 @@ const fIsEditableCell = (cellDiv) => {
 
 // fIsUrlLinkCell /////////////////////////////////////////////////////////////////////////////////
 // Returns true if cell has class 'url-link'.
-const fIsUrlLinkCell = (cellDiv) => {
+function fIsUrlLinkCell(cellDiv) {
     return cellDiv?.classList.contains('url-link');
 };
 
@@ -1817,7 +1817,7 @@ const fIsUrlLinkCell = (cellDiv) => {
 
 // fHandleDriveLink ///////////////////////////////////////////////////////////////////////////////
 // Opens Google Drive links in new tab due to embed restrictions.
-const fHandleDriveLink = (url) => {
+function fHandleDriveLink(url) {
     fLogStatus(`🖱️ Opening Drive Link in new tab: ${url.substring(0, 100)}...`);
     window.open(url, '_blank');
 };
@@ -1827,7 +1827,7 @@ const fHandleDriveLink = (url) => {
 
 // fHandleImageModal /////////////////////////////////////////////////////////////////////////////
 // Opens a standard image link in modal.
-const fHandleImageModal = (imageUrl) => {
+function fHandleImageModal(imageUrl) {
     fLogStatus(`🖱️ Clicked Standard Image Link: ${imageUrl.substring(0, 100)}...`);
     fShowImageModal(imageUrl);
 };
@@ -1837,7 +1837,7 @@ const fHandleImageModal = (imageUrl) => {
 
 // fHandleWebLink /////////////////////////////////////////////////////////////////////////////////
 // Opens non-image, non-Drive links in a new tab.
-const fHandleWebLink = (url) => {
+function fHandleWebLink(url) {
     fLogStatus(`🖱️ Clicked Web Link: ${url.substring(0, 100)}...`);
     window.open(url, '_blank');
 };
@@ -1847,7 +1847,7 @@ const fHandleWebLink = (url) => {
 
 // fHandleUrlClick ////////////////////////////////////////////////////////////////////////////////
 // Determines URL type and routes to appropriate handler.
-const fHandleUrlClick = (cellDiv) => {
+function fHandleUrlClick(cellDiv) {
     const originalUrl = cellDiv.dataset.url;
     if (!originalUrl) {
         console.warn("Clicked URL link cell, but data-url attribute was missing.", cellDiv);
@@ -1873,7 +1873,7 @@ const fHandleUrlClick = (cellDiv) => {
 // fHandleGridClick ///////////////////////////////////////////////////////////////////////////////
 // Delegated click handler for cells: routes to header buttons, checkboxes, URLs, etc.
 // MODIFIED: 'action-rollDice' case now calls fHandleRollDiceAction
-const fHandleGridClick = (event) => {
+function fHandleGridClick(event) {
     const target = event.target;
     // --- Check for Header Button Click FIRST ---
     const buttonImg = target.closest('.header-button-img[data-button-action]');
@@ -1980,7 +1980,7 @@ const fHandleGridClick = (event) => {
 //            Updates the gUI.arr data if the cell's text content has changed.
 // Inputs  -> event (FocusEvent): The blur event object.
 // Outputs -> None. (Modifies gUI.arr).
-const fHandleGridCellEdit = (event) => {
+function fHandleGridCellEdit(event) {
     const cellDiv = event.target;
 
     // Check if the blurred element is actually a cell div that is contenteditable
@@ -2025,7 +2025,7 @@ const fHandleGridCellEdit = (event) => {
 
 // fIsValidRangeObject //////////////////////////////////////////////////////////////////////////////
 // Checks if the range object has valid r1, c1, r2, c2 properties.
-const fIsValidRangeObject = (range) => {
+function fIsValidRangeObject(range) {
     return range &&
         typeof range.r1 !== 'undefined' &&
         typeof range.c1 !== 'undefined' &&
@@ -2038,7 +2038,7 @@ const fIsValidRangeObject = (range) => {
 
 // fResolveRangeIndices /////////////////////////////////////////////////////////////////////////////
 // Converts tag or index values to resolved numerical indices.
-const fResolveRangeIndices = (range) => {
+function fResolveRangeIndices(range) {
     const r1 = resolveRow(range.r1);
     const c1 = resolveCol(range.c1);
     const r2 = resolveRow(range.r2);
@@ -2051,7 +2051,7 @@ const fResolveRangeIndices = (range) => {
 
 // fClearCheckboxInGrid /////////////////////////////////////////////////////////////////////////////
 // Unchecks a checkbox in the specified grid cell if it exists and is checked.
-const fClearCheckboxInGrid = (r, c) => {
+function fClearCheckboxInGrid(r, c) {
     const row = gUI.grid2D[r];
     if (!row) return false;
     const cellDiv = row[c];
@@ -2070,7 +2070,7 @@ const fClearCheckboxInGrid = (r, c) => {
 
 // fClearCheckboxesInRange //////////////////////////////////////////////////////////////////////////
 // Handles a single range: resolves bounds, checks validity, clears checkboxes.
-const fClearCheckboxesInRange = (range, index) => {
+function fClearCheckboxesInRange(range, index) {
     if (!fIsValidRangeObject(range)) {
         console.warn(`⚠️ Skipping invalid range object at index ${index}`, range);
         return 0;
@@ -2114,7 +2114,7 @@ const fClearCheckboxesInRange = (range, index) => {
 
 // fClearCheckboxesInGridRange //////////////////////////////////////////////////////////////////////
 // Main entry: loops through range array, clears all checkboxes in valid ranges.
-const fClearCheckboxesInGridRange = (rangeArray) => {
+function fClearCheckboxesInGridRange(rangeArray) {
     fLogStatus(`⚙️ Clearing checkboxes in ranges...`);
 
     if (!Array.isArray(rangeArray)) {
@@ -2158,7 +2158,7 @@ const fClearCheckboxesInGridRange = (rangeArray) => {
 
 // fCloseAllDropdowns //////////////////////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Finds all dropdown content panels and removes the 'show' class to hide them.
-const fCloseAllDropdowns = () => {
+function fCloseAllDropdowns() {
   const dropdowns = document.getElementsByClassName("dropdown-content");
   for (let i = 0; i < dropdowns.length; i++) {
     const panel = dropdowns[i];
@@ -2175,7 +2175,7 @@ const fCloseAllDropdowns = () => {
 
 // fShowSidebar //////////////////////////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Makes the Roll Log sidebar visible.
-const fShowSidebar = () => {
+function fShowSidebar() {
     const sidebar = document.getElementById('roll-log-sidebar');
     if (sidebar && !sidebar.classList.contains('show')) { // Only log if changing state
         sidebar.classList.add('show');
@@ -2190,7 +2190,7 @@ const fShowSidebar = () => {
 
 // fHideSidebar //////////////////////////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Hides the Roll Log sidebar.
-const fHideSidebar = () => {
+function fHideSidebar() {
     const sidebar = document.getElementById('roll-log-sidebar');
     if (sidebar && sidebar.classList.contains('show')) { // Only log if changing state
         sidebar.classList.remove('show');
@@ -2207,7 +2207,7 @@ const fHideSidebar = () => {
 // Purpose -> Checks the current visibility state of the sidebar and toggles it.
 // Inputs -> None
 // Outputs -> None
-const fToggleSidebar = () => {
+function fToggleSidebar() {
     const sidebar = document.getElementById('roll-log-sidebar');
     if (!sidebar) {
         console.error("❌ Cannot find sidebar element (#roll-log-sidebar) to toggle.");
@@ -2232,7 +2232,7 @@ const fToggleSidebar = () => {
 // Purpose -> Adds click listeners to the main menu bar buttons (Nish, Roll, Game, Gear).
 // MODIFIED: Added btnRoll parameter and listener
 // MODIFIED: btnRoll listener now calls fHandleRollDiceAction
-const fSetupMenuButtonListeners = (btnNish, btnRoll, btnGame, dropdownGame, btnGear, dropdownGear) => { // <<< Added btnRoll
+function fSetupMenuButtonListeners(btnNish, btnRoll, btnGame, dropdownGame, btnGear, dropdownGear) { // <<< Added btnRoll
 
     // Listener for 'Nish' button (Direct Action)
     btnNish.addEventListener('click', (event) => {
@@ -2277,7 +2277,7 @@ const fSetupMenuButtonListeners = (btnNish, btnRoll, btnGame, dropdownGame, btnG
 
 // fSetupWindowClickListener ///////////////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Adds listener to the window to close dropdowns when clicking outside the menu area.
-const fSetupWindowClickListener = () => {
+function fSetupWindowClickListener() {
     window.addEventListener('click', (event) => {
         // If the click is not on a main menu button or within a menu item, close dropdowns
         if (event.target && !event.target.closest('.menu-item') && !event.target.closest('#menu-bar > button')) {
@@ -2292,7 +2292,7 @@ const fSetupWindowClickListener = () => {
 // fSetupDelegatedMenuActionClick //////////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Adds delegated listener to the menu bar to handle clicks on items with data-action.
 // MODIFIED: Changed 'game-showSidebar' to 'game-toggleSidebar' and call fToggleSidebar
-const fSetupDelegatedMenuActionClick = (menuBar) => {
+function fSetupDelegatedMenuActionClick(menuBar) {
      if (!menuBar) return; // Should not happen based on main check, but safe practice
 
      menuBar.addEventListener('click', (event) => {
@@ -2339,7 +2339,7 @@ const fSetupDelegatedMenuActionClick = (menuBar) => {
 
 // fClearHideTimeout /////////////////////////////////////////////////////////////////////////////////
 // Clears any active hide timeout on a submenu panel.
-const fClearHideTimeout = (panel) => {
+function fClearHideTimeout(panel) {
     const timeoutId = parseInt(panel.dataset.hideTimeoutId || '0');
     if (timeoutId) {
         clearTimeout(timeoutId);
@@ -2352,7 +2352,7 @@ const fClearHideTimeout = (panel) => {
 
 // fIsAnySiblingSubmenuOpen /////////////////////////////////////////////////////////////////////////
 // Checks if any other sibling .sub-menu-item has an open submenu panel.
-const fIsAnySiblingSubmenuOpen = (item) => {
+function fIsAnySiblingSubmenuOpen(item) {
     const parent = item.parentElement;
     if (!parent) return false;
 
@@ -2371,7 +2371,7 @@ const fIsAnySiblingSubmenuOpen = (item) => {
 
 // fStartHideTimeout /////////////////////////////////////////////////////////////////////////////////
 // Sets a timeout to hide a submenu panel and possibly restore overflow.
-const fStartHideTimeout = (item, panel, mainDropdown, delayMs = 250) => {
+function fStartHideTimeout(item, panel, mainDropdown, delayMs = 250) {
     fClearHideTimeout(panel);
     const timeoutId = setTimeout(() => {
         if (mainDropdown && !fIsAnySiblingSubmenuOpen(item)) {
@@ -2387,7 +2387,7 @@ const fStartHideTimeout = (item, panel, mainDropdown, delayMs = 250) => {
 
 // fSetupSingleSubMenuItem //////////////////////////////////////////////////////////////////////////
 // Attaches hover listeners and timeout logic to a single submenu item.
-const fSetupSingleSubMenuItem = (item, index) => {
+function fSetupSingleSubMenuItem(item, index) {
     const triggerLink = item.querySelector('a');
     const subMenuPanel = item.querySelector('.dropdown-content.sub-menu');
     const mainDropdown = item.closest('.dropdown-content:not(.sub-menu)');
@@ -2421,7 +2421,7 @@ const fSetupSingleSubMenuItem = (item, index) => {
 
 // fSetupSubMenuHover ///////////////////////////////////////////////////////////////////////////////
 // Main function: sets up hover logic for all .sub-menu-item elements under menuBar.
-const fSetupSubMenuHover = (menuBar) => {
+function fSetupSubMenuHover(menuBar) {
     if (!menuBar) return;
 
     const subMenuItems = menuBar.querySelectorAll('.sub-menu-item');
@@ -2449,7 +2449,7 @@ const fSetupSubMenuHover = (menuBar) => {
 // Purpose -> Attaches a general delegated click listener to the grid container.
 // Inputs  -> gridElement (HTMLElement): The grid container element.
 // Outputs -> None.
-const fSetupGridClickListeners = (gridElement) => {
+function fSetupGridClickListeners(gridElement) {
 
     // Validate input
     if (!gridElement) {
@@ -2474,7 +2474,7 @@ const fSetupGridClickListeners = (gridElement) => {
 // fSetupGridHoverListeners ////////////////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Attaches delegated mouseover and mouseout listeners to the grid container for tooltips.
 // Inputs -> gridElement (HTMLElement): The grid container element.
-const fSetupGridHoverListeners = (gridElement) => {
+function fSetupGridHoverListeners(gridElement) {
     if (!gridElement) {
         console.error("❌ Cannot setup hover listeners: Grid element not provided.");
         return;
@@ -2495,7 +2495,7 @@ const fSetupGridHoverListeners = (gridElement) => {
 
 // fHideImageModal ///////////////////////////////////////////////////////////////////////////////
 // Purpose -> Hides the image modal and resets image source and visibility.
-const fHideImageModal = () => {
+function fHideImageModal() {
     if (!gUI.modalElement || !gUI.modalImageElement) return;
 
     gUI.modalElement.style.display = 'none';
@@ -2507,7 +2507,7 @@ const fHideImageModal = () => {
 
 // fSetupModalListeners //////////////////////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Adds click listeners to the modal close button and backdrop.
-const fSetupModalListeners = () => {
+function fSetupModalListeners() {
     // Globals moved to gUI are set in fSetupTooltipAndModal via fOnDataLoaded
     // gUI.modalElement, gUI.modalImageElement, gUI.modalCloseBtn, gUI.modalBackdrop
     if (!gUI.modalCloseBtn || !gUI.modalBackdrop) { // Updated references
@@ -2534,7 +2534,7 @@ const fSetupModalListeners = () => {
 // fSetupMenuInteractivity //////////////////////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Orchestrates the setup of all menu-related event listeners.
 // MODIFIED: Added btnRoll reference and check
-const fSetupMenuInteractivity = () => {
+function fSetupMenuInteractivity() {
     fLogStatus("⚙️ Setting up Menu Interactivity...");
 
     // --- Get Element References ---
@@ -2586,7 +2586,7 @@ const fSetupMenuInteractivity = () => {
 
 // fStoreAndValidateData ////////////////////////////////////////////////////////////////////////////
 // Validates incoming data and updates gUI; returns true if valid, false if not.
-const fStoreAndValidateData = (data) => {
+function fStoreAndValidateData(data) {
     if (!data || typeof data !== 'object' || !data.arr || !data.format || !data.notesArr || data.error || data instanceof Error) {
         console.error("Error or invalid data received:", data);
         fLogStatus("❌ Error or invalid data structure received.");
@@ -2618,7 +2618,7 @@ const fStoreAndValidateData = (data) => {
 
 // fSetupTooltipAndModal ////////////////////////////////////////////////////////////////////////////
 // Grabs DOM references for tooltip and modal elements and assigns them to gUI properties; logs if missing.
-const fSetupTooltipAndModal = () => {
+function fSetupTooltipAndModal() {
     gUI.tooltipElement = document.getElementById('cell-tooltip'); // Updated reference
     if (!gUI.tooltipElement) { // Updated reference
         fLogStatus("⚠️ Tooltip element missing...");
@@ -2641,7 +2641,7 @@ const fSetupTooltipAndModal = () => {
 
 // fModalElementsAvailable //////////////////////////////////////////////////////////////////////////
 // Checks if all modal elements are found within the gUI object.
-const fModalElementsAvailable = () => {
+function fModalElementsAvailable() {
     return gUI.modalElement && gUI.modalImageElement && gUI.modalCloseBtn && gUI.modalBackdrop; // Updated references
 };
 
@@ -2650,7 +2650,7 @@ const fModalElementsAvailable = () => {
 
 // fAttachGridListeners ////////////////////////////////////////////////////////////////////////////
 // Attaches click, edit, and hover listeners to grid if found.
-const fAttachGridListeners = (gridElement) => {
+function fAttachGridListeners(gridElement) {
     if (!gridElement) {
         console.error("❌ Could not find grid element to attach listeners.");
         fLogStatus("❌ Failed to attach grid event listeners.");
@@ -2672,7 +2672,7 @@ const fAttachGridListeners = (gridElement) => {
 
 // fRunPostRenderFormatting ////////////////////////////////////////////////////////////////////////
 // Runs all post-render visual adjustments, formatting, and listener hookups.
-const fRunPostRenderFormatting = () => {
+function fRunPostRenderFormatting() {
     fLogStatus("🚀 Applying Post-Render Formatting...");
     fApplyDynamicMerges();
     fAddHeaderButtons(); // <<< ADD CALL HERE
@@ -2697,7 +2697,7 @@ const fRunPostRenderFormatting = () => {
 
 // fOnDataLoaded ////////////////////////////////////////////////////////////////////////////////////
 // Receives data from server and kicks off render + post-processing sequence.
-const fOnDataLoaded = (data) => {
+function fOnDataLoaded(data) {
     fLogStatus("✅ Data received from server");
 
     const isValid = fStoreAndValidateData(data);
@@ -2719,7 +2719,7 @@ const fOnDataLoaded = (data) => {
 // fLoadGameSheet //////////////////////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Starts the process: Calls GAS backend (fCSGetGameSheet5) to get sheet data.
 // From current scripts.html (includes failure handler)
-const fLoadGameSheet = () => {
+function fLoadGameSheet() {
     gUI.startTime = performance.now(); // Reset global start time // Updated reference
     gUI.lastLogTime = gUI.startTime; // Updated reference
     fLogStatus("🚀 Requesting GSheet Data...");
