@@ -1,0 +1,24 @@
+<!-- index.html -->
+
+<html>
+  <head>
+    <base target="_top" />
+    <script>
+      // Purpose -> Inject the sheetId from server-side doGet into global client-side scope
+      const SHEET_ID = "<?= sheetId ?>";
+      console.log("✅ INDEX LOADED: " + new Date().toLocaleTimeString());
+      console.log("🧪 SHEET_ID param:", SHEET_ID);
+    </script>
+
+    <style>
+      <?!= HtmlService.createHtmlOutputFromFile('style').getContent(); ?>
+    </style>
+  </head>
+  <body>
+    <?!= HtmlService.createHtmlOutputFromFile('ui.html').getContent(); ?>
+
+    <?!= HtmlService.createHtmlOutputFromFile('gamelogic.html').getContent(); ?>
+
+    <?!= HtmlService.createHtmlOutputFromFile('scripts.html').getContent(); ?>
+  </body>
+</html>
