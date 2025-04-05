@@ -1647,97 +1647,108 @@ function fUncheckOldSkGroupBox(oldR, oldC) {
 // MODIFIED: 'action-rollDice' case now calls fHandleRollDiceAction
 function fHandleGridClick(event) {
     const target = event.target;
+
     // --- Check for Header Button Click FIRST ---
     const buttonImg = target.closest('.header-button-img[data-button-action]');
     if (buttonImg) {
-        const action = buttonImg.dataset.buttonAction;
-        fLogStatus(`🖱️ Header Button Clicked: ${action}`);
-        event.preventDefault(); // Prevent default image drag/etc.
-        event.stopPropagation(); // Stop event from bubbling further
-
-        // --- Get Grid Element (used by multiple actions) ---
-        const grid = document.getElementById('grid');
-
-
-        // --- Dispatch Header Button Actions ---
-        switch (action) {
-            case 'action-rollDice': // <<< UPDATED CASE
-                fHandleRollDiceAction(); // <<< Call the shared action function
-                break;
-            case 'action-refreshData':
-                console.log("ACTION: Refresh Data button clicked (logic pending)");
-                // @@ Placeholder - Could call fLoadGameSheet() or similar
-                break;
-            case 'action-jumpTop':
-                fLogStatus("ACTION: Jump Top button clicked");
-                if (grid) {
-                    grid.scrollTo({ top: 0, behavior: 'smooth' }); // Scroll grid to top smoothly
-                } else {
-                    console.warn("Could not find #grid element to scroll top.");
-                }
-                break;
-            case 'action-jumpBottom':
-                fLogStatus("ACTION: Jump Bottom button clicked");
-                if (grid) {
-                    const targetRowIndex = resolveRow('GearTblHeaderStartR'); // Resolve the target row
-                    if (!isNaN(targetRowIndex)) {
-                        const targetCell = gUI.grid2D?.[targetRowIndex]?.[0]; // Get first cell of target row
-                        if (targetCell) {
-                            const gridVisibleHeight = grid.clientHeight;
-                            const targetCellOffsetTop = targetCell.offsetTop; // Position relative to grid scroll container
-                            const targetCellHeight = targetCell.offsetHeight;
-
-                            // Calculate scroll position to center the cell (approximately)
-                            const desiredScrollTop = targetCellOffsetTop - (gridVisibleHeight / 2) + (targetCellHeight / 2);
-
-                            grid.scrollTo({ top: desiredScrollTop, behavior: 'smooth' });
-                            fLogStatus(`Scrolling grid to center row ${targetRowIndex} (Tag: GearTblHeaderStartR)`);
-                        } else {
-                            console.warn(`Could not find cell element for row ${targetRowIndex} (Tag: GearTblHeaderStartR)`);
-                        }
-                    } else {
-                        console.warn("Could not resolve row tag 'GearTblHeaderStartR' for scrolling.");
-                    }
-                } else {
-                    console.warn("Could not find #grid element to scroll bottom.");
-                }
-                break;
-            case 'action-showMonsters':
-                console.log("ACTION: Show Monsters button clicked (logic pending)");
-                // @@ Placeholder - Could scroll to monster section or toggle visibility
-                break;
-            // Add cases for other button actions here later
-            default:
-                console.warn(`Unhandled header button action: ${action}`);
-        }
-        return; // Handled the button click, stop processing this event
+        fHandleHeaderButtonClick(event, buttonImg);
+        return; // Handled the button click
     }
+
     // --- End Header Button Check ---
-
-
-    // --- Existing Cell Click Logic ---
     const cellDiv = target.closest('.cell');
-    if (!cellDiv) return; // Click wasn't inside any cell we track
+    if (!cellDiv) return;
 
     if (fIsCheckboxClick(target)) {
         fHandleGridCheckboxClick(event);
         return;
     }
 
-    // Prevent clicks on editable cells from triggering other actions (like URL clicks)
-    if (fIsEditableCell(cellDiv)) {
-        // Allow default behavior for content editing
-        return;
-    }
+    if (fIsEditableCell(cellDiv)) return;
 
     if (fIsUrlLinkCell(cellDiv)) {
         fHandleUrlClick(cellDiv);
         return;
     }
 
-    // More click routes could go here later (e.g., general cell select)
-    // fLogStatus(`🖱️ Clicked cell [${cellDiv.dataset.r}, ${cellDiv.dataset.c}] (no specific action)`);
-}; // END fHandleGridClick
+    // Future: Add general cell click behaviors here
+} // END fHandleGridClick
+
+
+
+
+// fHandleHeaderButtonClick ///////////////////////////////////////////////////////////////////////
+// Routes header button clicks to specific action handlers.
+function fHandleHeaderButtonClick(event, buttonImg) {
+    const action = buttonImg.dataset.buttonAction;
+    fLogStatus(`🖱️ Header Button Clicked: ${action}`);
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const grid = document.getElementById('grid');
+
+    switch (action) {
+        case 'action-rollDice':
+            fHandleRollDiceAction();
+            break;
+        case 'action-refreshData':
+            console.log("ACTION: Refresh Data button clicked (logic pending)");
+            break;
+        case 'action-jumpTop':
+            fScrollGridToTop(grid);
+            break;
+        case 'action-jumpBottom':
+            fScrollGridToBottom(grid);
+            break;
+        case 'action-showMonsters':
+            console.log("ACTION: Show Monsters button clicked (logic pending)");
+            break;
+        default:
+            console.warn(`Unhandled header button action: ${action}`);
+    }
+} // END fHandleHeaderButtonClick
+
+
+
+
+// fScrollGridToTop ///////////////////////////////////////////////////////////////////////////////
+// Scrolls the grid to the top smoothly.
+function fScrollGridToTop(grid) {
+    if (grid) {
+        grid.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+        console.warn("Could not find #grid element to scroll top.");
+    }
+} // END fScrollGridToTop
+
+
+
+
+// fScrollGridToBottom ////////////////////////////////////////////////////////////////////////////
+// Scrolls the grid to center on a specific tagged row.
+function fScrollGridToBottom(grid) {
+    if (!grid) {
+        console.warn("Could not find #grid element to scroll bottom.");
+        return;
+    }
+
+    const targetRowIndex = resolveRow('GearTblHeaderStartR');
+    if (isNaN(targetRowIndex)) {
+        console.warn("Could not resolve row tag 'GearTblHeaderStartR' for scrolling.");
+        return;
+    }
+
+    const targetCell = gUI.grid2D?.[targetRowIndex]?.[0];
+    if (!targetCell) {
+        console.warn(`Could not find cell for row ${targetRowIndex} (Tag: GearTblHeaderStartR)`);
+        return;
+    }
+
+    const scrollTop = targetCell.offsetTop - (grid.clientHeight / 2) + (targetCell.offsetHeight / 2);
+    grid.scrollTo({ top: scrollTop, behavior: 'smooth' });
+    fLogStatus(`Scrolling grid to center row ${targetRowIndex} (Tag: GearTblHeaderStartR)`);
+} // END fScrollGridToBottom
 
 
 
@@ -1746,7 +1757,7 @@ function fHandleGridClick(event) {
 // Returns true if target is a checkbox input.
 function fIsCheckboxClick(target) {
     return target.tagName === 'INPUT' && target.type === 'checkbox';
-};
+} // END fIsCheckboxClick
 
 
 
@@ -1755,7 +1766,7 @@ function fIsCheckboxClick(target) {
 // Returns true if the clicked cell is contentEditable.
 function fIsEditableCell(cellDiv) {
     return cellDiv?.isContentEditable;
-};
+} // END fIsEditableCell
 
 
 
@@ -1764,7 +1775,7 @@ function fIsEditableCell(cellDiv) {
 // Returns true if cell has class 'url-link'.
 function fIsUrlLinkCell(cellDiv) {
     return cellDiv?.classList.contains('url-link');
-};
+} // END fIsUrlLinkCell
 
 
 
@@ -1774,7 +1785,7 @@ function fIsUrlLinkCell(cellDiv) {
 function fHandleDriveLink(url) {
     fLogStatus(`🖱️ Opening Drive Link in new tab: ${url.substring(0, 100)}...`);
     window.open(url, '_blank');
-};
+} // END fHandleDriveLink
 
 
 
@@ -1784,7 +1795,7 @@ function fHandleDriveLink(url) {
 function fHandleImageModal(imageUrl) {
     fLogStatus(`🖱️ Clicked Standard Image Link: ${imageUrl.substring(0, 100)}...`);
     fShowImageModal(imageUrl);
-};
+} // END fHandleImageModal
 
 
 
@@ -1794,7 +1805,7 @@ function fHandleImageModal(imageUrl) {
 function fHandleWebLink(url) {
     fLogStatus(`🖱️ Clicked Web Link: ${url.substring(0, 100)}...`);
     window.open(url, '_blank');
-};
+} // END fHandleWebLink
 
 
 
@@ -1819,12 +1830,7 @@ function fHandleUrlClick(cellDiv) {
     } else {
         fHandleWebLink(originalUrl);
     }
-};
-
-
-
-
-
+} // END fHandleUrlClick
 
 
 

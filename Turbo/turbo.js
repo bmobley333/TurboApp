@@ -70,13 +70,30 @@ function doGet(e) {
 
 
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////// START fOnDataLoaded and helpers
+////////////////////////////////////////////////////////////////////////////////////////////////////////// START fCSGetGameSheet and helpers
 
+
+
+
+// fCSGetGameSheet5 /////////////////////////////////////////////////////////////////////////////////
+// Loads full data, format, and notes from 'Game' sheet. Returns structured object.
+function fCSGetGameSheet5(targetSheetId) {
+    Logger.log('Ver 5');
+    try {
+        const sh = fOpenGameSheet(targetSheetId);
+        return fExtractSheetData(sh);
+    } catch (e) {
+        const context = e.stack?.includes("fOpenGameSheet") ? "opening spreadsheet" : "processing sheet";
+        const msg = `fCSGetGameSheet5: Error ${context}: ${e.message}`;
+        console.error(msg + "\nStack:\n" + e.stack);
+        throw new Error(msg);
+    }
+}
 
 
 // fOpenGameSheet ///////////////////////////////////////////////////////////////////////////////////
 // Opens spreadsheet and retrieves the "Game" sheet, or throws with clear message.
-const fOpenGameSheet = (targetSheetId) => {
+function fOpenGameSheet(targetSheetId) {
     if (!targetSheetId || typeof targetSheetId !== 'string') {
         throw new Error("Invalid or missing Sheet ID provided.");
     }
@@ -95,7 +112,7 @@ const fOpenGameSheet = (targetSheetId) => {
 
 // fIsSheetTrulyEmpty ////////////////////////////////////////////////////////////////////////////////
 // Determines if the sheet has zero real content, returns true if it's blank.
-const fIsSheetTrulyEmpty = (sh, arr) => {
+function fIsSheetTrulyEmpty(sh, arr) {
     const numRows = arr.length;
     const numCols = arr[0]?.length || 0;
     const onlyEmpty = numRows === 1 && numCols === 1 && arr[0][0] === "";
@@ -108,7 +125,7 @@ const fIsSheetTrulyEmpty = (sh, arr) => {
 
 // fBuildFormatObject ////////////////////////////////////////////////////////////////////////////////
 // Constructs formatting object from raw arrays and merge info.
-const fBuildFormatObject = (sh, rngData, numCols) => {
+function fBuildFormatObject(sh, rngData, numCols) {
     const fontColorObjects = rngData.getFontColorObjects();
     const fontColorHex = fontColorObjects.map(row =>
         row.map(obj => obj?.asRgbColor?.()?.asHexString?.() ?? null)
@@ -145,7 +162,7 @@ const fBuildFormatObject = (sh, rngData, numCols) => {
 
 // fBuildReturnObject ////////////////////////////////////////////////////////////////////////////////
 // Combines the final return structure.
-const fBuildReturnObject = (arr, format, notesArr) => {
+function fBuildReturnObject(arr, format, notesArr) {
     return {
         arr: arr,
         format: format,
@@ -158,7 +175,7 @@ const fBuildReturnObject = (arr, format, notesArr) => {
 
 // fExtractSheetData ////////////////////////////////////////////////////////////////////////////////
 // Reads data, formats, and notes from the sheet and returns structured result.
-const fExtractSheetData = (sh) => {
+function fExtractSheetData(sh) {
     const rngData = sh.getDataRange();
     const arr = rngData.getValues();
 
@@ -180,24 +197,6 @@ const fExtractSheetData = (sh) => {
 
     return fBuildReturnObject(arr, format, notesArr);
 };
-
-
-
-
-// fCSGetGameSheet5 /////////////////////////////////////////////////////////////////////////////////
-// Loads full data, format, and notes from 'Game' sheet. Returns structured object.
-function fCSGetGameSheet5(targetSheetId) {
-    Logger.log('Ver 5');
-    try {
-        const sh = fOpenGameSheet(targetSheetId);
-        return fExtractSheetData(sh);
-    } catch (e) {
-        const context = e.stack?.includes("fOpenGameSheet") ? "opening spreadsheet" : "processing sheet";
-        const msg = `fCSGetGameSheet5: Error ${context}: ${e.message}`;
-        console.error(msg + "\nStack:\n" + e.stack);
-        throw new Error(msg);
-    }
-}
 
 
 
