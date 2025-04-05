@@ -1,124 +1,442 @@
-/* === style.html === */ /*
-========================================================================== */ /*
-=== Base Page Styling === */ /*
-========================================================================== */
-body { font-family: monospace; background: white; color: #000; margin: 0;
-padding: 0; box-sizing: border-box; } *, *:before, *:after { box-sizing:
-inherit; } /*
-========================================================================== */ /*
-=== Grid Container === */ /*
-========================================================================== */
-#grid { display: grid; grid-auto-rows: 20px; gap: 0; border: 1px solid #ccc;
-margin: 0; padding: 0; overflow: auto; max-height: calc(100vh - 40px); position:
-relative; } /*
-========================================================================== */ /*
-=== Grid Cells === */ /*
-========================================================================== */
-.cell { display: flex; align-items: center; justify-content: center; text-align:
-center; font-size: 0.8em; overflow: hidden; padding: 0 4px; background: white;
-color: #000; border: 1px solid transparent; white-space: pre-wrap;
-text-overflow: ellipsis; } .cell.overflow-left { justify-content: flex-start;
-text-align: left; } .cell.wrap { white-space: normal; word-wrap: break-word; }
-.cell-header { background-color: #f2f2f2; font-weight: bold; color: #333; }
-.cell input[type="checkbox"]:not(:disabled) { cursor: pointer; } .cell
-input[type="checkbox"]:disabled { cursor: not-allowed; opacity: 0.6; } .cell
-input[type="checkbox"]:checked { accent-color: #000; transform: scale(1.2);
-filter: brightness(0.5); } .cell[contenteditable="true"] { cursor: text;
-justify-content: flex-start; text-align: left; }
-.cell[contenteditable="true"]:hover { background-color: #f0f8ff; }
-.cell[contenteditable="true"]:focus { background-color: #e6f3ff; outline: 1px
-solid #7cccff; box-shadow: inset 0 0 0 1px #7cccff; } .cell.url-link { cursor:
-pointer; color: #0000EE; text-decoration: underline; } .cell.url-link:hover {
-color: #DD00DD; } /*
-========================================================================== */ /*
-=== Menu Bar === */ /*
-========================================================================== */
-#menu-bar { --menu-indent: 60px; --gap-nish-roll: 100px; --gap-roll-game: 290px;
---gap-game-gear: 300px; display: flex; align-items: center; padding: 4px 8px;
-padding-left: var(--menu-indent); background-color: #ddd; border-bottom: 1px
-solid #ccc; min-height: 35px; flex-wrap: wrap; } #menu-bar button { padding: 5px
-10px; cursor: pointer; font-family: monospace; font-size: 0.9em; border: 1px
-solid #bbb; background-color: #d67ec8; border-radius: 3px; flex-shrink: 0; }
-#menu-bar button:hover { background-color: #ddd; border-color: #aaa; } #btn-roll
-{ margin-left: var(--gap-nish-roll); } #game-menu-item { margin-left:
-var(--gap-roll-game); } #gear-menu-item { margin-left: var(--gap-game-gear); }
-.menu-item { position: relative; display: inline-block; flex-shrink: 0; }
-.dropdown-content { display: none; position: absolute; background-color:
-#f9f9f9; min-width: 300px; box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
-z-index: 100; border: 1px solid #ccc; padding: 5px 0; max-height: 70vh;
-overflow-y: auto; overflow-x: visible; } .dropdown-content.sub-menu { position:
-absolute; top: 0; left: 100%; margin-top: 0px; min-width: 180px; z-index: 101; }
-.dropdown-content.show { display: flex; flex-direction: column; }
-.dropdown-content a { color: black; padding: 8px 16px; text-decoration: none;
-display: block; white-space: nowrap; font-family: monospace; font-size: 0.9em; }
-.dropdown-content a:hover { background-color: #ddd; } .sub-menu-item { position:
-relative; display: block; transform: translateZ(0); } .sub-menu-item > a::after
-{ content: ' ▶'; font-size: 0.8em; color: #555; } /*
-========================================================================== */ /*
-=== Roll Log Sidebar === */ /*
-========================================================================== */
-#roll-log-sidebar { position: fixed; top: 0; right: 0; height: 100vh; width:
-18vw; max-width: 300px; min-width: 200px; background-color: #f8f9fa;
-border-left: 1px solid #ccc; box-shadow: -3px 0px 6px rgba(0, 0, 0, 0.1);
-z-index: 200; box-sizing: border-box; display: none; flex-direction: column;
-padding: 10px; font-family: monospace; } #roll-log-sidebar.show { display: flex;
-} .sidebar-header { display: flex; justify-content: space-between; align-items:
-center; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #ddd;
-} .sidebar-title { margin: 0; font-size: 1.1em; font-weight: bold; }
-#sidebar-close-btn { background: none; border: none; font-size: 1.5em;
-line-height: 1; padding: 0 5px; cursor: pointer; color: #666; }
-#sidebar-close-btn:hover { color: #000; } #sidebar-content { flex-grow: 1;
-overflow-y: auto; background-color: #ffffff; padding: 10px; border: 1px solid
-#ddd; border-radius: 3px; font-size: 0.9em; line-height: 1.4; } #sidebar-content
-p { margin-top: 0; } /*
-========================================================================== */ /*
-=== Note Indicator (Triangle) === */ /*
-========================================================================== */
-.cell.has-note::after { content: ''; position: absolute; top: 0; right: 0;
-width: 0; height: 0; border-top: 5px solid #333; border-left: 5px solid
-transparent; z-index: 1; } .cell.has-note:not(.sticky-header) { position:
-relative; } /*
-========================================================================== */ /*
-=== Cell Hover Tooltip === */ /*
-========================================================================== */
-#cell-tooltip { display: none; position: absolute; background-color: #ffffe0;
-border: 1px solid #a0a0a0; padding: 5px 8px; font-family: monospace; font-size:
-0.85em; color: #000; max-width: 350px; z-index: 500; pointer-events: none;
-white-space: pre-wrap; word-wrap: break-word; box-shadow: 2px 2px 5px
-rgba(0,0,0,0.2); } /*
-========================================================================== */ /*
-=== Styling for Sticky Header Rows === */ /*
-========================================================================== */
-#grid .cell.sticky-header { position: sticky; z-index: 10; background: white;
-box-shadow: 0 1px 2px rgba(0,0,0,0.2); } #grid .cell.below-sticky { box-shadow:
-inset 0 2px 2px -1px rgba(0,0,0,0.1); } /*
-========================================================================== */ /*
-=== Header Image Buttons === */ /*
-========================================================================== */
-.header-button-img { max-width: 90%; /* Prevent image exceeding cell bounds
-(adjust %) */ max-height: 90%; /* Respects merged cell height (adjust %) */
-object-fit: contain; /* Scale image down, preserving aspect ratio */ cursor:
-pointer; user-select: none; /* Prevent selecting the image itself */ display:
-block; /* Ensure image behaves predictably as a block */ margin: auto; /* Helps
-centering in some contexts */ } /* Style the host cell containing the button */
-.cell:has(.header-button-img) { justify-content: center; /* Ensure flex
-alignment is center */ align-items: center; /* Ensure flex alignment is center
-*/ padding: 0; /* Remove cell padding to allow more image space */ /* Optional:
-Remove border if desired for button cells */ /* border: none; */ } /* Optional:
-Hover effect for the image button */ .header-button-img:hover { opacity: 0.8; /*
-Or add a border, scale, etc. */ /* transform: scale(1.1); */ } /*
-========================================================================== */ /*
-=== Image Modal === */ /*
-========================================================================== */
-#image-modal { display: none; position: fixed; left: 0; top: 0; width: 100%;
-height: 100%; z-index: 600; display: flex; align-items: center; justify-content:
-center; } #modal-backdrop { position: absolute; left: 0; top: 0; width: 100%;
-height: 100%; background-color: rgba(0, 0, 0, 0.7); } #modal-content { position:
-relative; background-color: #fefefe; padding: 20px; border: 1px solid #888;
-border-radius: 5px; max-width: 85vw; max-height: 85vh; z-index: 1; overflow:
-auto; box-shadow: 0 4px 8px 0 rgba(0,0,0,0.2), 0 6px 20px 0 rgba(0,0,0,0.19); }
-#modal-image { display: block; max-width: 100%; max-height: 100%; }
-#modal-close-btn { position: absolute; top: -5px; right: 2px; color: #aaa;
-font-size: 28px; font-weight: bold; line-height: 1; padding: 0 5px; cursor:
-pointer; z-index: 2; } #modal-close-btn:hover, #modal-close-btn:focus { color:
-black; text-decoration: none; }
+/* === style.html === */
+
+/* ========================================================================== */
+/* === Base Page Styling === */
+/* ========================================================================== */
+
+body {
+  font-family: monospace;
+  background: white;
+  color: #000;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+*, *:before, *:after {
+  box-sizing: inherit;
+}
+
+/* ========================================================================== */
+/* === Grid Container === */
+/* ========================================================================== */
+
+#grid {
+  display: grid;
+  grid-auto-rows: 20px;
+  gap: 0;
+  border: 1px solid #ccc;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  max-height: calc(100vh - 40px);
+  position: relative;
+}
+
+/* ========================================================================== */
+/* === Grid Cells === */
+/* ========================================================================== */
+
+.cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 0.8em;
+  overflow: hidden;
+  padding: 0 4px;
+  background: white;
+  color: #000;
+  border: 1px solid transparent;
+  white-space: pre-wrap;
+  text-overflow: ellipsis;
+}
+
+.cell.overflow-left {
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.cell.wrap {
+  white-space: normal;
+  word-wrap: break-word;
+}
+
+.cell-header {
+  background-color: #f2f2f2;
+  font-weight: bold;
+  color: #333;
+}
+
+.cell input[type="checkbox"]:not(:disabled) {
+  cursor: pointer;
+}
+
+.cell input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.cell input[type="checkbox"]:checked {
+  accent-color: #000;
+  transform: scale(1.2);
+  filter: brightness(0.5);
+}
+
+.cell[contenteditable="true"] {
+  cursor: text;
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.cell[contenteditable="true"]:hover {
+  background-color: #f0f8ff;
+}
+
+.cell[contenteditable="true"]:focus {
+  background-color: #e6f3ff;
+  outline: 1px solid #7cccff;
+  box-shadow: inset 0 0 0 1px #7cccff;
+}
+
+.cell.url-link {
+  cursor: pointer;
+  color: #0000EE;
+  text-decoration: underline;
+}
+
+.cell.url-link:hover {
+  color: #DD00DD;
+}
+
+/* ========================================================================== */
+/* === Menu Bar === */
+/* ========================================================================== */
+
+#menu-bar {
+  --menu-indent: 60px;
+  --gap-nish-roll: 100px;
+  --gap-roll-game: 290px;
+  --gap-game-gear: 300px;
+
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  padding-left: var(--menu-indent);
+  background-color: #ddd;
+  border-bottom: 1px solid #ccc;
+  min-height: 35px;
+  flex-wrap: wrap;
+}
+
+#menu-bar button {
+  padding: 5px 10px;
+  cursor: pointer;
+  font-family: monospace;
+  font-size: 0.9em;
+  border: 1px solid #bbb;
+  background-color: #d67ec8;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+#menu-bar button:hover {
+  background-color: #ddd;
+  border-color: #aaa;
+}
+
+#btn-roll {
+  margin-left: var(--gap-nish-roll);
+}
+
+#game-menu-item {
+  margin-left: var(--gap-roll-game);
+}
+
+#gear-menu-item {
+  margin-left: var(--gap-game-gear);
+}
+
+.menu-item {
+  position: relative;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.dropdown-content {
+  display: none;
+  position: absolute;
+  background-color: #f9f9f9;
+  min-width: 300px;
+  box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+  z-index: 100;
+  border: 1px solid #ccc;
+  padding: 5px 0;
+  max-height: 70vh;
+  overflow-y: auto;
+  overflow-x: visible;
+}
+
+.dropdown-content.sub-menu {
+  position: absolute;
+  top: 0;
+  left: 100%;
+  margin-top: 0px;
+  min-width: 180px;
+  z-index: 101;
+}
+
+.dropdown-content.show {
+  display: flex;
+  flex-direction: column;
+}
+
+.dropdown-content a {
+  color: black;
+  padding: 8px 16px;
+  text-decoration: none;
+  display: block;
+  white-space: nowrap;
+  font-family: monospace;
+  font-size: 0.9em;
+}
+
+.dropdown-content a:hover {
+  background-color: #ddd;
+}
+
+.sub-menu-item {
+  position: relative;
+  display: block;
+  transform: translateZ(0);
+}
+
+.sub-menu-item > a::after {
+  content: ' ▶';
+  font-size: 0.8em;
+  color: #555;
+}
+
+/* ========================================================================== */
+/* === Roll Log Sidebar === */
+/* ========================================================================== */
+
+#roll-log-sidebar {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100vh;
+  width: 18vw;
+  max-width: 300px;
+  min-width: 200px;
+  background-color: #f8f9fa;
+  border-left: 1px solid #ccc;
+  box-shadow: -3px 0px 6px rgba(0, 0, 0, 0.1);
+  z-index: 200;
+  box-sizing: border-box;
+  display: none;
+  flex-direction: column;
+  padding: 10px;
+  font-family: monospace;
+}
+
+#roll-log-sidebar.show {
+  display: flex;
+}
+
+.sidebar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #ddd;
+}
+
+.sidebar-title {
+  margin: 0;
+  font-size: 1.1em;
+  font-weight: bold;
+}
+
+#sidebar-close-btn {
+  background: none;
+  border: none;
+  font-size: 1.5em;
+  line-height: 1;
+  padding: 0 5px;
+  cursor: pointer;
+  color: #666;
+}
+
+#sidebar-close-btn:hover {
+  color: #000;
+}
+
+#sidebar-content {
+  flex-grow: 1;
+  overflow-y: auto;
+  background-color: #ffffff;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+  font-size: 0.9em;
+  line-height: 1.4;
+}
+
+#sidebar-content p {
+  margin-top: 0;
+}
+
+/* ========================================================================== */
+/* === Note Indicator (Triangle) === */
+/* ========================================================================== */
+
+.cell.has-note::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 0;
+  height: 0;
+  border-top: 5px solid #333;
+  border-left: 5px solid transparent;
+  z-index: 1;
+}
+
+.cell.has-note:not(.sticky-header) {
+  position: relative;
+}
+
+/* ========================================================================== */
+/* === Cell Hover Tooltip === */
+/* ========================================================================== */
+
+#cell-tooltip {
+  display: none;
+  position: absolute;
+  background-color: #ffffe0;
+  border: 1px solid #a0a0a0;
+  padding: 5px 8px;
+  font-family: monospace;
+  font-size: 0.85em;
+  color: #000;
+  max-width: 350px;
+  z-index: 500;
+  pointer-events: none;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
+}
+
+/* ========================================================================== */
+/* === Styling for Sticky Header Rows === */
+/* ========================================================================== */
+
+#grid .cell.sticky-header {
+  position: sticky;
+  z-index: 10;
+  background: white;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+}
+
+#grid .cell.below-sticky {
+  box-shadow: inset 0 2px 2px -1px rgba(0,0,0,0.1);
+}
+
+
+/* ========================================================================== */
+/* === Header Image Buttons === */
+/* ========================================================================== */
+
+.header-button-img {
+  max-width: 90%;      /* Prevent image exceeding cell bounds (adjust %) */
+  max-height: 90%;     /* Respects merged cell height (adjust %) */
+  object-fit: contain; /* Scale image down, preserving aspect ratio */
+  cursor: pointer;
+  user-select: none;   /* Prevent selecting the image itself */
+  display: block;      /* Ensure image behaves predictably as a block */
+  margin: auto;        /* Helps centering in some contexts */
+}
+
+/* Style the host cell containing the button */
+.cell:has(.header-button-img) {
+     justify-content: center; /* Ensure flex alignment is center */
+     align-items: center;   /* Ensure flex alignment is center */
+     padding: 0;            /* Remove cell padding to allow more image space */
+     /* Optional: Remove border if desired for button cells */
+     /* border: none; */
+}
+
+/* Optional: Hover effect for the image button */
+.header-button-img:hover {
+  opacity: 0.8;
+  /* Or add a border, scale, etc. */
+  /* transform: scale(1.1); */
+}
+
+
+
+/* ========================================================================== */
+/* === Image Modal === */
+/* ========================================================================== */
+
+#image-modal {
+  display: none;
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#modal-backdrop {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.7);
+}
+
+#modal-content {
+  position: relative;
+  background-color: #fefefe;
+  padding: 20px;
+  border: 1px solid #888;
+  border-radius: 5px;
+  max-width: 85vw;
+  max-height: 85vh;
+  z-index: 1;
+  overflow: auto;
+  box-shadow: 0 4px 8px 0 rgba(0,0,0,0.2), 0 6px 20px 0 rgba(0,0,0,0.19);
+}
+
+#modal-image {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+#modal-close-btn {
+  position: absolute;
+  top: -5px;
+  right: 2px;
+  color: #aaa;
+  font-size: 28px;
+  font-weight: bold;
+  line-height: 1;
+  padding: 0 5px;
+  cursor: pointer;
+  z-index: 2;
+}
+
+#modal-close-btn:hover,
+#modal-close-btn:focus {
+  color: black;
+  text-decoration: none;
+}
