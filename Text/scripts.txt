@@ -310,6 +310,35 @@ function fMakeCheckBox(r, c) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////// START fCreateAndFormatCell and helpers
 
 
+
+
+// fCreateAndFormatCell ////////////////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Creates and formats a single cell div with content, URL/image/note tags, and style.
+// Inputs  -> r, c, value, rowFormat (see original for detailed descriptions)
+// Outputs -> HTMLElement: Configured cell div
+function fCreateAndFormatCell(r, c, value, rowFormat) {
+    const cell = document.createElement("div");
+    cell.className = "cell";
+
+    const originalValue = value ?? "";
+    const valStr = String(originalValue).toUpperCase();
+    const isCheckbox = value === true || value === false || valStr === "TRUE" || valStr === "FALSE";
+
+    const bgColor = rowFormat.bg?.[c];
+    const isEditable = fCheckIfEditable(bgColor, isCheckbox);
+
+    fSetCellAttributes(cell, r, c, isEditable);
+    fCheckAndTagNote(cell, r, c);
+    const { displayValue, isUrl } = fCheckAndTagUrl(cell, originalValue);
+    fPopulateCellContent(cell, r, c, displayValue, isCheckbox);
+    fApplyCellFormatting(cell, c, bgColor, rowFormat, isUrl);
+
+    return cell;
+};
+
+
+
+
 // fCheckIfEditable ///////////////////////////////////////////////////////////////////
 // Returns true if cell should be editable based on background and type.
 function fCheckIfEditable(bgColor, isCheckbox) {
@@ -409,31 +438,6 @@ function fApplyCellFormatting(cell, c, bgColor, rowFormat, isUrl) {
 
 
 
-// fCreateAndFormatCell ////////////////////////////////////////////////////////////////////////////////////////////
-// Purpose -> Creates and formats a single cell div with content, URL/image/note tags, and style.
-// Inputs  -> r, c, value, rowFormat (see original for detailed descriptions)
-// Outputs -> HTMLElement: Configured cell div
-function fCreateAndFormatCell(r, c, value, rowFormat) {
-    const cell = document.createElement("div");
-    cell.className = "cell";
-
-    const originalValue = value ?? "";
-    const valStr = String(originalValue).toUpperCase();
-    const isCheckbox = value === true || value === false || valStr === "TRUE" || valStr === "FALSE";
-
-    const bgColor = rowFormat.bg?.[c];
-    const isEditable = fCheckIfEditable(bgColor, isCheckbox);
-
-    fSetCellAttributes(cell, r, c, isEditable);
-    fCheckAndTagNote(cell, r, c);
-    const { displayValue, isUrl } = fCheckAndTagUrl(cell, originalValue);
-    fPopulateCellContent(cell, r, c, displayValue, isCheckbox);
-    fApplyCellFormatting(cell, c, bgColor, rowFormat, isUrl);
-
-    return cell;
-};
-
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////// END fCreateAndFormatCell and helpers
 
 
@@ -487,6 +491,35 @@ function fSetGridTagsFromHeaders() {
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////// START fRenderFullGrid and helpers
+
+
+
+
+// fRenderFullGrid /////////////////////////////////////////////////////////////////////////////////
+// Main controller that handles grid rendering logic using helpers.
+function fRenderFullGrid(callback) {
+    fLogStatus("⚙️ Rendering Full Grid...");
+    const grid = document.getElementById("grid");
+    const gameArr = gUI.arr;
+    const format = gUI.format || {};
+
+    if (!fInitGridAndSettings(grid, gameArr)) return;
+
+    const numRows = gameArr.length;
+    const numCols = gameArr[0].length;
+
+    fSetGridColumnWidths(grid, format, numCols);
+    fSetGridTagsFromHeaders();
+
+    gUI.grid2D = Array.from({ length: numRows }, () => Array(numCols).fill(null));
+    fLogStatus(`🏎️ Rendering ${numRows} rows in chunks of 50...`);
+
+    const renderChunk = fRenderChunkFactory(grid, gameArr, format, 50, callback);
+    requestAnimationFrame(renderChunk);
+};
+
+
+
 
 
 
@@ -585,32 +618,6 @@ function fRenderChunkFactory(grid, gameArr, format, chunkSize, callback) {
     };
 };
 
-
-
-
-
-// fRenderFullGrid /////////////////////////////////////////////////////////////////////////////////
-// Main controller that handles grid rendering logic using helpers.
-function fRenderFullGrid(callback) {
-    fLogStatus("⚙️ Rendering Full Grid...");
-    const grid = document.getElementById("grid");
-    const gameArr = gUI.arr;
-    const format = gUI.format || {};
-
-    if (!fInitGridAndSettings(grid, gameArr)) return;
-
-    const numRows = gameArr.length;
-    const numCols = gameArr[0].length;
-
-    fSetGridColumnWidths(grid, format, numCols);
-    fSetGridTagsFromHeaders();
-
-    gUI.grid2D = Array.from({ length: numRows }, () => Array(numCols).fill(null));
-    fLogStatus(`🏎️ Rendering ${numRows} rows in chunks of 50...`);
-
-    const renderChunk = fRenderChunkFactory(grid, gameArr, format, 50, callback);
-    requestAnimationFrame(renderChunk);
-};
 
 
 
@@ -908,64 +915,6 @@ function fApplyManualBorders() {
 
 
 
-// fGetResolvedCell ////////////////////////////////////////////////////////////////
-// Purpose -> Resolve a cell element in gUI.grid2D from rowTag and colTag.
-// Inputs  -> rowTag: string, colTag: string
-// Outputs -> Cell element or null
-function fGetResolvedCell(rowTag, colTag) {
-    const r = resolveRow(rowTag);
-    const c = resolveCol(colTag);
-
-    if (isNaN(r) || isNaN(c)) {
-        console.warn(`⚠️ Header Button: Could not resolve tags [${rowTag}, ${colTag}]`);
-        return null;
-    }
-
-    const cell = gUI.grid2D?.[r]?.[c];
-    if (!cell) {
-        console.warn(`⚠️ Header Button: Cell element not found at resolved [${r}, ${c}] for tags [${rowTag}, ${colTag}]`);
-        return null;
-    }
-
-    return cell;
-};
-
-
-
-
-// fCreateHeaderButtonImage ///////////////////////////////////////////////////////
-// Purpose -> Create and return a styled <img> element for a header button.
-// Inputs  -> config: button config object with imageUrl, altText, titleText, action
-// Outputs -> <img> element
-function fCreateHeaderButtonImage(config) {
-    const img = document.createElement('img');
-    img.src = config.imageUrl;
-    img.alt = config.altText;
-    img.title = config.titleText;
-    img.dataset.buttonAction = config.action;
-    img.classList.add('header-button-img');
-    return img;
-};
-
-
-
-
-// fApplyHeaderButtonToCell ///////////////////////////////////////////////////////
-// Purpose -> Clear the cell, insert image, apply styling.
-// Inputs  -> cell: HTMLElement, img: HTMLElement
-// Outputs -> None (modifies DOM)
-function fApplyHeaderButtonToCell(cell, img) {
-    cell.innerHTML = '';
-    cell.appendChild(img);
-
-    cell.style.justifyContent = 'center';
-    cell.style.alignItems = 'center';
-    cell.style.padding = '0';
-};
-
-
-
-
 // fAddHeaderButtons ////////////////////////////////////////////////////////////////
 // Purpose -> Finds specific cells designated as header buttons and inserts them.
 // Inputs  -> None
@@ -1030,6 +979,68 @@ function fAddHeaderButtons() {
         ? `✅ Added ${buttonsAdded} Header Button(s).`
         : `ℹ️ No valid Header Buttons found or added.`);
 };
+
+
+
+// fGetResolvedCell ////////////////////////////////////////////////////////////////
+// Purpose -> Resolve a cell element in gUI.grid2D from rowTag and colTag.
+// Inputs  -> rowTag: string, colTag: string
+// Outputs -> Cell element or null
+function fGetResolvedCell(rowTag, colTag) {
+    const r = resolveRow(rowTag);
+    const c = resolveCol(colTag);
+
+    if (isNaN(r) || isNaN(c)) {
+        console.warn(`⚠️ Header Button: Could not resolve tags [${rowTag}, ${colTag}]`);
+        return null;
+    }
+
+    const cell = gUI.grid2D?.[r]?.[c];
+    if (!cell) {
+        console.warn(`⚠️ Header Button: Cell element not found at resolved [${r}, ${c}] for tags [${rowTag}, ${colTag}]`);
+        return null;
+    }
+
+    return cell;
+};
+
+
+
+
+// fCreateHeaderButtonImage ///////////////////////////////////////////////////////
+// Purpose -> Create and return a styled <img> element for a header button.
+// Inputs  -> config: button config object with imageUrl, altText, titleText, action
+// Outputs -> <img> element
+function fCreateHeaderButtonImage(config) {
+    const img = document.createElement('img');
+    img.src = config.imageUrl;
+    img.alt = config.altText;
+    img.title = config.titleText;
+    img.dataset.buttonAction = config.action;
+    img.classList.add('header-button-img');
+    return img;
+};
+
+
+
+
+// fApplyHeaderButtonToCell ///////////////////////////////////////////////////////
+// Purpose -> Clear the cell, insert image, apply styling.
+// Inputs  -> cell: HTMLElement, img: HTMLElement
+// Outputs -> None (modifies DOM)
+function fApplyHeaderButtonToCell(cell, img) {
+    cell.innerHTML = '';
+    cell.appendChild(img);
+
+    cell.style.justifyContent = 'center';
+    cell.style.alignItems = 'center';
+    cell.style.padding = '0';
+};
+
+
+
+
+
 
 
 
@@ -1319,6 +1330,23 @@ function fPositionTooltip(tooltip, event) {
 
 
 
+// fHandleCellHover /////////////////////////////////////////////////////////////////////////////////
+// Delegated mouseenter/mouseover handler for grid cells (shows tooltips for overflow + notes)
+function fHandleCellHover(event) {
+    if (!gUI.tooltipElement) return; // Updated reference
+
+    const cell = fGetValidTargetCell(event);
+    if (!cell) {
+        fHideTooltip();
+        return;
+    }
+
+    // No need to call fHideTooltip here because fStartTooltipTimer clears the old one.
+    fStartTooltipTimer(cell, event);
+};
+
+
+
 // fGetValidTargetCell ////////////////////////////////////////////////////////////////////////////////
 // Returns the closest .cell from the event or null if invalid.
 function fGetValidTargetCell(event) {
@@ -1399,23 +1427,6 @@ function fStartTooltipTimer(cell, event) {
     }, gUI.HOVER_DELAY_MS); // Updated reference
 };
 
-
-
-
-// fHandleCellHover /////////////////////////////////////////////////////////////////////////////////
-// Delegated mouseenter/mouseover handler for grid cells (shows tooltips for overflow + notes)
-function fHandleCellHover(event) {
-    if (!gUI.tooltipElement) return; // Updated reference
-
-    const cell = fGetValidTargetCell(event);
-    if (!cell) {
-        fHideTooltip();
-        return;
-    }
-
-    // No need to call fHideTooltip here because fStartTooltipTimer clears the old one.
-    fStartTooltipTimer(cell, event);
-};
 
 
 
@@ -1519,6 +1530,34 @@ function fShowImageModal(imageUrl) {
 
 
 
+// fHandleGridCheckboxClick ////////////////////////////////////////////////////////////////////
+// Purpose -> Handles checkbox click events from fHandleGridClick.
+// Inputs  -> event (MouseEvent)
+// Outputs -> None (modifies gUI.arr and DOM)
+function fHandleGridCheckboxClick(event) {
+    const checkbox = event.target;
+    if (!fIsValidGridCheckbox(checkbox)) return;
+
+    const r = parseInt(checkbox.dataset.r, 10);
+    const c = parseInt(checkbox.dataset.c, 10);
+    if (!fIsValidGridCoords(r, c)) {
+        console.warn("Checkbox click handler: Invalid row/column index or missing grid element.", checkbox.dataset);
+        return;
+    }
+
+    const isChecked = checkbox.checked;
+    const isSkGroupMember = checkbox.dataset.skGroup === 'true';
+
+    if (isSkGroupMember) {
+        fHandleSkGroupCheckboxClick(r, c, isChecked);
+    } else {
+        gUI.arr[r][c] = isChecked;
+        fLogStatus(`Checkbox [${r}, ${c}] toggled to: ${isChecked}`);
+    }
+};
+
+
+
 // fIsValidGridCheckbox ////////////////////////////////////////////////////////////////////////
 // Purpose -> Ensure the clicked element is a valid checkbox inside a grid cell.
 // Inputs  -> checkbox (HTMLElement)
@@ -1593,279 +1632,12 @@ function fUncheckOldSkGroupBox(oldR, oldC) {
 
 
 
-// fHandleGridCheckboxClick ////////////////////////////////////////////////////////////////////
-// Purpose -> Handles checkbox click events from fHandleGridClick.
-// Inputs  -> event (MouseEvent)
-// Outputs -> None (modifies gUI.arr and DOM)
-function fHandleGridCheckboxClick(event) {
-    const checkbox = event.target;
-    if (!fIsValidGridCheckbox(checkbox)) return;
-
-    const r = parseInt(checkbox.dataset.r, 10);
-    const c = parseInt(checkbox.dataset.c, 10);
-    if (!fIsValidGridCoords(r, c)) {
-        console.warn("Checkbox click handler: Invalid row/column index or missing grid element.", checkbox.dataset);
-        return;
-    }
-
-    const isChecked = checkbox.checked;
-    const isSkGroupMember = checkbox.dataset.skGroup === 'true';
-
-    if (isSkGroupMember) {
-        fHandleSkGroupCheckboxClick(r, c, isChecked);
-    } else {
-        gUI.arr[r][c] = isChecked;
-        fLogStatus(`Checkbox [${r}, ${c}] toggled to: ${isChecked}`);
-    }
-};
-
-
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////// END fHandleGridCheckboxClick and helpers
 
 
 
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////// END fHandleRollDiceAction and helpers
-
-
-
-
-// fValidateRollSelection ///////////////////////////////////////////////////////////
-// Purpose -> Ensure a radio checkbox is selected (Sk1/Sk2).
-// Inputs  -> row, col indices
-// Outputs -> true if valid, false otherwise
-function fValidateRollSelection(row, col) {
-    const isValid = row !== null && !isNaN(row) && col !== null && !isNaN(col);
-    if (!isValid) {
-        const msg = "⚠️ Please select an Ability/Skill first!";
-        console.warn(msg);
-        fPrependToSidebar(msg);
-        fShowSidebar();
-    }
-    return isValid;
-};
-
-
-
-
-// fValidateRollColumnIndices ////////////////////////////////////////////////////////
-// Purpose -> Check if all critical column tags are resolved.
-// Inputs  -> array of column indices
-// Outputs -> true if valid, false otherwise
-function fValidateRollColumnIndices(cols) {
-    const allResolved = cols.every(col => !isNaN(col));
-    if (!allResolved) {
-        const msg = "❌ Error: Could not resolve required column tags.";
-        console.error(msg);
-        fPrependToSidebar(msg);
-        fShowSidebar();
-    }
-    return allResolved;
-};
-
-
-
-
-// fExtractSkillInfo /////////////////////////////////////////////////////////////////
-// Purpose -> Given selected skill col and row, extract type, value, and target.
-// Inputs  -> row index, selected col index, col references
-// Outputs -> { skillType, skillVal, skillTarget, logMsg }
-function fExtractSkillInfo(r, selectedC, cols) {
-    const idPattern = /\s{2,}_\w{6}$/;
-    let skillType = '', skillVal = '', skillTarget = NaN;
-    let logMsg = '';
-
-    if (selectedC === cols.cSk1ChkBox) {
-        skillType = (gUI.arr[r]?.[cols.cSk1Typ] ?? '').replace(idPattern, '');
-        skillVal = String(gUI.arr[r]?.[cols.cSk1] ?? '').replace(idPattern, '');
-        skillTarget = parseInt(skillVal, 10);
-        logMsg = ` -> Selected Sk1: ${skillType}${skillVal} (Target: ${skillTarget})`;
-    } else if (selectedC === cols.cSk2ChkBox) {
-        skillType = (gUI.arr[r]?.[cols.cSk2Typ] ?? '').replace(idPattern, '');
-        skillVal = String(gUI.arr[r]?.[cols.cSk2] ?? '').replace(idPattern, '');
-        skillTarget = parseInt(skillVal, 10);
-        logMsg = ` -> Selected Sk2: ${skillType}${skillVal} (Target: ${skillTarget})`;
-    } else {
-        const msg = `⚠️ Internal Warning: Selected checkbox column (${selectedC}) mismatch. Cannot determine roll type.`;
-        console.warn(msg);
-        fPrependToSidebar(msg);
-        fShowSidebar();
-        return null;
-    }
-
-    return { skillType, skillVal, skillTarget, logMsg };
-};
-
-
-
-
-// fGetRollResult ////////////////////////////////////////////////////////////////////
-// Purpose -> Roll a number between 1 and target (inclusive) and return as formatted string.
-// Inputs  -> skillTarget
-// Outputs -> { roll, rollStr }
-function fGetRollResult(skillTarget) {
-    if (!isNaN(skillTarget) && skillTarget > 0) {
-        const roll = Math.floor(Math.random() * skillTarget) + 1;
-        const rollStr = `~${roll}`;
-        fLogStatus(` -> Roll Result: ${roll} (vs Target: ${skillTarget})`);
-        return { roll, rollStr };
-    }
-    fLogStatus(` -> Skipping roll: Invalid or zero target (${skillTarget}).`);
-    return { roll: 0, rollStr: '' };
-};
-
-
-
-
-// fBuildRollHTML ////////////////////////////////////////////////////////////////////
-// Purpose -> Construct sidebar output HTML from ability, skill, roll.
-// Inputs  -> abilityStr, skillType, skillVal, rollStr
-// Outputs -> HTML string
-function fBuildRollHTML(abilityStr, skillType, skillVal, rollStr) {
-    const abilityHTML = `<span class="sidebar-ability-name">${abilityStr}</span>`;
-    let line1 = abilityHTML;
-    let line2 = '';
-
-    if (skillType) line1 += ` as ${skillType}`;
-
-    if (skillType && skillVal) line2 = `${skillType}(${skillVal})${rollStr}`;
-    else if (skillVal && rollStr) line2 = `Value(${skillVal})${rollStr}`;
-    else if (rollStr) line2 = `Roll${rollStr}`;
-
-    const html = line2 ? `${line1}<br>${line2}` : line1;
-    fLogStatus(` -> Sidebar Output: ${html.replace('<br>', ' | ')}`);
-    return html;
-};
-
-
-
-
-// fHandleRollDiceAction ////////////////////////////////////////////////////////////
-// Purpose -> Top-level handler for "Roll Dice" action. Validates, rolls, displays.
-// Inputs  -> None (uses gUI)
-// Outputs -> None (DOM + gUI changes)
-function fHandleRollDiceAction() {
-    fLogStatus("🎲 Roll Dice Action Triggered");
-
-    const r = gUI.currentSkRadioChecked.r;
-    const c = gUI.currentSkRadioChecked.c;
-    if (!fValidateRollSelection(r, c)) return;
-
-    const colRefs = {
-        cAbility: resolveCol('Ability'),
-        cSk1Typ: resolveCol('Sk1Typ'),
-        cSk1: resolveCol('Sk1'),
-        cSk2Typ: resolveCol('Sk2Typ'),
-        cSk2: resolveCol('Sk2'),
-        cSk1ChkBox: resolveCol('Sk1ChkBox'),
-        cSk2ChkBox: resolveCol('Sk2ChkBox')
-    };
-    if (!fValidateRollColumnIndices(Object.values(colRefs))) return;
-
-    const abilityVal = (gUI.arr[r]?.[colRefs.cAbility] ?? '').replace(/\s{2,}_\w{6}$/, '');
-
-    const skillData = fExtractSkillInfo(r, c, colRefs);
-    if (!skillData) return;
-
-    fLogStatus(skillData.logMsg);
-    const { rollStr } = fGetRollResult(skillData.skillTarget);
-    const html = fBuildRollHTML(abilityVal, skillData.skillType, skillData.skillVal, rollStr);
-
-    fPrependToSidebar(html);
-    fShowSidebar();
-};
-
-
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////// END fHandleRollDiceAction and helpers
-
-
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////// START fHandleGridClick and helpers
-
-
-
-
-
-// fIsCheckboxClick ////////////////////////////////////////////////////////////////////////////////
-// Returns true if target is a checkbox input.
-function fIsCheckboxClick(target) {
-    return target.tagName === 'INPUT' && target.type === 'checkbox';
-};
-
-
-
-
-// fIsEditableCell /////////////////////////////////////////////////////////////////////////////////
-// Returns true if the clicked cell is contentEditable.
-function fIsEditableCell(cellDiv) {
-    return cellDiv?.isContentEditable;
-};
-
-
-
-
-// fIsUrlLinkCell /////////////////////////////////////////////////////////////////////////////////
-// Returns true if cell has class 'url-link'.
-function fIsUrlLinkCell(cellDiv) {
-    return cellDiv?.classList.contains('url-link');
-};
-
-
-
-
-// fHandleDriveLink ///////////////////////////////////////////////////////////////////////////////
-// Opens Google Drive links in new tab due to embed restrictions.
-function fHandleDriveLink(url) {
-    fLogStatus(`🖱️ Opening Drive Link in new tab: ${url.substring(0, 100)}...`);
-    window.open(url, '_blank');
-};
-
-
-
-
-// fHandleImageModal /////////////////////////////////////////////////////////////////////////////
-// Opens a standard image link in modal.
-function fHandleImageModal(imageUrl) {
-    fLogStatus(`🖱️ Clicked Standard Image Link: ${imageUrl.substring(0, 100)}...`);
-    fShowImageModal(imageUrl);
-};
-
-
-
-
-// fHandleWebLink /////////////////////////////////////////////////////////////////////////////////
-// Opens non-image, non-Drive links in a new tab.
-function fHandleWebLink(url) {
-    fLogStatus(`🖱️ Clicked Web Link: ${url.substring(0, 100)}...`);
-    window.open(url, '_blank');
-};
-
-
-
-
-// fHandleUrlClick ////////////////////////////////////////////////////////////////////////////////
-// Determines URL type and routes to appropriate handler.
-function fHandleUrlClick(cellDiv) {
-    const originalUrl = cellDiv.dataset.url;
-    if (!originalUrl) {
-        console.warn("Clicked URL link cell, but data-url attribute was missing.", cellDiv);
-        return;
-    }
-
-    const isDrive = originalUrl.includes('drive.google.com/file/d/');
-    const isImage = cellDiv.classList.contains('image-link') && !isDrive;
-    const imageUrl = cellDiv.dataset.imageSrc;
-
-    if (isDrive) {
-        fHandleDriveLink(originalUrl);
-    } else if (isImage && imageUrl) {
-        fHandleImageModal(imageUrl);
-    } else {
-        fHandleWebLink(originalUrl);
-    }
-};
 
 
 
@@ -1970,6 +1742,93 @@ function fHandleGridClick(event) {
 
 
 
+// fIsCheckboxClick ////////////////////////////////////////////////////////////////////////////////
+// Returns true if target is a checkbox input.
+function fIsCheckboxClick(target) {
+    return target.tagName === 'INPUT' && target.type === 'checkbox';
+};
+
+
+
+
+// fIsEditableCell /////////////////////////////////////////////////////////////////////////////////
+// Returns true if the clicked cell is contentEditable.
+function fIsEditableCell(cellDiv) {
+    return cellDiv?.isContentEditable;
+};
+
+
+
+
+// fIsUrlLinkCell /////////////////////////////////////////////////////////////////////////////////
+// Returns true if cell has class 'url-link'.
+function fIsUrlLinkCell(cellDiv) {
+    return cellDiv?.classList.contains('url-link');
+};
+
+
+
+
+// fHandleDriveLink ///////////////////////////////////////////////////////////////////////////////
+// Opens Google Drive links in new tab due to embed restrictions.
+function fHandleDriveLink(url) {
+    fLogStatus(`🖱️ Opening Drive Link in new tab: ${url.substring(0, 100)}...`);
+    window.open(url, '_blank');
+};
+
+
+
+
+// fHandleImageModal /////////////////////////////////////////////////////////////////////////////
+// Opens a standard image link in modal.
+function fHandleImageModal(imageUrl) {
+    fLogStatus(`🖱️ Clicked Standard Image Link: ${imageUrl.substring(0, 100)}...`);
+    fShowImageModal(imageUrl);
+};
+
+
+
+
+// fHandleWebLink /////////////////////////////////////////////////////////////////////////////////
+// Opens non-image, non-Drive links in a new tab.
+function fHandleWebLink(url) {
+    fLogStatus(`🖱️ Clicked Web Link: ${url.substring(0, 100)}...`);
+    window.open(url, '_blank');
+};
+
+
+
+
+// fHandleUrlClick ////////////////////////////////////////////////////////////////////////////////
+// Determines URL type and routes to appropriate handler.
+function fHandleUrlClick(cellDiv) {
+    const originalUrl = cellDiv.dataset.url;
+    if (!originalUrl) {
+        console.warn("Clicked URL link cell, but data-url attribute was missing.", cellDiv);
+        return;
+    }
+
+    const isDrive = originalUrl.includes('drive.google.com/file/d/');
+    const isImage = cellDiv.classList.contains('image-link') && !isDrive;
+    const imageUrl = cellDiv.dataset.imageSrc;
+
+    if (isDrive) {
+        fHandleDriveLink(originalUrl);
+    } else if (isImage && imageUrl) {
+        fHandleImageModal(imageUrl);
+    } else {
+        fHandleWebLink(originalUrl);
+    }
+};
+
+
+
+
+
+
+
+
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////// END fHandleGridClick and helpers
 
 
@@ -2021,6 +1880,37 @@ function fHandleGridCellEdit(event) {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////// START fClearCheckboxesInGridRange and helpers
 
+
+
+
+// fClearCheckboxesInGridRange //////////////////////////////////////////////////////////////////////
+// Main entry: loops through range array, clears all checkboxes in valid ranges.
+function fClearCheckboxesInGridRange(rangeArray) {
+    fLogStatus(`⚙️ Clearing checkboxes in ranges...`);
+
+    if (!Array.isArray(rangeArray)) {
+        console.error("❌ Invalid input: must be an array of range objects.", rangeArray);
+        fLogStatus("❌ Failed to clear checkboxes: Input was not an array.");
+        return;
+    }
+
+    if (rangeArray.length === 0) {
+        fLogStatus("ℹ️ Input array is empty, no ranges to process.");
+        return;
+    }
+
+    if (!gUI.grid2D || gUI.grid2D.length === 0) {
+        fLogStatus("ℹ️ Grid is empty, no checkboxes to clear.");
+        return;
+    }
+
+    let totalCleared = 0;
+    rangeArray.forEach((range, idx) => {
+        totalCleared += fClearCheckboxesInRange(range, idx);
+    });
+
+    fLogStatus(`✅ Cleared ${totalCleared} checkboxes in the specified range(s).`);
+};
 
 
 // fIsValidRangeObject //////////////////////////////////////////////////////////////////////////////
@@ -2109,37 +1999,6 @@ function fClearCheckboxesInRange(range, index) {
     return clearedCount;
 };
 
-
-
-
-// fClearCheckboxesInGridRange //////////////////////////////////////////////////////////////////////
-// Main entry: loops through range array, clears all checkboxes in valid ranges.
-function fClearCheckboxesInGridRange(rangeArray) {
-    fLogStatus(`⚙️ Clearing checkboxes in ranges...`);
-
-    if (!Array.isArray(rangeArray)) {
-        console.error("❌ Invalid input: must be an array of range objects.", rangeArray);
-        fLogStatus("❌ Failed to clear checkboxes: Input was not an array.");
-        return;
-    }
-
-    if (rangeArray.length === 0) {
-        fLogStatus("ℹ️ Input array is empty, no ranges to process.");
-        return;
-    }
-
-    if (!gUI.grid2D || gUI.grid2D.length === 0) {
-        fLogStatus("ℹ️ Grid is empty, no checkboxes to clear.");
-        return;
-    }
-
-    let totalCleared = 0;
-    rangeArray.forEach((range, idx) => {
-        totalCleared += fClearCheckboxesInRange(range, idx);
-    });
-
-    fLogStatus(`✅ Cleared ${totalCleared} checkboxes in the specified range(s).`);
-};
 
 
 
@@ -2337,6 +2196,19 @@ function fSetupDelegatedMenuActionClick(menuBar) {
 
 
 
+
+// fSetupSubMenuHover ///////////////////////////////////////////////////////////////////////////////
+// Main function: sets up hover logic for all .sub-menu-item elements under menuBar.
+function fSetupSubMenuHover(menuBar) {
+    if (!menuBar) return;
+
+    const subMenuItems = menuBar.querySelectorAll('.sub-menu-item');
+    subMenuItems.forEach((item, index) => {
+        fSetupSingleSubMenuItem(item, index);
+    });
+};
+
+
 // fClearHideTimeout /////////////////////////////////////////////////////////////////////////////////
 // Clears any active hide timeout on a submenu panel.
 function fClearHideTimeout(panel) {
@@ -2415,21 +2287,6 @@ function fSetupSingleSubMenuItem(item, index) {
         fStartHideTimeout(item, subMenuPanel, mainDropdown);
     });
 };
-
-
-
-
-// fSetupSubMenuHover ///////////////////////////////////////////////////////////////////////////////
-// Main function: sets up hover logic for all .sub-menu-item elements under menuBar.
-function fSetupSubMenuHover(menuBar) {
-    if (!menuBar) return;
-
-    const subMenuItems = menuBar.querySelectorAll('.sub-menu-item');
-    subMenuItems.forEach((item, index) => {
-        fSetupSingleSubMenuItem(item, index);
-    });
-};
-
 
 
 
@@ -2580,8 +2437,25 @@ function fSetupMenuInteractivity() {
 
 
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////// End fOnDataLoaded and helpers
+////////////////////////////////////////////////////////////////////////////////////////////////////////// START fOnDataLoaded and helpers
 
+
+
+
+// fOnDataLoaded ////////////////////////////////////////////////////////////////////////////////////
+// Receives data from server and kicks off render + post-processing sequence.
+function fOnDataLoaded(data) {
+    fLogStatus("✅ Data received from server");
+
+    const isValid = fStoreAndValidateData(data);
+    if (!isValid) return;
+
+    fSetupTooltipAndModal(); // Grabs DOM refs and assigns to gUI
+
+    fRenderFullGrid(() => { // Callback runs after initial render pass
+        fRunPostRenderFormatting(); // Applies merges, borders, listeners etc.
+    });
+};
 
 
 // fStoreAndValidateData ////////////////////////////////////////////////////////////////////////////
@@ -2692,23 +2566,6 @@ function fRunPostRenderFormatting() {
     fLogStatus("✅ All Post-Render Formatting Done!");
 }; // END fRunPostRenderFormatting
 
-
-
-
-// fOnDataLoaded ////////////////////////////////////////////////////////////////////////////////////
-// Receives data from server and kicks off render + post-processing sequence.
-function fOnDataLoaded(data) {
-    fLogStatus("✅ Data received from server");
-
-    const isValid = fStoreAndValidateData(data);
-    if (!isValid) return;
-
-    fSetupTooltipAndModal(); // Grabs DOM refs and assigns to gUI
-
-    fRenderFullGrid(() => { // Callback runs after initial render pass
-        fRunPostRenderFormatting(); // Applies merges, borders, listeners etc.
-    });
-};
 
 
 

@@ -5,4 +5,163 @@
 
 
 
+
+// ==========================================================================
+// === Die Roll Button         (End of Top) ===
+// ==========================================================================
+
+
+
+
+// fHandleRollDiceAction ////////////////////////////////////////////////////////////
+// Purpose -> Top-level handler for "Roll Dice" action. Validates, rolls, displays.
+// Inputs  -> None (uses gUI)
+// Outputs -> None (DOM + gUI changes)
+function fHandleRollDiceAction() {
+    fLogStatus("🎲 Roll Dice Action Triggered");
+
+    const r = gUI.currentSkRadioChecked.r;
+    const c = gUI.currentSkRadioChecked.c;
+    if (!fValidateRollSelection(r, c)) return;
+
+    const colRefs = {
+        cAbility: resolveCol('Ability'),
+        cSk1Typ: resolveCol('Sk1Typ'),
+        cSk1: resolveCol('Sk1'),
+        cSk2Typ: resolveCol('Sk2Typ'),
+        cSk2: resolveCol('Sk2'),
+        cSk1ChkBox: resolveCol('Sk1ChkBox'),
+        cSk2ChkBox: resolveCol('Sk2ChkBox')
+    };
+    if (!fValidateRollColumnIndices(Object.values(colRefs))) return;
+
+    const abilityVal = (gUI.arr[r]?.[colRefs.cAbility] ?? '').replace(/\s{2,}_\w{6}$/, '');
+
+    const skillData = fExtractSkillInfo(r, c, colRefs);
+    if (!skillData) return;
+
+    fLogStatus(skillData.logMsg);
+    const { rollStr } = fGetRollResult(skillData.skillTarget);
+    const html = fBuildRollHTML(abilityVal, skillData.skillType, skillData.skillVal, rollStr);
+
+    fPrependToSidebar(html);
+    fShowSidebar();
+};
+
+
+
+// fValidateRollSelection ///////////////////////////////////////////////////////////
+// Purpose -> Ensure a radio checkbox is selected (Sk1/Sk2).
+// Inputs  -> row, col indices
+// Outputs -> true if valid, false otherwise
+function fValidateRollSelection(row, col) {
+    const isValid = row !== null && !isNaN(row) && col !== null && !isNaN(col);
+    if (!isValid) {
+        const msg = "⚠️ Please select an Ability/Skill first!";
+        console.warn(msg);
+        fPrependToSidebar(msg);
+        fShowSidebar();
+    }
+    return isValid;
+};
+
+
+
+
+// fValidateRollColumnIndices ////////////////////////////////////////////////////////
+// Purpose -> Check if all critical column tags are resolved.
+// Inputs  -> array of column indices
+// Outputs -> true if valid, false otherwise
+function fValidateRollColumnIndices(cols) {
+    const allResolved = cols.every(col => !isNaN(col));
+    if (!allResolved) {
+        const msg = "❌ Error: Could not resolve required column tags.";
+        console.error(msg);
+        fPrependToSidebar(msg);
+        fShowSidebar();
+    }
+    return allResolved;
+};
+
+
+
+
+// fExtractSkillInfo /////////////////////////////////////////////////////////////////
+// Purpose -> Given selected skill col and row, extract type, value, and target.
+// Inputs  -> row index, selected col index, col references
+// Outputs -> { skillType, skillVal, skillTarget, logMsg }
+function fExtractSkillInfo(r, selectedC, cols) {
+    const idPattern = /\s{2,}_\w{6}$/;
+    let skillType = '', skillVal = '', skillTarget = NaN;
+    let logMsg = '';
+
+    if (selectedC === cols.cSk1ChkBox) {
+        skillType = (gUI.arr[r]?.[cols.cSk1Typ] ?? '').replace(idPattern, '');
+        skillVal = String(gUI.arr[r]?.[cols.cSk1] ?? '').replace(idPattern, '');
+        skillTarget = parseInt(skillVal, 10);
+        logMsg = ` -> Selected Sk1: ${skillType}${skillVal} (Target: ${skillTarget})`;
+    } else if (selectedC === cols.cSk2ChkBox) {
+        skillType = (gUI.arr[r]?.[cols.cSk2Typ] ?? '').replace(idPattern, '');
+        skillVal = String(gUI.arr[r]?.[cols.cSk2] ?? '').replace(idPattern, '');
+        skillTarget = parseInt(skillVal, 10);
+        logMsg = ` -> Selected Sk2: ${skillType}${skillVal} (Target: ${skillTarget})`;
+    } else {
+        const msg = `⚠️ Internal Warning: Selected checkbox column (${selectedC}) mismatch. Cannot determine roll type.`;
+        console.warn(msg);
+        fPrependToSidebar(msg);
+        fShowSidebar();
+        return null;
+    }
+
+    return { skillType, skillVal, skillTarget, logMsg };
+};
+
+
+
+
+// fGetRollResult ////////////////////////////////////////////////////////////////////
+// Purpose -> Roll a number between 1 and target (inclusive) and return as formatted string.
+// Inputs  -> skillTarget
+// Outputs -> { roll, rollStr }
+function fGetRollResult(skillTarget) {
+    if (!isNaN(skillTarget) && skillTarget > 0) {
+        const roll = Math.floor(Math.random() * skillTarget) + 1;
+        const rollStr = `~${roll}`;
+        fLogStatus(` -> Roll Result: ${roll} (vs Target: ${skillTarget})`);
+        return { roll, rollStr };
+    }
+    fLogStatus(` -> Skipping roll: Invalid or zero target (${skillTarget}).`);
+    return { roll: 0, rollStr: '' };
+};
+
+
+
+
+// fBuildRollHTML ////////////////////////////////////////////////////////////////////
+// Purpose -> Construct sidebar output HTML from ability, skill, roll.
+// Inputs  -> abilityStr, skillType, skillVal, rollStr
+// Outputs -> HTML string
+function fBuildRollHTML(abilityStr, skillType, skillVal, rollStr) {
+    const abilityHTML = `<span class="sidebar-ability-name">${abilityStr}</span>`;
+    let line1 = abilityHTML;
+    let line2 = '';
+
+    if (skillType) line1 += ` as ${skillType}`;
+
+    if (skillType && skillVal) line2 = `${skillType}(${skillVal})${rollStr}`;
+    else if (skillVal && rollStr) line2 = `Value(${skillVal})${rollStr}`;
+    else if (rollStr) line2 = `Roll${rollStr}`;
+
+    const html = line2 ? `${line1}<br>${line2}` : line1;
+    fLogStatus(` -> Sidebar Output: ${html.replace('<br>', ' | ')}`);
+    return html;
+};
+
+
+
+// ==========================================================================
+// === ???????           (End of Die Roll Button ) ===
+// ==========================================================================
+
+
 </script>
