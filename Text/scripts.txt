@@ -44,8 +44,8 @@ const gUI = {
   sk1sk2CheckBoxes: [
     { r1: 'NishAtr_R', c1: 'Sk1ChkBox', r2: 'AbilTblEnd_R', c2: 'Sk1ChkBox'},
     { r1: 'NishAtr_R', c1: 'Sk2ChkBox', r2: 'AbilTblEnd_R', c2: 'Sk2ChkBox'},
-    { r1: 'GearTblStart_R', c1: 'Sk1ChkBox', r2: 'SocketTblEnd', c2: 'Sk1ChkBox'},
-    { r1: 'GearTblStart_R', c1: 'Sk2ChkBox', r2: 'SocketTblEnd', c2: 'Sk2ChkBox'}
+    { r1: 'GearTblStart_R', c1: 'Sk1ChkBox', r2: 'GearTblEnd_R', c2: 'Sk1ChkBox'},
+    { r1: 'GearTblStart_R', c1: 'Sk2ChkBox', r2: 'GearTblEnd_R', c2: 'Sk2ChkBox'}
   ],
   // Define initially hidden columns/rows using tags or indices
   initialHiddenCols: [
@@ -226,15 +226,14 @@ const getBorderStyleCSS = (borderSideData) => {
 //        -> c (Number): The 0-based column index.
 // Outputs -> (Boolean): True if the cell is part of the Sk1/Sk2 radio group ranges, false otherwise.
 const fIsSkRadioGroupMember = (r, c) => {
-    const ranges = gUI.sk1sk2CheckBoxes;
-
+    const ranges = gUI.sk1sk2CheckBoxes; // Reads all defined ranges
     if (!Array.isArray(ranges)) {
         console.warn("fIsSkRadioGroupMember: gUI.sk1sk2CheckBoxes is not a valid array.");
         return false;
     }
     if (typeof r !== 'number' || typeof c !== 'number' || isNaN(r) || isNaN(c)) {
          console.warn(`fIsSkRadioGroupMember: Invalid input coordinates (${r}, ${c})`);
-         return false; // Invalid input coordinates
+        return false; // Invalid input coordinates
     }
 
 
@@ -242,14 +241,14 @@ const fIsSkRadioGroupMember = (r, c) => {
     for (const range of ranges) {
         if (!fIsValidRangeObject(range)) { // Use existing helper function
              console.warn("fIsSkRadioGroupMember: Skipping invalid range object", range);
-             continue; // Skip malformed ranges
+            continue; // Skip malformed ranges
         }
 
         // Resolve the tags/indices for the current range
         const resolved = fResolveRangeIndices(range); // Use existing helper function
         if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
              console.warn("fIsSkRadioGroupMember: Skipping range due to unresolved indices", range);
-             continue; // Skip ranges with invalid tags/indices
+            continue; // Skip ranges with invalid tags/indices
         }
 
         const rMin = Math.min(resolved.r1, resolved.r2);
@@ -292,8 +291,8 @@ const fMakeCheckBox = (r, c) => {
     checkbox.checked = value === true || valStr === "TRUE";
 
     // --- Add data attribute if this checkbox is part of the Sk radio group ---
-    if (fIsSkRadioGroupMember(r, c)) {
-        checkbox.dataset.skGroup = 'true';
+    if (fIsSkRadioGroupMember(r, c)) { // Checks membership using the function above
+        checkbox.dataset.skGroup = 'true'; // Adds the attribute if it IS a member
     }
     // --- End Sk radio group check ---
 
@@ -904,112 +903,139 @@ const fApplyManualBorders = () => {
 
 
 
-// scripts.html //
+////////////////////////////////////////////////////////////////////////////////////////////////////////// START fAddHeaderButtons and helpers
+
+
+
+
+// fGetResolvedCell ////////////////////////////////////////////////////////////////
+// Purpose -> Resolve a cell element in gUI.grid2D from rowTag and colTag.
+// Inputs  -> rowTag: string, colTag: string
+// Outputs -> Cell element or null
+const fGetResolvedCell = (rowTag, colTag) => {
+    const r = resolveRow(rowTag);
+    const c = resolveCol(colTag);
+
+    if (isNaN(r) || isNaN(c)) {
+        console.warn(`⚠️ Header Button: Could not resolve tags [${rowTag}, ${colTag}]`);
+        return null;
+    }
+
+    const cell = gUI.grid2D?.[r]?.[c];
+    if (!cell) {
+        console.warn(`⚠️ Header Button: Cell element not found at resolved [${r}, ${c}] for tags [${rowTag}, ${colTag}]`);
+        return null;
+    }
+
+    return cell;
+};
+
+
+
+
+// fCreateHeaderButtonImage ///////////////////////////////////////////////////////
+// Purpose -> Create and return a styled <img> element for a header button.
+// Inputs  -> config: button config object with imageUrl, altText, titleText, action
+// Outputs -> <img> element
+const fCreateHeaderButtonImage = (config) => {
+    const img = document.createElement('img');
+    img.src = config.imageUrl;
+    img.alt = config.altText;
+    img.title = config.titleText;
+    img.dataset.buttonAction = config.action;
+    img.classList.add('header-button-img');
+    return img;
+};
+
+
+
+
+// fApplyHeaderButtonToCell ///////////////////////////////////////////////////////
+// Purpose -> Clear the cell, insert image, apply styling.
+// Inputs  -> cell: HTMLElement, img: HTMLElement
+// Outputs -> None (modifies DOM)
+const fApplyHeaderButtonToCell = (cell, img) => {
+    cell.innerHTML = '';
+    cell.appendChild(img);
+
+    cell.style.justifyContent = 'center';
+    cell.style.alignItems = 'center';
+    cell.style.padding = '0';
+};
+
+
 
 
 // fAddHeaderButtons ////////////////////////////////////////////////////////////////
-// Purpose -> Finds specific cells designated as header buttons (by tag) and inserts
-//            the corresponding image button elements after initial render.
-// Inputs -> None
+// Purpose -> Finds specific cells designated as header buttons and inserts them.
+// Inputs  -> None
 // Outputs -> None (Modifies DOM)
 const fAddHeaderButtons = () => {
     fLogStatus("⚙️ Adding Header Buttons...");
     let buttonsAdded = 0;
 
-    // --- Define Header Buttons Here ---
-    // Structure: { rowTag: string, colTag: string, action: string, imageUrl: string, altText: string, titleText: string }
     const headerButtonConfigs = [
-        // --- Existing Dice Button ---
         {
             rowTag: 'Button_R',
             colTag: 'DieButtonC',
             action: 'action-rollDice',
-            imageUrl: 'https://raw.githubusercontent.com/bmobley333/TurboApp/main/Buttons/Button_d20.png',
+            imageUrl: 'https://raw.githubusercontent.com/bmobley333/TurboApp/main/Pics/Buttons/Button_d20.png',
             altText: 'Roll Dice',
             titleText: 'Roll Dice'
         },
-        // --- New Buttons ---
         {
             rowTag: 'Button_R',
             colTag: 'RefreshButtonC',
-            action: 'action-refreshData', // Placeholder action name
-            imageUrl: 'https://raw.githubusercontent.com/bmobley333/TurboApp/main/Buttons/Button_Refresh.png', // Converted URL
+            action: 'action-refreshData',
+            imageUrl: 'https://raw.githubusercontent.com/bmobley333/TurboApp/main/Pics/Buttons/Button_Refresh.png',
             altText: 'Refresh Data',
             titleText: 'Refresh Data'
         },
         {
             rowTag: 'Button_R',
             colTag: 'UpArrowButtonC',
-            action: 'action-jumpTop', // Placeholder action name (matches menu?)
-            imageUrl: 'https://raw.githubusercontent.com/bmobley333/TurboApp/main/Buttons/Button_UpArrow.png', // Converted URL
+            action: 'action-jumpTop',
+            imageUrl: 'https://raw.githubusercontent.com/bmobley333/TurboApp/main/Pics/Buttons/Button_UpArrow.png',
             altText: 'Jump to Top',
             titleText: 'Jump to Top'
         },
         {
             rowTag: 'Button_R',
             colTag: 'DownArrowButtonC',
-            action: 'action-jumpBottom', // Placeholder action name (matches menu?)
-            imageUrl: 'https://raw.githubusercontent.com/bmobley333/TurboApp/main/Buttons/Button_DownArrow.png', // Converted URL
+            action: 'action-jumpBottom',
+            imageUrl: 'https://raw.githubusercontent.com/bmobley333/TurboApp/main/Pics/Buttons/Button_DownArrow.png',
             altText: 'Jump to Bottom',
             titleText: 'Jump to Bottom'
         },
         {
             rowTag: 'Button_R',
             colTag: 'MonsterButtonC',
-            action: 'action-showMonsters', // Placeholder action name
-            imageUrl: 'https://raw.githubusercontent.com/bmobley333/TurboApp/main/Buttons/Button_Monster.png', // Converted URL
+            action: 'action-showMonsters',
+            imageUrl: 'https://raw.githubusercontent.com/bmobley333/TurboApp/main/Pics/Buttons/Button_Monster.png',
             altText: 'Show Monsters',
             titleText: 'Show Monsters'
         }
-        // Add configurations for other buttons here later
     ];
-    // --- End Button Definitions ---
 
     headerButtonConfigs.forEach(config => {
-        const r = resolveRow(config.rowTag);
-        const c = resolveCol(config.colTag);
+        const cell = fGetResolvedCell(config.rowTag, config.colTag);
+        if (!cell) return;
 
-        if (isNaN(r) || isNaN(c)) {
-            console.warn(`⚠️ Header Button: Could not resolve tags [${config.rowTag}, ${config.colTag}]`);
-            return; // Skip this button if tags are invalid
-        }
-
-        const cell = gUI.grid2D?.[r]?.[c];
-        if (!cell) {
-            console.warn(`⚠️ Header Button: Cell element not found at resolved [${r}, ${c}] for tags [${config.rowTag}, ${config.colTag}]`);
-            return; // Skip if cell element doesn't exist
-        }
-
-        // Clear any existing content (like placeholder text or parsed special markers)
-        cell.innerHTML = '';
-
-        // Create the image element
-        const img = document.createElement('img');
-        img.src = config.imageUrl;
-        img.alt = config.altText;
-        img.title = config.titleText;
-        img.dataset.buttonAction = config.action; // Action identifier
-        img.classList.add('header-button-img');  // CSS class for styling
-
-        // Append the image button to the cell
-        cell.appendChild(img);
-
-        // Ensure cell styles are appropriate for centering the button image
-        cell.style.justifyContent = 'center'; // Center horizontally (flex)
-        cell.style.alignItems = 'center';   // Center vertically (flex)
-        cell.style.padding = '0';             // Remove padding to maximize image space
-
+        const img = fCreateHeaderButtonImage(config);
+        fApplyHeaderButtonToCell(cell, img);
         buttonsAdded++;
     });
 
-    if (buttonsAdded > 0) {
-        fLogStatus(`✅ Added ${buttonsAdded} Header Button(s).`);
-    } else {
-        fLogStatus(`ℹ️ No valid Header Buttons found or added.`);
-    }
+    fLogStatus(buttonsAdded > 0
+        ? `✅ Added ${buttonsAdded} Header Button(s).`
+        : `ℹ️ No valid Header Buttons found or added.`);
+};
 
-}; // END fAddHeaderButtons
 
+
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////// END fAddHeaderButtons and helpers
 
 
 // fMarkOverflowingCells //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1416,24 +1442,39 @@ const fHandleCellMouseOut = (event) => {
 
 
 // ==========================================================================
-// === Image Modal Logic                 (End of Tooltip Logic) ===
+// === Sidebar                       (End of Tooltip Logic) ===
 // ==========================================================================
 
 
 
 
-// fHideImageModal //////////////////////////////////////////////////////////////////////////////////////////////////
-// Purpose -> Hides the image modal and clears the image source.
-const fHideImageModal = () => { // <<< RENAMED BACK (Name is fine, updating internal refs)
-    // Check renamed global variables within gUI object
-    if (!gUI.modalElement || !gUI.modalImageElement) return; // Updated references
+// fPrependToSidebar /////////////////////////////////////////////////////////////////
+// Purpose -> Prepends a message string (which can contain HTML) as a new paragraph
+//            to the sidebar content area. Removes the initial placeholder message.
+// Inputs -> message (String): The text or HTML content to prepend.
+// Outputs -> None (Modifies DOM).
+// MODIFIED: Uses prepend. Removed scroll-to-bottom. Uses innerHTML.
+const fPrependToSidebar = (message) => {
+    const sidebarContent = document.getElementById('sidebar-content');
+    if (!sidebarContent) {
+        console.error("❌ Cannot find sidebar content element (#sidebar-content)");
+        return;
+    }
 
-    fLogStatus("🖼️ Hiding image modal.");
-    gUI.modalElement.style.display = 'none'; // Updated reference
-    // Use renamed global variable & clear img src
-    gUI.modalImageElement.src = ''; // Updated reference
+    // Check for and remove the initial placeholder paragraph if it exists
+    const placeholder = sidebarContent.querySelector('p');
+    if (placeholder && placeholder.textContent === 'Roll log entries will appear here...') {
+        placeholder.remove();
+    }
 
-}; // END fHideImageModal
+    // Create a new paragraph element
+    const newEntry = document.createElement('p');
+    newEntry.innerHTML = message; // <<< Use innerHTML to render tags
+
+    // Prepend the new entry to the sidebar content
+    sidebarContent.prepend(newEntry);
+
+}; // END fPrependToSidebar
 
 
 
@@ -1441,7 +1482,7 @@ const fHideImageModal = () => { // <<< RENAMED BACK (Name is fine, updating inte
 // fShowImageModal //////////////////////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Displays the image modal with the specified image URL in the img tag.
 // Inputs -> imageUrl (String): The direct URL of the image to display.
-const fShowImageModal = (imageUrl) => { // <<< RENAMED BACK (Name is fine, updating internal refs)
+const fShowImageModal = (imageUrl) => { 
     console.log("--- fShowImageModal Start ---");
     console.log(" Image URL:", imageUrl);
     // Check renamed global variables within gUI object
@@ -1467,101 +1508,283 @@ const fShowImageModal = (imageUrl) => { // <<< RENAMED BACK (Name is fine, updat
 
 
 // ==========================================================================
-// === Grid Interaction Logic          (End of Image Modal Logic) ===
+// === Grid Interaction Logic          (End of Sidebar) ===
 // ==========================================================================
 
 
 
 
-// fHandleGridCheckboxClick //////////////////////////////////////////////////////////////////////////////////////
-// Purpose -> Handles click events routed from fHandleGridClick, specifically for checkboxes.
-//          Updates the gUI.arr data based on the checkbox's new state.
-//          Includes special logic for checkboxes in the 'sk-radio-group'.
-// Inputs  -> event (MouseEvent): The click event object passed from the delegated listener.
-// Outputs -> None. (Modifies gUI.arr, gUI.currentSkRadioChecked, potentially DOM).
+////////////////////////////////////////////////////////////////////////////////////////////////////////// START fHandleGridCheckboxClick and helpers
+
+
+
+
+// fIsValidGridCheckbox ////////////////////////////////////////////////////////////////////////
+// Purpose -> Ensure the clicked element is a valid checkbox inside a grid cell.
+// Inputs  -> checkbox (HTMLElement)
+// Outputs -> true if valid, false otherwise
+const fIsValidGridCheckbox = (checkbox) => {
+    return checkbox &&
+           checkbox.tagName === 'INPUT' &&
+           checkbox.type === 'checkbox' &&
+           checkbox.closest('.cell') &&
+           !checkbox.disabled;
+};
+
+
+
+
+// fIsValidGridCoords ////////////////////////////////////////////////////////////////////////
+// Purpose -> Ensure the coordinates are valid integers and point to existing grid rows.
+// Inputs  -> r: row index, c: col index
+// Outputs -> true if valid, false otherwise
+const fIsValidGridCoords = (r, c) => {
+    return !isNaN(r) && !isNaN(c) &&
+           r >= 0 && c >= 0 &&
+           gUI.arr[r] && gUI.grid2D[r];
+};
+
+
+
+
+// fHandleSkGroupCheckboxClick ////////////////////////////////////////////////////////////////
+// Purpose -> Logic for checkboxes that are part of an sk-radio group.
+// Inputs  -> r, c: current coordinates, isChecked: boolean
+// Outputs -> None (modifies gUI.arr and gUI.currentSkRadioChecked)
+const fHandleSkGroupCheckboxClick = (r, c, isChecked) => {
+    const oldR = gUI.currentSkRadioChecked.r;
+    const oldC = gUI.currentSkRadioChecked.c;
+
+    if (isChecked) {
+        if (oldR !== null && oldC !== null && (oldR !== r || oldC !== c)) {
+            fUncheckOldSkGroupBox(oldR, oldC);
+        }
+        gUI.currentSkRadioChecked = { r, c };
+        gUI.arr[r][c] = true;
+        fLogStatus(`Radio group: Checked box [${r}, ${c}]`);
+    } else {
+        if (oldR === r && oldC === c) {
+            gUI.currentSkRadioChecked = { r: null, c: null };
+        }
+        gUI.arr[r][c] = false;
+        fLogStatus(`Radio group: Unchecked box [${r}, ${c}]`);
+    }
+};
+
+
+
+
+// fUncheckOldSkGroupBox //////////////////////////////////////////////////////////////////////
+// Purpose -> Uncheck the previously checked box in the sk-radio group, if one exists.
+// Inputs  -> oldR, oldC: previous coordinates
+// Outputs -> None (modifies DOM and gUI.arr)
+const fUncheckOldSkGroupBox = (oldR, oldC) => {
+    const oldCellDiv = gUI.grid2D[oldR]?.[oldC];
+    const oldCheckbox = oldCellDiv?.querySelector('input[data-sk-group="true"]');
+
+    if (oldCheckbox) {
+        oldCheckbox.checked = false;
+        gUI.arr[oldR][oldC] = false;
+        fLogStatus(`Radio group: Unchecked previous box [${oldR}, ${oldC}]`);
+    } else {
+        console.warn(`Radio group: Could not find previous checkbox element at [${oldR}, ${oldC}] to uncheck.`);
+    }
+};
+
+
+
+// fHandleGridCheckboxClick ////////////////////////////////////////////////////////////////////
+// Purpose -> Handles checkbox click events from fHandleGridClick.
+// Inputs  -> event (MouseEvent)
+// Outputs -> None (modifies gUI.arr and DOM)
 const fHandleGridCheckboxClick = (event) => {
-    const checkbox = event.target; // Target of the click *is* the checkbox
+    const checkbox = event.target;
+    if (!fIsValidGridCheckbox(checkbox)) return;
 
-    // Ensure it's a valid checkbox element we care about
-    if (!checkbox || checkbox.tagName !== 'INPUT' || checkbox.type !== 'checkbox' || !checkbox.closest('.cell')) {
-        return;
-    }
-
-    // Exit if the checkbox is disabled
-    if (checkbox.disabled) {
-        return;
-    }
-
-    // Get coordinates from data attributes
     const r = parseInt(checkbox.dataset.r, 10);
     const c = parseInt(checkbox.dataset.c, 10);
-
-    // Validate indices (Added check for grid2D row existence)
-    if (isNaN(r) || isNaN(c) || r < 0 || c < 0 || !gUI.arr[r] || !gUI.grid2D[r] ) {
+    if (!fIsValidGridCoords(r, c)) {
         console.warn("Checkbox click handler: Invalid row/column index or missing grid element.", checkbox.dataset);
         return;
     }
 
-    // Read the new state AFTER the click happened
     const isChecked = checkbox.checked;
     const isSkGroupMember = checkbox.dataset.skGroup === 'true';
 
-    // --- Handle Sk1/Sk2 Radio Group Logic ---
     if (isSkGroupMember) {
-        // If the box is being CHECKED
-        if (isChecked) {
-            const oldR = gUI.currentSkRadioChecked.r;
-            const oldC = gUI.currentSkRadioChecked.c;
-
-            // Check if there WAS a previously checked box and it's DIFFERENT from this one
-            if (oldR !== null && oldC !== null && (oldR !== r || oldC !== c)) {
-                // Find the DOM element for the old checkbox
-                const oldCellDiv = gUI.grid2D[oldR]?.[oldC];
-                const oldCheckbox = oldCellDiv?.querySelector('input[data-sk-group="true"]');
-
-                if (oldCheckbox) {
-                    // Uncheck the old checkbox visually
-                    oldCheckbox.checked = false;
-                    // Update the data model for the old checkbox
-                    gUI.arr[oldR][oldC] = false;
-                    fLogStatus(`Radio group: Unchecked previous box [${oldR}, ${oldC}]`);
-                } else {
-                    // This might happen if the grid structure changed unexpectedly or coords were bad
-                    console.warn(`Radio group: Could not find previous checkbox element at [${oldR}, ${oldC}] to uncheck.`);
-                }
-            }
-            // Update tracker to the newly checked box
-            gUI.currentSkRadioChecked = { r: r, c: c };
-            // Update data model for the newly checked box
-            gUI.arr[r][c] = true;
-            fLogStatus(`Radio group: Checked box [${r}, ${c}]`);
-
-        }
-        // If the box is being UNCHECKED (by clicking the currently active one)
-        else {
-             // Only clear tracker if the one being unchecked IS the currently tracked one
-             if (gUI.currentSkRadioChecked.r === r && gUI.currentSkRadioChecked.c === c) {
-                gUI.currentSkRadioChecked = { r: null, c: null };
-             }
-             // Update data model for the unchecked box
-             gUI.arr[r][c] = false;
-             fLogStatus(`Radio group: Unchecked box [${r}, ${c}]`);
-        }
-    }
-    // --- Handle Normal Checkbox Logic ---
-    else {
-        // Update the underlying data model in gUI.arr for non-group checkboxes
+        fHandleSkGroupCheckboxClick(r, c, isChecked);
+    } else {
         gUI.arr[r][c] = isChecked;
-        // Log the change for normal checkboxes
         fLogStatus(`Checkbox [${r}, ${c}] toggled to: ${isChecked}`);
     }
+};
 
-}; // END fHandleGridCheckboxClick
 
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////// END fHandleGridCheckboxClick and helpers
+
+
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////// END fHandleRollDiceAction and helpers
+
+
+
+
+// fValidateRollSelection ///////////////////////////////////////////////////////////
+// Purpose -> Ensure a radio checkbox is selected (Sk1/Sk2).
+// Inputs  -> row, col indices
+// Outputs -> true if valid, false otherwise
+const fValidateRollSelection = (row, col) => {
+    const isValid = row !== null && !isNaN(row) && col !== null && !isNaN(col);
+    if (!isValid) {
+        const msg = "⚠️ Please select an Ability/Skill first!";
+        console.warn(msg);
+        fPrependToSidebar(msg);
+        fShowSidebar();
+    }
+    return isValid;
+};
+
+
+
+
+// fValidateRollColumnIndices ////////////////////////////////////////////////////////
+// Purpose -> Check if all critical column tags are resolved.
+// Inputs  -> array of column indices
+// Outputs -> true if valid, false otherwise
+const fValidateRollColumnIndices = (cols) => {
+    const allResolved = cols.every(col => !isNaN(col));
+    if (!allResolved) {
+        const msg = "❌ Error: Could not resolve required column tags.";
+        console.error(msg);
+        fPrependToSidebar(msg);
+        fShowSidebar();
+    }
+    return allResolved;
+};
+
+
+
+
+// fExtractSkillInfo /////////////////////////////////////////////////////////////////
+// Purpose -> Given selected skill col and row, extract type, value, and target.
+// Inputs  -> row index, selected col index, col references
+// Outputs -> { skillType, skillVal, skillTarget, logMsg }
+const fExtractSkillInfo = (r, selectedC, cols) => {
+    const idPattern = /\s{2,}_\w{6}$/;
+    let skillType = '', skillVal = '', skillTarget = NaN;
+    let logMsg = '';
+
+    if (selectedC === cols.cSk1ChkBox) {
+        skillType = (gUI.arr[r]?.[cols.cSk1Typ] ?? '').replace(idPattern, '');
+        skillVal = String(gUI.arr[r]?.[cols.cSk1] ?? '').replace(idPattern, '');
+        skillTarget = parseInt(skillVal, 10);
+        logMsg = ` -> Selected Sk1: ${skillType}${skillVal} (Target: ${skillTarget})`;
+    } else if (selectedC === cols.cSk2ChkBox) {
+        skillType = (gUI.arr[r]?.[cols.cSk2Typ] ?? '').replace(idPattern, '');
+        skillVal = String(gUI.arr[r]?.[cols.cSk2] ?? '').replace(idPattern, '');
+        skillTarget = parseInt(skillVal, 10);
+        logMsg = ` -> Selected Sk2: ${skillType}${skillVal} (Target: ${skillTarget})`;
+    } else {
+        const msg = `⚠️ Internal Warning: Selected checkbox column (${selectedC}) mismatch. Cannot determine roll type.`;
+        console.warn(msg);
+        fPrependToSidebar(msg);
+        fShowSidebar();
+        return null;
+    }
+
+    return { skillType, skillVal, skillTarget, logMsg };
+};
+
+
+
+
+// fGetRollResult ////////////////////////////////////////////////////////////////////
+// Purpose -> Roll a number between 1 and target (inclusive) and return as formatted string.
+// Inputs  -> skillTarget
+// Outputs -> { roll, rollStr }
+const fGetRollResult = (skillTarget) => {
+    if (!isNaN(skillTarget) && skillTarget > 0) {
+        const roll = Math.floor(Math.random() * skillTarget) + 1;
+        const rollStr = `~${roll}`;
+        fLogStatus(` -> Roll Result: ${roll} (vs Target: ${skillTarget})`);
+        return { roll, rollStr };
+    }
+    fLogStatus(` -> Skipping roll: Invalid or zero target (${skillTarget}).`);
+    return { roll: 0, rollStr: '' };
+};
+
+
+
+
+// fBuildRollHTML ////////////////////////////////////////////////////////////////////
+// Purpose -> Construct sidebar output HTML from ability, skill, roll.
+// Inputs  -> abilityStr, skillType, skillVal, rollStr
+// Outputs -> HTML string
+const fBuildRollHTML = (abilityStr, skillType, skillVal, rollStr) => {
+    const abilityHTML = `<span class="sidebar-ability-name">${abilityStr}</span>`;
+    let line1 = abilityHTML;
+    let line2 = '';
+
+    if (skillType) line1 += ` as ${skillType}`;
+
+    if (skillType && skillVal) line2 = `${skillType}(${skillVal})${rollStr}`;
+    else if (skillVal && rollStr) line2 = `Value(${skillVal})${rollStr}`;
+    else if (rollStr) line2 = `Roll${rollStr}`;
+
+    const html = line2 ? `${line1}<br>${line2}` : line1;
+    fLogStatus(` -> Sidebar Output: ${html.replace('<br>', ' | ')}`);
+    return html;
+};
+
+
+
+
+// fHandleRollDiceAction ////////////////////////////////////////////////////////////
+// Purpose -> Top-level handler for "Roll Dice" action. Validates, rolls, displays.
+// Inputs  -> None (uses gUI)
+// Outputs -> None (DOM + gUI changes)
+const fHandleRollDiceAction = () => {
+    fLogStatus("🎲 Roll Dice Action Triggered");
+
+    const r = gUI.currentSkRadioChecked.r;
+    const c = gUI.currentSkRadioChecked.c;
+    if (!fValidateRollSelection(r, c)) return;
+
+    const colRefs = {
+        cAbility: resolveCol('Ability'),
+        cSk1Typ: resolveCol('Sk1Typ'),
+        cSk1: resolveCol('Sk1'),
+        cSk2Typ: resolveCol('Sk2Typ'),
+        cSk2: resolveCol('Sk2'),
+        cSk1ChkBox: resolveCol('Sk1ChkBox'),
+        cSk2ChkBox: resolveCol('Sk2ChkBox')
+    };
+    if (!fValidateRollColumnIndices(Object.values(colRefs))) return;
+
+    const abilityVal = (gUI.arr[r]?.[colRefs.cAbility] ?? '').replace(/\s{2,}_\w{6}$/, '');
+
+    const skillData = fExtractSkillInfo(r, c, colRefs);
+    if (!skillData) return;
+
+    fLogStatus(skillData.logMsg);
+    const { rollStr } = fGetRollResult(skillData.skillTarget);
+    const html = fBuildRollHTML(abilityVal, skillData.skillType, skillData.skillVal, rollStr);
+
+    fPrependToSidebar(html);
+    fShowSidebar();
+};
+
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////// END fHandleRollDiceAction and helpers
 
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////// START fHandleGridClick and helpers
+
+
 
 
 
@@ -1647,14 +1870,11 @@ const fHandleUrlClick = (cellDiv) => {
 
 
 
-// scripts.html //
-
-
 // fHandleGridClick ///////////////////////////////////////////////////////////////////////////////
 // Delegated click handler for cells: routes to header buttons, checkboxes, URLs, etc.
+// MODIFIED: 'action-rollDice' case now calls fHandleRollDiceAction
 const fHandleGridClick = (event) => {
     const target = event.target;
-
     // --- Check for Header Button Click FIRST ---
     const buttonImg = target.closest('.header-button-img[data-button-action]');
     if (buttonImg) {
@@ -1663,25 +1883,54 @@ const fHandleGridClick = (event) => {
         event.preventDefault(); // Prevent default image drag/etc.
         event.stopPropagation(); // Stop event from bubbling further
 
+        // --- Get Grid Element (used by multiple actions) ---
+        const grid = document.getElementById('grid');
+
+
         // --- Dispatch Header Button Actions ---
         switch (action) {
-            case 'action-rollDice':
-                console.log("ACTION: Roll Dice button clicked (logic pending)");
-                // @@ Placeholder - Add actual dice roll call here later
+            case 'action-rollDice': // <<< UPDATED CASE
+                fHandleRollDiceAction(); // <<< Call the shared action function
                 break;
-            case 'action-refreshData': // <<< NEW CASE
+            case 'action-refreshData':
                 console.log("ACTION: Refresh Data button clicked (logic pending)");
                 // @@ Placeholder - Could call fLoadGameSheet() or similar
                 break;
-            case 'action-jumpTop': // <<< NEW CASE
-                console.log("ACTION: Jump Top button clicked (logic pending)");
-                // @@ Placeholder - Could implement window.scrollTo(0, 0) or scroll grid
+            case 'action-jumpTop':
+                fLogStatus("ACTION: Jump Top button clicked");
+                if (grid) {
+                    grid.scrollTo({ top: 0, behavior: 'smooth' }); // Scroll grid to top smoothly
+                } else {
+                    console.warn("Could not find #grid element to scroll top.");
+                }
                 break;
-            case 'action-jumpBottom': // <<< NEW CASE
-                console.log("ACTION: Jump Bottom button clicked (logic pending)");
-                // @@ Placeholder - Could implement scrolling to end of grid/document
+            case 'action-jumpBottom':
+                fLogStatus("ACTION: Jump Bottom button clicked");
+                if (grid) {
+                    const targetRowIndex = resolveRow('GearTblHeaderStartR'); // Resolve the target row
+                    if (!isNaN(targetRowIndex)) {
+                        const targetCell = gUI.grid2D?.[targetRowIndex]?.[0]; // Get first cell of target row
+                        if (targetCell) {
+                            const gridVisibleHeight = grid.clientHeight;
+                            const targetCellOffsetTop = targetCell.offsetTop; // Position relative to grid scroll container
+                            const targetCellHeight = targetCell.offsetHeight;
+
+                            // Calculate scroll position to center the cell (approximately)
+                            const desiredScrollTop = targetCellOffsetTop - (gridVisibleHeight / 2) + (targetCellHeight / 2);
+
+                            grid.scrollTo({ top: desiredScrollTop, behavior: 'smooth' });
+                            fLogStatus(`Scrolling grid to center row ${targetRowIndex} (Tag: GearTblHeaderStartR)`);
+                        } else {
+                            console.warn(`Could not find cell element for row ${targetRowIndex} (Tag: GearTblHeaderStartR)`);
+                        }
+                    } else {
+                        console.warn("Could not resolve row tag 'GearTblHeaderStartR' for scrolling.");
+                    }
+                } else {
+                    console.warn("Could not find #grid element to scroll bottom.");
+                }
                 break;
-            case 'action-showMonsters': // <<< NEW CASE
+            case 'action-showMonsters':
                 console.log("ACTION: Show Monsters button clicked (logic pending)");
                 // @@ Placeholder - Could scroll to monster section or toggle visibility
                 break;
@@ -1716,8 +1965,8 @@ const fHandleGridClick = (event) => {
 
     // More click routes could go here later (e.g., general cell select)
     // fLogStatus(`🖱️ Clicked cell [${cellDiv.dataset.r}, ${cellDiv.dataset.c}] (no specific action)`);
-
 }; // END fHandleGridClick
+
 
 
 
@@ -1982,6 +2231,7 @@ const fToggleSidebar = () => {
 // fSetupMenuButtonListeners ///////////////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Adds click listeners to the main menu bar buttons (Nish, Roll, Game, Gear).
 // MODIFIED: Added btnRoll parameter and listener
+// MODIFIED: btnRoll listener now calls fHandleRollDiceAction
 const fSetupMenuButtonListeners = (btnNish, btnRoll, btnGame, dropdownGame, btnGear, dropdownGear) => { // <<< Added btnRoll
 
     // Listener for 'Nish' button (Direct Action)
@@ -1993,13 +2243,11 @@ const fSetupMenuButtonListeners = (btnNish, btnRoll, btnGame, dropdownGame, btnG
         // @@ Add logic for Nish button here later
     });
 
-    // Listener for 'Roll' button (Direct Action) // <<< NEW LISTENER
+    // Listener for 'Roll' button (Direct Action) // <<< UPDATED LISTENER
     btnRoll.addEventListener('click', (event) => {
         event.stopPropagation();
         fCloseAllDropdowns();
-        console.log("ACTION: Roll button clicked (logic pending)");
-        fLogStatus("🖱️ Roll Clicked");
-        // @@ Add logic for Roll button here later
+        fHandleRollDiceAction(); // <<< Call the shared action function
     });
 
     // Listener for 'Game' button (Toggle Dropdown)
@@ -2241,6 +2489,18 @@ const fSetupGridHoverListeners = (gridElement) => {
     fLogStatus("✅ Grid Hover Listeners Attached.");
 
 }; // END fSetupGridHoverListeners
+
+
+
+
+// fHideImageModal ///////////////////////////////////////////////////////////////////////////////
+// Purpose -> Hides the image modal and resets image source and visibility.
+const fHideImageModal = () => {
+    if (!gUI.modalElement || !gUI.modalImageElement) return;
+
+    gUI.modalElement.style.display = 'none';
+    gUI.modalImageElement.src = '';
+};
 
 
 

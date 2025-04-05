@@ -4,5 +4,4 @@ del _*.*
 del =*.*
 cd ..
 
-echo Done.
-pause
+echo Done..\1
