@@ -1,0 +1,146 @@
+<!-- ui.html -->
+
+<!-- ========================================================================== -->
+<!-- === Menu Bar === -->
+<!-- ========================================================================== -->
+
+<div id="menu-bar">
+
+  <button id="btn-nish">Nish</button>
+  <button id="btn-roll">Roll</button>
+
+  <div id="game-menu-item" class="menu-item">
+    <button id="btn-game-menu">Game</button>
+    <div id="dropdown-game" class="dropdown-content">
+
+      <a href="#" data-action="game-nishStartEnd">Nish Start or End</a>
+      <a href="#" data-action="game-toggleSidebar">Sidebar (Show/Hide)</a>
+      <a href="#" data-action="game-gmAward">GM Award</a>
+
+      <div class="sub-menu-item">
+        <a href="#">Roll</a>
+        <div class="dropdown-content sub-menu">
+          <a href="#" data-action="game-rollLucked">Roll Lucked</a>
+          <a href="#" data-action="game-rollFree">Roll Free</a>
+        </div>
+      </div>
+
+      <div class="sub-menu-item">
+        <a href="#">Jump</a>
+        <div class="dropdown-content sub-menu">
+          <a href="#" data-action="game-jumpTop">to Top (Nish)</a>
+          <a href="#" data-action="game-jumpBottom">to Bottom (Gear)</a>
+        </div>
+      </div>
+
+      <div class="sub-menu-item">
+        <a href="#">Meta</a>
+        <div class="dropdown-content sub-menu">
+          <a href="#" data-action="game-metaFlood">Flood</a>
+        </div>
+      </div>
+
+      <div class="sub-menu-item">
+        <a href="#">Healing</a>
+        <div class="dropdown-content sub-menu">
+          <a href="#" data-action="game-healingNatural">Natural Healing</a>
+          <a href="#" data-action="game-healingAll">All wounds</a>
+        </div>
+      </div>
+
+      <div class="sub-menu-item">
+        <a href="#">Rest or Time</a>
+        <div class="dropdown-content sub-menu">
+          <a href="#" data-action="game-restTimeRest">Rest</a>
+          <a href="#" data-action="game-restTimeSleep">Sleep</a>
+          <a href="#" data-action="game-restTimeNewSession">New Game Session</a>
+        </div>
+      </div>
+
+      <div class="sub-menu-item">
+        <a href="#">Clear</a>
+        <div class="dropdown-content sub-menu">
+          <a href="#" data-action="game-clearChanneled">Channeled Meta</a>
+          <a href="#" data-action="game-clearCheckboxes">All Check Boxes of Sk1 and Sk2</a>
+          <a href="#" data-action="game-clearMonsters">Monsters</a>
+          <a href="#" data-action="game-clearMorphs">Morphs</a>
+          <a href="#" data-action="game-clearNish">Nish</a>
+          <a href="#" data-action="game-clearRollLog">Roll Log</a>
+        </div>
+      </div>
+
+      <div class="sub-menu-item">
+        <a href="#">Refresh</a>
+        <div class="dropdown-content sub-menu">
+          <a href="#" data-action="game-refreshAbilGear">Abilities & Gear</a>
+          <a href="#" data-action="game-refreshMonsters">Monsters</a>
+          <a href="#" data-action="game-refreshVit">Vit</a>
+        </div>
+      </div>
+
+      <div class="sub-menu-item">
+        <a href="#">Set to Max</a>
+        <div class="dropdown-content sub-menu">
+          <a href="#" data-action="game-setMaxLuck">Luck</a>
+          <a href="#" data-action="game-setMaxMeta">Meta</a>
+          <a href="#" data-action="game-setMaxAll">Reset All to Max</a>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div id="gear-menu-item" class="menu-item">
+    <button id="btn-gear-menu">Gear</button>
+    <div id="dropdown-gear" class="dropdown-content">
+      <a href="#" data-action="gear-toggleGear">Gear (Show/Hide)</a>
+      <a href="#" data-action="gear-loot">Loot</a>
+
+      <div class="sub-menu-item">
+        <a href="#">Specific Loot</a>
+        <div class="dropdown-content sub-menu">
+          <a href="#" data-action="gear-lootArtifact">Artifact</a>
+          <a href="#" data-action="gear-lootChaosCrystal">Chaos Crystal</a>
+          <a href="#" data-action="gear-lootGear">Gear</a>
+          <a href="#" data-action="gear-lootGem">Gem (for socket)</a>
+          <a href="#" data-action="gear-lootSocketed">Socketed Gear</a>
+          <a href="#" data-action="gear-lootValuables">Valuables</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ========================================================================== -->
+<!-- === Sheet Grid And Hover Tool Tip === -->
+<!-- ========================================================================== -->
+
+<div id="grid"></div>
+<div id="cell-tooltip"></div>
+
+<!-- ========================================================================== -->
+<!-- === Image Modal Box === -->
+<!-- ========================================================================== -->
+
+<div id="image-modal" style="display: none;">
+  <div id="modal-backdrop"></div>
+  <div id="modal-content">
+    <span id="modal-close-btn">&times;</span>
+    <img id="modal-image" src="" alt="Image Preview">
+  </div>
+</div>
+
+<!-- ========================================================================== -->
+<!-- === Roll Log Sidebar === -->
+<!-- ========================================================================== -->
+
+<div id="roll-log-sidebar">
+  <div class="sidebar-header">
+    <h4 class="sidebar-title">Roll Log</h4>
+    <button id="sidebar-close-btn" title="Close Sidebar">&times;</button>
+  </div>
+  <div id="sidebar-content">
+    <p>Roll log entries will appear here...</p>
+  </div>
+</div>

@@ -1,0 +1,2509 @@
+<script>
+// scripts.html //
+
+
+// ==========================================================================
+// === Global Variables ===
+// ==========================================================================
+
+
+
+const gUI = {
+  arr: [],        // 2D array of data from the sheet
+  rowTag: {},     // Map of row tags to 0-based row indices
+  colTag: {},     // Map of column tags to 0-based column indices
+  format: {},     // Object containing formatting arrays (bg, fonts, borders, merges, etc.)
+  notes: [],      // <<< NEW: 2D array of cell notes (parallel to arr)
+  grid2D: [],     // 2D array holding references to the created cell DOM elements
+  // Add the manual border definitions here:
+  manualBorderSections: [
+    // Added 'edges' property based on old fSetAllBorders calls
+    { r1: 'Nish', c1: 'ULNish', r2: 'Nish', c2: 'Nish', edges: 'br' },
+    { r1: 'MR', c1: 'ULMR', r2: 'MR', c2: 'MR', edges: 'br' },
+    { r1: 'meta', c1: 'ULMeta', r2: 'chnl', c2: 'B', edges: 'r' },
+    { r1: 'LuckBox', c1: 'ULLuckBox', r2: 'LuckPlus', c2: 'LuckBox', edges: 'r' },
+    { r1: 'Act', c1: 'ULAct', r2: 'ActPlus', c2: 'ActTot', edges: 'r' },
+    { r1: 'Health', c1: 'vitPlus', r2: 'VitTbl', c2: 'VitNowPercent', edges: 'br' },
+    { r1: 'VerUL', c1: 'Ver', r2: 'FrozenHeader', c2: 'Ver', edges: 'r' },
+    { r1: 'FrozenHeader', c1: 'PermMorph1', r2: 'AbilTblEnd_R', c2: 'Regain', edges: 'br' },
+    { r1: 'FrozenHeader', c1: 'PossNum', r2: 'AbilTblEnd_R', c2: 'PossAPTot', edges: 'br' },
+    { r1: 'ULMonsterTbl', c1: 'NumMon', r2: 'LastMon_R', c2: 'MonSize', edges: 'br' },
+    { r1: 'AstralGauntHeader_R', c1: 'AstralGauntletSlot', r2: 'AstralGauntHeader_R', c2: 'AstralGauntletHeaderEndC', edges: 'r' },
+    { r1: 'Chaos2ndHeader', c1: 'AstralGauntletSlot', r2: 'ChaosWrist', c2: 'LastC', edges: 'br' },
+    { r1: 'SocketedGearHeader', c1: 'SocketedGearSlot', r2: 'SocketTblEnd', c2: 'LastC', edges: 'br' },
+    { r1: 'GearTblHeaderStartR', c1: 'PermMorph1', r2: 'GearTblEnd_R', c2: 'Regain', edges: 'br' },
+    { r1: 'GearTblHeaderStartR', c1: 'PossNum', r2: 'GearTblEnd_R', c2: 'PossAPTot', edges: 'br' },
+    { r1: 'GearSpe', c1: 'SpeedHeader', r2: 'GearStr', c2: 'GearPlusMR', edges: 'br' },
+    { r1: 'GearMRTbl', c1: 'MRHeader', r2: 'GearMRTbl', c2: 'MRHeaderEndC', edges: 'b' },
+    { r1: 'GearCarryTbl', c1: 'MRHeader', r2: 'GearCarryTbl', c2: 'MRHeaderEndC', edges: 'b' },
+    { r1: 'GearMRTbl', c1: 'GearMRCol1', r2: 'GearCarryTbl', c2: 'LastC', edges: 'br' },
+    { r1: 'PossAPTot', c1: 'CurrentEncHeader', r2: 'PossAPTot', c2: 'PossEncTotEndC', edges: 'br' },
+    { r1: 'PossEncTot', c1: 'GearAPTotHeader', r2: 'PossEncTot', c2: 'LastC', edges: 'br' }
+    // Add { style: '1px solid #888' } to specific objects if dark grey is desired
+  ],
+  sk1sk2CheckBoxes: [
+    { r1: 'NishAtr_R', c1: 'Sk1ChkBox', r2: 'AbilTblEnd_R', c2: 'Sk1ChkBox'},
+    { r1: 'NishAtr_R', c1: 'Sk2ChkBox', r2: 'AbilTblEnd_R', c2: 'Sk2ChkBox'},
+    { r1: 'GearTblStart_R', c1: 'Sk1ChkBox', r2: 'SocketTblEnd', c2: 'Sk1ChkBox'},
+    { r1: 'GearTblStart_R', c1: 'Sk2ChkBox', r2: 'SocketTblEnd', c2: 'Sk2ChkBox'}
+  ],
+  // Define initially hidden columns/rows using tags or indices
+  initialHiddenCols: [
+    { c1: 'Key', c2: 'PermMorph1' }, // Range using tags
+    { c1: 'PermMorph2', c2: 'PermMorph2' }  // Single column using tags
+  //  { c1: 0, c2: 0 }, // Example: Single column using index
+  ],
+  gearTblCols: [
+    { c1: 'PossNum', c2: 'GearTblEndC' }, // Range using tags
+  ],
+  initialHiddenRows: [
+    { r1: 'Agi', r2: 'Arc' } // Range using tags
+    // { r1: 0, r2: 1 } // Example: Range using indices
+  ],
+  // Sets to store the indices of currently hidden columns/rows
+  hiddenColumns: new Set(),
+  hiddenRows: new Set(),
+  startTime: 0,              // Timestamp for tracking load/render time
+  lastLogTime: 0,            // Timestamp for tracking delta time between logs
+  tooltipElement: null,      // Reference to the #cell-tooltip div
+  tooltipTimeoutId: null,    // Stores the timeout ID for the hover delay
+  modalElement: null,        // Reference to #image-modal container
+  modalImageElement: null,   // Reference to #modal-image img tag
+  modalCloseBtn: null,       // Reference to #modal-close-btn span
+  modalBackdrop: null,       // Reference to #modal-backdrop div
+  currentSkRadioChecked: { r: null, c: null }, // Tracks coords of the single checked Sk1/Sk2 box
+  HOVER_DELAY_MS: 300,       // Delay before showing tooltip (milliseconds)
+  TOOLTIP_OFFSET_Y: 15,      // Tooltip vertical offset from cursor (px)
+  TOOLTIP_OFFSET_X: 10,      // Tooltip horizontal offset from cursor (px)
+  ROW_HEIGHT_PX: 20          // Matches grid-auto-rows in style.html, used for sticky offset calculation
+};
+
+
+
+
+// ==========================================================================
+// === Low-Level Utilities              (End of Global Variables) ===
+// ==========================================================================
+
+
+
+
+// fLogStatus //////////////////////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Logs status messages with timing info to the browser's Developer Console.
+const fLogStatus = (msg) => {
+    const now = performance.now();
+    const delta = ((now - gUI.lastLogTime) / 1000).toFixed(2); // Updated reference
+    const total = ((now - gUI.startTime) / 1000).toFixed(2);   // Updated reference
+    gUI.lastLogTime = now;                                    // Updated reference
+
+    // Output the same formatted message to the console
+    console.log(`Status Log: [${total}s] ${msg} (+${delta}s)`);
+
+    // Removed DOM manipulation code for the old status box UI
+}; // END fLogStatus
+
+
+
+
+// resolveRow //////////////////////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Converts a string tag (from gUI.rowTag) or numeric index to a 0-based row index
+const resolveRow = v => {
+    if (typeof v === 'string') return gUI.rowTag[v]; // Lookup tag
+    if (typeof v === 'number' && v >= 0) return v;  // Assume valid index
+    console.warn(`resolveRow failed for value:`, v); // Log warning if invalid
+    return NaN; // Return NaN for errors
+}; // END resolveRow
+
+
+
+
+// resolveCol //////////////////////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Converts a string tag (from gUI.colTag) or numeric index to a 0-based col index
+const resolveCol = v => {
+     if (typeof v === 'string') return gUI.colTag[v]; // Lookup tag
+     if (typeof v === 'number' && v >= 0) return v;  // Assume valid index
+     console.warn(`resolveCol failed for value:`, v); // Log warning if invalid
+     return NaN; // Return NaN for errors
+}; // END resolveCol
+
+
+
+
+// fGetContrastColor //////////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Determines if black ('#000000') or white ('#ffffff') text has better contrast against a given background hex color.
+// From current scripts.html
+const fGetContrastColor = (hexColor) => {
+    const defaultColor = '#000000'; // Default to black text
+    if (!hexColor || typeof hexColor !== 'string') return defaultColor;
+
+    try {
+        // Remove # if present
+        let hex = hexColor.startsWith('#') ? hexColor.substring(1) : hexColor;
+
+        // Basic validation & expand shorthand hex (e.g., "03F" -> "0033FF")
+        if (hex.length === 3) {
+            hex = hex.split('').map(char => char + char).join('');
+        } else if (hex.length !== 6) {
+            return defaultColor; // Invalid hex length
+        }
+
+        // Convert hex to RGB
+        const r = parseInt(hex.substring(0, 2), 16);
+        const g = parseInt(hex.substring(2, 4), 16);
+        const b = parseInt(hex.substring(4, 6), 16);
+
+        if (isNaN(r) || isNaN(g) || isNaN(b)) return defaultColor; // Invalid hex characters
+
+        // Calculate luminance using a common formula (YIQ)
+        const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+
+        // If luminance is > 0.5, the background is light, use dark text. Otherwise, use light text.
+        return luminance > 0.5 ? '#000000' : '#ffffff';
+
+    } catch (e) {
+        console.error("Error calculating contrast color for:", hexColor, e);
+        return defaultColor; // Fallback on error
+    }
+}; // END fGetContrastColor
+
+
+
+
+// fColToA1 //////////////////////////////////////////////////////////////////////////////////////////////////
+// Convert numeric column index (0-based) to Excel-style A1 notation (e.g., 0 -> 'A', 25 -> 'Z', 26 -> 'AA')
+// From current scripts.html
+const fColToA1 = (col) => {
+    let label = '';
+    let c = col; // Use local variable
+    while (c >= 0) {
+        label = String.fromCharCode((c % 26) + 65) + label;
+        c = Math.floor(c / 26) - 1;
+    }
+    return label;
+}; // END fColToA1
+
+
+
+
+// getBorderStyleCSS //////////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Helper to generate CSS border string from border side data {style: 'STYLE', color?: '#hex'}
+// Extracted from current scripts.html fSetCellBorders helper
+const getBorderStyleCSS = (borderSideData) => {
+    if (!borderSideData || !borderSideData.style) return null; // Return null if no explicit border style
+
+    const styleStr = borderSideData.style; // e.g., 'SOLID', 'DOTTED'
+    // Color support can be added later if Turbo.gs sends it
+    const color = borderSideData.color || '#000000'; // Default explicit borders to black if color missing
+    let cssStyle = 'solid', cssWidth = '1px';
+
+    // Map Google Sheet BorderStyle enum strings to CSS border properties
+    switch (styleStr) {
+        case 'DOTTED': cssStyle = 'dotted'; break;
+        case 'DASHED': cssStyle = 'dashed'; break;
+        case 'SOLID': cssStyle = 'solid'; break;
+        case 'SOLID_MEDIUM': cssStyle = 'solid'; cssWidth = '2px'; break;
+        case 'SOLID_THICK': cssStyle = 'solid'; cssWidth = '3px'; break;
+        case 'DOUBLE': cssStyle = 'double'; cssWidth = '3px'; break;
+        // default: 'solid', '1px' already set
+    }
+    return `${cssWidth} ${cssStyle} ${color}`;
+}; // END getBorderStyleCSS
+
+
+
+
+// ==========================================================================
+// === Core Cell Creation Helpers       (End of Low-Level Utilities) ===
+// ==========================================================================
+
+
+
+
+// fIsSkRadioGroupMember ////////////////////////////////////////////////////////////
+// Purpose -> Checks if a given cell coordinate (r, c) falls within any of the ranges
+//            defined in gUI.sk1sk2CheckBoxes, indicating it's part of the radio group.
+// Inputs -> r (Number): The 0-based row index.
+//        -> c (Number): The 0-based column index.
+// Outputs -> (Boolean): True if the cell is part of the Sk1/Sk2 radio group ranges, false otherwise.
+const fIsSkRadioGroupMember = (r, c) => {
+    const ranges = gUI.sk1sk2CheckBoxes;
+
+    if (!Array.isArray(ranges)) {
+        console.warn("fIsSkRadioGroupMember: gUI.sk1sk2CheckBoxes is not a valid array.");
+        return false;
+    }
+    if (typeof r !== 'number' || typeof c !== 'number' || isNaN(r) || isNaN(c)) {
+         console.warn(`fIsSkRadioGroupMember: Invalid input coordinates (${r}, ${c})`);
+         return false; // Invalid input coordinates
+    }
+
+
+    // Loop through each defined range for the Sk1/Sk2 checkboxes
+    for (const range of ranges) {
+        if (!fIsValidRangeObject(range)) { // Use existing helper function
+             console.warn("fIsSkRadioGroupMember: Skipping invalid range object", range);
+             continue; // Skip malformed ranges
+        }
+
+        // Resolve the tags/indices for the current range
+        const resolved = fResolveRangeIndices(range); // Use existing helper function
+        if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
+             console.warn("fIsSkRadioGroupMember: Skipping range due to unresolved indices", range);
+             continue; // Skip ranges with invalid tags/indices
+        }
+
+        const rMin = Math.min(resolved.r1, resolved.r2);
+        const rMax = Math.max(resolved.r1, resolved.r2);
+        const cMin = Math.min(resolved.c1, resolved.c2);
+        const cMax = Math.max(resolved.c1, resolved.c2);
+
+        // Check if the input r, c falls within this range
+        if (r >= rMin && r <= rMax && c >= cMin && c <= cMax) {
+            return true; // Found a match, it's part of the group
+        }
+    }
+
+    // If no range matched after checking all of them
+    return false;
+}; // END fIsSkRadioGroupMember
+
+
+
+// fMakeCheckBox //////////////////////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Returns a checkbox element reflecting boolean value in gUI.arr[r][c].
+// MODIFIED: Sets 'disabled' based on cell background color.
+// MODIFIED: Adds 'data-sk-group' attribute if checkbox is part of the Sk1/Sk2 radio group.
+const fMakeCheckBox = (r, c) => {
+    const value = gUI.arr[r]?.[c];
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.dataset.r = r; // Add row index to data attribute
+    checkbox.dataset.c = c; // Add column index to data attribute
+
+    // --- Check background color to set disabled state ---
+    const bgColor = gUI.format?.bg?.[r]?.[c];
+    // Define 'non-white'. Assumes default/white is null, empty, #fff, or #ffffff. Adjust if needed.
+    const isNonWhite = bgColor && bgColor.toLowerCase() !== '#ffffff' && bgColor.toLowerCase() !== '#fff';
+    checkbox.disabled = isNonWhite; // Disable if background is NOT white/default
+    // --- End background check ---
+
+    // Handle boolean true/false and string "TRUE"/"FALSE" (case-insensitive)
+    const valStr = String(value).toUpperCase();
+    checkbox.checked = value === true || valStr === "TRUE";
+
+    // --- Add data attribute if this checkbox is part of the Sk radio group ---
+    if (fIsSkRadioGroupMember(r, c)) {
+        checkbox.dataset.skGroup = 'true';
+    }
+    // --- End Sk radio group check ---
+
+    return checkbox;
+}; // END fMakeCheckBox
+
+
+
+
+// ==========================================================================
+// === Core Rendering & Grid Tag Setup  (End of Core Cell Creation Helpers) ===
+// ==========================================================================
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////// START fCreateAndFormatCell and helpers
+
+
+// fCheckIfEditable ///////////////////////////////////////////////////////////////////
+// Returns true if cell should be editable based on background and type.
+const fCheckIfEditable = (bgColor, isCheckbox) => {
+    const isWhiteBg = (!bgColor || bgColor.toLowerCase() === '#ffffff' || bgColor === 'white');
+    return isWhiteBg && !isCheckbox;
+};
+
+
+
+// fSetCellAttributes ////////////////////////////////////////////////////////////////
+// Sets row, col, and contentEditable attributes if applicable.
+const fSetCellAttributes = (cell, r, c, isEditable) => {
+    cell.dataset.r = r;
+    cell.dataset.c = c;
+    if (isEditable) {
+        cell.contentEditable = true;
+        cell.style.justifyContent = 'flex-start';
+        cell.style.textAlign = 'left';
+    }
+};
+
+
+
+
+// fCheckAndTagNote //////////////////////////////////////////////////////////////////
+// Adds 'has-note' class if gUI.notes contains a non-empty value for this cell.
+const fCheckAndTagNote = (cell, r, c) => {
+    const noteText = gUI.notes?.[r]?.[c]?.trim();
+    if (noteText) cell.classList.add('has-note');
+};
+
+
+
+// fCheckAndTagUrl ///////////////////////////////////////////////////////////////////
+// Checks for URLs and images, adds relevant classes and dataset props.
+// Returns { displayValue, isUrl }
+const fCheckAndTagUrl = (cell, value) => {
+    const trimmed = typeof value === 'string' ? value.trim() : '';
+    const isUrl = trimmed.startsWith('http://') || trimmed.startsWith('https://');
+    let displayValue = value;
+    if (!isUrl) return { displayValue, isUrl };
+
+    cell.classList.add('url-link');
+    cell.dataset.url = trimmed;
+
+    const driveMatch = trimmed.match(/drive\.google\.com\/file\/d\/([-\w]+)/);
+    const imgExts = /\.(png|jpg|jpeg|gif|webp|svg)$/i;
+
+    if (driveMatch && driveMatch[1]) {
+        const fileId = driveMatch[1];
+        const url = 'https://drive.google.com/uc?export=view&id=' + fileId;
+        cell.classList.add('image-link');
+        cell.dataset.imageSrc = url;
+    } else if (imgExts.test(trimmed)) {
+        cell.classList.add('image-link');
+        cell.dataset.imageSrc = trimmed;
+    }
+
+    return { displayValue, isUrl };
+};
+
+
+
+// fPopulateCellContent /////////////////////////////////////////////////////////////
+// Adds checkbox or text content to the cell, stripping IDs if needed.
+const fPopulateCellContent = (cell, r, c, displayValue, isCheckbox) => {
+    if (isCheckbox) {
+        cell.appendChild(fMakeCheckBox(r, c));
+    } else {
+        const idPattern = /\s{2,}_\w{6}$/;
+        const text = (typeof displayValue === 'string' && idPattern.test(displayValue))
+            ? displayValue.replace(idPattern, '')
+            : displayValue;
+        cell.textContent = text;
+    }
+};
+
+
+
+
+
+// fApplyCellFormatting /////////////////////////////////////////////////////////////
+// Applies bgColor, font styles, wrap, etc.
+const fApplyCellFormatting = (cell, c, bgColor, rowFormat, isUrl) => {
+    if (bgColor) cell.style.backgroundColor = bgColor;
+    const finalFontColor = null; // Placeholder if color logic is ever needed
+    cell.style.color = finalFontColor || '';
+
+    const { weight, fontSize, fontStyle, fontFamily, wrap } = rowFormat;
+    if (weight?.[c]) cell.style.fontWeight = weight[c];
+    if (fontSize?.[c]) cell.style.fontSize = `${fontSize[c]}px`;
+    if (fontStyle?.[c]) cell.style.fontStyle = fontStyle[c];
+    if (fontFamily?.[c]) cell.style.fontFamily = fontFamily[c];
+    if (wrap?.[c]) cell.classList.add('wrap');
+};
+
+
+
+
+// fCreateAndFormatCell ////////////////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Creates and formats a single cell div with content, URL/image/note tags, and style.
+// Inputs  -> r, c, value, rowFormat (see original for detailed descriptions)
+// Outputs -> HTMLElement: Configured cell div
+const fCreateAndFormatCell = (r, c, value, rowFormat) => {
+    const cell = document.createElement("div");
+    cell.className = "cell";
+
+    const originalValue = value ?? "";
+    const valStr = String(originalValue).toUpperCase();
+    const isCheckbox = value === true || value === false || valStr === "TRUE" || valStr === "FALSE";
+
+    const bgColor = rowFormat.bg?.[c];
+    const isEditable = fCheckIfEditable(bgColor, isCheckbox);
+
+    fSetCellAttributes(cell, r, c, isEditable);
+    fCheckAndTagNote(cell, r, c);
+    const { displayValue, isUrl } = fCheckAndTagUrl(cell, originalValue);
+    fPopulateCellContent(cell, r, c, displayValue, isCheckbox);
+    fApplyCellFormatting(cell, c, bgColor, rowFormat, isUrl);
+
+    return cell;
+};
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////// END fCreateAndFormatCell and helpers
+
+
+
+// fSetGridTagsFromHeaders //////////////////////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Populates gUI.rowTag and gUI.colTag from tag headers in gUI.arr (Col 0 for rows, Row 0 for columns)
+// Note: Uses more robust version from current scripts.html
+const fSetGridTagsFromHeaders = () => {
+    fLogStatus("⚙️ Parsing Grid Tags...");
+    gUI.rowTag = {};
+    gUI.colTag = {};
+
+    const gameArr = gUI.arr;
+    if (!gameArr || gameArr.length === 0 || !gameArr[0]) {
+        console.warn("⚠️ Cannot parse tags, gUI.arr is empty or malformed.");
+        fLogStatus("⚠️ Grid Tags: Data empty.");
+        return;
+    }
+
+    const rows = gameArr.length;
+    const cols = gameArr[0].length;
+
+    // Row Tags (Column 0)
+    for (let r = 0; r < rows; r++) {
+        const rowCell = gameArr[r][0]; // Using direct access as optional chaining wasn't the fix
+        if (typeof rowCell === 'string' && rowCell) { // Ensure it's a non-empty string
+            rowCell.split(',').forEach(tag => {
+                const trimmedTag = tag.trim();
+                if (trimmedTag) gUI.rowTag[trimmedTag] = r;
+            });
+        }
+    }
+
+    // Col Tags (Row 0)
+    const colHeaderRow = gameArr[0];
+    if (colHeaderRow) {
+        for (let c = 0; c < cols; c++) {
+            const colCell = colHeaderRow[c]; // Check if cell exists
+            if (typeof colCell === 'string' && colCell) { // Ensure it's a non-empty string
+                colCell.split(',').forEach(tag => {
+                    const trimmedTag = tag.trim();
+                    if (trimmedTag) gUI.colTag[trimmedTag] = c;
+                });
+            }
+        }
+    }
+    fLogStatus("✅ Grid Tags Parsed");
+}; // END fSetGridTagsFromHeaders
+
+
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////// START fRenderFullGrid and helpers
+
+
+
+// fInitGridAndSettings ///////////////////////////////////////////////////////////////////////////////
+// Validates DOM/grid array, clears DOM, and logs errors if necessary.
+const fInitGridAndSettings = (grid, gameArr) => {
+    if (!grid) {
+        console.error("❌ Grid container #grid not found!");
+        return false;
+    }
+
+    if (!Array.isArray(gameArr) || gameArr.length === 0 || !Array.isArray(gameArr[0])) {
+        console.error("❌ gUI.arr is empty or malformed. Cannot render grid.");
+        grid.innerHTML = '<p style="color:red;">Error: Invalid data array for rendering.</p>';
+        return false;
+    }
+
+    grid.innerHTML = ""; // Clear old grid content
+    return true;
+};
+
+
+
+
+// fSetGridColumnWidths /////////////////////////////////////////////////////////////////////////////
+// Applies gridTemplateColumns to the #grid container from colWidths in format.
+const fSetGridColumnWidths = (grid, format, numCols) => {
+    const colWidths = format.colWidths || [];
+    const gridTemplateColumns = colWidths.map(w => `${w || 60}px`).join(' ');
+    grid.style.gridTemplateColumns = gridTemplateColumns;
+    fLogStatus(`📐 Applied ${numCols} column widths`);
+};
+
+
+
+
+// fBuildRowFormat /////////////////////////////////////////////////////////////////////////////////
+// Extracts the row format object from the full format object for one row.
+const fBuildRowFormat = (format, rowIdx) => {
+    return {
+        bg: format.bg?.[rowIdx],
+        fontColorHex: format.fontColorHex?.[rowIdx],
+        weight: format.weight?.[rowIdx],
+        fontSize: format.fontSize?.[rowIdx],
+        fontStyle: format.fontStyle?.[rowIdx],
+        fontFamily: format.fontFamily?.[rowIdx],
+        wrap: format.wrap?.[rowIdx]
+    };
+};
+
+
+
+// fAppendRowCells /////////////////////////////////////////////////////////////////////////////////
+// Renders one row of cells and appends to fragment and gUI.grid2D.
+const fAppendRowCells = (fragment, rowIdx, rowData, rowFormat, numCols) => {
+    for (let c = 0; c < numCols; c++) {
+        const value = rowData?.[c];
+        const cell = fCreateAndFormatCell(rowIdx, c, value, rowFormat);
+        gUI.grid2D[rowIdx][c] = cell;
+        fragment.appendChild(cell);
+    }
+};
+
+
+
+
+// fRenderChunkFactory /////////////////////////////////////////////////////////////////////////////
+// Returns a closure that handles chunked rendering using requestAnimationFrame.
+const fRenderChunkFactory = (grid, gameArr, format, chunkSize, callback) => {
+    let r = 0;
+    const numRows = gameArr.length;
+    const numCols = gameArr[0].length;
+
+    return function renderChunk() {
+        const fragment = document.createDocumentFragment();
+        const endRow = Math.min(r + chunkSize, numRows);
+
+        for (let rowIdx = r; rowIdx < endRow; rowIdx++) {
+            const rowData = gameArr[rowIdx];
+            const rowFormat = fBuildRowFormat(format, rowIdx);
+            fAppendRowCells(fragment, rowIdx, rowData, rowFormat, numCols);
+        }
+
+        grid.appendChild(fragment);
+        r = endRow;
+
+        if (r < numRows) {
+            requestAnimationFrame(renderChunk);
+        } else {
+            fLogStatus(`✅ Grid Rendered (${numRows} rows)`);
+            if (typeof callback === 'function') {
+                fLogStatus("🚀 Applying Post-Render Formatting...");
+                setTimeout(callback, 0);
+            }
+        }
+    };
+};
+
+
+
+
+
+// fRenderFullGrid /////////////////////////////////////////////////////////////////////////////////
+// Main controller that handles grid rendering logic using helpers.
+const fRenderFullGrid = (callback) => {
+    fLogStatus("⚙️ Rendering Full Grid...");
+    const grid = document.getElementById("grid");
+    const gameArr = gUI.arr;
+    const format = gUI.format || {};
+
+    if (!fInitGridAndSettings(grid, gameArr)) return;
+
+    const numRows = gameArr.length;
+    const numCols = gameArr[0].length;
+
+    fSetGridColumnWidths(grid, format, numCols);
+    fSetGridTagsFromHeaders();
+
+    gUI.grid2D = Array.from({ length: numRows }, () => Array(numCols).fill(null));
+    fLogStatus(`🏎️ Rendering ${numRows} rows in chunks of 50...`);
+
+    const renderChunk = fRenderChunkFactory(grid, gameArr, format, 50, callback);
+    requestAnimationFrame(renderChunk);
+};
+
+
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////// END fRenderFullGrid and helpers
+
+
+
+
+// ==========================================================================
+// === Grid Formatting & Visibility  (End of Core Rendering & Grid Tag Setup) ===
+// ==========================================================================
+
+
+
+
+// fSetHeader //////////////////////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Hides rows 0-1, offsets the grid, and freezes rows 2-4 as sticky headers.
+// Adapted from older scripts.html, uses classes from style.html
+const fSetHeader = () => {
+    fLogStatus("🔒 Applying Sticky Header...");
+    const numRows = gUI.grid2D.length;
+    if (numRows < 5) { // Need at least rows 0, 1, 2, 3, 4
+        fLogStatus("⚠️ Not enough rows for sticky header.");
+        return;
+    }
+    const numCols = gUI.grid2D[0]?.length || 0;
+
+    // Hide rows 0 and 1
+    for (let r = 0; r <= 1; r++) {
+        for (let c = 0; c < numCols; c++) {
+            const cell = gUI.grid2D?.[r]?.[c];
+            if (cell) cell.style.display = 'none';
+        }
+    }
+
+    // Apply sticky class and dynamic top offset to Rows 2, 3, 4
+    for (let r = 2; r <= 4; r++) {
+        const offset = (r - 2) * gUI.ROW_HEIGHT_PX; // Updated reference // Offset starts at 0 for row 2
+
+        for (let c = 0; c < numCols; c++) {
+            const cell = gUI.grid2D?.[r]?.[c];
+            if (!cell || cell.style.display === 'none') continue; // Skip hidden cells (e.g., merged away)
+
+            cell.classList.add('sticky-header'); // Add class defined in style.html
+            cell.style.top = `${offset}px`; // Set dynamic top offset
+
+            // Re-apply background color to prevent sticky-header class background overriding original
+            // (Requires background to be set during fRenderFullGrid)
+            const bgColor = gUI.format?.bg?.[r]?.[c];
+            cell.style.backgroundColor = bgColor || '#ffffff'; // Fallback to white if no specific bg
+        }
+    }
+
+    // Add class to row below sticky section (Row 5) for visual effect
+    if (numRows > 5) {
+        const belowRowIndex = 5;
+         for (let c = 0; c < numCols; c++) {
+             const cell = gUI.grid2D?.[belowRowIndex]?.[c];
+             if (cell && cell.style.display !== 'none') {
+                 cell.classList.add('below-sticky');
+             }
+         }
+    }
+    fLogStatus("✅ Sticky Header Applied");
+}; // END fSetHeader
+
+
+
+
+// fUpdateGridColumnTemplate //////////////////////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Recalculates and applies the grid-template-columns style based on gUI.hiddenColumns
+// MODIFIED: Added console logs for debugging
+const fUpdateGridColumnTemplate = () => {
+    const grid = document.getElementById("grid");
+    if (!grid || !gUI.format.colWidths || !gUI.arr || gUI.arr.length === 0) {
+        console.error("   -> fUpdateGridColumnTemplate: Missing prerequisites."); return;
+    }
+
+    const numCols = gUI.arr[0].length;
+    const colWidths = gUI.format.colWidths || [];
+    let templateCols = [];
+    let hiddenColsInTemplate = []; // DEBUG LOG
+
+    for (let c = 0; c < numCols; c++) {
+        if (gUI.hiddenColumns.has(c)) { // Check the Set
+            templateCols.push("0px");
+            hiddenColsInTemplate.push(c); // DEBUG LOG
+        } else {
+            const width = colWidths[c] || 60;
+            templateCols.push(`${width}px`);
+        }
+    }
+    const newTemplateString = templateCols.join(' ');
+
+    grid.style.gridTemplateColumns = newTemplateString; // Apply the style
+
+}; // END fUpdateGridColumnTemplate
+
+
+
+
+// fSetColumnVisibility //////////////////////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Hides or shows a single column by index and updates grid template
+// MODIFIED: Reverted to visibility:collapse, kept updateTemplate param and logs
+const fSetColumnVisibility = (colIndex, isVisible, updateTemplate = true) => {
+    if (isNaN(colIndex) || colIndex < 0 || !gUI.grid2D[0] || colIndex >= gUI.grid2D[0].length) {
+        console.warn(`   -> Invalid column index ${colIndex}`); return;
+    }
+
+    const numRows = gUI.grid2D.length;
+    const currentlyHidden = gUI.hiddenColumns.has(colIndex);
+    const action = isVisible ? 'Showing' : 'Hiding';
+
+    // Corrected condition from previous step
+    if ((isVisible && currentlyHidden) || (!isVisible && !currentlyHidden)) {
+        // fLogStatus(`👁️ ${action} Column ${colIndex}...`); // Keep commented out for range ops
+
+        if (isVisible) {
+            gUI.hiddenColumns.delete(colIndex);
+        } else {
+            gUI.hiddenColumns.add(colIndex);
+        }
+
+        // Toggle cell visibility style for all cells in the column
+        let cellsModifiedCount = 0; // DEBUG LOG counter
+        for (let r = 0; r < numRows; r++) {
+            const cell = gUI.grid2D[r]?.[colIndex];
+            if (cell) {
+                // *** CHANGE HERE: Use visibility: collapse instead of display: none ***
+                cell.style.visibility = isVisible ? '' : 'collapse';
+                cellsModifiedCount++; // DEBUG LOG counter
+            }
+        }
+
+        // Regenerate the grid template only if requested
+        if (updateTemplate) {
+             fUpdateGridColumnTemplate();
+        }
+    }
+}; // END fSetColumnVisibility
+
+
+
+
+// fSetRowVisibility //////////////////////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Hides or shows a single row by index by setting cell display style.
+const fSetRowVisibility = (rowIndex, isVisible) => {
+     if (isNaN(rowIndex) || rowIndex < 0 || rowIndex >= gUI.grid2D.length) {
+        console.warn(`Invalid row index ${rowIndex} for fSetRowVisibility`);
+        return;
+    }
+
+    const numCols = gUI.grid2D[0]?.length || 0;
+    const action = isVisible ? 'Showing' : 'Hiding';
+
+    // --- REMOVED the check: if ((isVisible && !currentlyHidden) || (!isVisible && currentlyHidden)) ---
+    // --- Always perform the action and update the Set ---
+
+    if (isVisible) {
+        gUI.hiddenRows.delete(rowIndex); // Remove from Set if showing
+    } else {
+        gUI.hiddenRows.add(rowIndex); // Add to Set if hiding
+    }
+
+    // Toggle display style for all cells in the row
+    let foundCellCount = 0;
+    for (let c = 0; c < numCols; c++) {
+        const cell = gUI.grid2D[rowIndex]?.[c];
+         if (cell) {
+             foundCellCount++;
+             cell.style.display = isVisible ? '' : 'none';
+             if (!isVisible) { // Reset sticky styles if hiding
+                 cell.classList.remove('sticky-header', 'below-sticky');
+                 cell.style.position = ''; cell.style.top = ''; cell.style.zIndex = '';
+             }
+         } else {
+             if (c < 5) console.warn(` -> Cell gUI.grid2D[${rowIndex}][${c}] not found!`);
+          }
+    }
+
+    // If we just showed a row that might be sticky (2,3,4,5), re-apply header styles.
+    // Note: Rows 0,1 are handled by fSetHeader directly.
+    if (isVisible && rowIndex >= 2 && rowIndex <= 5) {
+         fSetHeader(); // Re-run fSetHeader to ensure stickiness is correct
+    }
+    // --- REMOVED the else block that logged "already in desired state" ---
+
+}; // END fSetRowVisibility
+
+
+
+
+// fApplyDynamicMerges //////////////////////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Merges cells based on gUI.format.merges data using grid span and hiding covered cells.
+// New function replacing older fMergeAllCellBlocks / fMergeCells logic
+const fApplyDynamicMerges = () => {
+    fLogStatus("🧩 Applying Merges...");
+    const merges = gUI.format?.merges || []; // Array of {row, col, rowspan, colspan}
+
+    for (const mergeInfo of merges) {
+        const r = mergeInfo.row;
+        const c = mergeInfo.col;
+        const rs = mergeInfo.rowspan;
+        const cs = mergeInfo.colspan;
+
+        // Get the top-left anchor cell of the merge area
+        const anchor = gUI.grid2D?.[r]?.[c];
+        if (!anchor) {
+             console.warn(`⚠️ Merge anchor cell not found at [${r},${c}]`);
+             continue;
+        }
+
+        // Apply grid span styles to the anchor cell
+        if (cs > 1) anchor.style.gridColumn = `span ${cs}`;
+        if (rs > 1) anchor.style.gridRow = `span ${rs}`;
+
+        // Hide the other cells covered by the merge
+        for (let rSub = r; rSub < r + rs; rSub++) {
+            for (let cSub = c; cSub < c + cs; cSub++) {
+                if (rSub === r && cSub === c) continue; // Don't hide the anchor itself
+
+                const cellToHide = gUI.grid2D?.[rSub]?.[cSub];
+                if (cellToHide) {
+                    cellToHide.style.display = 'none';
+                }
+            }
+        }
+    }
+     fLogStatus("✅ Merges Applied");
+}; // END fApplyDynamicMerges
+
+
+
+
+// fApplyManualBorders //////////////////////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Applies border styles to ALL cells within predefined sections using tags,
+//            replicating the old fSetBorderColor behavior (top/left on all, optional right/bottom on edges).
+const fApplyManualBorders = () => {
+    fLogStatus("🖌️ Applying Manual Borders (Old Style)...");
+    let appliedCount = 0;
+
+    gUI.manualBorderSections.forEach(section => {
+        const rowStart = resolveRow(section.r1);
+        const colStart = resolveCol(section.c1);
+        const rowEnd = resolveRow(section.r2);
+        const colEnd = resolveCol(section.c2);
+        const borderStyle = section.style || '1px solid #000'; // Default to black
+        const edges = section.edges || ''; // Get edge flags, default to empty string
+
+        // Validate resolved indices
+        if ([rowStart, colStart, rowEnd, colEnd].some(v => isNaN(v))) {
+            console.warn("Skipping manual border section due to invalid tags:", section);
+            return; // Skip this section if tags don't resolve
+        }
+
+        // Apply borders replicating old fSetBorderColor logic
+        for (let r = rowStart; r <= rowEnd; r++) {
+            for (let c = colStart; c <= colEnd; c++) {
+                const cell = gUI.grid2D?.[r]?.[c];
+                // Skip non-existent cells or those hidden by merging
+                if (!cell || cell.style.display === 'none') continue;
+
+                let appliedThisCell = false;
+
+                // Apply Top and Left to ALL cells in the rectangle
+                cell.style.borderTop = borderStyle;
+                cell.style.borderLeft = borderStyle;
+                appliedThisCell = true; // Count applying top/left as one application for logging
+
+                // Apply Right border only if it's the last column AND edges flag allows 'r'
+                if (edges.includes('r') && c === colEnd) {
+                    cell.style.borderRight = borderStyle;
+                }
+
+                // Apply Bottom border only if it's the last row AND edges flag allows 'b'
+                if (edges.includes('b') && r === rowEnd) {
+                    cell.style.borderBottom = borderStyle;
+                }
+
+                if(appliedThisCell) appliedCount++;
+
+            } // end col loop
+        } // end row loop
+    }); // end forEach section
+
+    fLogStatus(`✅ Manual Borders Applied (Old Style - ${appliedCount} styles set)`);
+}; // END fApplyManualBorders
+
+
+
+
+// scripts.html //
+
+
+// fAddHeaderButtons ////////////////////////////////////////////////////////////////
+// Purpose -> Finds specific cells designated as header buttons (by tag) and inserts
+//            the corresponding image button elements after initial render.
+// Inputs -> None
+// Outputs -> None (Modifies DOM)
+const fAddHeaderButtons = () => {
+    fLogStatus("⚙️ Adding Header Buttons...");
+    let buttonsAdded = 0;
+
+    // --- Define Header Buttons Here ---
+    // Structure: { rowTag: string, colTag: string, action: string, imageUrl: string, altText: string, titleText: string }
+    const headerButtonConfigs = [
+        // --- Existing Dice Button ---
+        {
+            rowTag: 'Button_R',
+            colTag: 'DieButtonC',
+            action: 'action-rollDice',
+            imageUrl: 'https://raw.githubusercontent.com/bmobley333/TurboApp/main/Buttons/Button_d20.png',
+            altText: 'Roll Dice',
+            titleText: 'Roll Dice'
+        },
+        // --- New Buttons ---
+        {
+            rowTag: 'Button_R',
+            colTag: 'RefreshButtonC',
+            action: 'action-refreshData', // Placeholder action name
+            imageUrl: 'https://raw.githubusercontent.com/bmobley333/TurboApp/main/Buttons/Button_Refresh.png', // Converted URL
+            altText: 'Refresh Data',
+            titleText: 'Refresh Data'
+        },
+        {
+            rowTag: 'Button_R',
+            colTag: 'UpArrowButtonC',
+            action: 'action-jumpTop', // Placeholder action name (matches menu?)
+            imageUrl: 'https://raw.githubusercontent.com/bmobley333/TurboApp/main/Buttons/Button_UpArrow.png', // Converted URL
+            altText: 'Jump to Top',
+            titleText: 'Jump to Top'
+        },
+        {
+            rowTag: 'Button_R',
+            colTag: 'DownArrowButtonC',
+            action: 'action-jumpBottom', // Placeholder action name (matches menu?)
+            imageUrl: 'https://raw.githubusercontent.com/bmobley333/TurboApp/main/Buttons/Button_DownArrow.png', // Converted URL
+            altText: 'Jump to Bottom',
+            titleText: 'Jump to Bottom'
+        },
+        {
+            rowTag: 'Button_R',
+            colTag: 'MonsterButtonC',
+            action: 'action-showMonsters', // Placeholder action name
+            imageUrl: 'https://raw.githubusercontent.com/bmobley333/TurboApp/main/Buttons/Button_Monster.png', // Converted URL
+            altText: 'Show Monsters',
+            titleText: 'Show Monsters'
+        }
+        // Add configurations for other buttons here later
+    ];
+    // --- End Button Definitions ---
+
+    headerButtonConfigs.forEach(config => {
+        const r = resolveRow(config.rowTag);
+        const c = resolveCol(config.colTag);
+
+        if (isNaN(r) || isNaN(c)) {
+            console.warn(`⚠️ Header Button: Could not resolve tags [${config.rowTag}, ${config.colTag}]`);
+            return; // Skip this button if tags are invalid
+        }
+
+        const cell = gUI.grid2D?.[r]?.[c];
+        if (!cell) {
+            console.warn(`⚠️ Header Button: Cell element not found at resolved [${r}, ${c}] for tags [${config.rowTag}, ${config.colTag}]`);
+            return; // Skip if cell element doesn't exist
+        }
+
+        // Clear any existing content (like placeholder text or parsed special markers)
+        cell.innerHTML = '';
+
+        // Create the image element
+        const img = document.createElement('img');
+        img.src = config.imageUrl;
+        img.alt = config.altText;
+        img.title = config.titleText;
+        img.dataset.buttonAction = config.action; // Action identifier
+        img.classList.add('header-button-img');  // CSS class for styling
+
+        // Append the image button to the cell
+        cell.appendChild(img);
+
+        // Ensure cell styles are appropriate for centering the button image
+        cell.style.justifyContent = 'center'; // Center horizontally (flex)
+        cell.style.alignItems = 'center';   // Center vertically (flex)
+        cell.style.padding = '0';             // Remove padding to maximize image space
+
+        buttonsAdded++;
+    });
+
+    if (buttonsAdded > 0) {
+        fLogStatus(`✅ Added ${buttonsAdded} Header Button(s).`);
+    } else {
+        fLogStatus(`ℹ️ No valid Header Buttons found or added.`);
+    }
+
+}; // END fAddHeaderButtons
+
+
+
+// fMarkOverflowingCells //////////////////////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Adds 'overflow-left' class to cells where content width exceeds cell width.
+// From older scripts.html - Run AFTER merges and column widths are set.
+const fMarkOverflowingCells = () => {
+    fLogStatus("↔️ Checking Cell Overflow...");
+    // Query all rendered cells that are not part of a hidden merge area
+    const cells = document.querySelectorAll('#grid .cell:not([style*="display: none"])');
+    let count = 0;
+    cells.forEach(cell => {
+        // Check scrollWidth vs clientWidth for overflow
+        // Use a small tolerance? e.g., > cell.clientWidth + 1
+        if (cell.scrollWidth > cell.clientWidth + 1) {
+            cell.classList.add('overflow-left');
+            count++;
+        } else {
+            cell.classList.remove('overflow-left'); // Ensure class is removed if not overflowing
+        }
+    });
+     fLogStatus(`✅ Overflow Checked (${count} cells marked)`);
+}; // END fMarkOverflowingCells
+
+
+
+
+// fHideColumnRange //////////////////////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Hides multiple ranges of columns defined by an array of objects. Updates template once.
+// MODIFIED: Added console logs for debugging
+const fHideColumnRange = (rangeArray) => {
+    fLogStatus(`👁️ Hiding Column Ranges...`);
+    if (!Array.isArray(rangeArray)) {
+        console.error("   -> ❌ Invalid input: fHideColumnRange requires an array.", rangeArray);
+        return;
+    }
+
+    let anyColumnsChanged = false;
+
+    // Loop through each range object in the array
+    for (const range of rangeArray) {
+        if (!range || typeof range.c1 === 'undefined' || typeof range.c2 === 'undefined') {
+             console.warn("   -> Skipping invalid range object:", range);
+             continue;
+        }
+        const startCol = resolveCol(range.c1);
+        const endCol = resolveCol(range.c2);
+
+        if (isNaN(startCol) || isNaN(endCol)) {
+            console.warn(`   -> Skipping range due to invalid tags/indices: ${range.c1}, ${range.c2}`);
+            continue; // Skip this range if tags don't resolve
+        }
+
+        const cMin = Math.min(startCol, endCol);
+        const cMax = Math.max(startCol, endCol);
+
+        // Loop through columns within the current range
+        for (let c = cMin; c <= cMax; c++) {
+            const currentlyHidden = gUI.hiddenColumns.has(c);
+            if (!currentlyHidden) {
+                // Call will log its own details now
+                fSetColumnVisibility(c, false, false); // Hide column, DO NOT update template yet
+                anyColumnsChanged = true;
+            } else {
+            }
+        }
+    } // End loop through rangeArray
+
+    // Update the grid template ONCE after processing all ranges
+    if (anyColumnsChanged) {
+        fUpdateGridColumnTemplate();
+        fLogStatus(`✅ Column Ranges Hidden.`);
+    } else {
+        fLogStatus(`ℹ️ All Specified Column Ranges Already Hidden (or no valid ranges found).`);
+    }
+}; // END fHideColumnRange
+
+
+
+
+// fShowColumnRange //////////////////////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Shows multiple ranges of columns defined by an array of objects. Updates template once.
+const fShowColumnRange = (rangeArray) => {
+    fLogStatus(`👁️ Showing Column Ranges...`);
+    if (!Array.isArray(rangeArray)) {
+        console.error("❌ Invalid input: fShowColumnRange requires an array.", rangeArray);
+        return;
+    }
+
+    let anyColumnsChanged = false;
+
+    // Loop through each range object in the array
+    for (const range of rangeArray) {
+        if (!range || typeof range.c1 === 'undefined' || typeof range.c2 === 'undefined') {
+             console.warn("Skipping invalid range object in fShowColumnRange:", range);
+             continue;
+        }
+        const startCol = resolveCol(range.c1);
+        const endCol = resolveCol(range.c2);
+
+        if (isNaN(startCol) || isNaN(endCol)) {
+            console.warn(`Skipping range due to invalid tags/indices in fShowColumnRange: ${range.c1}, ${range.c2}`);
+            continue; // Skip this range if tags don't resolve
+        }
+
+        // Ensure startCol <= endCol
+        const cMin = Math.min(startCol, endCol);
+        const cMax = Math.max(startCol, endCol);
+
+        // Loop through columns within the current range
+        for (let c = cMin; c <= cMax; c++) {
+             const currentlyHidden = gUI.hiddenColumns.has(c);
+             if (currentlyHidden) { // Only act if column IS hidden
+                 fSetColumnVisibility(c, true, false); // Show column, DO NOT update template yet
+                 anyColumnsChanged = true;
+             }
+        }
+    } // End loop through rangeArray
+
+    // Update the grid template ONCE after processing all ranges
+    if (anyColumnsChanged) {
+        fUpdateGridColumnTemplate();
+        fLogStatus(`✅ Column Ranges Shown.`);
+    } else {
+         fLogStatus(`ℹ️ All Specified Column Ranges Already Visible (or no valid ranges found).`);
+    }
+}; // END fShowColumnRange
+
+
+
+
+// fToggleGearColumns ///////////////////////////////////////////////////////////////
+// Purpose -> Checks if gear columns (defined in gUI.gearTblCols) are currently visible
+//          and calls the appropriate show/hide range function to toggle their state.
+const fToggleGearColumns = () => {
+    const gearRanges = gUI.gearTblCols;
+
+    // Basic validation of the configuration
+    if (!Array.isArray(gearRanges) || gearRanges.length === 0) {
+        console.error("❌ Cannot toggle gear columns: gUI.gearTblCols is not a valid array or is empty.");
+        fLogStatus("❌ Error: Gear column definition missing or invalid.");
+        return;
+    }
+
+    let isCurrentlyVisible = false;
+
+    // Check if *any* column within the defined gear ranges is currently visible
+    // Loop through each range object in the array (e.g., [{ c1: 'TagA', c2: 'TagB' }])
+    for (const range of gearRanges) {
+        if (!range || typeof range.c1 === 'undefined' || typeof range.c2 === 'undefined') {
+            console.warn("Skipping invalid range object in fToggleGearColumns:", range);
+            continue;
+        }
+        const startCol = resolveCol(range.c1);
+        const endCol = resolveCol(range.c2);
+
+        if (isNaN(startCol) || isNaN(endCol)) {
+            console.warn(`Skipping gear range due to invalid tags/indices: ${range.c1}, ${range.c2}`);
+            continue; // Skip this range if tags don't resolve
+        }
+
+        const cMin = Math.min(startCol, endCol);
+        const cMax = Math.max(startCol, endCol);
+
+        // Loop through columns within the current resolved range
+        for (let c = cMin; c <= cMax; c++) {
+            // If we find *one* column in the gear range that is NOT hidden, then gear is visible
+            if (!gUI.hiddenColumns.has(c)) {
+                isCurrentlyVisible = true;
+                break; // Exit inner loop once visibility is confirmed
+            }
+        }
+
+        if (isCurrentlyVisible) {
+            break; // Exit outer loop once visibility is confirmed
+        }
+    } // End loop through gearRanges
+
+    // Call the appropriate action based on the determined visibility
+    if (isCurrentlyVisible) {
+        fLogStatus("⚙️ Toggling Gear: Currently Visible -> Hiding...");
+        fHideColumnRange(gearRanges); // Hide all defined gear ranges
+    } else {
+        fLogStatus("⚙️ Toggling Gear: Currently Hidden -> Showing...");
+        fShowColumnRange(gearRanges); // Show all defined gear ranges
+    }
+}; // END fToggleGearColumns
+
+
+
+// fApplyInitialVisibility //////////////////////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Applies the initial hidden state for columns and rows based on gUI definitions
+// MODIFIED: Added console logs for debugging
+const fApplyInitialVisibility = () => {
+    fLogStatus("👁️ Applying Initial Visibility...");
+
+    // Initial Columns - Use fHideColumnRange
+    if (gUI.initialHiddenCols && gUI.initialHiddenCols.length > 0) {
+        fHideColumnRange(gUI.initialHiddenCols); // Calls the range function
+    } else {
+         fLogStatus("   -> ℹ️ No initial columns defined to hide.");
+    }
+
+
+    // Initial Rows - Still uses fSetRowVisibility individually
+    if (gUI.initialHiddenRows && gUI.initialHiddenRows.length > 0) {
+        fLogStatus("   -> 👁️ Hiding Initial Rows...");
+        gUI.initialHiddenRows.forEach(range => {
+             const r1 = resolveRow(range.r1); const r2 = resolveRow(range.r2);
+             if (isNaN(r1) || isNaN(r2)) { console.warn("   -> Invalid row tag in initialHiddenRows:", range); return; }
+             const startRow = Math.min(r1, r2); const endRow = Math.max(r1, r2);
+             for (let r = startRow; r <= endRow; r++) { fSetRowVisibility(r, false); }
+        });
+         fLogStatus("   -> ✅ Initial Rows Hidden.");
+    } else {
+        fLogStatus("   -> ℹ️ No initial rows defined to hide.");
+    }
+
+}; // END fApplyInitialVisibility
+
+
+
+
+// ==========================================================================
+// === Tooltip Logic                 (End of Grid Formatting & Visibility) ===
+// ==========================================================================
+
+
+
+
+// fPositionTooltip //////////////////////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Calculates and sets the position of the tooltip, keeping it within the viewport.
+// Inputs -> tooltip (HTMLElement): The tooltip element.
+//       -> event (MouseEvent): The mouse event that triggered the hover.
+const fPositionTooltip = (tooltip, event) => {
+    if (!tooltip || !event) return;
+
+    // Get cursor position from the event
+    const cursorX = event.pageX;
+    const cursorY = event.pageY;
+
+    // Get tooltip dimensions (might require a brief display toggle if not already visible, but usually okay)
+    // If it was just made visible, dimensions should be available.
+    const tooltipRect = tooltip.getBoundingClientRect(); // Use getBoundingClientRect for dimensions including border
+    const tooltipWidth = tooltipRect.width;
+    const tooltipHeight = tooltipRect.height;
+
+    // Get viewport dimensions
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const scrollX = window.scrollX; // Horizontal scroll offset
+    const scrollY = window.scrollY; // Vertical scroll offset
+
+    // Calculate initial desired position (below and right of cursor)
+    let newTop = cursorY + gUI.TOOLTIP_OFFSET_Y;  // Updated reference
+    let newLeft = cursorX + gUI.TOOLTIP_OFFSET_X; // Updated reference
+
+    // Adjust if tooltip goes off the right edge of the viewport
+    if (newLeft + tooltipWidth > viewportWidth + scrollX) {
+        newLeft = cursorX - tooltipWidth - gUI.TOOLTIP_OFFSET_X; // Updated reference // Move to the left of the cursor
+        // Optional: Add check if it now goes off the left edge too (unlikely with reasonable tooltip width)
+        if (newLeft < scrollX) { newLeft = scrollX + 5; } // Stick near left edge if needed
+    }
+
+    // Adjust if tooltip goes off the bottom edge of the viewport
+    if (newTop + tooltipHeight > viewportHeight + scrollY) {
+        newTop = cursorY - tooltipHeight - gUI.TOOLTIP_OFFSET_Y; // Updated reference // Move above the cursor
+        // Optional: Add check if it now goes off the top edge too
+        if (newTop < scrollY) { newTop = scrollY + 5; } // Stick near top edge if needed
+    }
+
+    // Apply the calculated position
+    tooltip.style.top = `${newTop}px`;
+    tooltip.style.left = `${newLeft}px`;
+
+}; // END fPositionTooltip
+
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////// START fHandleCellHover and helpers
+
+
+
+
+// fGetValidTargetCell ////////////////////////////////////////////////////////////////////////////////
+// Returns the closest .cell from the event or null if invalid.
+const fGetValidTargetCell = (event) => {
+    return event.target.closest('.cell');
+};
+
+
+
+
+// fHideTooltip ///////////////////////////////////////////////////////////////////////////////////////
+// Clears timeout and hides tooltip.
+const fHideTooltip = () => {
+    clearTimeout(gUI.tooltipTimeoutId); // Updated reference
+    gUI.tooltipTimeoutId = null; // Clear the stored ID as well
+    if (gUI.tooltipElement) gUI.tooltipElement.style.display = 'none'; // Updated reference
+};
+
+
+
+
+// fShouldShowTooltip ////////////////////////////////////////////////////////////////////////////////
+// Returns boolean: true if cell is overflowing or has a note.
+const fShouldShowTooltip = (r, c, cell) => {
+    const isOverflowing = cell.scrollWidth > cell.clientWidth + 1;
+    const noteText = gUI.notes?.[r]?.[c]?.trim();
+    return isOverflowing || !!noteText;
+};
+
+
+
+
+// fBuildTooltipContent /////////////////////////////////////////////////////////////////////////////
+// Builds tooltip HTML content from overflow text and note.
+const fBuildTooltipContent = (r, c, cell) => {
+    const isOverflowing = cell.scrollWidth > cell.clientWidth + 1;
+    const noteText = gUI.notes?.[r]?.[c]?.trim();
+    let tooltipContent = '';
+
+    if (isOverflowing) {
+        tooltipContent = cell.textContent;
+    }
+
+    if (noteText) {
+        if (tooltipContent) tooltipContent += "\n---\n";
+        tooltipContent += `Note: ${noteText}`;
+    }
+
+    return tooltipContent.replace(/\n/g, '<br>');
+};
+
+
+
+
+// fStartTooltipTimer /////////////////////////////////////////////////////////////////////////////
+// Sets a timeout to show tooltip after HOVER_DELAY_MS.
+const fStartTooltipTimer = (cell, event) => {
+    // Clear any existing timeout before starting a new one
+    clearTimeout(gUI.tooltipTimeoutId); // Updated reference
+
+    gUI.tooltipTimeoutId = setTimeout(() => { // Updated reference
+        const r = parseInt(cell.dataset.r, 10);
+        const c = parseInt(cell.dataset.c, 10);
+
+        if (isNaN(r) || isNaN(c)) {
+            console.warn("Tooltip hover: Invalid r/c data attributes.", cell.dataset);
+            fHideTooltip();
+            return;
+        }
+
+        if (fShouldShowTooltip(r, c, cell)) {
+            gUI.tooltipElement.innerHTML = fBuildTooltipContent(r, c, cell); // Updated reference
+            gUI.tooltipElement.style.display = 'block';                     // Updated reference
+            fPositionTooltip(gUI.tooltipElement, event);                    // Updated reference
+        } else {
+            fHideTooltip();
+        }
+
+    }, gUI.HOVER_DELAY_MS); // Updated reference
+};
+
+
+
+
+// fHandleCellHover /////////////////////////////////////////////////////////////////////////////////
+// Delegated mouseenter/mouseover handler for grid cells (shows tooltips for overflow + notes)
+const fHandleCellHover = (event) => {
+    if (!gUI.tooltipElement) return; // Updated reference
+
+    const cell = fGetValidTargetCell(event);
+    if (!cell) {
+        fHideTooltip();
+        return;
+    }
+
+    // No need to call fHideTooltip here because fStartTooltipTimer clears the old one.
+    fStartTooltipTimer(cell, event);
+};
+
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////// END fHandleCellHover and helpers
+
+
+
+
+// fHandleCellMouseOut //////////////////////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Handles mouseout/mouseleave events delegated from the grid to hide the tooltip.
+// Inputs -> event (MouseEvent): The mouse event.
+const fHandleCellMouseOut = (event) => {
+    // Clear the pending timeout *immediately* if the mouse leaves before the delay finishes
+    clearTimeout(gUI.tooltipTimeoutId); // Updated reference
+    gUI.tooltipTimeoutId = null; // Reset the timeout ID // Updated reference
+
+    // Hide the tooltip if it's currently visible
+    if (gUI.tooltipElement) { // Updated reference
+        gUI.tooltipElement.style.display = 'none'; // Updated reference
+    }
+}; // END fHandleCellMouseOut
+
+
+
+
+// ==========================================================================
+// === Image Modal Logic                 (End of Tooltip Logic) ===
+// ==========================================================================
+
+
+
+
+// fHideImageModal //////////////////////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Hides the image modal and clears the image source.
+const fHideImageModal = () => { // <<< RENAMED BACK (Name is fine, updating internal refs)
+    // Check renamed global variables within gUI object
+    if (!gUI.modalElement || !gUI.modalImageElement) return; // Updated references
+
+    fLogStatus("🖼️ Hiding image modal.");
+    gUI.modalElement.style.display = 'none'; // Updated reference
+    // Use renamed global variable & clear img src
+    gUI.modalImageElement.src = ''; // Updated reference
+
+}; // END fHideImageModal
+
+
+
+
+// fShowImageModal //////////////////////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Displays the image modal with the specified image URL in the img tag.
+// Inputs -> imageUrl (String): The direct URL of the image to display.
+const fShowImageModal = (imageUrl) => { // <<< RENAMED BACK (Name is fine, updating internal refs)
+    console.log("--- fShowImageModal Start ---");
+    console.log(" Image URL:", imageUrl);
+    // Check renamed global variables within gUI object
+    if (!gUI.modalElement || !gUI.modalImageElement) { // Updated references
+        console.error("Cannot show modal: Modal elements not found in globals.");
+        return;
+    }
+    console.log("Modal elements found.");
+    fLogStatus(`🖼️ Showing image: ${imageUrl.substring(0, 100)}...`);
+
+    // Set the image source using renamed global variable for IMG
+    console.log("Setting image src...");
+    gUI.modalImageElement.src = imageUrl; // Updated reference
+
+    // Display the modal
+    console.log("Setting modal display to flex...");
+    gUI.modalElement.style.display = 'flex'; // Updated reference
+    console.log("--- fShowImageModal End ---");
+
+}; // END fShowImageModal
+
+
+
+
+// ==========================================================================
+// === Grid Interaction Logic          (End of Image Modal Logic) ===
+// ==========================================================================
+
+
+
+
+// fHandleGridCheckboxClick //////////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Handles click events routed from fHandleGridClick, specifically for checkboxes.
+//          Updates the gUI.arr data based on the checkbox's new state.
+//          Includes special logic for checkboxes in the 'sk-radio-group'.
+// Inputs  -> event (MouseEvent): The click event object passed from the delegated listener.
+// Outputs -> None. (Modifies gUI.arr, gUI.currentSkRadioChecked, potentially DOM).
+const fHandleGridCheckboxClick = (event) => {
+    const checkbox = event.target; // Target of the click *is* the checkbox
+
+    // Ensure it's a valid checkbox element we care about
+    if (!checkbox || checkbox.tagName !== 'INPUT' || checkbox.type !== 'checkbox' || !checkbox.closest('.cell')) {
+        return;
+    }
+
+    // Exit if the checkbox is disabled
+    if (checkbox.disabled) {
+        return;
+    }
+
+    // Get coordinates from data attributes
+    const r = parseInt(checkbox.dataset.r, 10);
+    const c = parseInt(checkbox.dataset.c, 10);
+
+    // Validate indices (Added check for grid2D row existence)
+    if (isNaN(r) || isNaN(c) || r < 0 || c < 0 || !gUI.arr[r] || !gUI.grid2D[r] ) {
+        console.warn("Checkbox click handler: Invalid row/column index or missing grid element.", checkbox.dataset);
+        return;
+    }
+
+    // Read the new state AFTER the click happened
+    const isChecked = checkbox.checked;
+    const isSkGroupMember = checkbox.dataset.skGroup === 'true';
+
+    // --- Handle Sk1/Sk2 Radio Group Logic ---
+    if (isSkGroupMember) {
+        // If the box is being CHECKED
+        if (isChecked) {
+            const oldR = gUI.currentSkRadioChecked.r;
+            const oldC = gUI.currentSkRadioChecked.c;
+
+            // Check if there WAS a previously checked box and it's DIFFERENT from this one
+            if (oldR !== null && oldC !== null && (oldR !== r || oldC !== c)) {
+                // Find the DOM element for the old checkbox
+                const oldCellDiv = gUI.grid2D[oldR]?.[oldC];
+                const oldCheckbox = oldCellDiv?.querySelector('input[data-sk-group="true"]');
+
+                if (oldCheckbox) {
+                    // Uncheck the old checkbox visually
+                    oldCheckbox.checked = false;
+                    // Update the data model for the old checkbox
+                    gUI.arr[oldR][oldC] = false;
+                    fLogStatus(`Radio group: Unchecked previous box [${oldR}, ${oldC}]`);
+                } else {
+                    // This might happen if the grid structure changed unexpectedly or coords were bad
+                    console.warn(`Radio group: Could not find previous checkbox element at [${oldR}, ${oldC}] to uncheck.`);
+                }
+            }
+            // Update tracker to the newly checked box
+            gUI.currentSkRadioChecked = { r: r, c: c };
+            // Update data model for the newly checked box
+            gUI.arr[r][c] = true;
+            fLogStatus(`Radio group: Checked box [${r}, ${c}]`);
+
+        }
+        // If the box is being UNCHECKED (by clicking the currently active one)
+        else {
+             // Only clear tracker if the one being unchecked IS the currently tracked one
+             if (gUI.currentSkRadioChecked.r === r && gUI.currentSkRadioChecked.c === c) {
+                gUI.currentSkRadioChecked = { r: null, c: null };
+             }
+             // Update data model for the unchecked box
+             gUI.arr[r][c] = false;
+             fLogStatus(`Radio group: Unchecked box [${r}, ${c}]`);
+        }
+    }
+    // --- Handle Normal Checkbox Logic ---
+    else {
+        // Update the underlying data model in gUI.arr for non-group checkboxes
+        gUI.arr[r][c] = isChecked;
+        // Log the change for normal checkboxes
+        fLogStatus(`Checkbox [${r}, ${c}] toggled to: ${isChecked}`);
+    }
+
+}; // END fHandleGridCheckboxClick
+
+
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////// START fHandleGridClick and helpers
+
+
+
+// fIsCheckboxClick ////////////////////////////////////////////////////////////////////////////////
+// Returns true if target is a checkbox input.
+const fIsCheckboxClick = (target) => {
+    return target.tagName === 'INPUT' && target.type === 'checkbox';
+};
+
+
+
+
+// fIsEditableCell /////////////////////////////////////////////////////////////////////////////////
+// Returns true if the clicked cell is contentEditable.
+const fIsEditableCell = (cellDiv) => {
+    return cellDiv?.isContentEditable;
+};
+
+
+
+
+// fIsUrlLinkCell /////////////////////////////////////////////////////////////////////////////////
+// Returns true if cell has class 'url-link'.
+const fIsUrlLinkCell = (cellDiv) => {
+    return cellDiv?.classList.contains('url-link');
+};
+
+
+
+
+// fHandleDriveLink ///////////////////////////////////////////////////////////////////////////////
+// Opens Google Drive links in new tab due to embed restrictions.
+const fHandleDriveLink = (url) => {
+    fLogStatus(`🖱️ Opening Drive Link in new tab: ${url.substring(0, 100)}...`);
+    window.open(url, '_blank');
+};
+
+
+
+
+// fHandleImageModal /////////////////////////////////////////////////////////////////////////////
+// Opens a standard image link in modal.
+const fHandleImageModal = (imageUrl) => {
+    fLogStatus(`🖱️ Clicked Standard Image Link: ${imageUrl.substring(0, 100)}...`);
+    fShowImageModal(imageUrl);
+};
+
+
+
+
+// fHandleWebLink /////////////////////////////////////////////////////////////////////////////////
+// Opens non-image, non-Drive links in a new tab.
+const fHandleWebLink = (url) => {
+    fLogStatus(`🖱️ Clicked Web Link: ${url.substring(0, 100)}...`);
+    window.open(url, '_blank');
+};
+
+
+
+
+// fHandleUrlClick ////////////////////////////////////////////////////////////////////////////////
+// Determines URL type and routes to appropriate handler.
+const fHandleUrlClick = (cellDiv) => {
+    const originalUrl = cellDiv.dataset.url;
+    if (!originalUrl) {
+        console.warn("Clicked URL link cell, but data-url attribute was missing.", cellDiv);
+        return;
+    }
+
+    const isDrive = originalUrl.includes('drive.google.com/file/d/');
+    const isImage = cellDiv.classList.contains('image-link') && !isDrive;
+    const imageUrl = cellDiv.dataset.imageSrc;
+
+    if (isDrive) {
+        fHandleDriveLink(originalUrl);
+    } else if (isImage && imageUrl) {
+        fHandleImageModal(imageUrl);
+    } else {
+        fHandleWebLink(originalUrl);
+    }
+};
+
+
+
+
+// scripts.html //
+
+
+// fHandleGridClick ///////////////////////////////////////////////////////////////////////////////
+// Delegated click handler for cells: routes to header buttons, checkboxes, URLs, etc.
+const fHandleGridClick = (event) => {
+    const target = event.target;
+
+    // --- Check for Header Button Click FIRST ---
+    const buttonImg = target.closest('.header-button-img[data-button-action]');
+    if (buttonImg) {
+        const action = buttonImg.dataset.buttonAction;
+        fLogStatus(`🖱️ Header Button Clicked: ${action}`);
+        event.preventDefault(); // Prevent default image drag/etc.
+        event.stopPropagation(); // Stop event from bubbling further
+
+        // --- Dispatch Header Button Actions ---
+        switch (action) {
+            case 'action-rollDice':
+                console.log("ACTION: Roll Dice button clicked (logic pending)");
+                // @@ Placeholder - Add actual dice roll call here later
+                break;
+            case 'action-refreshData': // <<< NEW CASE
+                console.log("ACTION: Refresh Data button clicked (logic pending)");
+                // @@ Placeholder - Could call fLoadGameSheet() or similar
+                break;
+            case 'action-jumpTop': // <<< NEW CASE
+                console.log("ACTION: Jump Top button clicked (logic pending)");
+                // @@ Placeholder - Could implement window.scrollTo(0, 0) or scroll grid
+                break;
+            case 'action-jumpBottom': // <<< NEW CASE
+                console.log("ACTION: Jump Bottom button clicked (logic pending)");
+                // @@ Placeholder - Could implement scrolling to end of grid/document
+                break;
+            case 'action-showMonsters': // <<< NEW CASE
+                console.log("ACTION: Show Monsters button clicked (logic pending)");
+                // @@ Placeholder - Could scroll to monster section or toggle visibility
+                break;
+            // Add cases for other button actions here later
+            default:
+                console.warn(`Unhandled header button action: ${action}`);
+        }
+        return; // Handled the button click, stop processing this event
+    }
+    // --- End Header Button Check ---
+
+
+    // --- Existing Cell Click Logic ---
+    const cellDiv = target.closest('.cell');
+    if (!cellDiv) return; // Click wasn't inside any cell we track
+
+    if (fIsCheckboxClick(target)) {
+        fHandleGridCheckboxClick(event);
+        return;
+    }
+
+    // Prevent clicks on editable cells from triggering other actions (like URL clicks)
+    if (fIsEditableCell(cellDiv)) {
+        // Allow default behavior for content editing
+        return;
+    }
+
+    if (fIsUrlLinkCell(cellDiv)) {
+        fHandleUrlClick(cellDiv);
+        return;
+    }
+
+    // More click routes could go here later (e.g., general cell select)
+    // fLogStatus(`🖱️ Clicked cell [${cellDiv.dataset.r}, ${cellDiv.dataset.c}] (no specific action)`);
+
+}; // END fHandleGridClick
+
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////// END fHandleGridClick and helpers
+
+
+
+
+// fHandleGridCellEdit ////////////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Handles blur events delegated from the grid container for contenteditable cells.
+//            Updates the gUI.arr data if the cell's text content has changed.
+// Inputs  -> event (FocusEvent): The blur event object.
+// Outputs -> None. (Modifies gUI.arr).
+const fHandleGridCellEdit = (event) => {
+    const cellDiv = event.target;
+
+    // Check if the blurred element is actually a cell div that is contenteditable
+    if (!cellDiv || !cellDiv.classList.contains('cell') || cellDiv.contentEditable !== 'true') {
+        return; // Exit if not an editable cell div
+    }
+
+    // Get row/col from the data attributes
+    const r = parseInt(cellDiv.dataset.r, 10);
+    const c = parseInt(cellDiv.dataset.c, 10);
+
+    // Validate indices
+    if (isNaN(r) || isNaN(c) || r < 0 || c < 0 || !gUI.arr[r]) {
+         console.warn("Cell edit handler: Invalid row/column index from data attributes.", cellDiv.dataset);
+         return;
+    }
+
+    // Get the new value from the cell's text content
+    const newValue = cellDiv.textContent;
+
+    // Get the old value from the data model (handle null/undefined)
+    const oldValue = String(gUI.arr[r][c] ?? ''); // Coerce to string for comparison
+
+    // Compare and update data model ONLY if changed
+    if (newValue !== oldValue) {
+        gUI.arr[r][c] = newValue; // Update the underlying data model
+        fLogStatus(`Cell [${r}, ${c}] changed to: "${newValue}"`);
+        // Optional: Add visual feedback for 'saved' state, or trigger server update later
+    }
+    // else { // Optional log removed for cleanliness
+    //   // console.log(`Cell [${r}, ${c}] content unchanged.`);
+    // }
+
+}; // END fHandleGridCellEdit
+
+
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////// START fClearCheckboxesInGridRange and helpers
+
+
+
+// fIsValidRangeObject //////////////////////////////////////////////////////////////////////////////
+// Checks if the range object has valid r1, c1, r2, c2 properties.
+const fIsValidRangeObject = (range) => {
+    return range &&
+        typeof range.r1 !== 'undefined' &&
+        typeof range.c1 !== 'undefined' &&
+        typeof range.r2 !== 'undefined' &&
+        typeof range.c2 !== 'undefined';
+};
+
+
+
+
+// fResolveRangeIndices /////////////////////////////////////////////////////////////////////////////
+// Converts tag or index values to resolved numerical indices.
+const fResolveRangeIndices = (range) => {
+    const r1 = resolveRow(range.r1);
+    const c1 = resolveCol(range.c1);
+    const r2 = resolveRow(range.r2);
+    const c2 = resolveCol(range.c2);
+    return { r1, c1, r2, c2 };
+};
+
+
+
+
+// fClearCheckboxInGrid /////////////////////////////////////////////////////////////////////////////
+// Unchecks a checkbox in the specified grid cell if it exists and is checked.
+const fClearCheckboxInGrid = (r, c) => {
+    const row = gUI.grid2D[r];
+    if (!row) return false;
+    const cellDiv = row[c];
+    if (!cellDiv) return false;
+
+    const checkbox = cellDiv.querySelector('input[type="checkbox"]');
+    if (checkbox && checkbox.checked) {
+        checkbox.checked = false;
+        return true;
+    }
+    return false;
+};
+
+
+
+
+// fClearCheckboxesInRange //////////////////////////////////////////////////////////////////////////
+// Handles a single range: resolves bounds, checks validity, clears checkboxes.
+const fClearCheckboxesInRange = (range, index) => {
+    if (!fIsValidRangeObject(range)) {
+        console.warn(`⚠️ Skipping invalid range object at index ${index}`, range);
+        return 0;
+    }
+
+    const { r1, c1, r2, c2 } = fResolveRangeIndices(range);
+    if ([r1, c1, r2, c2].some(isNaN)) {
+        console.warn(`⚠️ Invalid resolved indices at index ${index}:`, { r1, c1, r2, c2 });
+        return 0;
+    }
+
+    const rMin = Math.min(r1, r2);
+    const rMax = Math.max(r1, r2);
+    const cMin = Math.min(c1, c2);
+    const cMax = Math.max(c1, c2);
+
+    const numRows = gUI.grid2D.length;
+    if (rMin >= numRows) {
+        console.warn(`⚠️ Skipping range at index ${index}: start row ${rMin} outside grid bounds.`);
+        return 0;
+    }
+
+    const effectiveRMax = Math.min(rMax, numRows - 1);
+    let clearedCount = 0;
+
+    for (let r = rMin; r <= effectiveRMax; r++) {
+        const row = gUI.grid2D[r];
+        if (!row) continue;
+
+        const effectiveCMax = Math.min(cMax, row.length - 1);
+        for (let c = cMin; c <= effectiveCMax; c++) {
+            if (fClearCheckboxInGrid(r, c)) clearedCount++;
+        }
+    }
+
+    return clearedCount;
+};
+
+
+
+
+// fClearCheckboxesInGridRange //////////////////////////////////////////////////////////////////////
+// Main entry: loops through range array, clears all checkboxes in valid ranges.
+const fClearCheckboxesInGridRange = (rangeArray) => {
+    fLogStatus(`⚙️ Clearing checkboxes in ranges...`);
+
+    if (!Array.isArray(rangeArray)) {
+        console.error("❌ Invalid input: must be an array of range objects.", rangeArray);
+        fLogStatus("❌ Failed to clear checkboxes: Input was not an array.");
+        return;
+    }
+
+    if (rangeArray.length === 0) {
+        fLogStatus("ℹ️ Input array is empty, no ranges to process.");
+        return;
+    }
+
+    if (!gUI.grid2D || gUI.grid2D.length === 0) {
+        fLogStatus("ℹ️ Grid is empty, no checkboxes to clear.");
+        return;
+    }
+
+    let totalCleared = 0;
+    rangeArray.forEach((range, idx) => {
+        totalCleared += fClearCheckboxesInRange(range, idx);
+    });
+
+    fLogStatus(`✅ Cleared ${totalCleared} checkboxes in the specified range(s).`);
+};
+
+
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////// END fClearCheckboxesInGridRange and helpers
+
+
+
+
+// ==========================================================================
+// === Menu Bar Logic                 (End of Grid Interaction Logic) ===
+// ==========================================================================
+
+
+
+
+// fCloseAllDropdowns //////////////////////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Finds all dropdown content panels and removes the 'show' class to hide them.
+const fCloseAllDropdowns = () => {
+  const dropdowns = document.getElementsByClassName("dropdown-content");
+  for (let i = 0; i < dropdowns.length; i++) {
+    const panel = dropdowns[i];
+    panel.classList.remove('show');
+    // Reset parent overflow only if it's a main dropdown being closed this way
+    if (!panel.classList.contains('sub-menu') && panel.style.overflowY === 'visible') {
+        panel.style.overflowY = 'auto';
+    }
+  }
+}; // END fCloseAllDropdowns
+
+
+
+
+// fShowSidebar //////////////////////////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Makes the Roll Log sidebar visible.
+const fShowSidebar = () => {
+    const sidebar = document.getElementById('roll-log-sidebar');
+    if (sidebar && !sidebar.classList.contains('show')) { // Only log if changing state
+        sidebar.classList.add('show');
+        fLogStatus("▶️ Sidebar Shown");
+    } else if (!sidebar) {
+        console.error("❌ Cannot find sidebar element (#roll-log-sidebar)");
+    }
+}; // END fShowSidebar
+
+
+
+
+// fHideSidebar //////////////////////////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Hides the Roll Log sidebar.
+const fHideSidebar = () => {
+    const sidebar = document.getElementById('roll-log-sidebar');
+    if (sidebar && sidebar.classList.contains('show')) { // Only log if changing state
+        sidebar.classList.remove('show');
+        fLogStatus("◀️ Sidebar Hidden");
+    } else if (!sidebar) {
+        console.error("❌ Cannot find sidebar element (#roll-log-sidebar)");
+    }
+}; // END fHideSidebar
+
+
+
+
+// fToggleSidebar ///////////////////////////////////////////////////////////////////
+// Purpose -> Checks the current visibility state of the sidebar and toggles it.
+// Inputs -> None
+// Outputs -> None
+const fToggleSidebar = () => {
+    const sidebar = document.getElementById('roll-log-sidebar');
+    if (!sidebar) {
+        console.error("❌ Cannot find sidebar element (#roll-log-sidebar) to toggle.");
+        return;
+    }
+
+    // Check if the sidebar is currently shown
+    const isVisible = sidebar.classList.contains('show');
+
+    // Call the appropriate function
+    if (isVisible) {
+        fHideSidebar();
+    } else {
+        fShowSidebar();
+    }
+}; // END fToggleSidebar
+
+
+
+
+// fSetupMenuButtonListeners ///////////////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Adds click listeners to the main menu bar buttons (Nish, Roll, Game, Gear).
+// MODIFIED: Added btnRoll parameter and listener
+const fSetupMenuButtonListeners = (btnNish, btnRoll, btnGame, dropdownGame, btnGear, dropdownGear) => { // <<< Added btnRoll
+
+    // Listener for 'Nish' button (Direct Action)
+    btnNish.addEventListener('click', (event) => {
+        event.stopPropagation();
+        fCloseAllDropdowns();
+        console.log("ACTION: Nish button clicked (logic pending)");
+        fLogStatus("🖱️ Nish Clicked");
+        // @@ Add logic for Nish button here later
+    });
+
+    // Listener for 'Roll' button (Direct Action) // <<< NEW LISTENER
+    btnRoll.addEventListener('click', (event) => {
+        event.stopPropagation();
+        fCloseAllDropdowns();
+        console.log("ACTION: Roll button clicked (logic pending)");
+        fLogStatus("🖱️ Roll Clicked");
+        // @@ Add logic for Roll button here later
+    });
+
+    // Listener for 'Game' button (Toggle Dropdown)
+    btnGame.addEventListener('click', (event) => {
+        event.stopPropagation();
+        const currentlyShown = dropdownGame.classList.contains('show');
+        fCloseAllDropdowns(); // Close others first
+        if (!currentlyShown) {
+            dropdownGame.classList.add('show');
+        }
+    });
+
+    // Listener for 'Gear' button (Toggle Dropdown)
+    btnGear.addEventListener('click', (event) => {
+        event.stopPropagation();
+        const currentlyShown = dropdownGear.classList.contains('show');
+        fCloseAllDropdowns(); // Close others first
+        if (!currentlyShown) {
+            dropdownGear.classList.add('show');
+        }
+    });
+
+}; // END fSetupMenuButtonListeners
+
+
+
+
+// fSetupWindowClickListener ///////////////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Adds listener to the window to close dropdowns when clicking outside the menu area.
+const fSetupWindowClickListener = () => {
+    window.addEventListener('click', (event) => {
+        // If the click is not on a main menu button or within a menu item, close dropdowns
+        if (event.target && !event.target.closest('.menu-item') && !event.target.closest('#menu-bar > button')) {
+            fCloseAllDropdowns();
+        }
+    });
+}; // END fSetupWindowClickListener
+
+
+
+
+// fSetupDelegatedMenuActionClick //////////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Adds delegated listener to the menu bar to handle clicks on items with data-action.
+// MODIFIED: Changed 'game-showSidebar' to 'game-toggleSidebar' and call fToggleSidebar
+const fSetupDelegatedMenuActionClick = (menuBar) => {
+     if (!menuBar) return; // Should not happen based on main check, but safe practice
+
+     menuBar.addEventListener('click', (event) => {
+        // Handle clicks on action links
+        const targetLink = event.target.closest('.dropdown-content a[data-action]');
+        if (targetLink) {
+            event.preventDefault();
+            event.stopPropagation();
+            const action = targetLink.getAttribute('data-action');
+            fLogStatus(`🖱️ Menu Action Triggered: ${action}`);
+            fCloseAllDropdowns(); // Close dropdown after selection
+
+            // --- Action Dispatcher ---
+            switch (action) {
+                case 'gear-toggleGear': // <<< NEW CASE ADDED
+                    fToggleGearColumns(); // <<< Calls new function
+                    break;  
+                case 'game-toggleSidebar': // <<< NEW CASE ADDED
+                    fToggleSidebar();     // <<< Calls new function
+                    break;
+                // @@ Add other cases here later
+                default:
+                    console.log(`ACTION: Menu item clicked: ${action} (No handler defined yet)`);
+                    fLogStatus(`🖱️ Menu: ${action} (No handler)`);
+            }
+            // --- End Action Dispatcher ---
+
+        } // End if(targetLink)
+
+        // Handle clicks on sub-menu trigger links (prevent default)
+        const subMenuTriggerLink = event.target.closest('.sub-menu-item > a');
+        if (subMenuTriggerLink && !targetLink) { event.preventDefault(); }
+
+    }); // <-- End of menuBar CLICK listener
+
+}; // END fSetupDelegatedMenuActionClick
+
+
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////// START fSetupSubMenuHover and helpers
+
+
+
+// fClearHideTimeout /////////////////////////////////////////////////////////////////////////////////
+// Clears any active hide timeout on a submenu panel.
+const fClearHideTimeout = (panel) => {
+    const timeoutId = parseInt(panel.dataset.hideTimeoutId || '0');
+    if (timeoutId) {
+        clearTimeout(timeoutId);
+        panel.dataset.hideTimeoutId = '';
+    }
+};
+
+
+
+
+// fIsAnySiblingSubmenuOpen /////////////////////////////////////////////////////////////////////////
+// Checks if any other sibling .sub-menu-item has an open submenu panel.
+const fIsAnySiblingSubmenuOpen = (item) => {
+    const parent = item.parentElement;
+    if (!parent) return false;
+
+    const siblings = Array.from(parent.children).filter(el =>
+        el !== item && el.classList.contains('sub-menu-item')
+    );
+
+    return siblings.some(sibling => {
+        const siblingPanel = sibling.querySelector('.dropdown-content.sub-menu');
+        return siblingPanel && siblingPanel.classList.contains('show');
+    });
+};
+
+
+
+
+// fStartHideTimeout /////////////////////////////////////////////////////////////////////////////////
+// Sets a timeout to hide a submenu panel and possibly restore overflow.
+const fStartHideTimeout = (item, panel, mainDropdown, delayMs = 250) => {
+    fClearHideTimeout(panel);
+    const timeoutId = setTimeout(() => {
+        if (mainDropdown && !fIsAnySiblingSubmenuOpen(item)) {
+            mainDropdown.style.overflowY = 'auto';
+        }
+        panel.classList.remove('show');
+    }, delayMs);
+    panel.dataset.hideTimeoutId = timeoutId;
+};
+
+
+
+
+// fSetupSingleSubMenuItem //////////////////////////////////////////////////////////////////////////
+// Attaches hover listeners and timeout logic to a single submenu item.
+const fSetupSingleSubMenuItem = (item, index) => {
+    const triggerLink = item.querySelector('a');
+    const subMenuPanel = item.querySelector('.dropdown-content.sub-menu');
+    const mainDropdown = item.closest('.dropdown-content:not(.sub-menu)');
+
+    if (!subMenuPanel) return;
+    if (!mainDropdown && triggerLink) {
+        console.warn(`Item ${index} (${triggerLink?.textContent}): Could not find parent main dropdown!`);
+    }
+
+    item.addEventListener('mouseenter', () => {
+        fClearHideTimeout(subMenuPanel);
+        if (mainDropdown) mainDropdown.style.overflowY = 'visible';
+        subMenuPanel.classList.add('show');
+    });
+
+    item.addEventListener('mouseleave', () => {
+        fStartHideTimeout(item, subMenuPanel, mainDropdown);
+    });
+
+    subMenuPanel.addEventListener('mouseenter', () => {
+        fClearHideTimeout(subMenuPanel);
+    });
+
+    subMenuPanel.addEventListener('mouseleave', () => {
+        fStartHideTimeout(item, subMenuPanel, mainDropdown);
+    });
+};
+
+
+
+
+// fSetupSubMenuHover ///////////////////////////////////////////////////////////////////////////////
+// Main function: sets up hover logic for all .sub-menu-item elements under menuBar.
+const fSetupSubMenuHover = (menuBar) => {
+    if (!menuBar) return;
+
+    const subMenuItems = menuBar.querySelectorAll('.sub-menu-item');
+    subMenuItems.forEach((item, index) => {
+        fSetupSingleSubMenuItem(item, index);
+    });
+};
+
+
+
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////// End fSetupSubMenuHover and helpers
+
+
+
+// ==========================================================================
+// === Initialization & Setup Functions     (End of Menu Bar Logic) ===
+// ==========================================================================
+
+
+
+
+// fSetupGridClickListeners ////////////////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Attaches a general delegated click listener to the grid container.
+// Inputs  -> gridElement (HTMLElement): The grid container element.
+// Outputs -> None.
+const fSetupGridClickListeners = (gridElement) => {
+
+    // Validate input
+    if (!gridElement) {
+        console.error("❌ Cannot setup grid click listener: Grid element not provided.");
+        return;
+    }
+
+    // Log setup start
+    fLogStatus("🖱️ Setting up General Grid Click Listener...");
+
+    // Add the single delegated handler for various click types (checkboxes, URLs)
+    gridElement.addEventListener('click', fHandleGridClick);
+
+    // Log setup end
+    fLogStatus("✅ General Grid Click Listener Attached.");
+
+}; // END fSetupGridClickListeners
+
+
+
+
+// fSetupGridHoverListeners ////////////////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Attaches delegated mouseover and mouseout listeners to the grid container for tooltips.
+// Inputs -> gridElement (HTMLElement): The grid container element.
+const fSetupGridHoverListeners = (gridElement) => {
+    if (!gridElement) {
+        console.error("❌ Cannot setup hover listeners: Grid element not provided.");
+        return;
+    }
+
+    fLogStatus("🖱️ Setting up Grid Hover Listeners for Tooltips...");
+
+    // Use mouseover and mouseout for better detection as mouse moves over cell children
+    gridElement.addEventListener('mouseover', fHandleCellHover);
+    gridElement.addEventListener('mouseout', fHandleCellMouseOut);
+
+    fLogStatus("✅ Grid Hover Listeners Attached.");
+
+}; // END fSetupGridHoverListeners
+
+
+
+
+// fSetupModalListeners //////////////////////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Adds click listeners to the modal close button and backdrop.
+const fSetupModalListeners = () => {
+    // Globals moved to gUI are set in fSetupTooltipAndModal via fOnDataLoaded
+    // gUI.modalElement, gUI.modalImageElement, gUI.modalCloseBtn, gUI.modalBackdrop
+    if (!gUI.modalCloseBtn || !gUI.modalBackdrop) { // Updated references
+         fLogStatus("⚠️ Cannot setup modal listeners: Modal close button or backdrop not found.");
+         console.warn("Modal listeners not set up.");
+         return;
+    }
+
+    fLogStatus("🖱️ Setting up Modal Listeners...");
+
+    // Close button click - calls renamed/updated function
+    gUI.modalCloseBtn.addEventListener('click', fHideImageModal); // Updated reference
+
+    // Backdrop click - calls renamed/updated function
+    gUI.modalBackdrop.addEventListener('click', fHideImageModal); // Updated reference
+
+    fLogStatus("✅ Modal Listeners Attached.");
+
+}; // END fSetupModalListeners
+
+
+
+
+// fSetupMenuInteractivity //////////////////////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Orchestrates the setup of all menu-related event listeners.
+// MODIFIED: Added btnRoll reference and check
+const fSetupMenuInteractivity = () => {
+    fLogStatus("⚙️ Setting up Menu Interactivity...");
+
+    // --- Get Element References ---
+    const menuBar = document.getElementById('menu-bar');
+    const btnNish = document.getElementById('btn-nish');
+    const btnRoll = document.getElementById('btn-roll'); // <<< Get Roll button ref
+    const btnGame = document.getElementById('btn-game-menu');
+    const dropdownGame = document.getElementById('dropdown-game');
+    const btnGear = document.getElementById('btn-gear-menu');
+    const dropdownGear = document.getElementById('dropdown-gear');
+    const sidebarCloseBtn = document.getElementById('sidebar-close-btn');
+
+    // Check if *main* elements exist before adding listeners
+    // Added check for btnRoll and sidebarCloseBtn
+    if (!menuBar || !btnNish || !btnRoll || !btnGame || !dropdownGame || !btnGear || !dropdownGear || !sidebarCloseBtn) { // <<< Added btnRoll check
+        console.error("❌ Could not find all required menu/sidebar elements for interactivity setup.");
+        if(!btnRoll) console.error("     -> Missing: #btn-roll"); // Log if specific button missing
+        if(!sidebarCloseBtn) console.error("     -> Missing: #sidebar-close-btn");
+        return; // Stop if essential elements are missing
+    }
+
+    // --- Call Helper Functions to Attach Listeners ---
+    // Pass btnRoll to the button listener setup function
+    fSetupMenuButtonListeners(btnNish, btnRoll, btnGame, dropdownGame, btnGear, dropdownGear); // <<< Pass btnRoll
+    fSetupWindowClickListener();
+    fSetupDelegatedMenuActionClick(menuBar);
+    fSetupSubMenuHover(menuBar);
+
+    // --- Add Sidebar Close Button Listener ---
+    sidebarCloseBtn.addEventListener('click', fHideSidebar);
+
+    fLogStatus("✅ Menu Interactivity Setup Done");
+
+}; // END fSetupMenuInteractivity
+
+
+
+
+// ==========================================================================
+// === Initial Data Load      (End of Initialization & Setup Functions) ===
+// ==========================================================================
+
+
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////// End fOnDataLoaded and helpers
+
+
+
+// fStoreAndValidateData ////////////////////////////////////////////////////////////////////////////
+// Validates incoming data and updates gUI; returns true if valid, false if not.
+const fStoreAndValidateData = (data) => {
+    if (!data || typeof data !== 'object' || !data.arr || !data.format || !data.notesArr || data.error || data instanceof Error) {
+        console.error("Error or invalid data received:", data);
+        fLogStatus("❌ Error or invalid data structure received.");
+        return false;
+    }
+
+    gUI.arr = data.arr;
+    gUI.format = data.format;
+    gUI.notes = data.notesArr || [];
+
+    if (gUI.arr.length === 0 || !gUI.arr[0] || gUI.arr[0].length === 0) {
+        fLogStatus("⚠️ Data array received is empty.");
+        gUI.notes = [];
+        return false;
+    }
+
+    const container = document.getElementById('grid');
+    if (!container) {
+        console.error("❌ Grid container #grid not found!");
+        return false;
+    }
+
+    container.innerHTML = '';
+    return true;
+};
+
+
+
+
+// fSetupTooltipAndModal ////////////////////////////////////////////////////////////////////////////
+// Grabs DOM references for tooltip and modal elements and assigns them to gUI properties; logs if missing.
+const fSetupTooltipAndModal = () => {
+    gUI.tooltipElement = document.getElementById('cell-tooltip'); // Updated reference
+    if (!gUI.tooltipElement) { // Updated reference
+        fLogStatus("⚠️ Tooltip element missing...");
+    }
+
+    gUI.modalElement = document.getElementById('image-modal');        // Updated reference
+    gUI.modalImageElement = document.getElementById('modal-image');   // Updated reference
+    gUI.modalCloseBtn = document.getElementById('modal-close-btn');   // Updated reference
+    gUI.modalBackdrop = document.getElementById('modal-backdrop');    // Updated reference
+
+    if (!fModalElementsAvailable()) { // Checks the gUI properties now
+        console.error("❌ One or more modal elements not found in DOM!");
+        fLogStatus("⚠️ Modal elements missing, image preview disabled.");
+        // No need to nullify gUI properties here, just check before use
+    }
+};
+
+
+
+
+// fModalElementsAvailable //////////////////////////////////////////////////////////////////////////
+// Checks if all modal elements are found within the gUI object.
+const fModalElementsAvailable = () => {
+    return gUI.modalElement && gUI.modalImageElement && gUI.modalCloseBtn && gUI.modalBackdrop; // Updated references
+};
+
+
+
+
+// fAttachGridListeners ////////////////////////////////////////////////////////////////////////////
+// Attaches click, edit, and hover listeners to grid if found.
+const fAttachGridListeners = (gridElement) => {
+    if (!gridElement) {
+        console.error("❌ Could not find grid element to attach listeners.");
+        fLogStatus("❌ Failed to attach grid event listeners.");
+        return;
+    }
+
+    fSetupGridClickListeners(gridElement);
+    gridElement.addEventListener('blur', fHandleGridCellEdit, true); // Use capture phase for blur
+    if (gUI.tooltipElement) { // Check if tooltip exists before adding its listeners // Updated reference
+        fSetupGridHoverListeners(gridElement);
+    }
+};
+
+
+
+
+// scripts.html //
+
+
+// fRunPostRenderFormatting ////////////////////////////////////////////////////////////////////////
+// Runs all post-render visual adjustments, formatting, and listener hookups.
+const fRunPostRenderFormatting = () => {
+    fLogStatus("🚀 Applying Post-Render Formatting...");
+    fApplyDynamicMerges();
+    fAddHeaderButtons(); // <<< ADD CALL HERE
+    fApplyManualBorders();
+    fApplyInitialVisibility();
+    fSetHeader();
+    fMarkOverflowingCells();
+    fClearCheckboxesInGridRange(gUI.sk1sk2CheckBoxes);
+
+    const gridElement = document.getElementById('grid');
+    fAttachGridListeners(gridElement);
+
+    if (fModalElementsAvailable()) { // Check gUI properties
+        fSetupModalListeners();
+    }
+
+    fLogStatus("✅ All Post-Render Formatting Done!");
+}; // END fRunPostRenderFormatting
+
+
+
+
+// fOnDataLoaded ////////////////////////////////////////////////////////////////////////////////////
+// Receives data from server and kicks off render + post-processing sequence.
+const fOnDataLoaded = (data) => {
+    fLogStatus("✅ Data received from server");
+
+    const isValid = fStoreAndValidateData(data);
+    if (!isValid) return;
+
+    fSetupTooltipAndModal(); // Grabs DOM refs and assigns to gUI
+
+    fRenderFullGrid(() => { // Callback runs after initial render pass
+        fRunPostRenderFormatting(); // Applies merges, borders, listeners etc.
+    });
+};
+
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////// END fOnDataLoaded and helpers
+
+
+
+// fLoadGameSheet //////////////////////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Starts the process: Calls GAS backend (fCSGetGameSheet5) to get sheet data.
+// From current scripts.html (includes failure handler)
+const fLoadGameSheet = () => {
+    gUI.startTime = performance.now(); // Reset global start time // Updated reference
+    gUI.lastLogTime = gUI.startTime; // Updated reference
+    fLogStatus("🚀 Requesting GSheet Data...");
+    console.log("Sheet ID:", SHEET_ID); // Use the global SHEET_ID injected in index.html
+
+    if (!SHEET_ID) {
+        const errorMsg = "❌ No Sheet ID found. Cannot load data.";
+        console.error(errorMsg);
+        fLogStatus(errorMsg);
+        const gridDiv = document.getElementById('grid');
+        if (gridDiv) gridDiv.innerHTML = `<p style="color:red;">${errorMsg} Check URL parameter.</p>`;
+        return;
+    }
+
+    google.script.run
+        .withSuccessHandler(fOnDataLoaded) // Handles both success and thrown errors from server
+        .withFailureHandler(error => { // Handles transport errors or totally unhandled server exceptions
+            const errorMsg = `❌ Failed to call server: ${error.message}`;
+            console.error(errorMsg, error);
+            fLogStatus(errorMsg);
+            const gridDiv = document.getElementById('grid');
+            if(gridDiv) gridDiv.innerHTML = `<p style="color:red;">${errorMsg}</p>`;
+        })
+        .fCSGetGameSheet5(SHEET_ID); // Call the server-side function in Turbo.gs
+}; // END fLoadGameSheet
+
+
+
+
+// ==========================================================================
+// === Entry Point                 (End of Initial Data Load) ===
+// ==========================================================================
+
+
+
+
+// DOMContentLoaded Hook //////////////////////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Starts the UI logic once the page DOM is ready
+window.addEventListener("DOMContentLoaded", () => {
+    fLoadGameSheet(); // Start loading data
+    fSetupMenuInteractivity(); // Set up menu clicks AFTER initial DOM is ready
+});
+
+
+
+
+</script>
