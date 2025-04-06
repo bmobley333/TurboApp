@@ -47,7 +47,7 @@ function fValidateAbilityCB(row, col) {
   // If it's not a valid location, log/display an error message
   if (!isValid) {
     // Use the new helper function for logging/displaying
-    fRollLogMsg("⚠️ Please select a valid Ability checkbox first!");
+    fShowMessage("⚠️ Please select a valid Ability checkbox first!");
   }
 
   // Return the validation result
@@ -81,7 +81,7 @@ function fResetNPopulateGUIRoll(r, c) {
 
 
         if (!gUI.roll.skName) {
-            fRollLogMsg("⚠️ Please select an Ability with a name!");
+            fShowMessage("⚠️ Please select an Ability with a name!");
             return false;
         }
 

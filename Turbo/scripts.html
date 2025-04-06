@@ -85,10 +85,16 @@ const gUI = {
   lastLogTime: 0,            // Timestamp for tracking delta time between logs
   tooltipElement: null,      // Reference to the #cell-tooltip div
   tooltipTimeoutId: null,    // Stores the timeout ID for the hover delay
+  // Image Tab
   modalElement: null,        // Reference to #image-modal container
   modalImageElement: null,   // Reference to #modal-image img tag
   modalCloseBtn: null,       // Reference to #modal-close-btn span
   modalBackdrop: null,       // Reference to #modal-backdrop div
+  // Message Box Elements ---
+  messageModalOverlay: null, // Reference to #messageModal div
+  messageModalText: null,    // Reference to #messageText p tag
+  messageModalCloseButton: null, // Reference to #closeMessageModal button
+  // Other items
   currentSkRadioChecked: { r: null, c: null }, // Tracks coords of the single checked Sk1/Sk2 box
   HOVER_DELAY_MS: 300,       // Delay before showing tooltip (milliseconds)
   TOOLTIP_OFFSET_Y: 15,      // Tooltip vertical offset from cursor (px)
@@ -2332,8 +2338,127 @@ function fSetupSingleSubMenuItem(item, index) {
 
 
 
+
 // ==========================================================================
-// === Initialization & Setup Functions     (End of Menu Bar Logic) ===
+// === Message Box             (End of Menu Bar Logic) ===
+// ==========================================================================
+
+
+
+
+// fShowMessage ///////////////////////////////////////////////////////////////////
+// Purpose -> Displays the message modal box with the provided text.
+// Inputs -> message (String): The text or HTML to display in the message box.
+// Outputs -> None
+// MODIFIED: Attempts to cache elements just-in-time if not already cached.
+function fShowMessage(message) {
+    // --- Try to cache elements if not already done ---
+    if (!gUI.messageModalOverlay) {
+        gUI.messageModalOverlay = document.getElementById('messageModal');
+        // If caching now, log it for debugging timing issues
+        if (gUI.messageModalOverlay) console.log("fShowMessage: Just-in-time cache for #messageModal");
+    }
+    if (!gUI.messageModalText) {
+        gUI.messageModalText = document.getElementById('messageText');
+        if (gUI.messageModalText) console.log("fShowMessage: Just-in-time cache for #messageText");
+    }
+    // --- End Caching Attempt ---
+
+    // Now, re-check if elements exist *after* attempting to cache
+    if (!gUI.messageModalOverlay || !gUI.messageModalText) {
+        // Log the original error if elements are *still* not found
+        console.error("Message modal elements not cached or found in the DOM!");
+        if (!gUI.messageModalOverlay) console.error("Missing: #messageModal");
+        if (!gUI.messageModalText) console.error("Missing: #messageText");
+        // Optionally: Fallback to a simpler alert if modal isn't ready
+        // alert("Modal Error!\n" + message);
+        return; // Exit if essential elements are STILL missing
+    }
+
+    // Set message content (using innerHTML allows basic tags like <br>)
+    gUI.messageModalText.innerHTML = message;
+
+    // Show the modal
+    gUI.messageModalOverlay.style.display = 'flex'; // Using flex as defined in CSS
+
+} // END fShowMessage
+
+
+
+
+// fHideMessage ///////////////////////////////////////////////////////////////////
+// Purpose -> Hides the message modal box.
+// Inputs -> None
+// Outputs -> None
+function fHideMessage() {
+    if (gUI.messageModalOverlay) {
+        gUI.messageModalOverlay.style.display = 'none';
+    } else {
+        // This shouldn't happen if elements were cached, but log just in case
+        console.error("Message modal overlay element (#messageModal) not found when trying to hide.");
+    }
+} // END fHideMessage
+
+
+
+
+// fSetupMessageModalListeners /////////////////////////////////////////////////////
+// Purpose -> Sets up event listeners for the message modal close mechanisms.
+// Inputs -> None
+// Outputs -> None
+// MODIFIED: Fetches button element directly before adding listener, bypassing gUI cache for this specific setup.
+// MODIFIED: Removed debugging console.log lines from inside listeners.
+function fSetupMessageModalListeners() {
+
+    fLogStatus("🖱️ Setting up Message Modal Listeners...");
+
+    // --- Get elements directly here, don't rely solely on gUI cache ---
+    const overlayElement = document.getElementById('messageModal');
+    const closeButtonElement = document.getElementById('closeMessageModal');
+    // We still need the overlay for the other listeners, might as well fetch it too.
+
+    // Check if elements were found *now*
+    if (!overlayElement) {
+        console.error("Setup failed: Message modal overlay element (#messageModal) not found *during listener setup*.");
+        fLogStatus("⚠️ Message Modal Listeners NOT Attached (overlay missing).");
+        return;
+    }
+    if (!closeButtonElement) {
+        console.error("Setup failed: Message modal close button (#closeMessageModal) not found *during listener setup*.");
+        fLogStatus("⚠️ Message Modal Listeners NOT Attached (button missing).");
+        return; // Don't add listeners if button is missing
+    }
+    // --- End direct element fetching ---
+
+
+    // Listener for the close button - Attach to the element we just found
+    closeButtonElement.addEventListener('click', fHideMessage); // Call the original hide function directly
+
+
+    // Listener for clicking the background overlay - Attach to the element we just found
+    overlayElement.addEventListener('click', (event) => {
+        if (event.target === overlayElement) { // Check directly against the fetched element
+            fHideMessage();
+        }
+    });
+
+    // Listener for the Escape key (uses document, and checks overlay visibility)
+    document.addEventListener('keydown', (event) => {
+        // Check overlay visibility using the fetched element reference
+        if (overlayElement.style.display !== 'none' && event.key === 'Escape') {
+             fHideMessage();
+        }
+    });
+
+    fLogStatus("✅ Message Modal Listeners Attached.");
+
+} // END fSetupMessageModalListeners
+
+
+
+
+// ==========================================================================
+// === Initialization & Setup Functions     (End of Message Box) ===
 // ==========================================================================
 
 
@@ -2651,10 +2776,11 @@ function fLoadGameSheet() {
 
 
 // DOMContentLoaded Hook //////////////////////////////////////////////////////////////////////////////////////////////////
-// Purpose -> Starts the UI logic once the page DOM is ready
+// Purpose -> Starts the UI logic and listeners once the page DOM is ready
 window.addEventListener("DOMContentLoaded", () => {
-    fLoadGameSheet(); // Start loading data
-    fSetupMenuInteractivity(); // Set up menu clicks AFTER initial DOM is ready
+    fLoadGameSheet(); 
+    fSetupMenuInteractivity();
+    fSetupMessageModalListeners(); 
 });
 
 

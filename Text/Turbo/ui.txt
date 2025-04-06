@@ -120,7 +120,7 @@
 <div id="cell-tooltip"></div>
 
 <!-- ========================================================================== -->
-<!-- === Image Modal Box === -->
+<!-- === Image Tab Box === -->
 <!-- ========================================================================== -->
 
 <div id="image-modal" style="display: none;">
@@ -130,6 +130,24 @@
     <img id="modal-image" src="" alt="Image Preview">
   </div>
 </div>
+
+
+
+
+<!-- ========================================================================== -->
+<!-- === Message Box === -->
+<!-- ========================================================================== -->
+
+
+
+
+<div id="messageModal" class="modal-overlay"> <div class="modal-content">
+    <p id="messageText">Default Message</p>
+    <button id="closeMessageModal">Close</button>
+  </div>
+</div>
+
+
 
 <!-- ========================================================================== -->
 <!-- === Roll Log Sidebar === -->
