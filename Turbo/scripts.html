@@ -62,42 +62,21 @@ const gUI = {
   ],
   // Current Roll object
   roll: {
-    isSk1: null,          // Will be set based on context (e.g., true/false)
-    isCombat: false,        // Default to non-combat
-    isFreeRoll: false,      // Default
-    isLuckedRoll: false,    // Default
-    unSkilled: false,       // Default
-    finalTC: "",            // Default empty
-    wasMetaSpent: false,    // Default
-    wasActionUsed: false,   // Default
-    wasUsesUsed: false,     // Default
-    name: "",               // Will be set from ability/skill name
-    id: "",                 // Will be set from ability/skill ID
-    difficulty: 0,          // Default, may be set by target/opponent
-    focusColor: "",         // Default empty
-    dctTotal: 0,            // Default (for +/-d/c/t morphs)
-    morphString: "",        // Will be populated from cell data + conditions
-    typeOriginal: "",       // Will be set from cell data
-    type: "",               // Will be set from cell data, potentially modified by morphs
-    base: 0,                // Will be set from cell data
-    morphedBase: 0,         // Calculated during roll process
-    equals: 0,              // From =# morph
-    postEquals: 0,          // From ==# morph
-    result: 0,              // Raw die roll result
-    morphedResult: 0,       // Result after adjustments
-    focusPlus: 0,           // Bonus from meta focus
-    plus: 0,                // From +/-# morph
-    mult: 1,                // From *# /# morphs
-    postPlus: 0,            // From ++# --# morph
-    postMult: 1,            // From **# //# morph
-    combineArr: [],         // For combining values (e.g., armor)
-    numOfRolls: 1,          // Default, can be changed by #X morph
-    monWndsAccumultator: 0, // Temp accumulator for combat rolls
-    pcWndsAccumulator: 0,   // Temp accumulator for combat rolls
-    totalMonWnds: 0,        // Final wounds dealt to monster(s)
-    totalPCWnds: 0,         // Final wounds dealt to PC
-    mon: {},                // Placeholder for potential monster data in combat
-    log: "",                // Accumulates the roll log string
+    // Ability Table Columns in with sk1CB then in Order
+    sk1CB: false,
+    skMorph: '',
+    skTyp: '',
+    skSk: '',
+    skIsOn: '',
+    skNameID: '',
+    skName: '',
+    skAct: '',
+    skDur: '',
+    skMeta: '',
+    skUses: '',
+    resTyp: '',
+    resSk: ''
+    // Other roll key: value here
   },
   // Sets to store the indices of currently hidden columns/rows
   hiddenColumns: new Set(),
@@ -1529,30 +1508,16 @@ function fPrependToSidebar(message) {
 
 
 
-// fShowImageModal //////////////////////////////////////////////////////////////////////////////////////////////////
-// Purpose -> Displays the image modal with the specified image URL in the img tag.
-// Inputs -> imageUrl (String): The direct URL of the image to display.
-function fShowImageModal(imageUrl) { 
-    console.log("--- fShowImageModal Start ---");
-    console.log(" Image URL:", imageUrl);
-    // Check renamed global variables within gUI object
-    if (!gUI.modalElement || !gUI.modalImageElement) { // Updated references
-        console.error("Cannot show modal: Modal elements not found in globals.");
-        return;
+// fRollLogMsg ////////////////////////////////////////////////////////////////////////
+// Purpose -> Sends message to sidebar warning area.
+// Inputs  -> msg (String): Message to display.
+function fRollLogMsg(msg) {
+    if (msg) {
+        console.warn(msg);
+        fPrependToSidebar(msg);
+        fShowSidebar();
     }
-    console.log("Modal elements found.");
-    fLogStatus(`🖼️ Showing image: ${imageUrl.substring(0, 100)}...`);
-
-    // Set the image source using renamed global variable for IMG
-    console.log("Setting image src...");
-    gUI.modalImageElement.src = imageUrl; // Updated reference
-
-    // Display the modal
-    console.log("Setting modal display to flex...");
-    gUI.modalElement.style.display = 'flex'; // Updated reference
-    console.log("--- fShowImageModal End ---");
-
-}; // END fShowImageModal
+} // END fRollLogMsg
 
 
 
@@ -1833,8 +1798,35 @@ function fHandleDriveLink(url) {
 // Opens a standard image link in modal.
 function fHandleImageModal(imageUrl) {
     fLogStatus(`🖱️ Clicked Standard Image Link: ${imageUrl.substring(0, 100)}...`);
-    fShowImageModal(imageUrl);
+    fShowImageTab(imageUrl);
 } // END fHandleImageModal
+
+
+
+// fShowImageTab //////////////////////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Displays the image in new tab with the specified image URL in the img tag.
+// Inputs -> imageUrl (String): The direct URL of the image to display.
+function fShowImageTab(imageUrl) { 
+    console.log("--- fShowImageTab Start ---");
+    console.log(" Image URL:", imageUrl);
+    // Check renamed global variables within gUI object
+    if (!gUI.modalElement || !gUI.modalImageElement) { // Updated references
+        console.error("Cannot show modal: Modal elements not found in globals.");
+        return;
+    }
+    console.log("Modal elements found.");
+    fLogStatus(`🖼️ Showing image: ${imageUrl.substring(0, 100)}...`);
+
+    // Set the image source using renamed global variable for IMG
+    console.log("Setting image src...");
+    gUI.modalImageElement.src = imageUrl; // Updated reference
+
+    // Display the modal
+    console.log("Setting modal display to flex...");
+    gUI.modalElement.style.display = 'flex'; // Updated reference
+    console.log("--- fShowImageTab End ---");
+
+}; // END fShowImageTab
 
 
 
