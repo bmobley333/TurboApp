@@ -7,33 +7,172 @@
 
 
 // ==========================================================================
-// === Die Roll Button         (End of Top) ===
+// === Message Box             (End) ===
 // ==========================================================================
 
 
 
+
+// gUI addition needed (add this within the gUI object in scripts.html or here if you prefer)
+// gUI.messagePromiseResolve = null; // Function to resolve the message promise
+
+
+// fShowMessage ///////////////////////////////////////////////////////////////////
+// Purpose -> Displays the message modal box and returns a Promise that resolves when closed.
+// Inputs -> message (String): The text or HTML to display in the message box.
+// Outputs -> (Promise): Resolves when the modal is hidden.
+// MODIFIED: Now async, returns a Promise, stores resolve function in gUI.
+async function fShowMessage(message) {
+    // --- Try to cache elements if not already done ---
+    if (!gUI.messageModalOverlay) {
+        gUI.messageModalOverlay = document.getElementById('messageModal');
+        // If caching now, log it for debugging timing issues
+        if (gUI.messageModalOverlay) console.log("fShowMessage: Just-in-time cache for #messageModal");
+    }
+    if (!gUI.messageModalText) {
+        gUI.messageModalText = document.getElementById('messageText');
+        if (gUI.messageModalText) console.log("fShowMessage: Just-in-time cache for #messageText");
+    }
+    // --- End Caching Attempt ---
+
+    // Now, re-check if elements exist *after* attempting to cache
+    if (!gUI.messageModalOverlay || !gUI.messageModalText) {
+        // Log the original error if elements are *still* not found
+        console.error("Message modal elements not cached or found in the DOM!");
+        if (!gUI.messageModalOverlay) console.error("Missing: #messageModal");
+        if (!gUI.messageModalText) console.error("Missing: #messageText");
+        // Optionally: Fallback to a simpler alert if modal isn't ready
+        // alert("Modal Error!\n" + message);
+        return Promise.reject(new Error("Message modal elements not found.")); // Reject if elements missing
+    }
+
+    // Set message content (using innerHTML allows basic tags like <br>)
+    gUI.messageModalText.innerHTML = message;
+
+    // Show the modal
+    gUI.messageModalOverlay.style.display = 'flex'; // Using flex as defined in CSS
+
+    // Create and return a new Promise
+    return new Promise((resolve) => {
+        gUI.messagePromiseResolve = resolve; // Store the resolve function globally
+    });
+
+} // END fShowMessage
+
+
+
+
+// fHideMessage ///////////////////////////////////////////////////////////////////
+// Purpose -> Hides the message modal box and resolves the pending promise.
+// Inputs -> None
+// Outputs -> None
+// MODIFIED: Calls the stored resolve function if it exists.
+function fHideMessage() {
+    if (gUI.messageModalOverlay) {
+        gUI.messageModalOverlay.style.display = 'none';
+    } else {
+        // This shouldn't happen if elements were cached, but log just in case
+        console.error("Message modal overlay element (#messageModal) not found when trying to hide.");
+    }
+
+    // Resolve the promise if a resolve function is stored
+    if (typeof gUI.messagePromiseResolve === 'function') {
+        gUI.messagePromiseResolve();          // Call the stored resolve function
+        gUI.messagePromiseResolve = null; // Clear the stored function
+        fLogStatus("Message Promise Resolved"); // Optional log
+    }
+} // END fHideMessage
+
+
+
+
+// fSetupMessageModalListeners /////////////////////////////////////////////////////
+// Purpose -> Sets up event listeners for the message modal close mechanisms.
+// Inputs -> None
+// Outputs -> None
+// NOTE: No changes needed here, as the listeners already call fHideMessage,
+//       which now handles resolving the promise.
+function fSetupMessageModalListeners() {
+
+    fLogStatus("🖱️ Setting up Message Modal Listeners...");
+    // --- Get elements directly here, don't rely solely on gUI cache ---
+    const overlayElement = document.getElementById('messageModal');
+    const closeButtonElement = document.getElementById('closeMessageModal');
+    // We still need the overlay for the other listeners, might as well fetch it too.
+
+    // Check if elements were found *now*
+    if (!overlayElement) {
+        console.error("Setup failed: Message modal overlay element (#messageModal) not found *during listener setup*.");
+        fLogStatus("⚠️ Message Modal Listeners NOT Attached (overlay missing).");
+        return;
+    }
+    if (!closeButtonElement) {
+        console.error("Setup failed: Message modal close button (#closeMessageModal) not found *during listener setup*.");
+        fLogStatus("⚠️ Message Modal Listeners NOT Attached (button missing).");
+        return; // Don't add listeners if button is missing
+    }
+    // --- End direct element fetching ---
+
+
+    // Listener for the close button - Attach to the element we just found
+    closeButtonElement.addEventListener('click', fHideMessage); // Calls the (now modified) hide function
+
+
+    // Listener for clicking the background overlay - Attach to the element we just found
+    overlayElement.addEventListener('click', (event) => {
+        if (event.target === overlayElement) { // Check directly against the fetched element
+            fHideMessage(); // Calls the (now modified) hide function
+        }
+    });
+
+    // Listener for the Escape key (uses document, and checks overlay visibility)
+    document.addEventListener('keydown', (event) => {
+        // Check overlay visibility using the fetched element reference
+        if (overlayElement.style.display !== 'none' && event.key === 'Escape') {
+             fHideMessage(); // Calls the (now modified) hide function
+        }
+    });
+
+    fLogStatus("✅ Message Modal Listeners Attached.");
+
+} // END fSetupMessageModalListeners
+
+
+
+// ==========================================================================
+// === Die Roll Button         (End of Message Box) ===
+// ==========================================================================
+
+
+
+
+// scripts.html
 
 // fHandleRollDiceAction /////////////////////////////////////////////////////////////////////////
 // Purpose -> Top-level handler for "Roll Dice" action. Populates gUI.roll, validates inputs,
 //            runs morph/roll/resolution logic, and posts result.
 // Inputs  -> None (uses gUI.currentSkRadioChecked).
 // Outputs -> None (updates gUI and DOM).
-function fHandleRollDiceAction() {
+async function fHandleRollDiceAction() { // <<< Added async
     fLogStatus("🎲 Roll Dice Action Triggered");
 
     const { r, c } = gUI.currentSkRadioChecked;
 
     // Validate target is a valid Sk1/Sk2 checkbox
-    if (!fValidateAbilityCB(r, c)) return;
+    // Must await as fValidateAbilityCB is now async
+    if (!await fValidateAbilityCB(r, c)) return; // <<< Added await
 
     // Populate gUI.roll from sheet and clean it
-    if (!fResetPopulateNCleanGUIRoll(r, c)) return;
+    // Must await if fResetPopulateNCleanGUIRoll becomes async (due to its catch block)
+    if (!await fResetPopulateNCleanGUIRoll(r, c)) return; // <<< Added await (assuming fResetPopulateNCleanGUIRoll is made async)
 
     // Confirm ability has valid name and type
-    if (!fVerifyAbility()) return;
+    // Must await as fVerifyAbility is now async
+    if (!await fVerifyAbility()) return; // <<< Added await
 
     // Core calculation pipeline
-    fProcessMorph();
+    // Must await as fProcessMorph is now async
+    await fProcessMorph(); // <<< Added await
     fCalcGUIRollResSk();
     fCalcGUIRollRoll();
     fCalcGUIRollResRoll();
@@ -43,14 +182,16 @@ function fHandleRollDiceAction() {
 
 
 
-
 // fValidateAbilityCB /////////////////////////////////////////////////////////////////////////
 // Purpose -> Confirms that (row, col) is a valid Sk1/Sk2 checkbox based on gUI.sk1sk2CheckBoxes.
 // Inputs  -> row (Number), col (Number): 0-based indices.
 // Outputs -> (Boolean): true if valid, false otherwise.
-function fValidateAbilityCB(row, col) {
+// MODIFIED: Made async to await fShowMessage
+async function fValidateAbilityCB(row, col) {             // <<< Added async
     const isValid = fIsSkRadioGroupMember(row, col);
-    if (!isValid) fShowMessage("⚠️ Please select a valid Ability checkbox first!");
+    if (!isValid) {
+        await fShowMessage("⚠️ Please select a valid Ability checkbox first!"); // <<< Added await
+    }
     return isValid;
 } // END fValidateAbilityCB
 
@@ -133,24 +274,24 @@ function fResetPopulateNCleanGUIRoll(r, c) {
 
 
 
-
 // fVerifyAbility /////////////////////////////////////////////////////////////////////////
 // Purpose -> Validates current gUI.roll by checking name and skill type.
 // Inputs  -> None (uses gUI.roll and gUI.list).
 // Outputs -> (Boolean): true if ability is valid, false otherwise.
-function fVerifyAbility() {
+// MODIFIED: Made async to await fShowMessage
+async function fVerifyAbility() {                           // <<< Added async
     const { skName, skTyp, sk1CB } = gUI.roll;
 
     // --- Check: Ability name must exist ---
     if (!skName) {
-        fShowMessage("⚠️ Please select an Ability with a name!");
+        await fShowMessage("⚠️ Please select an Ability with a name!"); // <<< Added await
         return false;
     }
 
     // --- Check: Skill Typ must be a string ---
     if (!skTyp || typeof skTyp !== 'string') {
         const is2ndCol = !sk1CB;
-        fShowMessage(`⚠️ No skill Typ found${is2ndCol ? '<br><br>You may have wanted the 1st column.' : ''}`);
+        await fShowMessage(`⚠️ No skill Typ found${is2ndCol ? '<br><br>You may have wanted the 1st column.' : ''}`); // <<< Added await
         return false;
     }
 
@@ -158,7 +299,7 @@ function fVerifyAbility() {
     const skTypLower = skTyp.trim().toLowerCase();
     const isValidSkTyp = gUI.list.skTyp.some(type => type.toLowerCase() === skTypLower);
     if (!isValidSkTyp) {
-        fShowMessage(`⚠️ ${skTyp} is an invalid Skill Type!`);
+        await fShowMessage(`⚠️ ${skTyp} is an invalid Skill Type!`); // <<< Added await
         return false;
     }
 
@@ -172,7 +313,8 @@ function fVerifyAbility() {
 // Purpose -> Processes gUI.roll.skMorph string to extract modifiers and flags into res* fields.
 // Inputs  -> None (reads gUI.roll.skMorph, gUI.roll.skSk, gUI.list).
 // Outputs -> None (updates gUI.roll directly).
-function fProcessMorph() {
+// MODIFIED: Made async to await fParseMorphComponents
+async function fProcessMorph() { // <<< Added async
     const skMorph = gUI.roll.skMorph || '';
     if (!skMorph) {
         fLogStatus("ℹ️ No skMorph string to process.");
@@ -202,7 +344,9 @@ function fProcessMorph() {
         lastDifMatch: ''
     };
 
-    fParseMorphComponents(morphComponents, morphLower, acc);
+    // Await the parsing function which now handles async messages
+    await fParseMorphComponents(morphComponents, morphLower, acc); // <<< Added await
+
     fApplyMorphResults(acc);
 
     fLogStatus("⚙️ Processed skMorph string.");
@@ -213,7 +357,8 @@ function fProcessMorph() {
 
 // fParseMorphComponents ////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Parses each morph component and mutates gUI.roll and acc accordingly.
-function fParseMorphComponents(morphComponents, morphLower, acc) {
+// MODIFIED: Made async, changed forEach to for...of, added await to fShowMessage
+async function fParseMorphComponents(morphComponents, morphLower, acc) { // <<< Added async
     const plusMinusRegex = /^([-+])(\d+)$/;
     const numberOnlyRegex = /^\d+$/;
     const plusPlusMinusMinusRegex = /^(?:(\+\+)|(--))(\d+)$/;
@@ -223,7 +368,9 @@ function fParseMorphComponents(morphComponents, morphLower, acc) {
     const equalsEqualsRegex = /^==(\d+)$/;
     const caretRegex = /^\^(\d+)$/;
 
-    morphComponents.forEach((component, index) => {
+    // Use for...of loop instead of forEach to allow await
+    let index = 0; // Manual index tracking needed for morphLower
+    for (const component of morphComponents) { // <<< Changed from forEach
         const lower = morphLower[index];
 
         // --- isUnSk Check
@@ -262,11 +409,15 @@ function fParseMorphComponents(morphComponents, morphLower, acc) {
         const m1 = component.match(multDivRegex);
         if (m1) {
             const val = parseFloat(m1[2]);
-            if (m1[1] === '*') acc.totalMult *= val;
-            else if (val !== 0) acc.totalMult /= val;
-            else {
-                fShowMessage("❌ Morph includes illegal '/0'. Please correct and try again.");
+            if (m1[1] === '*') {
+                 acc.totalMult *= val;
+            } else if (val !== 0) {
+                 acc.totalMult /= val;
+            } else {
+                // Use await here
+                await fShowMessage("❌ Morph includes illegal '/0'. Please correct and try again."); // <<< Added await
                 console.warn("resMult divide by zero:", component);
+                // Consider adding 'return;' or 'throw new Error(...);' here if this error should halt processing
             }
             acc.foundResMult = true;
         }
@@ -275,11 +426,15 @@ function fParseMorphComponents(morphComponents, morphLower, acc) {
         const m2 = component.match(multMultDivDivRegex);
         if (m2) {
             const val = parseFloat(m2[3]);
-            if (m2[1] === '**') acc.totalMultMult *= val;
-            else if (val !== 0) acc.totalMultMult /= val;
-            else {
-                fShowMessage("❌ Morph includes illegal '//0'. Please correct and try again.");
+            if (m2[1] === '**') {
+                acc.totalMultMult *= val;
+            } else if (val !== 0) {
+                acc.totalMultMult /= val;
+            } else {
+                // Use await here
+                await fShowMessage("❌ Morph includes illegal '//0'. Please correct and try again."); // <<< Added await
                 console.warn("resMultMult divide by zero:", component);
+                 // Consider adding 'return;' or 'throw new Error(...);' here if this error should halt processing
             }
             acc.foundResMultMult = true;
         }
@@ -295,7 +450,9 @@ function fParseMorphComponents(morphComponents, morphLower, acc) {
         // --- resDif Check (find LAST match)
         const dif = component.match(caretRegex);
         if (dif) acc.lastDifMatch = dif[1];
-    });
+
+        index++; // Increment manual index
+    } // <<< End of for...of loop
 } // END fParseMorphComponents
 
 
