@@ -82,6 +82,7 @@ const gUI = {
     resFocus: '',
     resPlus: '',
     resPlusPlus: '',
+    resdctMult: '',
     resMult: '',
     resMultMult: '',
     resCombine: '',
