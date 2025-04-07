@@ -34,14 +34,9 @@ function fHandleRollDiceAction() {
     if (!fVerifyAbility()) return; // NEW check
 
     fProcessMorph();
-
     fCalcGUIRollResSk();
-
     fCalcGUIRollRoll();
-
     fCalcGUIRollResRoll();
-
-    // Step 4: Calculate the roll log prepend
     fCalcRollLogPrepend();
 
 } // END fHandleRollDiceAction
@@ -157,39 +152,37 @@ function fResetPopulateNCleanGUIRoll(r, c) {
 
 
 
-// fVerifyAbility //////////////////////////////////////////////////////////////////
+// fVerifyAbility ///////////////////////////////////////////////////////////////////
 // Purpose -> Verifies if the currently populated gUI.roll data is valid for rolling.
 // Inputs  -> None (uses gUI.roll and gUI.list)
 // Outputs -> true if valid, false otherwise.
-// MODIFIED: Corrected skTyp check to be case-insensitive against gUI.list.skTyp.
 function fVerifyAbility() {
 
-    // Check 1: Ability Name must be present
-    if (!gUI.roll.skName) {
-        // Use fShowMessage as requested for this function
+    // Check 1: Ability name must be present
+    const { skName, skTyp } = gUI.roll;
+    if (!skName) {
         fShowMessage("⚠️ Please select an Ability with a name!");
-        return false; // Invalid if name is missing
+        return false;
     }
 
-    // Check 2: Skill Type must be valid (case-insensitive)
-    const skTypLower = (typeof gUI.roll.skTyp === 'string') ? gUI.roll.skTyp.trim().toLowerCase() : '';
+    // Check 2: Skill type must be valid (case-insensitive)
+    if (!skTyp || typeof skTyp !== 'string') {
+        const is2ndCol = !gUI.roll.sk1CB;
+        fShowMessage(`⚠️ No skill Typ found${is2ndCol ? '<br><br>You may have wanted the 1st column.' : ''}`);
+        return false;
+    }
 
-    // Check if skTypLower exists in the list when list items are also lowercased
-    const isValidSkTyp = gUI.list.skTyp.some(validType => validType.toLowerCase() === skTypLower);
-
+    const skTypLower = skTyp.trim().toLowerCase();
+    const isValidSkTyp = gUI.list.skTyp.some(type => type.toLowerCase() === skTypLower);
     if (!isValidSkTyp) {
-        // Use original value in message for clarity
-        fShowMessage(`⚠️ ${gUI.roll.skTyp || '""'} is an invalid Skill Type!`);
-        return false; // Invalid if type not in list (case-insensitive)
+        fShowMessage(`⚠️ ${skTyp} is an invalid Skill Type!`);
+        return false;
     }
 
-    // @@ Add other validation checks for gUI.roll properties here later if needed
-
-
-    // If all checks pass
     return true;
 
 } // END fVerifyAbility
+
 
 
 
@@ -353,6 +346,18 @@ function fProcessMorph() {
 
     // --- Assign final results to gUI.roll ---
 
+    // MUST BE FIRST: Assign resFlatBase (convert last match to integer)
+    if (lastFlatBaseMatch !== '') {
+        const num = parseInt(lastFlatBaseMatch, 10);
+        gUI.roll.resFlatBase = !isNaN(num) ? num : ''; // Assign '' if parse fails
+        gUI.roll.skSk = !isNaN(num) ? num : gUI.roll.skSk;
+    } // Otherwise remains ''
+    
+    // Assign resTyp (last match found else gUI.roll.skTyp)
+    if (foundResTyp) {
+         gUI.roll.resTyp = (lastResTypMatch) ? lastResTypMatch : gUI.roll.skTyp;        
+    } // Otherwise remains ''
+    
     // Assign resTyp (last match found else gUI.roll.skTyp)
     if (foundResTyp) {
          gUI.roll.resTyp = (lastResTypMatch) ? lastResTypMatch : gUI.roll.skTyp;        
@@ -400,12 +405,6 @@ function fProcessMorph() {
         gUI.roll.resMultMult = Number(totalMultMult.toFixed(2));
     } // Otherwise remains ''
 
-    // Assign resFlatBase (convert last match to integer)
-    if (lastFlatBaseMatch !== '') {
-        const num = parseInt(lastFlatBaseMatch, 10);
-        gUI.roll.resFlatBase = !isNaN(num) ? num : ''; // Assign '' if parse fails
-    } // Otherwise remains ''
-
     // Assign resFlatResult (convert last match to integer)
     if (lastFlatResultMatch !== '') {
         const num = parseInt(lastFlatResultMatch, 10);
@@ -437,17 +436,14 @@ function fCalcGUIRollResSk() {
     let currentResSk; // Use a local variable for calculations
 
     // --- Determine Initial Base Value ---
-    if (typeof gUI.roll.resFlatBase === 'number' && gUI.roll.resFlatBase !== '') {
-        currentResSk = gUI.roll.resFlatBase;
-    } else if (typeof gUI.roll.skSk === 'number' && gUI.roll.skSk !== '') {
+    if (typeof gUI.roll.skSk === 'number' && gUI.roll.skSk !== '') {
         currentResSk = gUI.roll.skSk;
     } else {
         currentResSk = NaN;
     }
+
     // --- Apply Modifiers (only if we have a valid starting or combined number) ---
-    if (typeof gUI.roll.resFlatBase === 'number' && gUI.roll.resFlatBase !== '') {
-        currentResSk = gUI.roll.resFlatBase;
-    } else if (typeof gUI.roll.resCombine === 'number' && gUI.roll.resCombine !== '') {
+    if (typeof gUI.roll.resCombine === 'number' && gUI.roll.resCombine !== '') {
         currentResSk = gUI.roll.resCombine;
         fLogStatus("   -> Using resCombine as fallback for resSk calculation.");
     }
@@ -563,9 +559,11 @@ function fCalcGUIRollRoll() {
 // Purpose -> Calculates the final modified roll result (gUI.roll.resRoll) after
 //            applying overrides (resFlatResult) or modifiers (resMultMult, resPlusPlus)
 //            to the initial roll value (gUI.roll.roll). Ensures result is >= 0.
+//            Rounds to 2 decimal places only if resTyp is 'ar', otherwise rounds to integer.
 // Inputs  -> None (reads gUI.roll properties)
 // Outputs -> None (modifies gUI.roll.resRoll)
 // MODIFIED: Added check to ensure result is not less than 0.
+// MODIFIED: Added conditional rounding based on gUI.roll.resTyp.
 function fCalcGUIRollResRoll() {
 
     // Check for Flat Result Override first
@@ -574,9 +572,12 @@ function fCalcGUIRollResRoll() {
                        : null;
 
     if (flatResult !== null) {
-        // Apply floor of 0 check even to flat results
-        gUI.roll.resRoll = Math.max(0, flatResult);
-        fLogStatus(`⚙️ Calculated resRoll (override): ${gUI.roll.resRoll}`);
+        // Apply floor of 0 check even to flat results.
+        // Conditional rounding for flat override based on resTyp.
+        const isArType = (typeof gUI.roll.resTyp === 'string') && gUI.roll.resTyp.trim().toLowerCase() === 'ar';
+        const roundedFlatResult = isArType ? Number(flatResult.toFixed(2)) : Math.round(flatResult);
+        gUI.roll.resRoll = Math.max(0, roundedFlatResult);
+        fLogStatus(`⚙️ Calculated resRoll (override, ${isArType ? 'AR-rounded' : 'INT-rounded'}): ${gUI.roll.resRoll}`);
         return; // Exit early
     }
 
@@ -601,9 +602,14 @@ function fCalcGUIRollResRoll() {
         currentResRoll += gUI.roll.resPlusPlus;
     }
 
-    // --- Final Assignment with Rounding and Floor ---
+    // --- Final Assignment with Conditional Rounding and Floor ---
     if (!isNaN(currentResRoll)) {
-         const roundedResRoll = Math.round(currentResRoll);
+         // Check the result type for conditional rounding
+         const isArType = (typeof gUI.roll.resTyp === 'string') && gUI.roll.resTyp.trim().toLowerCase() === 'ar';
+
+         // Round based on type: 2 decimals for 'ar', integer otherwise
+         const roundedResRoll = isArType ? Number(currentResRoll.toFixed(2)) : Math.round(currentResRoll);
+
          // Ensure the result is not less than 0
          gUI.roll.resRoll = Math.max(0, roundedResRoll);
     } else {
@@ -689,7 +695,7 @@ function fCalcRollLogPrepend() {
     // --- Build Roll Difficulty String (^Dif) ---
     let rollDif = '';
     if ((typeof gUI.roll.resDif === 'number' || (typeof gUI.roll.resDif === 'string' && gUI.roll.resDif !== '')) && gUI.roll.resDif !== null && gUI.roll.resDif !== undefined) {
-        rollDif += ` ^${gUI.roll.resDif}`; // Added space before ^
+        rollDif += `^${gUI.roll.resDif}`; 
     }
 
     // --- Build Success String (=Delta or =+Delta) ---
@@ -921,7 +927,7 @@ function fCSDArmor(pcAR) {
   // Formula from MSGLib: max(1, trunc( (fCSDSk(pcAR) / 15) * 10 ) / 10 )
   const skillRoll = fCSDSk(pcAR);
   // MSGLib uses 15 here, not 8 like fCSRollUnSkilledArmor
-  const result = Math.trunc((skillRoll / 15) * 10) / 10;
+  const result = Math.trunc((skillRoll / 15) * 100) / 100;
   return Math.max(1, result); // Ensure minimum of 1
 } // END fCSDArmor
 

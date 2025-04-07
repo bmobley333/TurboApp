@@ -338,7 +338,7 @@ body {
   font-family: monospace;
   font-size: 0.85em;
   color: #000;
-  max-width: 350px;
+  max-width: 500px;
   z-index: 500;
   pointer-events: none;
   white-space: pre-wrap;
@@ -486,9 +486,9 @@ body {
   border-radius: 8px; /* Rounded corners */
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3); /* Drop shadow for depth */
   position: relative; /* For potential absolute positioning of children */
-  max-width: 500px; /* Maximum width of the modal */
+  max-width: 33vw; /* Maximum width of the modal */
   width: auto; /* Allow shrinking */
-  min-width: 250px; /* Minimum width */
+  min-width: 10vw; /* Minimum width */
   text-align: center; /* Center text inside */
   color: #333333; /* Dark grey text color */
   z-index: 1001; /* Ensure content is above overlay */

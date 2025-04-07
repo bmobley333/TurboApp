@@ -17,7 +17,7 @@
   </head>
   <body>
     <?!= HtmlService.createHtmlOutputFromFile('ui.html').getContent(); ?>
-    <?!= HtmlService.createHtmlOutputFromFile('scripts.html').getContent(); ?>
     <?!= HtmlService.createHtmlOutputFromFile('gamelogic.html').getContent(); ?>
+    <?!= HtmlService.createHtmlOutputFromFile('scripts.html').getContent(); ?>
   </body>
 </html>
