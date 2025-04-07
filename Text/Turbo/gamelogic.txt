@@ -13,165 +13,148 @@
 
 
 
-// fHandleRollDiceAction ////////////////////////////////////////////////////////////
-// Purpose -> Top-level handler for "Roll Dice" action. Populates gUI.roll,
-//            validates, calculates roll using basic fCSD, and displays result.
-// Inputs  -> None (uses gUI)
-// Outputs -> None (DOM + gUI changes)
+// fHandleRollDiceAction /////////////////////////////////////////////////////////////////////////
+// Purpose -> Top-level handler for "Roll Dice" action. Populates gUI.roll, validates inputs,
+//            runs morph/roll/resolution logic, and posts result.
+// Inputs  -> None (uses gUI.currentSkRadioChecked).
+// Outputs -> None (updates gUI and DOM).
 function fHandleRollDiceAction() {
     fLogStatus("🎲 Roll Dice Action Triggered");
 
-    const r = gUI.currentSkRadioChecked.r;
-    const c = gUI.currentSkRadioChecked.c;
+    const { r, c } = gUI.currentSkRadioChecked;
 
-    // Step 1: Validate the selected checkbox is a valid ability target
+    // Validate target is a valid Sk1/Sk2 checkbox
     if (!fValidateAbilityCB(r, c)) return;
 
-    // Step 2: Populate the gUI.roll object (includes error handling)
-    if (!fResetPopulateNCleanGUIRoll(r, c)) return; // Still returns false on population error
+    // Populate gUI.roll from sheet and clean it
+    if (!fResetPopulateNCleanGUIRoll(r, c)) return;
 
-    // Step 3: Verify the populated data (e.g., check for name)
-    if (!fVerifyAbility()) return; // NEW check
+    // Confirm ability has valid name and type
+    if (!fVerifyAbility()) return;
 
+    // Core calculation pipeline
     fProcessMorph();
     fCalcGUIRollResSk();
     fCalcGUIRollRoll();
     fCalcGUIRollResRoll();
     fCalcRollLogPrepend();
-
 } // END fHandleRollDiceAction
 
 
 
 
-// fValidateAbilityCB //////////////////////////////////////////////////////
-// Purpose -> Ensure the provided row and column indices correspond to a valid
-//            Sk1/Sk2 checkbox cell as defined in gUI.sk1sk2CheckBoxes.
-// Inputs  -> row (Number): The 0-based row index to check.
-//         -> col (Number): The 0-based column index to check.
-// Outputs -> (Boolean): true if (row, col) is a valid Sk1/Sk2 checkbox location, false otherwise.
+
+// fValidateAbilityCB /////////////////////////////////////////////////////////////////////////
+// Purpose -> Confirms that (row, col) is a valid Sk1/Sk2 checkbox based on gUI.sk1sk2CheckBoxes.
+// Inputs  -> row (Number), col (Number): 0-based indices.
+// Outputs -> (Boolean): true if valid, false otherwise.
 function fValidateAbilityCB(row, col) {
-  // Use the existing helper function from scripts.html to check ranges
-  const isValid = fIsSkRadioGroupMember(row, col);
-
-  // If it's not a valid location, log/display an error message
-  if (!isValid) {
-    // Use the new helper function for logging/displaying
-    fShowMessage("⚠️ Please select a valid Ability checkbox first!");
-  }
-
-  // Return the validation result
-  return isValid;
+    const isValid = fIsSkRadioGroupMember(row, col);
+    if (!isValid) fShowMessage("⚠️ Please select a valid Ability checkbox first!");
+    return isValid;
 } // END fValidateAbilityCB
 
 
 
+
 // fResetPopulateNCleanGUIRoll //////////////////////////////////////////////////////////////////
-// Purpose -> Resets and Extracts data from the selected ability row, cleans it,
-//            and fills the gUI.roll object based on Sk1CheckBox or Sk2CheckBox.
+// Purpose -> Extracts and cleans ability row data into gUI.roll based on Sk1 or Sk2 checkbox.
 // Inputs  -> r (Number), c (Number): Row and column from selected radio.
-// Outputs -> true if successful, false if a data extraction error occurs.
-// MODIFIED: Fixed TypeError on trim() by ensuring value is string first.
+// Outputs -> (Boolean): true if success, false if extraction/cleaning fails.
 function fResetPopulateNCleanGUIRoll(r, c) {
     try {
-        const getVal = (tag) => gUI.arr[r]?.[resolveCol(tag)] ?? '';
+        const getVal = tag => gUI.arr[r]?.[resolveCol(tag)] ?? '';
         const isSk1 = (c === resolveCol('Sk1ChkBox'));
 
         // --- Initial Population ---
-        gUI.roll.sk1CB    = isSk1;
-        gUI.roll.skMorph  = isSk1 ? getVal('Morph1') : getVal('Morph2');
-        gUI.roll.skTyp    = isSk1 ? getVal('Sk1Typ') : getVal('Sk2Typ');
-        gUI.roll.skSk     = isSk1 ? getVal('Sk1') : getVal('Sk2');
-        gUI.roll.skIsOn   = getVal('On');
-        gUI.roll.skNameID = getVal('Ability');
-        gUI.roll.skName   = gUI.roll.skNameID.replace(/(\s{2,}_\w{6})$/, '').trim(); // Name already trimmed here
-        gUI.roll.skAct    = isSk1 ? getVal('Act') : '';
-        gUI.roll.skDur    = isSk1 ? getVal('Dur') : '';
-        gUI.roll.skMeta   = isSk1 ? getVal('Meta') : '';
-        gUI.roll.skUses   = isSk1 ? getVal('Uses') : '';
-        gUI.roll.resTyp   = gUI.roll.skTyp; // Special case resTyp needs to start as skTyp
-        gUI.roll.resSk    = '';  // Reset result fields
-        gUI.roll.resFlatBase   = '';
-        gUI.roll.resFlatResult = '';
-        gUI.roll.resDif   = '';
-        gUI.roll.resFocus = '';
-        gUI.roll.resPlus  = '';
-        gUI.roll.resPlusPlus = '';
-        gUI.roll.resMult  = '';
-        gUI.roll.resMultMult  = '';
-        gUI.roll.resCombine = '';
-        gUI.roll.isUnSk   = false;
-        gUI.roll.roll     = '';
-        gUI.roll.resRoll  = '';
+        gUI.roll = {
+            sk1CB: isSk1,
+            skMorph: isSk1 ? getVal('Morph1') : getVal('Morph2'),
+            skTyp: isSk1 ? getVal('Sk1Typ') : getVal('Sk2Typ'),
+            skSk: isSk1 ? getVal('Sk1') : getVal('Sk2'),
+            skIsOn: getVal('On'),
+            skNameID: getVal('Ability'),
+            skName: '',
+            skAct: isSk1 ? getVal('Act') : '',
+            skDur: isSk1 ? getVal('Dur') : '',
+            skMeta: isSk1 ? getVal('Meta') : '',
+            skUses: isSk1 ? getVal('Uses') : '',
+            resTyp: '',
+            resSk: '',
+            resFlatBase: '',
+            resFlatResult: '',
+            resDif: '',
+            resFocus: '',
+            resPlus: '',
+            resPlusPlus: '',
+            resMult: '',
+            resMultMult: '',
+            resCombine: '',
+            isUnSk: false,
+            roll: '',
+            resRoll: ''
+        };
 
-        // --- Clean gUI.roll data ---
-        // Use String() to ensure values are strings before trimming
+        const rData = gUI.roll;
 
-        // skMorph: trim whitespace and remove leading commas
-        gUI.roll.skMorph = String(gUI.roll.skMorph || '').trim().replace(/^,+/, '');
+        // --- Clean string fields ---
+        rData.skName = String(rData.skNameID || '').replace(/\s{2,}_\w{6}$/, '').trim();
+        rData.skMorph = String(rData.skMorph || '').trim().replace(/^,+/, '');
+        rData.skTyp = String(rData.skTyp || '').trim();
+        rData.skIsOn = String(rData.skIsOn || '').trim();
+        rData.skDur = String(rData.skDur || '').trim();
+        rData.skMeta = String(rData.skMeta || '').trim();
 
-        // skTyp: trim whitespace
-        gUI.roll.skTyp = String(gUI.roll.skTyp || '').trim();
+        // --- Clean numeric fields ---
+        const sk = parseInt(rData.skSk, 10);
+        rData.skSk = (!isNaN(sk) && sk >= 1) ? sk : '';
 
-        // skSk: convert to integer >= 1, or ''
-        // skSk is initially populated, potentially as string or number
-        const skNum = parseInt(gUI.roll.skSk, 10); // Attempt parsing
-        gUI.roll.skSk = (!isNaN(skNum) && skNum >= 1) ? skNum : '';
+        const act = parseInt(String(rData.skAct || '').trim(), 10);
+        rData.skAct = (!isNaN(act) && act >= 1) ? act : '';
 
-        // skIsOn: trim whitespace
-        gUI.roll.skIsOn = String(gUI.roll.skIsOn || '').trim();
+        const uses = parseInt(rData.skUses, 10);
+        rData.skUses = (!isNaN(uses) && uses >= 0) ? uses : '';
 
-        // skAct: trim whitespace and convert to integer >= 1, or ''
-        const actStr = String(gUI.roll.skAct || '').trim(); 
-        const actNum = parseInt(actStr, 10);
-        gUI.roll.skAct = (!isNaN(actNum) && actNum >= 1) ? actNum : '';
+        // --- Default resTyp to skTyp ---
+        rData.resTyp = rData.skTyp;
 
-        // skDur: trim whitespace (Assuming trim based on other fields)
-        gUI.roll.skDur = String(gUI.roll.skDur || '').trim();
-
-        // skMeta: trim whitespace (Assuming trim based on other fields)
-        gUI.roll.skMeta = String(gUI.roll.skMeta || '').trim();
-
-        // skUses: convert to integer >= 0, or ''
-        // skUses is initially populated, potentially as string or number
-        const usesNum = parseInt(gUI.roll.skUses, 10); // Attempt parsing
-        gUI.roll.skUses = (!isNaN(usesNum) && usesNum >= 0) ? usesNum : '';
-        // --- End Cleaning ---
-
+        // --- Final status log ---
         fLogStatus(`⚙️ Populated & Cleaned gUI.roll for row ${r} (isSk1: ${isSk1})`);
-        return true; // Return true on successful population and cleaning
+        return true;
 
-    } catch (error) {
-        // Log detailed error and update sidebar if data extraction fails
-        console.error("❌ Error populating/cleaning gUI.roll:", error);
-        fPrependToSidebar(`❌ Error processing skill data: ${error.message}`);
+    } catch (err) {
+        // --- Error Handling ---
+        console.error("❌ Error populating/cleaning gUI.roll:", err);
+        fPrependToSidebar(`❌ Error processing skill data: ${err.message}`);
         fShowSidebar();
-        return false; // Indicate failure
+        return false;
     }
 } // END fResetPopulateNCleanGUIRoll
 
 
 
-// fVerifyAbility ///////////////////////////////////////////////////////////////////
-// Purpose -> Verifies if the currently populated gUI.roll data is valid for rolling.
-// Inputs  -> None (uses gUI.roll and gUI.list)
-// Outputs -> true if valid, false otherwise.
-function fVerifyAbility() {
 
-    // Check 1: Ability name must be present
-    const { skName, skTyp } = gUI.roll;
+// fVerifyAbility /////////////////////////////////////////////////////////////////////////
+// Purpose -> Validates current gUI.roll by checking name and skill type.
+// Inputs  -> None (uses gUI.roll and gUI.list).
+// Outputs -> (Boolean): true if ability is valid, false otherwise.
+function fVerifyAbility() {
+    const { skName, skTyp, sk1CB } = gUI.roll;
+
+    // --- Check: Ability name must exist ---
     if (!skName) {
         fShowMessage("⚠️ Please select an Ability with a name!");
         return false;
     }
 
-    // Check 2: Skill type must be valid (case-insensitive)
+    // --- Check: Skill Typ must be a string ---
     if (!skTyp || typeof skTyp !== 'string') {
-        const is2ndCol = !gUI.roll.sk1CB;
+        const is2ndCol = !sk1CB;
         fShowMessage(`⚠️ No skill Typ found${is2ndCol ? '<br><br>You may have wanted the 1st column.' : ''}`);
         return false;
     }
 
+    // --- Check: Skill type must match known types (case-insensitive) ---
     const skTypLower = skTyp.trim().toLowerCase();
     const isValidSkTyp = gUI.list.skTyp.some(type => type.toLowerCase() === skTypLower);
     if (!isValidSkTyp) {
@@ -179,47 +162,58 @@ function fVerifyAbility() {
         return false;
     }
 
+    // --- Passed all checks ---
     return true;
-
 } // END fVerifyAbility
 
 
 
-
-
-
-// fProcessMorph //////////////////////////////////////////////////////////////////
-// Purpose -> Processes the gUI.roll.skMorph string (CSV) to extract various
-//            modifiers and flags, populating gUI.roll.res* properties and isUnSk.
-// Inputs  -> None (reads gUI.roll.skMorph, gUI.roll.skSk, gUI.list)
-// Outputs -> None (modifies gUI.roll properties directly)
+// fProcessMorph /////////////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Processes gUI.roll.skMorph string to extract modifiers and flags into res* fields.
+// Inputs  -> None (reads gUI.roll.skMorph, gUI.roll.skSk, gUI.list).
+// Outputs -> None (updates gUI.roll directly).
 function fProcessMorph() {
-    const skMorph = gUI.roll.skMorph || ''; // Ensure it's a string
-
-    // Initialize result properties in gUI.roll
-    gUI.roll.isUnSk = false;
-    gUI.roll.resTyp = gUI.roll.skTyp;
-    gUI.roll.resFocus = '';
-    gUI.roll.resPlus = '';
-    gUI.roll.resCombine = '';
-    gUI.roll.resPlusPlus = '';
-    gUI.roll.resMult = '';
-    gUI.roll.resMultMult = '';
-    gUI.roll.resFlatBase = '';
-    gUI.roll.resFlatResult = '';
-    gUI.roll.resDif = '';
-
-    // --- Process Morph String ---
+    const skMorph = gUI.roll.skMorph || '';
     if (!skMorph) {
         fLogStatus("ℹ️ No skMorph string to process.");
-        return; // Nothing to do if skMorph is empty
+        return;
     }
 
-    // Convert to array for easier processing - trim whitespace from each component
-    const morphComponents = skMorph.split(',').map(item => item.trim()).filter(item => item); // Filter out empty strings after split/trim
-    const morphLowerComponents = morphComponents.map(item => item.toLowerCase());
+    // Split morph string and compile lowercased version
+    const morphComponents = skMorph.split(',').map(x => x.trim()).filter(Boolean);
+    const morphLower = morphComponents.map(x => x.toLowerCase());
 
-    // Pre-compile RegExps for efficiency
+    // Accumulator object for temp results
+    const acc = {
+        foundResTyp: false,
+        lastResTypMatch: '',
+        lastFocusIndex: -1,
+        foundResPlus: false,
+        totalPlus: 0,
+        combineNumbers: [],
+        foundResPlusPlus: false,
+        totalPlusPlus: 0,
+        foundResMult: false,
+        totalMult: 1.0,
+        foundResMultMult: false,
+        totalMultMult: 1.0,
+        lastFlatBaseMatch: '',
+        lastFlatResultMatch: '',
+        lastDifMatch: ''
+    };
+
+    fParseMorphComponents(morphComponents, morphLower, acc);
+    fApplyMorphResults(acc);
+
+    fLogStatus("⚙️ Processed skMorph string.");
+} // END fProcessMorph
+
+
+
+
+// fParseMorphComponents ////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Parses each morph component and mutates gUI.roll and acc accordingly.
+function fParseMorphComponents(morphComponents, morphLower, acc) {
     const plusMinusRegex = /^([-+])(\d+)$/;
     const numberOnlyRegex = /^\d+$/;
     const plusPlusMinusMinusRegex = /^(?:(\+\+)|(--))(\d+)$/;
@@ -229,211 +223,165 @@ function fProcessMorph() {
     const equalsEqualsRegex = /^==(\d+)$/;
     const caretRegex = /^\^(\d+)$/;
 
-    // --- Temporary Accumulators/Flags ---
-    let foundResTyp = false;
-    let lastResTypMatch = '';
-    let lastFocusIndex = -1;
-    let foundResPlus = false;
-    let totalPlus = 0;
-    let combineNumbers = [];
-    let foundResPlusPlus = false;
-    let totalPlusPlus = 0;
-    let foundResMult = false;
-    let totalMult = 1.0;
-    let foundResMultMult = false;
-    let totalMultMult = 1.0;
-    let lastFlatBaseMatch = '';
-    let lastFlatResultMatch = '';
-    let lastDifMatch = '';
-
-    // --- Iterate through each component ---
     morphComponents.forEach((component, index) => {
-        const componentLower = morphLowerComponents[index];
+        const lower = morphLower[index];
 
-        // 1. isUnSk Check
-        if (componentLower === 'un' || componentLower === 'unsk') {
-            gUI.roll.isUnSk = true;
+        // --- isUnSk Check
+        if (lower === 'un' || lower === 'unsk') gUI.roll.isUnSk = true;
+
+        // --- resTyp Check (find LAST match)
+        if (gUI.list.skTyp.includes(lower)) {
+            acc.lastResTypMatch = component;
+            acc.foundResTyp = true;
         }
 
-        // 2. resTyp Check (find LAST match)
-        if (gUI.list.skTyp.includes(componentLower)) {
-            lastResTypMatch = component; // Store original case
-            foundResTyp = true;
-        }
+        // --- resFocus Check (find index of LAST match)
+        const focusIndex = gUI.list.metaColor.indexOf(lower);
+        if (focusIndex > -1) acc.lastFocusIndex = focusIndex;
 
-        // 3. resFocus Check (find index of LAST match)
-        const focusIndex = gUI.list.metaColor.indexOf(componentLower);
-        if (focusIndex > -1) {
-            lastFocusIndex = focusIndex; // Store index
-        }
-
-        // 4. resPlus Check
+        // --- resPlus Check
         const plusMatch = component.match(plusMinusRegex);
         if (plusMatch) {
-            const sign = plusMatch[1];
-            const value = parseInt(plusMatch[2], 10);
-            totalPlus += (sign === '+') ? value : -value;
-            foundResPlus = true;
+            const val = parseInt(plusMatch[2], 10);
+            acc.totalPlus += (plusMatch[1] === '+' ? val : -val);
+            acc.foundResPlus = true;
         }
 
-        // 5. resCombine Check (collect numbers)
-        if (numberOnlyRegex.test(component)) {
-            combineNumbers.push(parseInt(component, 10));
+        // --- resCombine Check (collect numbers)
+        if (numberOnlyRegex.test(component)) acc.combineNumbers.push(parseInt(component, 10));
+
+        // --- resPlusPlus Check
+        const ppMatch = component.match(plusPlusMinusMinusRegex);
+        if (ppMatch) {
+            const val = parseInt(ppMatch[3], 10);
+            acc.totalPlusPlus += (ppMatch[1] === '++' ? val : -val);
+            acc.foundResPlusPlus = true;
         }
 
-        // 6. resPlusPlus Check
-        const plusPlusMatch = component.match(plusPlusMinusMinusRegex);
-        if (plusPlusMatch) {
-            const op = plusPlusMatch[1] ? '++' : '--'; // Check which group matched
-            const value = parseInt(plusPlusMatch[3], 10);
-            totalPlusPlus += (op === '++') ? value : -value;
-            foundResPlusPlus = true;
-        }
-
-        // 7. resMult Check
-        const multMatch = component.match(multDivRegex);
-        if (multMatch) {
-            const op = multMatch[1];
-            const value = parseFloat(multMatch[2]);
-            if (op === '*') {
-                totalMult *= value;
-            } else if (op === '/' && value !== 0) { // Avoid division by zero
-                totalMult /= value;
-            } else if (op === '/' && value === 0) {
-                console.warn("fProcessMorph: Division by zero detected in resMult calculation for component:", component);
+        // --- resMult Check
+        const m1 = component.match(multDivRegex);
+        if (m1) {
+            const val = parseFloat(m1[2]);
+            if (m1[1] === '*') acc.totalMult *= val;
+            else if (val !== 0) acc.totalMult /= val;
+            else {
                 fShowMessage("❌ Morph includes illegal '/0'. Please correct and try again.");
-                return;
+                console.warn("resMult divide by zero:", component);
             }
-            foundResMult = true;
+            acc.foundResMult = true;
         }
 
-        // 8. resMultMult Check
-        const multMultMatch = component.match(multMultDivDivRegex);
-        if (multMultMatch) {
-            const op = multMultMatch[1] ? '**' : '//'; // Check which group matched
-            const value = parseFloat(multMultMatch[3]);
-             if (op === '**') {
-                totalMultMult *= value;
-            } else if (op === '//' && value !== 0) { // Avoid division by zero
-                totalMultMult /= value;
-            } else if (op === '//' && value === 0) {
-                console.warn("fProcessMorph: Division by zero detected in resMultMult calculation for component:", component);
+        // --- resMultMult Check
+        const m2 = component.match(multMultDivDivRegex);
+        if (m2) {
+            const val = parseFloat(m2[3]);
+            if (m2[1] === '**') acc.totalMultMult *= val;
+            else if (val !== 0) acc.totalMultMult /= val;
+            else {
                 fShowMessage("❌ Morph includes illegal '//0'. Please correct and try again.");
-                return;
+                console.warn("resMultMult divide by zero:", component);
             }
-            foundResMultMult = true;
+            acc.foundResMultMult = true;
         }
 
-        // 9. resFlatBase Check (find LAST match)
-        const flatBaseMatch = component.match(equalsRegex);
-        if (flatBaseMatch) {
-            lastFlatBaseMatch = flatBaseMatch[1]; // Store the number part
-        }
+        // --- resFlatBase Check (find LAST match)
+        const eq1 = component.match(equalsRegex);
+        if (eq1) acc.lastFlatBaseMatch = eq1[1];
 
         // 10. resFlatResult Check (find LAST match)
-        const flatResultMatch = component.match(equalsEqualsRegex);
-        if (flatResultMatch) {
-            lastFlatResultMatch = flatResultMatch[1]; // Store the number part
+        const eq2 = component.match(equalsEqualsRegex);
+        if (eq2) acc.lastFlatResultMatch = eq2[1];
+
+        // --- resDif Check (find LAST match)
+        const dif = component.match(caretRegex);
+        if (dif) acc.lastDifMatch = dif[1];
+    });
+} // END fParseMorphComponents
+
+
+
+
+// fApplyMorphResults ////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Applies accumulated morph data to gUI.roll.
+function fApplyMorphResults(acc) {
+    const r = gUI.roll;
+
+    // MUST BE FIRST: Assign resFlatBase (also sets skSk)
+    if (acc.lastFlatBaseMatch !== '') {
+        const num = parseInt(acc.lastFlatBaseMatch, 10);
+        if (!isNaN(num)) {
+            r.resFlatBase = num;
+            r.skSk = num;
         }
+    }
 
-        // 11. resDif Check (find LAST match)
-        const difMatch = component.match(caretRegex);
-        if (difMatch) {
-            lastDifMatch = difMatch[1]; // Store the number part
-        }
-    }); // --- End forEach component ---
-
-
-    // --- Assign final results to gUI.roll ---
-
-    // MUST BE FIRST: Assign resFlatBase (convert last match to integer)
-    if (lastFlatBaseMatch !== '') {
-        const num = parseInt(lastFlatBaseMatch, 10);
-        gUI.roll.resFlatBase = !isNaN(num) ? num : ''; // Assign '' if parse fails
-        gUI.roll.skSk = !isNaN(num) ? num : gUI.roll.skSk;
-    } // Otherwise remains ''
-    
     // Assign resTyp (last match found else gUI.roll.skTyp)
-    if (foundResTyp) {
-         gUI.roll.resTyp = (lastResTypMatch) ? lastResTypMatch : gUI.roll.skTyp;        
-    } // Otherwise remains ''
-    
-    // Assign resTyp (last match found else gUI.roll.skTyp)
-    if (foundResTyp) {
-         gUI.roll.resTyp = (lastResTypMatch) ? lastResTypMatch : gUI.roll.skTyp;        
-    } // Otherwise remains ''
+    if (acc.foundResTyp) {
+        r.resTyp = acc.lastResTypMatch || r.skTyp;
+    }
 
     // Assign resFocus (index of last match found)
-    if (lastFocusIndex > -1) {
-        gUI.roll.resFocus = lastFocusIndex; // Store the index
-    } // Otherwise remains ''
+    if (acc.lastFocusIndex > -1) {
+        r.resFocus = acc.lastFocusIndex;
+    }
 
     // Assign resPlus
-    if (foundResPlus) {
-        gUI.roll.resPlus = totalPlus;
-    } // Otherwise remains ''
+    if (acc.foundResPlus) {
+        r.resPlus = acc.totalPlus;
+    }
 
     // Assign resCombine
-    // Add skSk if it's a valid number >= 1
-    if (typeof gUI.roll.skSk === 'number' && gUI.roll.skSk >= 1) {
-         combineNumbers.push(gUI.roll.skSk);
+    if (typeof r.skSk === 'number' && r.skSk >= 1) {
+        acc.combineNumbers.push(r.skSk);
     }
-    if (combineNumbers.length > 0) {
-        combineNumbers.sort((a, b) => b - a); // Sort descending
-        let combineValue = 0;
-        let divisor = 1;
-        for (const num of combineNumbers) {
-            combineValue += num / divisor;
+    if (acc.combineNumbers.length > 0) {
+        acc.combineNumbers.sort((a, b) => b - a);
+        let value = 0, divisor = 1;
+        for (const num of acc.combineNumbers) {
+            value += num / divisor;
             divisor *= 2;
         }
-        gUI.roll.resCombine = Math.round(combineValue); // Convert to integer
-    } // Otherwise remains ''
+        r.resCombine = Math.round(value);
+    }
 
     // Assign resPlusPlus
-    if (foundResPlusPlus) {
-        gUI.roll.resPlusPlus = totalPlusPlus;
-    } // Otherwise remains ''
+    if (acc.foundResPlusPlus) {
+        r.resPlusPlus = acc.totalPlusPlus;
+    }
 
     // Assign resMult
-    if (foundResMult) {
-        // Round to 2 decimal places and convert back to number to remove trailing .00
-        gUI.roll.resMult = Number(totalMult.toFixed(2));
-    } // Otherwise remains ''
+    if (acc.foundResMult) {
+        r.resMult = Number(acc.totalMult.toFixed(2));
+    }
 
     // Assign resMultMult
-    if (foundResMultMult) {
-        gUI.roll.resMultMult = Number(totalMultMult.toFixed(2));
-    } // Otherwise remains ''
+    if (acc.foundResMultMult) {
+        r.resMultMult = Number(acc.totalMultMult.toFixed(2));
+    }
 
     // Assign resFlatResult (convert last match to integer)
-    if (lastFlatResultMatch !== '') {
-        const num = parseInt(lastFlatResultMatch, 10);
-        gUI.roll.resFlatResult = !isNaN(num) ? num : '';
-    } // Otherwise remains ''
+    if (acc.lastFlatResultMatch !== '') {
+        const num = parseInt(acc.lastFlatResultMatch, 10);
+        if (!isNaN(num)) r.resFlatResult = num;
+    }
 
     // Assign resDif (convert last match to integer)
-    if (lastDifMatch !== '') {
-        const num = parseInt(lastDifMatch, 10);
-        gUI.roll.resDif = !isNaN(num) ? num : '';
-    } // Otherwise remains ''
-
-    fLogStatus("⚙️ Processed skMorph string.");
-
-} // END fProcessMorph
+    if (acc.lastDifMatch !== '') {
+        const num = parseInt(acc.lastDifMatch, 10);
+        if (!isNaN(num)) r.resDif = num;
+    }
+} // END fApplyMorphResults
 
 
 
 
-// fCalcGUIRollResSk //////////////////////////////////////////////////////////////////
-// Purpose -> Calculates the final resulting skill value (gUI.roll.resSk) after
-//            applying modifiers derived from the morph string.
-// Inputs  -> None (reads gUI.roll properties)
-// Outputs -> None (modifies gUI.roll.resSk)
-// MODIFIED: Added check for resCombine to potentially override initial base value.
-// MODIFIED: Added diagnostic log before final assignment.
+
+// fCalcGUIRollResSk /////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Calculates final resulting skill value (gUI.roll.resSk) using morph-derived modifiers.
+// Inputs  -> None (reads from gUI.roll).
+// Outputs -> None (writes gUI.roll.resSk).
 function fCalcGUIRollResSk() {
-
-    let currentResSk; // Use a local variable for calculations
+    let currentResSk;
 
     // --- Determine Initial Base Value ---
     if (typeof gUI.roll.skSk === 'number' && gUI.roll.skSk !== '') {
@@ -442,293 +390,241 @@ function fCalcGUIRollResSk() {
         currentResSk = NaN;
     }
 
-    // --- Apply Modifiers (only if we have a valid starting or combined number) ---
+    // --- Fallback to Combine Value ---
     if (typeof gUI.roll.resCombine === 'number' && gUI.roll.resCombine !== '') {
         currentResSk = gUI.roll.resCombine;
         fLogStatus("   -> Using resCombine as fallback for resSk calculation.");
     }
 
-
-    // Proceed only if currentResSk is now a valid number
+    // --- Modifier Application Pipeline ---
     if (!isNaN(currentResSk)) {
-        // Apply Multiplier (resMult)
+        // Apply resMult (multiplicative)
         if (typeof gUI.roll.resMult === 'number' && gUI.roll.resMult !== '') {
             currentResSk *= gUI.roll.resMult;
         }
-        // Apply Additive Bonus (resPlus)
+
+        // Apply resPlus (additive)
         if (typeof gUI.roll.resPlus === 'number' && gUI.roll.resPlus !== '') {
             currentResSk += gUI.roll.resPlus;
         }
-        // Apply Focus Bonus (resFocus - which stores the index)
+
+        // Apply resFocus (focus index adds 5 * (1 + index))
         if (typeof gUI.roll.resFocus === 'number' && gUI.roll.resFocus >= 0) {
             currentResSk += 5 * (1 + gUI.roll.resFocus);
         }
-        // Apply Unskilled Modifier (isUnSk)
+
+        // Apply isUnSk (cut in half)
         if (gUI.roll.isUnSk === true) {
             currentResSk *= 0.5;
         }
-        // --- Final Adjustments ---
+
+        // --- Final Adjustment: Clamp Tiny Values ---
         if (currentResSk > 0 && currentResSk < 1) {
             currentResSk = 1;
         }
 
-        // --- ADDED DIAGNOSTIC LOG ---
+        // --- Diagnostic Output ---
         console.log(`DEBUG fCalcGUIRollResSk: Value before final check/assignment:`, currentResSk);
 
-        // Check if result is >= 1, round to integer; otherwise set to empty string
+        // --- Final Assignment ---
         if (currentResSk >= 1) {
             gUI.roll.resSk = Math.round(currentResSk);
         } else {
             gUI.roll.resSk = '';
         }
     } else {
+        // Invalid input, leave resSk empty
         gUI.roll.resSk = '';
     }
 
     fLogStatus(`⚙️ Calculated final resSk: ${gUI.roll.resSk}`);
-
 } // END fCalcGUIRollResSk
 
 
 
-// fCalcGUIRollRoll //////////////////////////////////////////////////////////////////
-// Purpose -> Calculates the dice roll result (gUI.roll.roll) based on
-//            the calculated skill value (resSk) and the determined roll type (resTyp).
-// Inputs  -> None (reads gUI.roll.resSk, gUI.roll.resTyp)
-// Outputs -> None (modifies gUI.roll.roll)
+
+// fCalcGUIRollRoll /////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Determines dice roll result (gUI.roll.roll) based on resSk and resTyp.
+// Inputs  -> None (reads gUI.roll.resSk, gUI.roll.resTyp).
+// Outputs -> None (writes gUI.roll.roll).
 function fCalcGUIRollRoll() {
-
     const resSkValue = gUI.roll.resSk;
-    const resTypValue = (typeof gUI.roll.resTyp === 'string') ? gUI.roll.resTyp.trim().toLowerCase() : '';
+    const resTypValue = (typeof gUI.roll.resTyp === 'string')
+        ? gUI.roll.resTyp.trim().toLowerCase()
+        : '';
 
-    // Check if resSk is valid (should be a number >= 1 from fCalcGUIRollResSk)
+    // --- Validate resSk (must be a number >= 1) ---
     if (typeof resSkValue !== 'number' || resSkValue < 1) {
-        gUI.roll.roll = ''; // Set roll to empty if resSk is invalid
+        gUI.roll.roll = '';
         fLogStatus(`ℹ️ Cannot calculate roll: Invalid resSk value (${resSkValue}).`);
         return;
     }
 
-
-
-    // Determine the roll based on the type
+    // --- Determine roll function based on resTyp ---
     switch (resTypValue) {
-        case '':
-            gUI.roll.roll = ''; // No type means no roll
-            break;
+
+        // No type → skip rolling
+        case '': gUI.roll.roll = ''; break;
+
+        // Skill or Attribute roll
         case 'sk':
-        case 'atr':
-            gUI.roll.roll = fCSDSk(resSkValue);
-            break;
-        case 'atk':
-            gUI.roll.roll = fCSAtk(resSkValue);
-            break;
-        case 'dmg':
-            gUI.roll.roll = fCSDDmg(resSkValue);
-            break;
-        case 'def':
-            gUI.roll.roll = fCSDef(resSkValue);
-            break;
-        case 'ar':
-            // Note: fCSDArmor returns a number possibly with decimals (e.g., 1.5)
-            gUI.roll.roll = fCSDArmor(resSkValue);
-            break;
-        // Note: 'un' and 'unsk' types are handled by fCalcGUIRollResSk modifying the resSk value,
-        // but the final roll type might still be specified (e.g., 'un,atk').
-        // If resTyp resolves to 'un' or 'unsk' here, we might need specific roll logic
-        // or assume it defaults to a standard roll type like 'sk'.
-        // For now, handle them like unknown types.
+        case 'atr': gUI.roll.roll = fCSDSk(resSkValue); break;
+
+        // Attack roll
+        case 'atk': gUI.roll.roll = fCSAtk(resSkValue); break;
+
+        // Damage roll
+        case 'dmg': gUI.roll.roll = fCSDDmg(resSkValue); break;
+
+        // Defense roll
+        case 'def': gUI.roll.roll = fCSDef(resSkValue); break;
+
+        // Armor roll (may return decimal)
+        case 'ar': gUI.roll.roll = fCSDArmor(resSkValue); break;
+
+        // Unexpected usage of 'unsk' as final roll type
         case 'un':
         case 'unsk':
-             console.warn(`fCalcGUIRollRoll: Roll type '${resTypValue}' used directly. Consider if a base roll type should apply.`);
-             gUI.roll.roll = fCSDSk(resSkValue); // Defaulting to 'sk' roll for now
-             break;
+            console.warn(`fCalcGUIRollRoll: Roll type '${resTypValue}' used directly. Consider adjusting morph.`);
+            gUI.roll.roll = fCSDSk(resSkValue);
+            break;
+
+        // Unknown roll type
         default:
             console.warn(`fCalcGUIRollRoll: Unknown resTyp '${resTypValue}'. Cannot calculate roll.`);
             gUI.roll.roll = '';
             break;
     }
 
+    // --- Final Logging ---
     fLogStatus(`⚙️ Calculated roll (${resTypValue}): ${gUI.roll.roll}`);
-
 } // END fCalcGUIRollRoll
 
 
 
 
-// fCalcGUIRollResRoll //////////////////////////////////////////////////////////////////
-// Purpose -> Calculates the final modified roll result (gUI.roll.resRoll) after
-//            applying overrides (resFlatResult) or modifiers (resMultMult, resPlusPlus)
-//            to the initial roll value (gUI.roll.roll). Ensures result is >= 0.
-//            Rounds to 2 decimal places only if resTyp is 'ar', otherwise rounds to integer.
-// Inputs  -> None (reads gUI.roll properties)
-// Outputs -> None (modifies gUI.roll.resRoll)
-// MODIFIED: Added check to ensure result is not less than 0.
-// MODIFIED: Added conditional rounding based on gUI.roll.resTyp.
+
+// fCalcGUIRollResRoll /////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Calculates final gUI.roll.resRoll using overrides or morph-based modifiers.
+// Inputs  -> None (reads gUI.roll).
+// Outputs -> None (writes gUI.roll.resRoll).
 function fCalcGUIRollResRoll() {
 
-    // Check for Flat Result Override first
-    const flatResult = (typeof gUI.roll.resFlatResult === 'number' && gUI.roll.resFlatResult !== '')
-                       ? gUI.roll.resFlatResult
-                       : null;
+    // --- Check for Flat Result Override ---
+    const flatResult = (typeof gUI.roll.resFlatResult === 'number' && gUI.roll.resFlatResult !== '') ? gUI.roll.resFlatResult : null;
 
     if (flatResult !== null) {
-        // Apply floor of 0 check even to flat results.
-        // Conditional rounding for flat override based on resTyp.
         const isArType = (typeof gUI.roll.resTyp === 'string') && gUI.roll.resTyp.trim().toLowerCase() === 'ar';
         const roundedFlatResult = isArType ? Number(flatResult.toFixed(2)) : Math.round(flatResult);
         gUI.roll.resRoll = Math.max(0, roundedFlatResult);
         fLogStatus(`⚙️ Calculated resRoll (override, ${isArType ? 'AR-rounded' : 'INT-rounded'}): ${gUI.roll.resRoll}`);
-        return; // Exit early
+        return;
     }
 
-    // Check if the initial roll value is valid
+    // --- Validate Base Roll ---
     const initialRoll = gUI.roll.roll;
     if (typeof initialRoll !== 'number' || initialRoll === '') {
-        gUI.roll.resRoll = ''; // Set final result to empty if initial roll is invalid
+        gUI.roll.resRoll = '';
         fLogStatus(`ℹ️ Cannot calculate resRoll: Invalid initial roll value (${initialRoll}).`);
         return;
     }
 
-    // Start calculation with the initial roll value
+    // --- Apply Modifiers ---
     let currentResRoll = initialRoll;
+    if (typeof gUI.roll.resMultMult === 'number' && gUI.roll.resMultMult !== '') currentResRoll *= gUI.roll.resMultMult;
+    if (typeof gUI.roll.resPlusPlus === 'number' && gUI.roll.resPlusPlus !== '') currentResRoll += gUI.roll.resPlusPlus;
 
-    // Apply Multiplier (resMultMult)
-    if (typeof gUI.roll.resMultMult === 'number' && gUI.roll.resMultMult !== '') {
-        currentResRoll *= gUI.roll.resMultMult;
-    }
-
-    // Apply Additive Bonus (resPlusPlus)
-    if (typeof gUI.roll.resPlusPlus === 'number' && gUI.roll.resPlusPlus !== '') {
-        currentResRoll += gUI.roll.resPlusPlus;
-    }
-
-    // --- Final Assignment with Conditional Rounding and Floor ---
+    // --- Final Rounding, Clamping, and Assignment ---
     if (!isNaN(currentResRoll)) {
-         // Check the result type for conditional rounding
-         const isArType = (typeof gUI.roll.resTyp === 'string') && gUI.roll.resTyp.trim().toLowerCase() === 'ar';
-
-         // Round based on type: 2 decimals for 'ar', integer otherwise
-         const roundedResRoll = isArType ? Number(currentResRoll.toFixed(2)) : Math.round(currentResRoll);
-
-         // Ensure the result is not less than 0
-         gUI.roll.resRoll = Math.max(0, roundedResRoll);
+        const isArType = (typeof gUI.roll.resTyp === 'string') && gUI.roll.resTyp.trim().toLowerCase() === 'ar';
+        const roundedResRoll = isArType ? Number(currentResRoll.toFixed(2)) : Math.round(currentResRoll);
+        gUI.roll.resRoll = Math.max(0, roundedResRoll);
     } else {
-         gUI.roll.resRoll = ''; // Assign '' if calculation resulted in NaN
-         console.warn("fCalcGUIRollResRoll: Calculation resulted in NaN.");
+        gUI.roll.resRoll = '';
+        console.warn("fCalcGUIRollResRoll: Calculation resulted in NaN.");
     }
-    // --- End Final Assignment ---
 
     fLogStatus(`⚙️ Calculated final resRoll: ${gUI.roll.resRoll}`);
-
 } // END fCalcGUIRollResRoll
 
 
 
 
-// fCalcRollLogPrepend //////////////////////////////////////////////////////////////////
-// Purpose -> Constructs the formatted HTML string for a completed roll event
-//            and prepends it to the sidebar roll log.
-// Inputs  -> None (reads gUI.roll properties)
-// Outputs -> None (calls fPrependToSidebar and fShowSidebar)
-// MODIFIED: Added diagnostic log for skSk/resSk comparison.
-function fCalcRollLogPrepend() {
 
-    // --- Build Title String ---
-    let title = gUI.roll.skName || 'Unknown Ability';
+
+// fCalcRollLogPrepend /////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Builds final roll result log message and prepends it to the sidebar.
+// Inputs  -> None (reads gUI.roll).
+// Outputs -> None (calls fPrependToSidebar, fShowSidebar).
+function fCalcRollLogPrepend() {
+    const html = fBuildRollLogHTML();
+    fPrependToSidebar(html);
+    fShowSidebar();
+    fLogStatus("📰 Roll Log message prepended.");
+} // END fCalcRollLogPrepend
+
+
+
+
+// fBuildRollLogHTML /////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Constructs and returns the formatted HTML log line based on gUI.roll data.
+// Inputs  -> None (reads gUI.roll).
+// Outputs -> (String): HTML string to insert in sidebar.
+function fBuildRollLogHTML() {
+
+    // --- Build Title ---
     const skTyp = (typeof gUI.roll.skTyp === 'string') ? gUI.roll.skTyp.trim() : '';
     const resTyp = (typeof gUI.roll.resTyp === 'string') ? gUI.roll.resTyp.trim() : '';
-    if (skTyp) {
-        title += ` ${skTyp}`;
-    }
-    if (resTyp && resTyp !== skTyp) {
-        title += ` (now ${resTyp})`;
-    }
+    let title = gUI.roll.skName || 'Unknown Ability';
+    if (skTyp) title += ` ${skTyp}`;
+    if (resTyp && resTyp !== skTyp) title += ` (now ${resTyp})`;
 
     // --- Get Morph String ---
     const morph = (typeof gUI.roll.skMorph === 'string' && gUI.roll.skMorph !== ',') ? gUI.roll.skMorph.trim() : '';
 
     // --- Build Roll Base String (Type(Sk->ResSk)) ---
-    let rollBase = '';
-    const skSk = gUI.roll.skSk; // Original base skill value
-    const resSk = gUI.roll.resSk; // Calculated resulting skill value
-
-    if (resTyp) {
-         rollBase += resTyp;
-    } else if (skTyp) {
-         rollBase += skTyp;
-    }
-
-    // --- ADDED DIAGNOSTIC LOG ---
-    console.log(`DEBUG fCalcRollLogPrepend: Values before base string build:`);
-    console.log(`  skSk:`, skSk, `(Type: ${typeof skSk})`);
-    console.log(`  resSk:`, resSk, `(Type: ${typeof resSk})`);
-    console.log(`  Comparison (resSk !== skSk):`, resSk !== skSk);
-    // --- END DIAGNOSTIC LOG ---
-
-
+    let rollBase = resTyp || skTyp;
+    const skSk = gUI.roll.skSk;
+    const resSk = gUI.roll.resSk;
     if (typeof skSk === 'number' && skSk !== '') {
-        rollBase += `(${skSk}`;
-        if (typeof resSk === 'number' && resSk !== '' && resSk !== skSk) {
-            rollBase += `->${resSk}`;
-        }
-        rollBase += ')';
+        rollBase += `(${skSk}${(typeof resSk === 'number' && resSk !== '' && resSk !== skSk) ? `->${resSk}` : ''})`;
     } else if (typeof resSk === 'number' && resSk !== '') {
-         rollBase += `(${resSk})`;
+        rollBase += `(${resSk})`;
     }
-
 
     // --- Build Roll Result String (~Roll->ResRoll) ---
-    let rollResult = '';
     const roll = gUI.roll.roll;
     const resRoll = gUI.roll.resRoll;
-
-    if ((typeof roll === 'number' || (typeof roll === 'string' && roll !== '')) && roll !== null && roll !== undefined) {
-        rollResult += ` ~${roll}`; // Added space before ~
-        if ((typeof resRoll === 'number' || (typeof resRoll === 'string' && resRoll !== '')) && resRoll !== null && resRoll !== undefined && resRoll !== roll) {
-             rollResult += `->${resRoll}`;
+    let rollResult = '';
+    if ((typeof roll === 'number' || (typeof roll === 'string' && roll !== '')) && roll != null) {
+        rollResult += ` ~${roll}`;
+        if ((typeof resRoll === 'number' || (typeof resRoll === 'string' && resRoll !== '')) && resRoll != null && resRoll !== roll) {
+            rollResult += `->${resRoll}`;
         }
-    } else if ((typeof resRoll === 'number' || (typeof resRoll === 'string' && resRoll !== '')) && resRoll !== null && resRoll !== undefined) {
-         rollResult += ` ~${resRoll}`; // Added space before ~
+    } else if ((typeof resRoll === 'number' || (typeof resRoll === 'string' && resRoll !== '')) && resRoll != null) {
+        rollResult += ` ~${resRoll}`;
     }
 
+    // --- Build Difficulty (^Dif) ---
+    const dif = gUI.roll.resDif;
+    let rollDif = (typeof dif === 'number' || (typeof dif === 'string' && dif !== '')) && dif != null ? `^${dif}` : '';
 
-    // --- Build Roll Difficulty String (^Dif) ---
-    let rollDif = '';
-    if ((typeof gUI.roll.resDif === 'number' || (typeof gUI.roll.resDif === 'string' && gUI.roll.resDif !== '')) && gUI.roll.resDif !== null && gUI.roll.resDif !== undefined) {
-        rollDif += `^${gUI.roll.resDif}`; 
-    }
-
-    // --- Build Success String (=Delta or =+Delta) ---
+    // --- Build Success Delta (=/+Δ) ---
     let rollSuccess = '';
-    if (typeof gUI.roll.resRoll === 'number' && typeof gUI.roll.resDif === 'number') {
-        const deltaSuccess = gUI.roll.resRoll - gUI.roll.resDif;
-        rollSuccess += (deltaSuccess > 0) ? ` =+${deltaSuccess}` : ` =${deltaSuccess}`; // Added space before =/+
+    if (typeof resRoll === 'number' && typeof dif === 'number') {
+        const delta = resRoll - dif;
+        rollSuccess = delta > 0 ? ` =+${delta}` : ` =${delta}`;
     }
 
-
-    // --- Combine Roll String ---
+    // --- Combine Roll Summary ---
     const roll1 = `${rollBase}${rollResult}${rollDif}${rollSuccess}`.trim();
-
 
     // --- Build Final HTML ---
     let html = `<span class="sidebar-ability-name">${title}</span>`;
-    if (morph) {
-        html += `<br>morph: ${morph}`;
-    }
-    if (roll1) {
-        html += `<br>${roll1}`;
-    }
-
-    // --- Prepend to Sidebar ---
-    fPrependToSidebar(html);
-    fShowSidebar();
-
-    fLogStatus("📰 Roll Log message prepended.");
-
-} // END fCalcRollLogPrepend
-
-
-
+    if (morph) html += `<br>morph: ${morph}`;
+    if (roll1) html += `<br>${roll1}`;
+    return html;
+} // END fBuildRollLogHTML
 
 
 
