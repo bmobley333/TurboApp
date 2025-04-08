@@ -88,7 +88,8 @@ const gUI = {
     resCombine: '',
     roll: '',
     resRoll: '',
-    isUnSk: false
+    isUnSk: false,
+    htmlHeader: ''   // Stores the header HTML string for the roll log
   },
     list: {
     // array lists
@@ -126,7 +127,7 @@ const gUI = {
   TOOLTIP_OFFSET_Y: 15,      // Tooltip vertical offset from cursor (px)
   TOOLTIP_OFFSET_X: 10,      // Tooltip horizontal offset from cursor (px)
   ROW_HEIGHT_PX: 20,          // Matches grid-auto-rows in style.html, used for sticky offset calculation
-  isDebugMode: false    // Turns console logging on (true) or off (false)
+  isDebugMode: true    // Turns console logging on (true) or off (false)
 };
 
 
@@ -146,7 +147,7 @@ function fMyConsoleLog(msg) {
     const delta = ((now - gUI.lastLogTime) / 1000).toFixed(2);
     const total = ((now - gUI.startTime) / 1000).toFixed(2);
     gUI.lastLogTime = now;
-    console.log(`Status Log: [${total}s] <span class="math-inline">\{msg\} \(\+</span>{delta}s)`);
+    console.log(`Status Log: [${total}s] ${msg} (+${delta}s)`);
 }; // END fMyConsoleLog
 
 

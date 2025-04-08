@@ -293,6 +293,18 @@ async function fHandleRollDiceAction() {
 
 
 
+// fAppendToHTMLHeader /////////////////////////////////////////////////////////////
+// Purpose -> Appends a new line (with <br> separator for next newHeader or Title section) to the gUI.roll.htmlHeader string.
+// Inputs  -> newHeader (String): The string to append.
+// Outputs -> None (modifies gUI.roll.htmlHeader).
+function fAppendToHTMLHeader(newHeader) {
+        gUI.roll.htmlHeader += `${newHeader}<br>`;
+} // END fAppendToHTMLHeader
+
+
+
+
+
 // fValidateAbilityCB /////////////////////////////////////////////////////////////////////////
 // Purpose -> Confirms that (row, col) is a valid Sk1/Sk2 checkbox based on gUI.sk1sk2CheckBoxes.
 // Inputs  -> row (Number), col (Number): 0-based indices.
@@ -345,7 +357,8 @@ async function fResetPopulateNCleanGUIRoll(r, c) {
             resCombine: '',
             isUnSk: false,
             roll: '',
-            resRoll: ''
+            resRoll: '',
+            htmlHeader: ''
          };
 
         const rData = gUI.roll;
@@ -704,7 +717,7 @@ function fApplyMorphResults(acc) {
 // Inputs  -> None (uses gUI.roll, gUI.currentSkRadioChecked, and reads grid via helpers).
 // Outputs -> (Promise<Boolean>): Resolves true if costs are met/overridden and applied,
 //                                resolves false if cancelled by user or insufficient resources.
-async function fVerifyNSetActMetaLuckUsesOnEtc(allGood) {
+async function fVerifyNSetActMetaLuckUsesOnEtc() {
     fMyConsoleLog("🛡️ Verifying & Setting Costs...");
 
     const { skAct, skMeta, skUses, skIsOn, skName } = gUI.roll; // Assuming skLuck might be added later
@@ -730,6 +743,7 @@ async function fVerifyNSetActMetaLuckUsesOnEtc(allGood) {
                 return false; // User chose No
             }
             fMyConsoleLog("✅ User chose to proceed despite insufficient Action Points.");
+            fAppendToHTMLHeader(`⚠️ NEGATIVE ACT POINTS: ${currentAct - actCost}`);
         }
 
         // Decrement Action Points
@@ -1077,7 +1091,7 @@ function fBuildRollLogHTML() {
     let rollSuccess = '';
     if (typeof resRoll === 'number' && typeof dif === 'number') {
         const delta = resRoll - dif;
-        rollSuccess = delta > 0 ? ` =+${delta}` : ` =${delta}`;
+        rollSuccess = delta >= 0 ? ` =+${delta} ✅` : ` =${delta} ❌`;
     }
 
     // --- Combine Roll1 Summary and add possible TC ---
@@ -1086,7 +1100,8 @@ function fBuildRollLogHTML() {
     if (roll1 && tc) roll1 += `   ${tc}`;
 
     // --- Build Final HTML ---
-    let html = `${title}`;
+    let html = gUI.roll.htmlHeader;
+    if (title) html += `${title}`;
     if (morph) html += `<br>morph: ${morph}`;
     if (roll1) html += `<br>${roll1}`;
     return html;
