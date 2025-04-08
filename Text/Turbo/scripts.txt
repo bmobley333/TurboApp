@@ -111,6 +111,15 @@ const gUI = {
   messageModalOverlay: null, // Reference to #messageModal div
   messageModalText: null,    // Reference to #messageText p tag
   messageModalCloseButton: null, // Reference to #closeMessageModal button
+  messagePromiseResolve: null, // Function to resolve the message promise [cite: 1]
+  // Prompt Box Elements --- <<< NEW SECTION ADDED ---
+  promptModalOverlay: null,    // Reference to #promptModal div
+  promptModalText: null,       // Reference to #promptText p tag
+  promptYesButton: null,       // Reference to #promptYesButton button
+  promptNoButton: null,        // Reference to #promptNoButton button
+  promptPromiseResolve: null,  // Function to resolve the prompt promise
+  promptPromiseReject: null,   // Function to reject the prompt promise (optional usage)
+
   // Other items
   currentSkRadioChecked: { r: null, c: null }, // Tracks coords of the single checked Sk1/Sk2 box
   HOVER_DELAY_MS: 300,       // Delay before showing tooltip (milliseconds)
@@ -2679,7 +2688,8 @@ function fLoadGameSheet() {
 window.addEventListener("DOMContentLoaded", () => {
     fLoadGameSheet(); 
     fSetupMenuInteractivity();
-    fSetupMessageModalListeners(); 
+    fSetupMessageModalListeners();
+    fSetupPromptModalListeners(); 
 });
 
 

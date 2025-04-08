@@ -11,12 +11,6 @@
 // ==========================================================================
 
 
-
-
-// gUI addition needed (add this within the gUI object in scripts.html or here if you prefer)
-// gUI.messagePromiseResolve = null; // Function to resolve the message promise
-
-
 // fShowMessage ///////////////////////////////////////////////////////////////////
 // Purpose -> Displays the message modal box and returns a Promise that resolves when closed.
 // Inputs -> message (String): The text or HTML to display in the message box.
@@ -140,13 +134,123 @@ function fSetupMessageModalListeners() {
 
 
 // ==========================================================================
-// === Die Roll Button         (End of Message Box) ===
+// === Prompt Box              (End of Message Box) ===
+// ==========================================================================
+
+
+// fShowPrompt ///////////////////////////////////////////////////////////////////
+// Purpose -> Displays the prompt modal box and returns a Promise that resolves with true (Yes) or false (No).
+// Inputs -> message (String): The text or HTML to display in the prompt box.
+// Outputs -> (Promise): Resolves with true if 'Yes' clicked, false if 'No' clicked.
+async function fShowPrompt(message) {
+    // --- Try to cache elements if not already done ---
+    if (!gUI.promptModalOverlay) gUI.promptModalOverlay = document.getElementById('promptModal');
+    if (!gUI.promptModalText) gUI.promptModalText = document.getElementById('promptText');
+    // --- End Caching Attempt ---
+
+    // Check if elements exist *after* attempting to cache
+    if (!gUI.promptModalOverlay || !gUI.promptModalText) {
+        console.error("Prompt modal elements not cached or found in the DOM!");
+        if (!gUI.promptModalOverlay) console.error("Missing: #promptModal");
+        if (!gUI.promptModalText) console.error("Missing: #promptText");
+        return Promise.reject(new Error("Prompt modal elements not found.")); // Reject if elements missing
+    }
+
+    // Set prompt content
+    gUI.promptModalText.innerHTML = message;
+
+    // Show the modal
+    gUI.promptModalOverlay.style.display = 'flex';
+
+    // Create and return a new Promise
+    // We store both resolve and reject, although reject might not be used often for simple Yes/No
+    return new Promise((resolve, reject) => {
+        gUI.promptPromiseResolve = resolve; // Store the resolve function
+        gUI.promptPromiseReject = reject;   // Store the reject function
+    });
+} // END fShowPrompt
+
+
+
+
+// fHandlePromptResponse ///////////////////////////////////////////////////////////
+// Purpose -> Hides the prompt modal and resolves the pending promise with the user's choice.
+// Inputs -> userResponse (Boolean): true for 'Yes', false for 'No'.
+// Outputs -> None
+function fHandlePromptResponse(userResponse) {
+    // Hide the modal first
+    if (gUI.promptModalOverlay) {
+        gUI.promptModalOverlay.style.display = 'none';
+    } else {
+        console.error("Prompt modal overlay element (#promptModal) not found when trying to hide.");
+    }
+
+    // Resolve the promise if a resolve function is stored
+    if (typeof gUI.promptPromiseResolve === 'function') {
+        gUI.promptPromiseResolve(userResponse); // Call the stored resolve function with the response
+        fLogStatus(`Prompt Promise Resolved with: ${userResponse}`); // Optional log
+    } else {
+        console.error("Prompt promise resolve function not found when trying to resolve.");
+    }
+
+    // Clear the stored functions after use
+    gUI.promptPromiseResolve = null;
+    gUI.promptPromiseReject = null;
+} // END fHandlePromptResponse
+
+
+
+
+// fSetupPromptModalListeners //////////////////////////////////////////////////////
+// Purpose -> Sets up event listeners for the prompt modal 'Yes' and 'No' buttons.
+// Inputs -> None
+// Outputs -> None
+function fSetupPromptModalListeners() {
+    fLogStatus("🖱️ Setting up Prompt Modal Listeners...");
+
+    // --- Cache elements if not already done (or get directly) ---
+    if (!gUI.promptYesButton) gUI.promptYesButton = document.getElementById('promptYesButton');
+    if (!gUI.promptNoButton) gUI.promptNoButton = document.getElementById('promptNoButton');
+    // We don't necessarily need the overlay reference here unless adding Escape/background click handling
+
+    // Check if buttons were found *now*
+    if (!gUI.promptYesButton) {
+        console.error("Setup failed: Prompt 'Yes' button (#promptYesButton) not found *during listener setup*.");
+        fLogStatus("⚠️ Prompt Modal Listeners NOT Attached (Yes button missing).");
+        return;
+    }
+    if (!gUI.promptNoButton) {
+        console.error("Setup failed: Prompt 'No' button (#promptNoButton) not found *during listener setup*.");
+        fLogStatus("⚠️ Prompt Modal Listeners NOT Attached (No button missing).");
+        return;
+    }
+    // --- End direct element fetching/caching ---
+
+    // Listener for the 'Yes' button
+    gUI.promptYesButton.addEventListener('click', () => fHandlePromptResponse(true));
+
+    // Listener for the 'No' button
+    gUI.promptNoButton.addEventListener('click', () => fHandlePromptResponse(false));
+
+    // @@Optional: Add Escape key listener here if needed (could call fHandlePromptResponse(false) or reject)
+    // document.addEventListener('keydown', (event) => {
+    //   if (gUI.promptModalOverlay && gUI.promptModalOverlay.style.display !== 'none' && event.key === 'Escape') {
+    //     fHandlePromptResponse(false); // Or potentially reject if you use the reject function
+    //   }
+    // });
+
+    fLogStatus("✅ Prompt Modal Listeners Attached.");
+} // END fSetupPromptModalListeners
+
+
+
+
+// ==========================================================================
+// === Die Roll Button         (End of Prompt Box) ===
 // ==========================================================================
 
 
 
-
-// scripts.html
 
 // fHandleRollDiceAction /////////////////////////////////////////////////////////////////////////
 // Purpose -> Top-level handler for "Roll Dice" action. Populates gUI.roll, validates inputs,
@@ -583,6 +687,21 @@ function fApplyMorphResults(acc) {
         if (!isNaN(num)) r.resDif = num;
     }
 } // END fApplyMorphResults
+
+
+
+
+//@@ // Verify the abilities costs and effects and properly decrements/adjusts said costs and effects
+//@@ // Including Act, Meta, Luck, Uses, On, etc.
+//@@ async function fVerifyNSetActMetaLuckUsesOnEtc()
+//@@ if gUI.roll.resAct is a number && >0
+//@@    then verify that cell ('Act','ActTot') is a number >= to gUI.roll.resAct
+//@@       If true then decrement cell ('Act','ActTot') by gUI.roll.resAct
+//@@    else
+//@@       fShowPrompt(`Not Enouch Action Points<br><br>Do you want to continue?`)
+//@@       If 'no' then return
+//@@       If 'yes' then decrement cell ('Act','ActTot') by gUI.roll.resAct
+//@@ // Place hoder for all the other conditions once this one works
 
 
 

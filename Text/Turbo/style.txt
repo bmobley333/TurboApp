@@ -550,3 +550,67 @@ body {
 
 
 
+/* ========================================================================== */
+/* === Prompt Box === */
+/* ========================================================================== */
+
+/* Use existing .modal-overlay styles [cite: 906] */
+/* Use existing .modal-content styles [cite: 912] */
+
+#promptText {
+  margin: 0 0 20px 0; /* Space below text */
+  font-size: 1.1em;
+  line-height: 1.6;
+  white-space: pre-wrap; /* Preserve line breaks */
+}
+
+.prompt-buttons {
+  display: flex;
+  justify-content: space-around; /* Space out buttons */
+  margin-top: 20px; /* Space above buttons */
+}
+
+#promptYesButton,
+#promptNoButton {
+  padding: 10px 25px;
+  border: none;
+  border-radius: 5px;
+  color: white;
+  font-size: 1em;
+  font-weight: bold;
+  cursor: pointer;
+  min-width: 80px; /* Ensure buttons have a minimum width */
+  transition: background-color 0.2s ease-in-out;
+}
+
+#promptYesButton {
+  background-color: #4CAF50; /* Green */
+}
+
+#promptNoButton {
+  background-color: #f44336; /* Red */
+}
+
+#promptYesButton:hover {
+  background-color: #45a049; /* Darker green */
+}
+
+#promptNoButton:hover {
+  background-color: #da190b; /* Darker red */
+}
+
+#promptYesButton:active {
+  background-color: #3e8e41;
+}
+
+#promptNoButton:active {
+  background-color: #b3140a;
+}
+
+
+
+
+
+
+
+
