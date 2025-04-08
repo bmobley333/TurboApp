@@ -1,5 +1,31 @@
 /* === style.html === */
 
+
+/* ========================================================================== */
+/* === Common inline styles === */
+/* ========================================================================== */
+
+
+/* === Common inline styles === */
+/* Example: <span class="green-bold">${text}</span> */
+.green-bold { color: green; font-weight: bold; }
+
+/* Example: <span class="red-italic">${text}</span> */
+.red-italic { color: red; font-style: italic; }
+
+/* Example: <span class="red-bold">${text}</span> */
+.red-bold { color: red; font-weight: bold; }
+
+/* Example: <span class="blue-bold">${text}</span> */
+.blue-bold { color: blue; font-weight: bold; }
+
+/* Example: <span class="tremendous">${text}</span> */
+.tremendous { background-color: yellow; color: green; font-weight: bold; }
+
+
+
+
+
 /* ========================================================================== */
 /* === Base Page Styling === */
 /* ========================================================================== */

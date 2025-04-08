@@ -866,9 +866,9 @@ function fBuildRollLogHTML() {
     // --- Build Title ---
     const skTyp = (typeof gUI.roll.skTyp === 'string') ? gUI.roll.skTyp.trim() : '';
     const resTyp = (typeof gUI.roll.resTyp === 'string') ? gUI.roll.resTyp.trim() : '';
-    let title = gUI.roll.skName || 'Unknown Ability';
+    let title = `<span class="sidebar-ability-name">${gUI.roll.skName || 'Unknown Ability'}</span>`;
     if (skTyp) title += ` ${skTyp}`;
-    if (resTyp && resTyp !== skTyp) title += ` (now ${resTyp})`;
+    if (resTyp && resTyp !== skTyp) title += ` (<span class="red-bold">now</span> ${resTyp})`;
 
     // --- Get Morph String ---
     const morph = (typeof gUI.roll.skMorph === 'string' && gUI.roll.skMorph !== ',') ? gUI.roll.skMorph.trim() : '';
@@ -907,11 +907,13 @@ function fBuildRollLogHTML() {
         rollSuccess = delta > 0 ? ` =+${delta}` : ` =${delta}`;
     }
 
-    // --- Combine Roll Summary ---
-    const roll1 = `${rollBase}${rollResult}${rollDif}${rollSuccess}`.trim();
+    // --- Combine Roll1 Summary and add possible TC ---
+    let roll1 = `${rollBase}${rollResult}${rollDif}${rollSuccess}`.trim();
+    const tc = fCStc();
+    if (roll1 && tc) roll1 += `   ${tc}`;
 
     // --- Build Final HTML ---
-    let html = `<span class="sidebar-ability-name">${title}</span>`;
+    let html = `${title}`;
     if (morph) html += `<br>morph: ${morph}`;
     if (roll1) html += `<br>${roll1}`;
     return html;
@@ -971,9 +973,9 @@ function fCStc() {
   const endS = gUI?.style?.endS ?? '';   // Span End
 
   return roll === 1
-    ? `${treS}T${endS}`
+    ? `<span class="tremendous">T</span>`
     : roll === 2
-    ? `${redBS}C${endS}`
+    ? `<span class="red-bold">C</span>`
     : "";
 } // END fCStc
 
