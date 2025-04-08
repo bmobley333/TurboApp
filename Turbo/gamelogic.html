@@ -153,26 +153,27 @@ function fSetupMessageModalListeners() {
 //            runs morph/roll/resolution logic, and posts result.
 // Inputs  -> None (uses gUI.currentSkRadioChecked).
 // Outputs -> None (updates gUI and DOM).
-async function fHandleRollDiceAction() { // <<< Added async
+async function fHandleRollDiceAction() { 
     fLogStatus("🎲 Roll Dice Action Triggered");
 
     const { r, c } = gUI.currentSkRadioChecked;
 
     // Validate target is a valid Sk1/Sk2 checkbox
     // Must await as fValidateAbilityCB is now async
-    if (!await fValidateAbilityCB(r, c)) return; // <<< Added await
+    if (!await fValidateAbilityCB(r, c)) return; 
 
     // Populate gUI.roll from sheet and clean it
     // Must await if fResetPopulateNCleanGUIRoll becomes async (due to its catch block)
-    if (!await fResetPopulateNCleanGUIRoll(r, c)) return; // <<< Added await (assuming fResetPopulateNCleanGUIRoll is made async)
+    if (!await fResetPopulateNCleanGUIRoll(r, c)) return; //  (assuming fResetPopulateNCleanGUIRoll is made async)
 
     // Confirm ability has valid name and type
     // Must await as fVerifyAbility is now async
-    if (!await fVerifyAbility()) return; // <<< Added await
+    if (!await fVerifyAbility()) return; 
 
     // Core calculation pipeline
     // Must await as fProcessMorph is now async
-    await fProcessMorph(); // <<< Added await
+    await fProcessMorph(); 
+    await fVerifyNSetActMetaLuckUsesOnEtc();
     fCalcGUIRollResSk();
     fCalcGUIRollRoll();
     fCalcGUIRollResRoll();
@@ -187,10 +188,10 @@ async function fHandleRollDiceAction() { // <<< Added async
 // Inputs  -> row (Number), col (Number): 0-based indices.
 // Outputs -> (Boolean): true if valid, false otherwise.
 // MODIFIED: Made async to await fShowMessage
-async function fValidateAbilityCB(row, col) {             // <<< Added async
+async function fValidateAbilityCB(row, col) {             
     const isValid = fIsSkRadioGroupMember(row, col);
     if (!isValid) {
-        await fShowMessage("⚠️ Please select a valid Ability checkbox first!"); // <<< Added await
+        await fShowMessage("⚠️ Please select a valid Ability checkbox first!"); 
     }
     return isValid;
 } // END fValidateAbilityCB
@@ -276,19 +277,19 @@ async function fResetPopulateNCleanGUIRoll(r, c) {
 // Inputs  -> None (uses gUI.roll and gUI.list).
 // Outputs -> (Boolean): true if ability is valid, false otherwise.
 // MODIFIED: Made async to await fShowMessage
-async function fVerifyAbility() {                           // <<< Added async
+async function fVerifyAbility() {                           
     const { skName, skTyp, sk1CB } = gUI.roll;
 
     // --- Check: Ability name must exist ---
     if (!skName) {
-        await fShowMessage("⚠️ Please select an Ability with a name!"); // <<< Added await
+        await fShowMessage("⚠️ Please select an Ability with a name!"); 
         return false;
     }
 
     // --- Check: Skill Typ must be a string ---
     if (!skTyp || typeof skTyp !== 'string') {
         const is2ndCol = !sk1CB;
-        await fShowMessage(`⚠️ No skill Typ found${is2ndCol ? '<br><br>You may have wanted the 1st column.' : ''}`); // <<< Added await
+        await fShowMessage(`⚠️ No skill Typ found${is2ndCol ? '<br><br>You may have wanted the 1st column.' : ''}`); 
         return false;
     }
 
@@ -296,7 +297,7 @@ async function fVerifyAbility() {                           // <<< Added async
     const skTypLower = skTyp.trim().toLowerCase();
     const isValidSkTyp = gUI.list.skTyp.some(type => type.toLowerCase() === skTypLower);
     if (!isValidSkTyp) {
-        await fShowMessage(`⚠️ ${skTyp} is an invalid Skill Type!`); // <<< Added await
+        await fShowMessage(`⚠️ ${skTyp} is an invalid Skill Type!`); 
         return false;
     }
 
@@ -310,7 +311,7 @@ async function fVerifyAbility() {                           // <<< Added async
 // Purpose -> Processes gUI.roll.skMorph string to extract modifiers and flags into res* fields.
 // Inputs  -> None (reads gUI.roll.skMorph, gUI.roll.skSk, gUI.list).
 // Outputs -> None (updates gUI.roll directly).
-async function fProcessMorph() { // <<< Added async
+async function fProcessMorph() { 
     const skMorph = gUI.roll.skMorph || '';
     if (!skMorph) {
         fLogStatus("ℹ️ No skMorph string to process.");
@@ -370,11 +371,13 @@ async function fParseMorphComponents(morphComponents, morphLower, acc) {
     let index = 0;
     // Manual index tracking needed for morphLower
     for (const component of morphComponents) {
+
         const lower = morphLower[index];
         // --- isUnSk Check
         if (lower === 'un' || lower === 'unsk') gUI.roll.isUnSk = true;
+
         // --- resTyp Check (find LAST match)
-        if (gUI.list.skTyp.includes(lower)) {
+        if (gUI.list.skTyp.some(t => t.toLowerCase() === lower)) {
             acc.lastResTypMatch = component;
             acc.foundResTyp = true;
         }
@@ -412,7 +415,7 @@ async function fParseMorphComponents(morphComponents, morphLower, acc) {
             } else {
                 // Use await here
                 await fShowMessage("❌ Morph includes illegal '/0'. Please correct and try again.");
-                // <<< Added await
+                
                 console.warn("resMult divide by zero:", component);
                 // Consider adding 'return;' or 'throw new Error(...);' here if this error should halt processing
             }
@@ -430,7 +433,7 @@ async function fParseMorphComponents(morphComponents, morphLower, acc) {
             } else {
                 // Use await here
                 await fShowMessage("❌ Morph includes illegal '//0'. Please correct and try again.");
-                // <<< Added await
+                
                 console.warn("resMultMult divide by zero:", component);
                 // Consider adding 'return;' or 'throw new Error(...);' here if this error should halt processing
             }
@@ -580,7 +583,6 @@ function fApplyMorphResults(acc) {
         if (!isNaN(num)) r.resDif = num;
     }
 } // END fApplyMorphResults
-
 
 
 
