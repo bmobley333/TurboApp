@@ -73,7 +73,7 @@ function fHideMessage() {
     if (typeof gUI.messagePromiseResolve === 'function') {
         gUI.messagePromiseResolve();          // Call the stored resolve function
         gUI.messagePromiseResolve = null; // Clear the stored function
-        fLogStatus("Message Promise Resolved"); // Optional log
+        fMyConsoleLog("Message Promise Resolved"); // Optional log
     }
 } // END fHideMessage
 
@@ -88,7 +88,7 @@ function fHideMessage() {
 //       which now handles resolving the promise.
 function fSetupMessageModalListeners() {
 
-    fLogStatus("🖱️ Setting up Message Modal Listeners...");
+    fMyConsoleLog("🖱️ Setting up Message Modal Listeners...");
     // --- Get elements directly here, don't rely solely on gUI cache ---
     const overlayElement = document.getElementById('messageModal');
     const closeButtonElement = document.getElementById('closeMessageModal');
@@ -97,12 +97,12 @@ function fSetupMessageModalListeners() {
     // Check if elements were found *now*
     if (!overlayElement) {
         console.error("Setup failed: Message modal overlay element (#messageModal) not found *during listener setup*.");
-        fLogStatus("⚠️ Message Modal Listeners NOT Attached (overlay missing).");
+        fMyConsoleLog("⚠️ Message Modal Listeners NOT Attached (overlay missing).");
         return;
     }
     if (!closeButtonElement) {
         console.error("Setup failed: Message modal close button (#closeMessageModal) not found *during listener setup*.");
-        fLogStatus("⚠️ Message Modal Listeners NOT Attached (button missing).");
+        fMyConsoleLog("⚠️ Message Modal Listeners NOT Attached (button missing).");
         return; // Don't add listeners if button is missing
     }
     // --- End direct element fetching ---
@@ -127,7 +127,7 @@ function fSetupMessageModalListeners() {
         }
     });
 
-    fLogStatus("✅ Message Modal Listeners Attached.");
+    fMyConsoleLog("✅ Message Modal Listeners Attached.");
 
 } // END fSetupMessageModalListeners
 
@@ -188,7 +188,7 @@ function fHandlePromptResponse(userResponse) {
     // Resolve the promise if a resolve function is stored
     if (typeof gUI.promptPromiseResolve === 'function') {
         gUI.promptPromiseResolve(userResponse); // Call the stored resolve function with the response
-        fLogStatus(`Prompt Promise Resolved with: ${userResponse}`); // Optional log
+        fMyConsoleLog(`Prompt Promise Resolved with: ${userResponse}`); // Optional log
     } else {
         console.error("Prompt promise resolve function not found when trying to resolve.");
     }
@@ -206,7 +206,7 @@ function fHandlePromptResponse(userResponse) {
 // Inputs -> None
 // Outputs -> None
 function fSetupPromptModalListeners() {
-    fLogStatus("🖱️ Setting up Prompt Modal Listeners...");
+    fMyConsoleLog("🖱️ Setting up Prompt Modal Listeners...");
 
     // --- Cache elements if not already done (or get directly) ---
     if (!gUI.promptYesButton) gUI.promptYesButton = document.getElementById('promptYesButton');
@@ -216,12 +216,12 @@ function fSetupPromptModalListeners() {
     // Check if buttons were found *now*
     if (!gUI.promptYesButton) {
         console.error("Setup failed: Prompt 'Yes' button (#promptYesButton) not found *during listener setup*.");
-        fLogStatus("⚠️ Prompt Modal Listeners NOT Attached (Yes button missing).");
+        fMyConsoleLog("⚠️ Prompt Modal Listeners NOT Attached (Yes button missing).");
         return;
     }
     if (!gUI.promptNoButton) {
         console.error("Setup failed: Prompt 'No' button (#promptNoButton) not found *during listener setup*.");
-        fLogStatus("⚠️ Prompt Modal Listeners NOT Attached (No button missing).");
+        fMyConsoleLog("⚠️ Prompt Modal Listeners NOT Attached (No button missing).");
         return;
     }
     // --- End direct element fetching/caching ---
@@ -239,7 +239,7 @@ function fSetupPromptModalListeners() {
     //   }
     // });
 
-    fLogStatus("✅ Prompt Modal Listeners Attached.");
+    fMyConsoleLog("✅ Prompt Modal Listeners Attached.");
 } // END fSetupPromptModalListeners
 
 
@@ -257,31 +257,37 @@ function fSetupPromptModalListeners() {
 //            runs morph/roll/resolution logic, and posts result.
 // Inputs  -> None (uses gUI.currentSkRadioChecked).
 // Outputs -> None (updates gUI and DOM).
-async function fHandleRollDiceAction() { 
-    fLogStatus("🎲 Roll Dice Action Triggered");
+async function fHandleRollDiceAction() {
+    fMyConsoleLog("🎲 Roll Dice Action Triggered");
 
     const { r, c } = gUI.currentSkRadioChecked;
-
     // Validate target is a valid Sk1/Sk2 checkbox
-    // Must await as fValidateAbilityCB is now async
-    if (!await fValidateAbilityCB(r, c)) return; 
+    if (!await fValidateAbilityCB(r, c)) return; // Early exit if invalid target
 
     // Populate gUI.roll from sheet and clean it
-    // Must await if fResetPopulateNCleanGUIRoll becomes async (due to its catch block)
-    if (!await fResetPopulateNCleanGUIRoll(r, c)) return; //  (assuming fResetPopulateNCleanGUIRoll is made async)
+    if (!await fResetPopulateNCleanGUIRoll(r, c)) return; // Early exit if population fails
 
     // Confirm ability has valid name and type
-    // Must await as fVerifyAbility is now async
-    if (!await fVerifyAbility()) return; 
+    if (!await fVerifyAbility()) return; // Early exit if ability invalid
 
-    // Core calculation pipeline
-    // Must await as fProcessMorph is now async
-    await fProcessMorph(); 
-    await fVerifyNSetActMetaLuckUsesOnEtc();
+    // Process morphs (can potentially show messages, but doesn't typically halt flow)
+    await fProcessMorph();
+
+    // *** CHECK THE RESULT of the verification function ***
+    const costsOk = await fVerifyNSetActMetaLuckUsesOnEtc();
+    if (!costsOk) {
+        fMyConsoleLog("🚦 Halting Roll Dice Action due to cost verification failure or cancellation.");
+        return; // *** EXIT HERE if costs not met/verified ***
+    }
+
+    // --- Costs OK, proceed with calculations and logging ---
     fCalcGUIRollResSk();
     fCalcGUIRollRoll();
     fCalcGUIRollResRoll();
     fCalcRollLogPrepend();
+
+    fMyConsoleLog("✅ Roll Dice Action Completed"); // Optional: Log completion
+
 } // END fHandleRollDiceAction
 
 
@@ -362,7 +368,7 @@ async function fResetPopulateNCleanGUIRoll(r, c) {
         // --- Default resTyp to skTyp ---
         rData.resTyp = rData.skTyp;
         // --- Final status log ---
-        fLogStatus(`⚙️ Populated & Cleaned gUI.roll for row ${r} (isSk1: ${isSk1})`);
+        fMyConsoleLog(`⚙️ Populated & Cleaned gUI.roll for row ${r} (isSk1: ${isSk1})`);
         return true;
 
     } catch (err) {
@@ -418,7 +424,7 @@ async function fVerifyAbility() {
 async function fProcessMorph() { 
     const skMorph = gUI.roll.skMorph || '';
     if (!skMorph) {
-        fLogStatus("ℹ️ No skMorph string to process.");
+        fMyConsoleLog("ℹ️ No skMorph string to process.");
         return;
     }
 
@@ -451,7 +457,7 @@ async function fProcessMorph() {
 
     fApplyMorphResults(acc);
 
-    fLogStatus("⚙️ Processed skMorph string.");
+    fMyConsoleLog("⚙️ Processed skMorph string.");
 } // END fProcessMorph
 
 
@@ -691,17 +697,63 @@ function fApplyMorphResults(acc) {
 
 
 
-//@@ // Verify the abilities costs and effects and properly decrements/adjusts said costs and effects
-//@@ // Including Act, Meta, Luck, Uses, On, etc.
-//@@ async function fVerifyNSetActMetaLuckUsesOnEtc()
-//@@ if gUI.roll.resAct is a number && >0
-//@@    then verify that cell ('Act','ActTot') is a number >= to gUI.roll.resAct
-//@@       If true then decrement cell ('Act','ActTot') by gUI.roll.resAct
-//@@    else
-//@@       fShowPrompt(`Not Enouch Action Points<br><br>Do you want to continue?`)
-//@@       If 'no' then return
-//@@       If 'yes' then decrement cell ('Act','ActTot') by gUI.roll.resAct
-//@@ // Place hoder for all the other conditions once this one works
+// fVerifyNSetActMetaLuckUsesOnEtc ///////////////////////////////////////////////////////////
+// Purpose -> Verify ability costs (Act, Meta, Luck, Uses) and toggle 'IsOn' state.
+//            Prompts user if insufficient Action Points. Halts if insufficient Meta/Luck/Uses.
+//            Decrements resources if proceeding.
+// Inputs  -> None (uses gUI.roll, gUI.currentSkRadioChecked, and reads grid via helpers).
+// Outputs -> (Promise<Boolean>): Resolves true if costs are met/overridden and applied,
+//                                resolves false if cancelled by user or insufficient resources.
+async function fVerifyNSetActMetaLuckUsesOnEtc(allGood) {
+    fMyConsoleLog("🛡️ Verifying & Setting Costs...");
+
+    const { skAct, skMeta, skUses, skIsOn, skName } = gUI.roll; // Assuming skLuck might be added later
+
+    // --- 1. Action Points (Act) ---
+    const actCost = Number(skAct); // skAct should be a number from fResetPopulateNCleanGUIRoll
+
+    if (actCost > 0) {
+        let currentAct = fGetGridValue('Act', 'ActTot', true); // Use 'let' as it might be updated
+
+        // *** CHANGE: Treat NaN as an error ***
+        if (isNaN(currentAct)) {
+            await fShowMessage(`❌ Error reading current Action Points from cell ('Act', 'ActTot'). Cannot proceed.`);
+            fMyConsoleLog("🚫 Failed to verify costs: Could not read Action Points.");
+            return false; // Halt if we can't read the current value
+        }
+
+        if (actCost > currentAct) {
+            fMyConsoleLog(`⚠️ Insufficient Action Points (Need ${actCost}, Have ${currentAct})`);
+            const proceed = await fShowPrompt(`Not Enough Action Points (${currentAct}) to use '${skName}' (Cost: ${actCost})<br><br>Do you want to go negative?`);
+            if (!proceed) {
+                fMyConsoleLog("🚫 User cancelled due to insufficient Action Points.");
+                return false; // User chose No
+            }
+            fMyConsoleLog("✅ User chose to proceed despite insufficient Action Points.");
+        }
+
+        // Decrement Action Points
+        const newActTotal = currentAct - actCost;
+        if (!fSetGridValue('Act', 'ActTot', newActTotal)) {
+             await fShowMessage(`❌ Error updating Action Points ('Act', 'ActTot'). Aborting.`);
+             fMyConsoleLog("🚫 Failed to verify costs: Could not update Action Points.");
+             return false; // Stop if update failed
+        }
+        fMyConsoleLog(`   -> Action Points: ${currentAct} -> ${newActTotal}`);
+    }
+
+    // --- Placeholder sections for other costs (Meta, Luck, Uses, On) ---
+    // @@ Add Meta check logic here
+    // @@ Add Luck check logic here
+    // @@ Add Uses check logic here
+    // @@ Add Is On toggle/duration logic here
+
+
+    // --- If all checks passed or were overridden ---
+    fMyConsoleLog("✅ Costs Verified & Applied Successfully (for implemented checks).");
+    return true; // *** ADDED: Signal success ***
+
+} // END fVerifyNSetActMetaLuckUsesOnEtc
 
 
 
@@ -716,7 +768,7 @@ function fCalcGUIRollResSk() {
     // Use resCombine if it's a valid number; fallback to skSk if needed
     if (typeof gUI.roll.resCombine === 'number') {
         currentResSk = gUI.roll.resCombine;
-        fLogStatus("   -> Using resCombine as base for resSk calculation.");
+        fMyConsoleLog("   -> Using resCombine as base for resSk calculation.");
     } else if (typeof gUI.roll.skSk === 'number') {
         currentResSk = gUI.roll.skSk;
     } else {
@@ -774,7 +826,7 @@ function fCalcGUIRollResSk() {
         gUI.roll.resSk = '';
     }
 
-    fLogStatus(`⚙️ Calculated final resSk: ${gUI.roll.resSk}`);
+    fMyConsoleLog(`⚙️ Calculated final resSk: ${gUI.roll.resSk}`);
 } // END fCalcGUIRollResSk
 
 
@@ -794,7 +846,7 @@ function fCalcGUIRollRoll() {
     // --- Validate resSk (must be a number >= 1) ---
     if (typeof resSkValue !== 'number' || resSkValue < 1) {
         gUI.roll.roll = '';
-        fLogStatus(`ℹ️ Cannot calculate roll: Invalid resSk value (${resSkValue}).`);
+        fMyConsoleLog(`ℹ️ Cannot calculate roll: Invalid resSk value (${resSkValue}).`);
         return;
     }
 
@@ -845,7 +897,7 @@ function fCalcGUIRollRoll() {
 
 
     // --- Final Logging ---
-    fLogStatus(`⚙️ Calculated roll (${resTypValue}): ${gUI.roll.roll}`);
+    fMyConsoleLog(`⚙️ Calculated roll (${resTypValue}): ${gUI.roll.roll}`);
 } // END fCalcGUIRollRoll
 
 
@@ -866,7 +918,7 @@ function fCalcGUIRollResRoll() {
         // Round appropriately based on type (AR needs decimals)
         const roundedFlatResult = isArType ? Number(flatResult.toFixed(2)) : Math.round(flatResult);
         gUI.roll.resRoll = Math.max(0, roundedFlatResult); // Clamp at 0 minimum
-        fLogStatus(`⚙️ Calculated resRoll (override, ${isArType ? 'AR-rounded' : 'INT-rounded'}): ${gUI.roll.resRoll}`);
+        fMyConsoleLog(`⚙️ Calculated resRoll (override, ${isArType ? 'AR-rounded' : 'INT-rounded'}): ${gUI.roll.resRoll}`);
         return; // Exit early as override takes precedence
     }
 
@@ -875,7 +927,7 @@ function fCalcGUIRollResRoll() {
     const initialRoll = gUI.roll.roll;
     if (typeof initialRoll !== 'number' || initialRoll === '' || isNaN(initialRoll)) { // Added isNaN check
         gUI.roll.resRoll = '';
-        fLogStatus(`ℹ️ Cannot calculate resRoll: Invalid initial roll value (${initialRoll}).`);
+        fMyConsoleLog(`ℹ️ Cannot calculate resRoll: Invalid initial roll value (${initialRoll}).`);
         return;
     }
 
@@ -909,7 +961,7 @@ function fCalcGUIRollResRoll() {
         console.warn("fCalcGUIRollResRoll: Calculation resulted in NaN.");
     }
 
-    fLogStatus(`⚙️ Calculated final resRoll: ${gUI.roll.resRoll}`);
+    fMyConsoleLog(`⚙️ Calculated final resRoll: ${gUI.roll.resRoll}`);
 } // END fCalcGUIRollResRoll
 
 
@@ -929,7 +981,7 @@ function fCalcGUIRollResRoll() {
         const isArType = (typeof gUI.roll.resTyp === 'string') && gUI.roll.resTyp.trim().toLowerCase() === 'ar';
         const roundedFlatResult = isArType ? Number(flatResult.toFixed(2)) : Math.round(flatResult);
         gUI.roll.resRoll = Math.max(0, roundedFlatResult);
-        fLogStatus(`⚙️ Calculated resRoll (override, ${isArType ? 'AR-rounded' : 'INT-rounded'}): ${gUI.roll.resRoll}`);
+        fMyConsoleLog(`⚙️ Calculated resRoll (override, ${isArType ? 'AR-rounded' : 'INT-rounded'}): ${gUI.roll.resRoll}`);
         return;
     }
 
@@ -937,7 +989,7 @@ function fCalcGUIRollResRoll() {
     const initialRoll = gUI.roll.roll;
     if (typeof initialRoll !== 'number' || initialRoll === '') {
         gUI.roll.resRoll = '';
-        fLogStatus(`ℹ️ Cannot calculate resRoll: Invalid initial roll value (${initialRoll}).`);
+        fMyConsoleLog(`ℹ️ Cannot calculate resRoll: Invalid initial roll value (${initialRoll}).`);
         return;
     }
 
@@ -956,7 +1008,7 @@ function fCalcGUIRollResRoll() {
         console.warn("fCalcGUIRollResRoll: Calculation resulted in NaN.");
     }
 
-    fLogStatus(`⚙️ Calculated final resRoll: ${gUI.roll.resRoll}`);
+    fMyConsoleLog(`⚙️ Calculated final resRoll: ${gUI.roll.resRoll}`);
 } // END fCalcGUIRollResRoll
 
 
@@ -972,7 +1024,7 @@ function fCalcRollLogPrepend() {
     const html = fBuildRollLogHTML();
     fPrependToSidebar(html);
     fShowSidebar();
-    fLogStatus("📰 Roll Log message prepended.");
+    fMyConsoleLog("📰 Roll Log message prepended.");
 } // END fCalcRollLogPrepend
 
 
