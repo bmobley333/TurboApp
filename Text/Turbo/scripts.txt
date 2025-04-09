@@ -105,6 +105,15 @@ roll: {
     skTyp: ['Atr','Sk','Atk','DMG','Def','AR','Str'], // Note free, luck, un, unSk are not skill Types and dealth with elsewhere
     metaColor: ['R','O','Y','G','B']
   },
+  range: {
+    // Define ranges using objects with r1, c1, r2, c2 properties
+    morphs: [ // <-- Array is correct because there are MULTIPLE morph ranges
+      { r1: 'AbilTblStart_R', c1: 'Morph1', r2: 'AbilTblEnd_R', c2: 'Morph1' },
+      { r1: 'AbilTblStart_R', c1: 'Morph2', r2: 'AbilTblEnd_R', c2: 'Morph2' }
+    ],
+    monsters: { r1: 'CustMon', c1: 'NumMon', r2: 'LastMon_R', c2: 'MonSize' },
+    currentNish: { r1: 'Nish', c1: 'Nish', r2: 'Nish', c2: 'Nish' }
+  },
   // Sets to store the indices of currently hidden columns/rows
   hiddenColumns: new Set(),
   hiddenRows: new Set(),
@@ -496,147 +505,6 @@ function fApplyCellFormatting(cell, c, bgColor, rowFormat, isUrl) {
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////// END fCreateAndFormatCell and helpers
-
-
-
-// fSetGridTagsFromHeaders //////////////////////////////////////////////////////////////////////////////////////////////////
-// Purpose -> Populates gUI.rowTag and gUI.colTag from tag headers in gUI.arr (Col 0 for rows, Row 0 for columns)
-// Note: Uses more robust version from current scripts.html
-function fSetGridTagsFromHeaders() {
-    fMyConsoleLog("⚙️ Parsing Grid Tags...");
-    gUI.rowTag = {};
-    gUI.colTag = {};
-
-    const gameArr = gUI.arr;
-    if (!gameArr || gameArr.length === 0 || !gameArr[0]) {
-        console.warn("⚠️ Cannot parse tags, gUI.arr is empty or malformed.");
-        fMyConsoleLog("⚠️ Grid Tags: Data empty.");
-        return;
-    }
-
-    const rows = gameArr.length;
-    const cols = gameArr[0].length;
-
-    // Row Tags (Column 0)
-    for (let r = 0; r < rows; r++) {
-        const rowCell = gameArr[r][0]; // Using direct access as optional chaining wasn't the fix
-        if (typeof rowCell === 'string' && rowCell) { // Ensure it's a non-empty string
-            rowCell.split(',').forEach(tag => {
-                const trimmedTag = tag.trim();
-                if (trimmedTag) gUI.rowTag[trimmedTag] = r;
-            });
-        }
-    }
-
-    // Col Tags (Row 0)
-    const colHeaderRow = gameArr[0];
-    if (colHeaderRow) {
-        for (let c = 0; c < cols; c++) {
-            const colCell = colHeaderRow[c]; // Check if cell exists
-            if (typeof colCell === 'string' && colCell) { // Ensure it's a non-empty string
-                colCell.split(',').forEach(tag => {
-                    const trimmedTag = tag.trim();
-                    if (trimmedTag) gUI.colTag[trimmedTag] = c;
-                });
-            }
-        }
-    }
-    fMyConsoleLog("✅ Grid Tags Parsed");
-}; // END fSetGridTagsFromHeaders
-
-
-
-
-// fGetGridValue ///////////////////////////////////////////////////////////////////
-// Purpose -> Retrieves a value from gUI.arr using tags or indices, with optional type coercion.
-// Inputs -> rowRef (String|Number): Row tag or 0-based index.
-//        -> colRef (String|Number): Column tag or 0-based index.
-//        -> asNumber (Boolean): If true, attempt to parse the value as a number (default: false).
-// Outputs -> (Any|NaN): The value from the grid, or NaN if type coercion fails or cell not found.
-function fGetGridValue(rowRef, colRef, asNumber = false) {
-    const r = resolveRow(rowRef);
-    const c = resolveCol(colRef);
-
-    if (isNaN(r) || isNaN(c)) {
-        console.warn(`fGetGridValue: Could not resolve (${rowRef}, ${colRef}) to valid indices.`);
-        return NaN; // Return NaN for unresolved refs
-    }
-
-    const value = gUI.arr?.[r]?.[c];
-
-    if (value === undefined || value === null || value === '') {
-        // Treat empty/null/undefined as potentially 0 if requesting a number, else undefined
-        return asNumber ? 0 : undefined;
-    }
-
-    if (asNumber) {
-        const numValue = Number(value);
-        if (isNaN(numValue)) {
-            console.warn(`fGetGridValue: Value at (${rowRef}, ${colRef}) -> [${r}, ${c}] ("${value}") is not a valid number.`);
-            return NaN; // Return NaN if conversion fails
-        }
-        return numValue;
-    }
-
-    return value;
-} // END fGetGridValue
-
-
-
-
-// fSetGridValue ///////////////////////////////////////////////////////////////////
-// Purpose -> Updates a value in gUI.arr and the corresponding cell display in gUI.grid2D.
-// Inputs -> rowRef (String|Number): Row tag or 0-based index.
-//        -> colRef (String|Number): Column tag or 0-based index.
-//        -> newValue (Any): The new value to set.
-// Outputs -> (Boolean): true if successful, false otherwise.
-function fSetGridValue(rowRef, colRef, newValue) {
-    const r = resolveRow(rowRef);
-    const c = resolveCol(colRef);
-
-    if (isNaN(r) || isNaN(c)) {
-        console.warn(`fSetGridValue: Could not resolve (${rowRef}, ${colRef}) to valid indices.`);
-        return false;
-    }
-
-    if (!gUI.arr?.[r]) {
-        console.warn(`fSetGridValue: Row ${r} does not exist in gUI.arr.`);
-        return false;
-    }
-
-    // Update data model
-    gUI.arr[r][c] = newValue;
-
-    // Update DOM if cell exists
-    const cell = gUI.grid2D?.[r]?.[c];
-    if (cell) {
-        // Handle checkboxes separately if needed in the future
-        // For now, just update text content for non-checkbox cells
-        if (cell.contentEditable === 'true' || !cell.querySelector('input[type="checkbox"]')) {
-             // Avoid adding IDs back if they were stripped during rendering
-             const idPattern = /\s{2,}_\w{6}$/;
-             const text = (typeof newValue === 'string' && idPattern.test(newValue))
-                 ? newValue.replace(idPattern, '')
-                 : newValue;
-             cell.textContent = text ?? ''; // Use empty string for null/undefined
-        } else {
-            // If it IS a checkbox cell, update its checked state
-            const checkbox = cell.querySelector('input[type="checkbox"]');
-            if (checkbox) {
-                 const valStr = String(newValue).toUpperCase();
-                 checkbox.checked = newValue === true || valStr === "TRUE";
-            }
-        }
-        // fMyConsoleLog(`DOM updated for [${r}, ${c}]`); // Optional: Add verbose logging if needed
-    } else {
-        console.warn(`fSetGridValue: Cell element not found in gUI.grid2D at [${r}, ${c}]. Data model updated, DOM not.`);
-        // return false; // Decide if DOM update failure should cause function failure
-    }
-
-    fMyConsoleLog(`Grid set [${r}, ${c}] = ${newValue}`); // Log successful update
-    return true;
-} // END fSetGridValue
-
 
 
 
@@ -1327,65 +1195,6 @@ function fShowColumnRange(rangeArray) {
 
 
 
-// fToggleGearColumns ///////////////////////////////////////////////////////////////
-// Purpose -> Checks if gear columns (defined in gUI.gearTblCols) are currently visible
-//          and calls the appropriate show/hide range function to toggle their state.
-function fToggleGearColumns() {
-    const gearRanges = gUI.gearTblCols;
-
-    // Basic validation of the configuration
-    if (!Array.isArray(gearRanges) || gearRanges.length === 0) {
-        console.error("❌ Cannot toggle gear columns: gUI.gearTblCols is not a valid array or is empty.");
-        fMyConsoleLog("❌ Error: Gear column definition missing or invalid.");
-        return;
-    }
-
-    let isCurrentlyVisible = false;
-
-    // Check if *any* column within the defined gear ranges is currently visible
-    // Loop through each range object in the array (e.g., [{ c1: 'TagA', c2: 'TagB' }])
-    for (const range of gearRanges) {
-        if (!range || typeof range.c1 === 'undefined' || typeof range.c2 === 'undefined') {
-            console.warn("Skipping invalid range object in fToggleGearColumns:", range);
-            continue;
-        }
-        const startCol = resolveCol(range.c1);
-        const endCol = resolveCol(range.c2);
-
-        if (isNaN(startCol) || isNaN(endCol)) {
-            console.warn(`Skipping gear range due to invalid tags/indices: ${range.c1}, ${range.c2}`);
-            continue; // Skip this range if tags don't resolve
-        }
-
-        const cMin = Math.min(startCol, endCol);
-        const cMax = Math.max(startCol, endCol);
-
-        // Loop through columns within the current resolved range
-        for (let c = cMin; c <= cMax; c++) {
-            // If we find *one* column in the gear range that is NOT hidden, then gear is visible
-            if (!gUI.hiddenColumns.has(c)) {
-                isCurrentlyVisible = true;
-                break; // Exit inner loop once visibility is confirmed
-            }
-        }
-
-        if (isCurrentlyVisible) {
-            break; // Exit outer loop once visibility is confirmed
-        }
-    } // End loop through gearRanges
-
-    // Call the appropriate action based on the determined visibility
-    if (isCurrentlyVisible) {
-        fMyConsoleLog("⚙️ Toggling Gear: Currently Visible -> Hiding...");
-        fHideColumnRange(gearRanges); // Hide all defined gear ranges
-    } else {
-        fMyConsoleLog("⚙️ Toggling Gear: Currently Hidden -> Showing...");
-        fShowColumnRange(gearRanges); // Show all defined gear ranges
-    }
-}; // END fToggleGearColumns
-
-
-
 // fApplyInitialVisibility //////////////////////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Applies the initial hidden state for columns and rows based on gUI definitions
 // MODIFIED: Added console logs for debugging
@@ -2000,36 +1809,6 @@ function fHandleGridCellEdit(event) {
 
 
 
-// fClearCheckboxesInGridRange //////////////////////////////////////////////////////////////////////
-// Main entry: loops through range array, clears all checkboxes in valid ranges.
-function fClearCheckboxesInGridRange(rangeArray) {
-    fMyConsoleLog(`⚙️ Clearing checkboxes in ranges...`);
-
-    if (!Array.isArray(rangeArray)) {
-        console.error("❌ Invalid input: must be an array of range objects.", rangeArray);
-        fMyConsoleLog("❌ Failed to clear checkboxes: Input was not an array.");
-        return;
-    }
-
-    if (rangeArray.length === 0) {
-        fMyConsoleLog("ℹ️ Input array is empty, no ranges to process.");
-        return;
-    }
-
-    if (!gUI.grid2D || gUI.grid2D.length === 0) {
-        fMyConsoleLog("ℹ️ Grid is empty, no checkboxes to clear.");
-        return;
-    }
-
-    let totalCleared = 0;
-    rangeArray.forEach((range, idx) => {
-        totalCleared += fClearCheckboxesInRange(range, idx);
-    });
-
-    fMyConsoleLog(`✅ Cleared ${totalCleared} checkboxes in the specified range(s).`);
-};
-
-
 // fIsValidRangeObject //////////////////////////////////////////////////////////////////////////////
 // Checks if the range object has valid r1, c1, r2, c2 properties.
 function fIsValidRangeObject(range) {
@@ -2039,7 +1818,6 @@ function fIsValidRangeObject(range) {
         typeof range.r2 !== 'undefined' &&
         typeof range.c2 !== 'undefined';
 };
-
 
 
 
@@ -2056,77 +1834,331 @@ function fResolveRangeIndices(range) {
 
 
 
-// fClearCheckboxInGrid /////////////////////////////////////////////////////////////////////////////
-// Unchecks a checkbox in the specified grid cell if it exists and is checked.
-function fClearCheckboxInGrid(r, c) {
-    const row = gUI.grid2D[r];
-    if (!row) return false;
-    const cellDiv = row[c];
-    if (!cellDiv) return false;
-
-    const checkbox = cellDiv.querySelector('input[type="checkbox"]');
-    if (checkbox && checkbox.checked) {
-        checkbox.checked = false;
-        return true;
-    }
-    return false;
-};
-
-
-
-
-// fClearCheckboxesInRange //////////////////////////////////////////////////////////////////////////
-// Handles a single range: resolves bounds, checks validity, clears checkboxes.
-function fClearCheckboxesInRange(range, index) {
-    if (!fIsValidRangeObject(range)) {
-        console.warn(`⚠️ Skipping invalid range object at index ${index}`, range);
-        return 0;
-    }
-
-    const { r1, c1, r2, c2 } = fResolveRangeIndices(range);
-    if ([r1, c1, r2, c2].some(isNaN)) {
-        console.warn(`⚠️ Invalid resolved indices at index ${index}:`, { r1, c1, r2, c2 });
-        return 0;
-    }
-
-    const rMin = Math.min(r1, r2);
-    const rMax = Math.max(r1, r2);
-    const cMin = Math.min(c1, c2);
-    const cMax = Math.max(c1, c2);
-
-    const numRows = gUI.grid2D.length;
-    if (rMin >= numRows) {
-        console.warn(`⚠️ Skipping range at index ${index}: start row ${rMin} outside grid bounds.`);
-        return 0;
-    }
-
-    const effectiveRMax = Math.min(rMax, numRows - 1);
-    let clearedCount = 0;
-
-    for (let r = rMin; r <= effectiveRMax; r++) {
-        const row = gUI.grid2D[r];
-        if (!row) continue;
-
-        const effectiveCMax = Math.min(cMax, row.length - 1);
-        for (let c = cMin; c <= effectiveCMax; c++) {
-            if (fClearCheckboxInGrid(r, c)) clearedCount++;
-        }
-    }
-
-    return clearedCount;
-};
-
-
-
-
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////// END fClearCheckboxesInGridRange and helpers
 
 
 
 
+// fCloseAllDropdowns //////////////////////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Finds all dropdown content panels and removes the 'show' class to hide them.
+function fCloseAllDropdowns() {
+  const dropdowns = document.getElementsByClassName("dropdown-content");
+  for (let i = 0; i < dropdowns.length; i++) {
+    const panel = dropdowns[i];
+    panel.classList.remove('show');
+    // Reset parent overflow only if it's a main dropdown being closed this way
+    if (!panel.classList.contains('sub-menu') && panel.style.overflowY === 'visible') {
+        panel.style.overflowY = 'auto';
+    }
+  }
+}; // END fCloseAllDropdowns
+
+
+
 // ==========================================================================
-// === Sidebar                       (End of Grid Hover) ===
+// === Tags & Read Write Cells & Range                        (End of Grid Hover) ===
+// ==========================================================================
+
+
+// fSetGridTagsFromHeaders //////////////////////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Populates gUI.rowTag and gUI.colTag from tag headers in gUI.arr (Col 0 for rows, Row 0 for columns)
+// Note: Uses more robust version from current scripts.html
+function fSetGridTagsFromHeaders() {
+    fMyConsoleLog("⚙️ Parsing Grid Tags...");
+    gUI.rowTag = {};
+    gUI.colTag = {};
+
+    const gameArr = gUI.arr;
+    if (!gameArr || gameArr.length === 0 || !gameArr[0]) {
+        console.warn("⚠️ Cannot parse tags, gUI.arr is empty or malformed.");
+        fMyConsoleLog("⚠️ Grid Tags: Data empty.");
+        return;
+    }
+
+    const rows = gameArr.length;
+    const cols = gameArr[0].length;
+
+    // Row Tags (Column 0)
+    for (let r = 0; r < rows; r++) {
+        const rowCell = gameArr[r][0]; // Using direct access as optional chaining wasn't the fix
+        if (typeof rowCell === 'string' && rowCell) { // Ensure it's a non-empty string
+            rowCell.split(',').forEach(tag => {
+                const trimmedTag = tag.trim();
+                if (trimmedTag) gUI.rowTag[trimmedTag] = r;
+            });
+        }
+    }
+
+    // Col Tags (Row 0)
+    const colHeaderRow = gameArr[0];
+    if (colHeaderRow) {
+        for (let c = 0; c < cols; c++) {
+            const colCell = colHeaderRow[c]; // Check if cell exists
+            if (typeof colCell === 'string' && colCell) { // Ensure it's a non-empty string
+                colCell.split(',').forEach(tag => {
+                    const trimmedTag = tag.trim();
+                    if (trimmedTag) gUI.colTag[trimmedTag] = c;
+                });
+            }
+        }
+    }
+    fMyConsoleLog("✅ Grid Tags Parsed");
+}; // END fSetGridTagsFromHeaders
+
+
+
+
+// fGetGridValue ///////////////////////////////////////////////////////////////////
+// Purpose -> Retrieves a value from gUI.arr using tags or indices, with optional type coercion.
+// Inputs -> rowRef (String|Number): Row tag or 0-based index.
+//        -> colRef (String|Number): Column tag or 0-based index.
+//        -> asNumber (Boolean): If true, attempt to parse the value as a number (default: false).
+// Outputs -> (Any|NaN): The value from the grid, or NaN if type coercion fails or cell not found.
+function fGetGridValue(rowRef, colRef, asNumber = false) {
+    const r = resolveRow(rowRef);
+    const c = resolveCol(colRef);
+
+    if (isNaN(r) || isNaN(c)) {
+        console.warn(`fGetGridValue: Could not resolve (${rowRef}, ${colRef}) to valid indices.`);
+        return NaN; // Return NaN for unresolved refs
+    }
+
+    const value = gUI.arr?.[r]?.[c];
+
+    if (value === undefined || value === null || value === '') {
+        // Treat empty/null/undefined as potentially 0 if requesting a number, else undefined
+        return asNumber ? 0 : undefined;
+    }
+
+    if (asNumber) {
+        const numValue = Number(value);
+        if (isNaN(numValue)) {
+            console.warn(`fGetGridValue: Value at (${rowRef}, ${colRef}) -> [${r}, ${c}] ("${value}") is not a valid number.`);
+            return NaN; // Return NaN if conversion fails
+        }
+        return numValue;
+    }
+
+    return value;
+} // END fGetGridValue
+
+
+
+
+// fSetGridValue ///////////////////////////////////////////////////////////////////
+// Purpose -> Updates a value in gUI.arr and the corresponding cell display in gUI.grid2D.
+// Inputs -> rowRef (String|Number): Row tag or 0-based index.
+//        -> colRef (String|Number): Column tag or 0-based index.
+//        -> newValue (Any): The new value to set.
+// Outputs -> (Boolean): true if successful, false otherwise.
+function fSetGridValue(rowRef, colRef, newValue) {
+    const r = resolveRow(rowRef);
+    const c = resolveCol(colRef);
+
+    if (isNaN(r) || isNaN(c)) {
+        console.warn(`fSetGridValue: Could not resolve (${rowRef}, ${colRef}) to valid indices.`);
+        return false;
+    }
+
+    if (!gUI.arr?.[r]) {
+        console.warn(`fSetGridValue: Row ${r} does not exist in gUI.arr.`);
+        return false;
+    }
+
+    // Update data model
+    gUI.arr[r][c] = newValue;
+
+    // Update DOM if cell exists
+    const cell = gUI.grid2D?.[r]?.[c];
+    if (cell) {
+        // Handle checkboxes separately if needed in the future
+        // For now, just update text content for non-checkbox cells
+        if (cell.contentEditable === 'true' || !cell.querySelector('input[type="checkbox"]')) {
+             // Avoid adding IDs back if they were stripped during rendering
+             const idPattern = /\s{2,}_\w{6}$/;
+             const text = (typeof newValue === 'string' && idPattern.test(newValue))
+                 ? newValue.replace(idPattern, '')
+                 : newValue;
+             cell.textContent = text ?? ''; // Use empty string for null/undefined
+        } else {
+            // If it IS a checkbox cell, update its checked state
+            const checkbox = cell.querySelector('input[type="checkbox"]');
+            if (checkbox) {
+                 const valStr = String(newValue).toUpperCase();
+                 checkbox.checked = newValue === true || valStr === "TRUE";
+            }
+        }
+        // fMyConsoleLog(`DOM updated for [${r}, ${c}]`); // Optional: Add verbose logging if needed
+    } else {
+        console.warn(`fSetGridValue: Cell element not found in gUI.grid2D at [${r}, ${c}]. Data model updated, DOM not.`);
+        // return false; // Decide if DOM update failure should cause function failure
+    }
+
+    fMyConsoleLog(`Grid set [${r}, ${c}] = ${newValue}`); // Log successful update
+    return true;
+} // END fSetGridValue
+
+
+
+
+// fSetRangeValues /////////////////////////////////////////////////////////////////
+// Purpose -> Updates values in a specified grid range (data and DOM) from a provided array OR a single value.
+// Inputs -> r1 (String|Number): Starting row tag or 0-based index.
+//        -> c1 (String|Number): Starting column tag or 0-based index.
+//        -> r2 (String|Number): Ending row tag or 0-based index.
+//        -> c2 (String|Number): Ending column tag or 0-based index.
+//        -> valueOrArray (Array|Any): 1D/2D array matching range dimensions, OR a single value to fill the range.
+// Outputs -> (Boolean): true if successful, false otherwise.
+function fSetRangeValues(r1Ref, c1Ref, r2Ref, c2Ref, valueOrArray) {
+    fMyConsoleLog(`⚙️ Setting range values: ${r1Ref},${c1Ref} to ${r2Ref},${c2Ref}...`);
+
+    // --- 1. Resolve Indices ---
+    const r1 = resolveRow(r1Ref);
+    const c1 = resolveCol(c1Ref);
+    const r2 = resolveRow(r2Ref);
+    const c2 = resolveCol(c2Ref);
+
+    if ([r1, c1, r2, c2].some(isNaN)) {
+        console.warn(`fSetRangeValues: Could not resolve one or more references: (${r1Ref}, ${c1Ref}, ${r2Ref}, ${c2Ref}) -> (${r1}, ${c1}, ${r2}, ${c2}).`);
+        fMyConsoleLog(`❌ fSetRangeValues failed: Invalid range references.`);
+        return false;
+    }
+
+    // --- 2. Determine Mode: Single Value Fill or Array Mapping ---
+    let isSingleValueFill = !Array.isArray(valueOrArray);
+    let singleFillValue = null;
+    let newValArr = null; // Will hold the array only if not in single value mode
+
+    if (isSingleValueFill) {
+        singleFillValue = valueOrArray;
+        fMyConsoleLog(`   -> Mode: Single value fill ('${singleFillValue}')`);
+    } else {
+        newValArr = valueOrArray; // It's an array, assign it
+        fMyConsoleLog(`   -> Mode: Array mapping`);
+        // --- 2a. Validate Input Array (only if not single value fill) ---
+        if (newValArr.length === 0 && (rMax - rMin + 1 > 0 && cMax - cMin + 1 > 0)) {
+             // Allow empty array only if range is also effectively empty (e.g., r1=r2, c1=c2 but cell doesn't exist)
+             // If range has cells but array is empty, it's an error.
+             console.warn(`fSetRangeValues: Provided newValArr is an empty array, but range is not empty.`);
+             fMyConsoleLog(`❌ fSetRangeValues failed: Input array empty for non-empty range.`);
+            return false;
+        }
+    }
+
+    // --- 3. Determine Range Dimensions ---
+    const rMin = Math.min(r1, r2);
+    const rMax = Math.max(r1, r2);
+    const cMin = Math.min(c1, c2);
+    const cMax = Math.max(c1, c2);
+    const rangeRows = rMax - rMin + 1;
+    const rangeCols = cMax - cMin + 1;
+
+    // --- 4. Validate Array Dimensions (only if not single value fill) ---
+    if (!isSingleValueFill) {
+        let arrRows = 0;
+        let arrCols = 0;
+        let isInputArray2D = false;
+
+        if (newValArr.length > 0) {
+            if (Array.isArray(newValArr[0])) {
+                // Likely 2D array
+                isInputArray2D = true;
+                arrRows = newValArr.length;
+                arrCols = newValArr[0].length;
+                if (!newValArr.every(row => Array.isArray(row) && row.length === arrCols)) {
+                    console.warn(`fSetRangeValues: Input 2D array has inconsistent column lengths.`);
+                    fMyConsoleLog(`❌ fSetRangeValues failed: Input 2D array malformed.`);
+                    return false;
+                }
+            } else {
+                // Likely 1D array
+                arrRows = 1;
+                arrCols = newValArr.length;
+                if (rangeCols === 1 && rangeRows > 1) { // Adjust if target is a single column
+                    arrRows = newValArr.length;
+                    arrCols = 1;
+                }
+            }
+        }
+         // Else: newValArr is empty array, dimensions remain 0, handled above
+
+        // Check if dimensions match
+        if (rangeRows !== arrRows || rangeCols !== arrCols) {
+            console.warn(`fSetRangeValues: Dimension mismatch. Range: ${rangeRows}x${rangeCols}, Array: ${arrRows}x${arrCols}.`);
+            fMyConsoleLog(`❌ fSetRangeValues failed: Dimension mismatch.`);
+            return false;
+        }
+    }
+     // --- End Array Validation ---
+
+    // --- 5. Update Data and DOM ---
+    let updateCount = 0;
+    let updateErrors = 0;
+    for (let r = rMin; r <= rMax; r++) {
+        if (!gUI.arr[r] || !gUI.grid2D[r]) {
+            console.warn(`fSetRangeValues: Row ${r} does not exist in gUI.arr or gUI.grid2D. Skipping row.`);
+            updateErrors += rangeCols;
+            continue;
+        }
+        for (let c = cMin; c <= cMax; c++) {
+            let newValue;
+            // --- Determine the value to set ---
+            if (isSingleValueFill) {
+                newValue = singleFillValue;
+            } else {
+                // Calculate corresponding index in newValArr
+                const arrRowIdx = r - rMin;
+                const arrColIdx = c - cMin;
+                const isInputArray2D = Array.isArray(newValArr[0]); // Check again inside loop just to be safe
+                newValue = isInputArray2D
+                         ? newValArr[arrRowIdx]?.[arrColIdx]
+                         : (rangeCols === 1 && rangeRows > 1 ? newValArr[arrRowIdx] : newValArr[arrColIdx]);
+            }
+
+            // --- Update data model ---
+            gUI.arr[r][c] = newValue;
+
+            // --- Update DOM if cell exists ---
+            const cell = gUI.grid2D[r]?.[c];
+            if (cell) {
+                if (cell.style.display === 'none') continue; // Skip cells hidden by merges
+
+                const valStr = String(newValue).toUpperCase();
+                const isCheckboxValue = newValue === true || newValue === false || valStr === "TRUE" || valStr === "FALSE";
+                const checkbox = cell.querySelector('input[type="checkbox"]');
+
+                if (checkbox) {
+                    checkbox.checked = newValue === true || valStr === "TRUE";
+                    // Optionally disable/enable checkbox based on fill value?
+                    // checkbox.disabled = (newValue === ' '); // Example: disable if clearing
+                } else if (cell.contentEditable === 'true' || !isCheckboxValue) {
+                    const idPattern = /\s{2,}_\w{6}$/;
+                     const text = (typeof newValue === 'string' && idPattern.test(newValue))
+                                  ? newValue.replace(idPattern, '')
+                                  : newValue;
+                    cell.textContent = text ?? '';
+                } else {
+                    // Handle potential mismatch (e.g., trying to put text in a checkbox cell)
+                    console.warn(`fSetRangeValues: Mismatch or unexpected value type at [${r}, ${c}] for cell type.`);
+                    cell.textContent = newValue ?? ''; // Default to text content
+                }
+                updateCount++;
+            } else {
+                console.warn(`fSetRangeValues: Cell element not found in gUI.grid2D at [${r}, ${c}]. Data model updated, DOM not.`);
+                updateErrors++;
+            }
+        }
+    }
+
+    fMyConsoleLog(`✅ fSetRangeValues: ${isSingleValueFill ? 'Filled' : 'Updated'} ${updateCount} cells. ${updateErrors > 0 ? `(${updateErrors} errors)` : ''}`);
+    return updateErrors === 0;
+
+} // END fSetRangeValues
+
+
+
+// ==========================================================================
+// === Sidebar                       (End of Read Write Cell & Range) ===
 // ==========================================================================
 
 
@@ -2176,29 +2208,6 @@ function fRollLogMsg(msg) {
 
 
 
-// ==========================================================================
-// === Menu Bar Logic                 (End of Sidebar) ===
-// ==========================================================================
-
-
-
-
-// fCloseAllDropdowns //////////////////////////////////////////////////////////////////////////////////////////////////
-// Purpose -> Finds all dropdown content panels and removes the 'show' class to hide them.
-function fCloseAllDropdowns() {
-  const dropdowns = document.getElementsByClassName("dropdown-content");
-  for (let i = 0; i < dropdowns.length; i++) {
-    const panel = dropdowns[i];
-    panel.classList.remove('show');
-    // Reset parent overflow only if it's a main dropdown being closed this way
-    if (!panel.classList.contains('sub-menu') && panel.style.overflowY === 'visible') {
-        panel.style.overflowY = 'auto';
-    }
-  }
-}; // END fCloseAllDropdowns
-
-
-
 
 // fShowSidebar //////////////////////////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Makes the Roll Log sidebar visible.
@@ -2230,28 +2239,9 @@ function fHideSidebar() {
 
 
 
-// fToggleSidebar ///////////////////////////////////////////////////////////////////
-// Purpose -> Checks the current visibility state of the sidebar and toggles it.
-// Inputs -> None
-// Outputs -> None
-function fToggleSidebar() {
-    const sidebar = document.getElementById('roll-log-sidebar');
-    if (!sidebar) {
-        console.error("❌ Cannot find sidebar element (#roll-log-sidebar) to toggle.");
-        return;
-    }
-
-    // Check if the sidebar is currently shown
-    const isVisible = sidebar.classList.contains('show');
-
-    // Call the appropriate function
-    if (isVisible) {
-        fHideSidebar();
-    } else {
-        fShowSidebar();
-    }
-}; // END fToggleSidebar
-
+// ==========================================================================
+// === Menu Bar Setup                 (End of Sidebar) ===
+// ==========================================================================
 
 
 
@@ -2312,50 +2302,6 @@ function fSetupWindowClickListener() {
         }
     });
 }; // END fSetupWindowClickListener
-
-
-
-
-// fSetupDelegatedMenuActionClick //////////////////////////////////////////////////////////////////////////////////////
-// Purpose -> Adds delegated listener to the menu bar to handle clicks on items with data-action.
-// MODIFIED: Changed 'game-showSidebar' to 'game-toggleSidebar' and call fToggleSidebar
-function fSetupDelegatedMenuActionClick(menuBar) {
-     if (!menuBar) return; // Should not happen based on main check, but safe practice
-
-     menuBar.addEventListener('click', (event) => {
-        // Handle clicks on action links
-        const targetLink = event.target.closest('.dropdown-content a[data-action]');
-        if (targetLink) {
-            event.preventDefault();
-            event.stopPropagation();
-            const action = targetLink.getAttribute('data-action');
-            fMyConsoleLog(`🖱️ Menu Action Triggered: ${action}`);
-            fCloseAllDropdowns(); // Close dropdown after selection
-
-            // --- Action Dispatcher ---
-            switch (action) {
-                case 'gear-toggleGear': // <<< NEW CASE ADDED
-                    fToggleGearColumns(); // <<< Calls new function
-                    break;  
-                case 'game-toggleSidebar': // <<< NEW CASE ADDED
-                    fToggleSidebar();     // <<< Calls new function
-                    break;
-                // @@ Add other cases here later
-                default:
-                    console.log(`ACTION: Menu item clicked: ${action} (No handler defined yet)`);
-                    fMyConsoleLog(`🖱️ Menu: ${action} (No handler)`);
-            }
-            // --- End Action Dispatcher ---
-
-        } // End if(targetLink)
-
-        // Handle clicks on sub-menu trigger links (prevent default)
-        const subMenuTriggerLink = event.target.closest('.sub-menu-item > a');
-        if (subMenuTriggerLink && !targetLink) { event.preventDefault(); }
-
-    }); // <-- End of menuBar CLICK listener
-
-}; // END fSetupDelegatedMenuActionClick
 
 
 
@@ -2463,10 +2409,348 @@ function fSetupSingleSubMenuItem(item, index) {
 
 
 
+// ==========================================================================
+// === Menu Bar Click     (End of Menu Bar Setup)) ===
+// ==========================================================================
+
+
+
+
+// fSetupDelegatedMenuActionClick //////////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Adds delegated listener to the menu bar to handle clicks on items with data-action.
+// MODIFIED: Added case for 'game-clearCheckboxes'
+function fSetupDelegatedMenuActionClick(menuBar) {
+     if (!menuBar) return; // Should not happen based on main check, but safe practice
+
+     menuBar.addEventListener('click', (event) => {
+         // Handle clicks on action links
+         const targetLink = event.target.closest('.dropdown-content a[data-action]');
+         if (targetLink) {
+             event.preventDefault();
+             event.stopPropagation();
+             const action = targetLink.getAttribute('data-action');
+             fMyConsoleLog(`🖱️ Menu Action Triggered: ${action}`);
+             fCloseAllDropdowns(); // Close dropdown after selection
+
+             // --- Action Dispatcher ---
+             switch (action) {
+                     case 'game-toggleSidebar': fToggleSidebar(); break;
+                     case 'game-clearChanneled': fClearChanneledMeta(); break;
+                     case 'game-clearCheckboxes': fClearSk1Sk2Checkboxes(); break;
+                     case 'game-clearMonsters': fClearMonsters(); break;
+                     case 'game-clearMorphs': fClearMorphs(); break;
+                     case 'game-clearNish': fClearCurrentNish(); break;
+                     case 'game-clearRollLog': fClearRollLog(); break;
+                     case 'gear-toggleGear': fToggleGearColumns(); break;
+                 default:
+                     console.log(`ACTION: Menu item clicked: ${action} (No handler defined yet)`);
+                     fMyConsoleLog(`🖱️ Menu: ${action} (No handler)`);
+             }
+             // --- End Action Dispatcher ---
+
+         } // End if(targetLink)
+
+         // Handle clicks on sub-menu trigger links (prevent default)
+         const subMenuTriggerLink = event.target.closest('.sub-menu-item > a');
+         if (subMenuTriggerLink && !targetLink) { event.preventDefault(); }
+
+     }); // <-- End of menuBar CLICK listener
+
+}; // END fSetupDelegatedMenuActionClick
+
+
+
+// fToggleSidebar ///////////////////////////////////////////////////////////////////
+// Purpose -> Checks the current visibility state of the sidebar and toggles it.
+// Inputs -> None
+// Outputs -> None
+function fToggleSidebar() {
+    const sidebar = document.getElementById('roll-log-sidebar');
+    if (!sidebar) {
+        console.error("❌ Cannot find sidebar element (#roll-log-sidebar) to toggle.");
+        return;
+    }
+
+    // Check if the sidebar is currently shown
+    const isVisible = sidebar.classList.contains('show');
+
+    // Call the appropriate function
+    if (isVisible) {
+        fHideSidebar();
+    } else {
+        fShowSidebar();
+    }
+}; // END fToggleSidebar
+
+
+
+// fClearChanneledMeta ////////////////////////////////////////////////////////////
+// Purpose -> Clears the channeled meta range (R-B) in the grid.
+// Inputs  -> None
+// Outputs -> None (Calls fSetRangeValues which modifies grid data and DOM)
+function fClearChanneledMeta() {
+    fMyConsoleLog("⚙️ Menu Action: Clearing Channeled Meta...");
+    // Call fSetRangeValues to set the range ('chnl', 'R') to ('chnl', 'B') with an empty string ''
+    const success = fSetRangeValues('chnl', 'R', 'chnl', 'B', '');
+    if (!success) {
+         fMyConsoleLog("⚠️ Failed to clear Channeled Meta range using fSetRangeValues.");
+         // Optional: Show an error message to the user if needed
+         // fShowMessage("Error clearing the channeled meta range.");
+    }
+} // END fClearChanneledMeta
+
+
+
+// fClearSk1Sk2Checkboxes ///////////////////////////////////////////////////////
+// Purpose -> Clears all checkboxes defined in gUI.sk1sk2CheckBoxes using fSetRangeValues.
+// Inputs  -> None
+// Outputs -> None (Calls fSetRangeValues which modifies grid data and DOM)
+function fClearSk1Sk2Checkboxes() {
+    fMyConsoleLog("⚙️ Menu Action: Clearing Sk1/Sk2 Checkboxes...");
+    let allSucceeded = true;
+    const rangesToClear = gUI.sk1sk2CheckBoxes; // Get the predefined ranges
+
+    if (!Array.isArray(rangesToClear) || rangesToClear.length === 0) {
+        fMyConsoleLog("ℹ️ No Sk1/Sk2 checkbox ranges defined in gUI.sk1sk2CheckBoxes.");
+        return;
+    }
+
+    rangesToClear.forEach(range => {
+        // We still need to resolve each range object before calling fSetRangeValues
+        const r1 = resolveRow(range.r1);
+        const c1 = resolveCol(range.c1);
+        const r2 = resolveRow(range.r2);
+        const c2 = resolveCol(range.c2);
+
+        // Validate the resolved indices from the range object
+        if ([r1, c1, r2, c2].some(isNaN)) {
+             console.warn(`fClearSk1Sk2Checkboxes: Skipping invalid range definition:`, range);
+             allSucceeded = false; // Mark failure if any range is invalid
+             return; // Skip this range object in the forEach loop
+        }
+
+        // Call fSetRangeValues for the current range, setting to false
+        // This updates both gUI.arr and the checkbox DOM state
+        const success = fSetRangeValues(r1, c1, r2, c2, false);
+        if (!success) {
+             allSucceeded = false; // Track if any call to fSetRangeValues fails
+        }
+    });
+
+     if (!allSucceeded) {
+         fMyConsoleLog("⚠️ Failed to clear one or more Sk1/Sk2 Checkbox ranges.");
+         // Consider showing an error message: fShowMessage("Error clearing some checkboxes.");
+     } else {
+        fMyConsoleLog("✅ Sk1/Sk2 Checkboxes Cleared.");
+     }
+
+} // END fClearSk1Sk2Checkboxes
+
+
+
+
+// fClearMonsters ///////////////////////////////////////////////////////////////
+// Purpose -> Clears the monster data range defined in gUI.range.monsters using fSetRangeValues.
+// Inputs  -> None
+// Outputs -> None (Calls fSetRangeValues which modifies grid data and DOM)
+function fClearMonsters() {
+    fMyConsoleLog("⚙️ Menu Action: Clearing Monsters...");
+    const monsterRange = gUI.range?.monsters; // Get the range definition object
+
+    // Validate the range object exists and has the needed properties
+    if (!monsterRange || typeof monsterRange.r1 === 'undefined' || typeof monsterRange.c1 === 'undefined' || typeof monsterRange.r2 === 'undefined' || typeof monsterRange.c2 === 'undefined') {
+        console.warn("fClearMonsters: Monster range definition is missing or incomplete in gUI.range.monsters.");
+        fMyConsoleLog("⚠️ Cannot clear monsters: Range definition missing or incomplete.");
+        return;
+    }
+
+    const clearValue = ' '; // Use a space to clear the cells
+
+    // Call fSetRangeValues using properties from the monsterRange object
+    const success = fSetRangeValues(
+        monsterRange.r1,
+        monsterRange.c1,
+        monsterRange.r2,
+        monsterRange.c2,
+        clearValue
+    );
+
+    if (!success) {
+         // Log uses the actual tags from the object for clarity
+         fMyConsoleLog(`⚠️ Failed to clear Monsters range (${monsterRange.r1},${monsterRange.c1} to ${monsterRange.r2},${monsterRange.c2}) using fSetRangeValues.`);
+         // Optional: Show an error message to the user
+         // fShowMessage("Error clearing the monster data range.");
+    } else {
+        fMyConsoleLog("✅ Monsters Range Cleared.");
+    }
+} // END fClearMonsters
+
+
+
+
+
+// fClearMorphs /////////////////////////////////////////////////////////////////
+// Purpose -> Clears the Morph1 and Morph2 ranges defined in gUI.range.morphs.
+// Inputs  -> None
+// Outputs -> None (Calls fSetRangeValues which modifies grid data and DOM)
+function fClearMorphs() {
+    fMyConsoleLog("⚙️ Menu Action: Clearing Morphs...");
+    let allSucceeded = true;
+    const morphRanges = gUI.range?.morphs; // Use optional chaining just in case
+
+    if (!Array.isArray(morphRanges) || morphRanges.length === 0) {
+        console.warn("fClearMorphs: No morph ranges defined in gUI.range.morphs.");
+        fMyConsoleLog("⚠️ Cannot clear morphs: Ranges not defined.");
+        return;
+    }
+
+    morphRanges.forEach(range => {
+        if (!range || typeof range.r1 === 'undefined' || typeof range.c1 === 'undefined' || typeof range.r2 === 'undefined' || typeof range.c2 === 'undefined') {
+            console.warn("fClearMorphs: Skipping invalid range object within gUI.range.morphs:", range);
+            allSucceeded = false;
+            return; // Skip this invalid range object in the loop
+        }
+        // Call fSetRangeValues for the current morph range, clearing with a space
+        const success = fSetRangeValues(range.r1, range.c1, range.r2, range.c2, ' ');
+        if (!success) {
+             allSucceeded = false; // Track if any call fails
+        }
+    });
+
+     if (!allSucceeded) {
+         fMyConsoleLog("⚠️ Failed to clear one or more Morph ranges using fSetRangeValues.");
+         // fShowMessage("Error clearing some morph ranges."); // Optional user message
+     } else {
+        fMyConsoleLog("✅ Morph Ranges Cleared.");
+     }
+} // END fClearMorphs
+
+
+
+
+// fClearCurrentNish ////////////////////////////////////////////////////////////
+// Purpose -> Clears the current Nish range defined in gUI.range.currentNish.
+// Inputs  -> None
+// Outputs -> None (Calls fSetRangeValues which modifies grid data and DOM)
+function fClearCurrentNish() {
+    fMyConsoleLog("⚙️ Menu Action: Clearing Current Nish...");
+    const nishRange = gUI.range?.currentNish; // Get the range definition object
+
+    // Validate the range object
+    if (!nishRange || typeof nishRange.r1 === 'undefined' || typeof nishRange.c1 === 'undefined' || typeof nishRange.r2 === 'undefined' || typeof nishRange.c2 === 'undefined') {
+        console.warn("fClearCurrentNish: Nish range definition is missing or incomplete in gUI.range.currentNish.");
+        fMyConsoleLog("⚠️ Cannot clear Nish: Range definition missing or incomplete.");
+        return;
+    }
+
+    const clearValue = ' '; // Use a space to clear the cells
+
+    // Call fSetRangeValues using properties from the nishRange object
+    const success = fSetRangeValues(
+        nishRange.r1,
+        nishRange.c1,
+        nishRange.r2,
+        nishRange.c2,
+        clearValue
+    );
+
+    if (!success) {
+         fMyConsoleLog(`⚠️ Failed to clear Nish range (<span class="math-inline">\{nishRange\.r1\},</span>{nishRange.c1} to <span class="math-inline">\{nishRange\.r2\},</span>{nishRange.c2}) using fSetRangeValues.`);
+         // Optional: fShowMessage("Error clearing the Nish data range.");
+    } else {
+        fMyConsoleLog("✅ Current Nish Range Cleared.");
+    }
+} // END fClearCurrentNish
+
+
+
+
+// fClearRollLog ////////////////////////////////////////////////////////////////
+// Purpose -> Clears the Roll Log sidebar and displays a confirmation message.
+// Inputs  -> None
+// Outputs -> None (Modifies DOM)
+function fClearRollLog() {
+    fMyConsoleLog("⚙️ Menu Action: Clearing Roll Log...");
+    const sidebarContent = document.getElementById('sidebar-content');
+
+    if (!sidebarContent) {
+        console.error("fClearRollLog: Could not find sidebar content element (#sidebar-content).");
+        fMyConsoleLog("⚠️ Cannot clear Roll Log: Sidebar content element not found.");
+        return;
+    }
+
+    // Clear existing content and add the styled "Cleared" message
+    // Uses the .blue-bold class from style.html [cite: 579]
+    sidebarContent.innerHTML = '<p><span class="blue-bold">Roll Log Cleared</span></p>';
+
+    fMyConsoleLog("✅ Roll Log Cleared.");
+} // END fClearRollLog
+
+
+
+
+// fToggleGearColumns ///////////////////////////////////////////////////////////////
+// Purpose -> Checks if gear columns (defined in gUI.gearTblCols) are currently visible
+//          and calls the appropriate show/hide range function to toggle their state.
+function fToggleGearColumns() {
+    const gearRanges = gUI.gearTblCols;
+
+    // Basic validation of the configuration
+    if (!Array.isArray(gearRanges) || gearRanges.length === 0) {
+        console.error("❌ Cannot toggle gear columns: gUI.gearTblCols is not a valid array or is empty.");
+        fMyConsoleLog("❌ Error: Gear column definition missing or invalid.");
+        return;
+    }
+
+    let isCurrentlyVisible = false;
+
+    // Check if *any* column within the defined gear ranges is currently visible
+    // Loop through each range object in the array (e.g., [{ c1: 'TagA', c2: 'TagB' }])
+    for (const range of gearRanges) {
+        if (!range || typeof range.c1 === 'undefined' || typeof range.c2 === 'undefined') {
+            console.warn("Skipping invalid range object in fToggleGearColumns:", range);
+            continue;
+        }
+        const startCol = resolveCol(range.c1);
+        const endCol = resolveCol(range.c2);
+
+        if (isNaN(startCol) || isNaN(endCol)) {
+            console.warn(`Skipping gear range due to invalid tags/indices: ${range.c1}, ${range.c2}`);
+            continue; // Skip this range if tags don't resolve
+        }
+
+        const cMin = Math.min(startCol, endCol);
+        const cMax = Math.max(startCol, endCol);
+
+        // Loop through columns within the current resolved range
+        for (let c = cMin; c <= cMax; c++) {
+            // If we find *one* column in the gear range that is NOT hidden, then gear is visible
+            if (!gUI.hiddenColumns.has(c)) {
+                isCurrentlyVisible = true;
+                break; // Exit inner loop once visibility is confirmed
+            }
+        }
+
+        if (isCurrentlyVisible) {
+            break; // Exit outer loop once visibility is confirmed
+        }
+    } // End loop through gearRanges
+
+    // Call the appropriate action based on the determined visibility
+    if (isCurrentlyVisible) {
+        fMyConsoleLog("⚙️ Toggling Gear: Currently Visible -> Hiding...");
+        fHideColumnRange(gearRanges); // Hide all defined gear ranges
+    } else {
+        fMyConsoleLog("⚙️ Toggling Gear: Currently Hidden -> Showing...");
+        fShowColumnRange(gearRanges); // Show all defined gear ranges
+    }
+}; // END fToggleGearColumns
+
+
 
 
 // ==========================================================================
-// === Initialization & Setup Functions     (End of Menu Bar Logic)) ===
+// === Initialization & Setup Functions     (End of Menu Bar Click) ===
 // ==========================================================================
 
 
@@ -2724,7 +3008,7 @@ function fRunPostRenderFormatting() {
     fApplyInitialVisibility();
     fSetHeader();
     fMarkOverflowingCells();
-    fClearCheckboxesInGridRange(gUI.sk1sk2CheckBoxes);
+    fClearSk1Sk2Checkboxes();
 
     const gridElement = document.getElementById('grid');
     fAttachGridListeners(gridElement);

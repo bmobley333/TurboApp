@@ -73,7 +73,7 @@
         <a href="#">Refresh</a>
         <div class="dropdown-content sub-menu">
           <a href="#" data-action="game-refreshAbilGear">Abilities & Gear</a>
-          <a href="#" data-action="game-refreshMonsters">Monsters</a>
+          <a href="#" data-action="game-clearMonsters">Monsters</a>
           <a href="#" data-action="game-refreshVit">Vit</a>
         </div>
       </div>
