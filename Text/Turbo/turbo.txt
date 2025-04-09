@@ -205,3 +205,49 @@ function fExtractSheetData(sh) {
 
 
 
+
+// ==========================================================================
+// === Get Specific Range Data                         (End of Get Game Sheet data/styles) ===
+// ==========================================================================
+
+
+// fCSGetRangeData /////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Fetches values from a specified A1 range within the "Game" sheet of a given spreadsheet.
+// Inputs  -> targetSheetId (String): The ID of the target Google Spreadsheet.
+//         -> a1Notation (String): The standard A1 notation for the range (e.g., "C5:F10").
+// Outputs -> (Array[][]|Error): A 2D array of values from the specified range, or throws an error on failure.
+function fCSGetRangeData(targetSheetId, a1Notation) {
+    Logger.log(`fCSGetRangeData called for SheetID: ${targetSheetId}, Range: ${a1Notation}`);
+    try {
+        // Validate inputs
+        if (!targetSheetId || typeof targetSheetId !== 'string') {
+            throw new Error("Invalid or missing Sheet ID provided.");
+        }
+        if (!a1Notation || typeof a1Notation !== 'string' || !a1Notation.includes(':')) {
+            // Basic check for A1 format - improve if needed
+            throw new Error("Invalid or missing A1 notation provided.");
+        }
+
+        // Open sheet (reuse existing helper if suitable, or inline logic)
+        const ss = SpreadsheetApp.openById(targetSheetId);
+        const sh = ss.getSheetByName("Game");
+        if (!sh) {
+            throw new Error(`Sheet named "Game" not found in SheetID: ${targetSheetId}.`);
+        }
+
+        // Get range and values
+        const range = sh.getRange(a1Notation);
+        const values = range.getValues();
+
+        Logger.log(`fCSGetRangeData successfully retrieved ${values.length} rows.`);
+        return values; // Return the 2D array
+
+    } catch (e) {
+        // Log detailed error and re-throw for client-side failure handler
+        const errMsg = `fCSGetRangeData Error: Failed to get range "${a1Notation}" from sheet "${targetSheetId}". Details: ${e.message}`;
+        console.error(errMsg + "\nStack:\n" + e.stack);
+        throw new Error(errMsg); // Throw error back to client
+    }
+} // END fCSGetRangeData
+
+

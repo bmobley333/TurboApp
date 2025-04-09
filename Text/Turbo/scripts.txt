@@ -252,6 +252,30 @@ function fGetContrastColor(hexColor) {
 
 
 
+// fIndicesToA1 ////////////////////////////////////////////////////////////////////
+// Purpose -> Converts 0-based row/column indices to standard A1 notation string.
+// Inputs  -> r1, c1, r2, c2 (Number): 0-based start/end row and column indices.
+// Outputs -> (String): A1 notation string (e.g., "C5:F10").
+function fIndicesToA1(r1, c1, r2, c2) {
+    // Validate inputs are numbers >= 0
+    if ([r1, c1, r2, c2].some(idx => typeof idx !== 'number' || idx < 0 || isNaN(idx))) {
+        console.error(`fIndicesToA1: Invalid indices provided (${r1},${c1},${r2},${c2})`);
+        return null; // Return null or throw error
+    }
+    const startColA1 = fColToA1(c1);
+    const endColA1 = fColToA1(c2);
+    // Add 1 to rows for A1 notation (which is 1-based)
+    const startRowA1 = r1 + 1;
+    const endRowA1 = r2 + 1;
+
+    // Format: Top-left cell : Bottom-right cell
+    return `${startColA1}${startRowA1}:${endColA1}${endRowA1}`;
+
+} // END fIndicesToA1
+
+
+
+
 // fColToA1 //////////////////////////////////////////////////////////////////////////////////////////////////
 // Convert numeric column index (0-based) to Excel-style A1 notation (e.g., 0 -> 'A', 25 -> 'Z', 26 -> 'AA')
 // From current scripts.html
@@ -1587,82 +1611,6 @@ function fHandleGridClick(event) {
 
 
 
-// fHandleHeaderButtonClick ///////////////////////////////////////////////////////////////////////
-// Routes header button clicks to specific action handlers.
-function fHandleHeaderButtonClick(event, buttonImg) {
-    const action = buttonImg.dataset.buttonAction;
-    fMyConsoleLog(`🖱️ Header Button Clicked: ${action}`);
-
-    event.preventDefault();
-    event.stopPropagation();
-
-    const grid = document.getElementById('grid');
-
-    switch (action) {
-        case 'action-rollDice':
-            fHandleRollDiceAction();
-            break;
-        case 'action-refreshData':
-            console.log("ACTION: Refresh Data button clicked (logic pending)");
-            break;
-        case 'action-jumpTop':
-            fScrollGridToTop(grid);
-            break;
-        case 'action-jumpBottom':
-            fScrollGridToBottom(grid);
-            break;
-        case 'action-showMonsters':
-            console.log("ACTION: Show Monsters button clicked (logic pending)");
-            break;
-        default:
-            console.warn(`Unhandled header button action: ${action}`);
-    }
-} // END fHandleHeaderButtonClick
-
-
-
-
-// fScrollGridToTop ///////////////////////////////////////////////////////////////////////////////
-// Scrolls the grid to the top smoothly.
-function fScrollGridToTop(grid) {
-    if (grid) {
-        grid.scrollTo({ top: 0, behavior: 'smooth' });
-    } else {
-        console.warn("Could not find #grid element to scroll top.");
-    }
-} // END fScrollGridToTop
-
-
-
-
-// fScrollGridToBottom ////////////////////////////////////////////////////////////////////////////
-// Scrolls the grid to center on a specific tagged row.
-function fScrollGridToBottom(grid) {
-    if (!grid) {
-        console.warn("Could not find #grid element to scroll bottom.");
-        return;
-    }
-
-    const targetRowIndex = resolveRow('GearTblHeaderStartR');
-    if (isNaN(targetRowIndex)) {
-        console.warn("Could not resolve row tag 'GearTblHeaderStartR' for scrolling.");
-        return;
-    }
-
-    const targetCell = gUI.grid2D?.[targetRowIndex]?.[0];
-    if (!targetCell) {
-        console.warn(`Could not find cell for row ${targetRowIndex} (Tag: GearTblHeaderStartR)`);
-        return;
-    }
-
-    const scrollTop = targetCell.offsetTop - (grid.clientHeight / 2) + (targetCell.offsetHeight / 2);
-    grid.scrollTo({ top: scrollTop, behavior: 'smooth' });
-    fMyConsoleLog(`Scrolling grid to center row ${targetRowIndex} (Tag: GearTblHeaderStartR)`);
-} // END fScrollGridToBottom
-
-
-
-
 // fIsCheckboxClick ////////////////////////////////////////////////////////////////////////////////
 // Returns true if target is a checkbox input.
 function fIsCheckboxClick(target) {
@@ -2454,6 +2402,9 @@ function fSetupDelegatedMenuActionClick(menuBar) {
 
                      // Game Menu
                      case 'game-toggleSidebar': fToggleSidebar(); break;
+                     // Healing
+                     case 'game-healingNatural': fCalc_NaturalHealing(); break;
+                     case 'game-healingAll': fHealAllWounds(); break;
                      // Set to Max grid cells/ranges
                      case 'game-setMaxMeta': fMeta_SetToMax(); break;
                      case 'game-setMaxLuck': fLuck_SetToMax(); break;
@@ -2511,6 +2462,180 @@ function fToggleSidebar() {
 
 
 
+// fCalc_NaturalHealing ////////////////////////////////////////////////////////////////////
+// Purpose -> Reduces 1st, 2nd, 3rd degree wounds based on Vit Max rolls, updates grid, and logs to sidebar.
+// Inputs  -> None
+// Outputs -> None (Modifies grid, calls sidebar functions)
+async function fCalc_NaturalHealing() {
+    fMyConsoleLog("⚙️ Menu Action: Natural Healing...");
+
+    // --- Get Vit Max ---
+    const vitMaxRange = gUI.range?.vitMax;
+    if (!vitMaxRange || !vitMaxRange.r1 || !vitMaxRange.c1) {
+        const msg = "Vit Max range definition missing.";
+        console.warn(`fCalc_NaturalHealing: ${msg}`);
+        fMyConsoleLog(`⚠️ Natural Healing failed: ${msg}`);
+        await fShowMessage(`Error: ${msg}`);
+        return;
+    }
+    const vitMax = fGetGridValue(vitMaxRange.r1, vitMaxRange.c1, true);
+    if (isNaN(vitMax) || vitMax < 1) {
+        const msg = `Vit Max value ('${vitMax}') is invalid or zero. Cannot calculate healing.`;
+        console.warn(`fCalc_NaturalHealing: ${msg}`);
+        fMyConsoleLog(`⚠️ Natural Healing failed: ${msg}`);
+        await fShowMessage(`Error: ${msg}`);
+        return;
+    }
+    fMyConsoleLog(`   -> Vit Max for healing calc: ${vitMax}`);
+
+    // --- Process Each Wound Type ---
+    let errorsOccurred = false;
+    const healingResults = {}; // Store results for sidebar
+
+    healingResults['1st'] = await fProcessWoundHealing('vit1stWnds', vitMax, 4, '1st');
+    if (healingResults['1st'] === null) errorsOccurred = true;
+
+    healingResults['2nd'] = await fProcessWoundHealing('vit2ndWnds', vitMax, 8, '2nd');
+    if (healingResults['2nd'] === null) errorsOccurred = true;
+
+    healingResults['3rd'] = await fProcessWoundHealing('vit3rdWnds', vitMax, 16, '3rd');
+    if (healingResults['3rd'] === null) errorsOccurred = true;
+
+    // --- Update Vit Now & Percent ---
+    if (!errorsOccurred) {
+        await fVitNowNPercent_Calc(); // Update dependent Vit fields
+    } else {
+        fMyConsoleLog("   -> Skipping Vit Now/Percent update due to healing errors.");
+    }
+
+    // --- Build and Display Sidebar Message ---
+    let sidebarMsg = `<span class="blue-bold">ℹ️ Natural Healing:</span>`;
+    if (healingResults['1st'] !== null) sidebarMsg += `<br>${healingResults['1st']} -> 1st Deg Wnds`;
+    if (healingResults['2nd'] !== null) sidebarMsg += `<br>${healingResults['2nd']} -> 2nd Deg Wnds`;
+    if (healingResults['3rd'] !== null) sidebarMsg += `<br>${healingResults['3rd']} -> 3rd Deg Wnds`;
+
+    fPrependToSidebar(sidebarMsg);
+    fShowSidebar();
+
+    // Update Vit
+    fCalc_VitMaxNowPerc();
+
+    fMyConsoleLog(`✅ Natural Healing Process Complete ${errorsOccurred ? '(with errors)' : ''}.`);
+
+} // END fCalc_NaturalHealing
+
+
+
+
+// fProcessWoundHealing ////////////////////////////////////////////////////////////////////
+// Purpose -> Helper to get, calculate, and set healing for a specific wound degree.
+// Inputs  -> woundRangeTag (String): The tag for the wound cell (e.g., 'vit1stWnds').
+//         -> vitMax (Number): The character's maximum vitality.
+//         -> divisor (Number): The divisor for Vit Max to determine healing die size (4, 8, 16).
+//         -> degreeLabel (String): Label for logging ('1st', '2nd', '3rd').
+// Outputs -> (Promise<Number|null>): The actual amount healed, or null if an error occurred.
+async function fProcessWoundHealing(woundRangeTag, vitMax, divisor, degreeLabel) {
+    fMyConsoleLog(`      -> Processing ${degreeLabel} Degree wounds...`);
+
+    // Get range definition
+    const woundRange = gUI.range?.[woundRangeTag];
+    if (!woundRange || !woundRange.r1 || !woundRange.c1) {
+        const msg = `Wound range definition missing for tag: ${woundRangeTag}.`;
+        console.warn(`fProcessWoundHealing: ${msg}`);
+        fMyConsoleLog(`         -> ⚠️ Error: ${msg}`);
+        await fShowMessage(`Error processing ${degreeLabel} wounds: ${msg}`);
+        return null;
+    }
+
+    // Get current wounds (default to 0 if invalid/missing, ensure non-negative)
+    let currentWounds = Math.max(0, fGetGridValue(woundRange.r1, woundRange.c1, true) || 0);
+    if (isNaN(currentWounds)) {
+        fMyConsoleLog(`         -> Warning: Invalid current wound value for ${degreeLabel}. Assuming 0.`);
+        currentWounds = 0;
+    }
+
+    // Calculate healing die size (must be at least 1)
+    const healingDieSize = Math.max(1, Math.round(vitMax / divisor));
+    const healingRoll = fCSd(healingDieSize);
+    fMyConsoleLog(`         -> Healing roll (${degreeLabel}): d${healingDieSize} = ${healingRoll}`);
+
+    // Calculate new wounds (minimum 0)
+    const newWounds = Math.max(0, currentWounds - healingRoll);
+    const actualHealed = currentWounds - newWounds; // <<< CALCULATE ACTUAL HEALED AMOUNT
+    fMyConsoleLog(`         -> Wounds: ${currentWounds} -> ${newWounds} (Healed: ${actualHealed})`);
+
+    // Set the new wound value in the grid
+    if (!fSetGridValue(woundRange.r1, woundRange.c1, newWounds)) {
+        const msg = `Failed to update grid for ${degreeLabel} wounds.`;
+        console.warn(`fProcessWoundHealing: ${msg}`);
+        fMyConsoleLog(`         -> ⚠️ Error: ${msg}`);
+        await fShowMessage(`Error updating ${degreeLabel} wounds: ${msg}`);
+        return null; // Indicate failure
+    }
+
+    return actualHealed; // <<< RETURN ACTUAL HEALED AMOUNT
+
+} // END fProcessWoundHealing
+
+
+
+
+// fHealAllWounds /////////////////////////////////////////////////////////////////////////
+// Purpose -> Sets 1st, 2nd, and 3rd degree wounds to 0, updates Vit Now/Percent, and logs to sidebar.
+// Inputs  -> None
+// Outputs -> None (Modifies grid, calls sidebar functions)
+async function fHealAllWounds() {
+    fMyConsoleLog("⚙️ Menu Action: Clearing All Wounds...");
+
+    const woundTags = ['vit1stWnds', 'vit2ndWnds', 'vit3rdWnds'];
+    let errorsOccurred = false;
+
+    // Loop through each wound type tag
+    for (const tag of woundTags) {
+        const woundRange = gUI.range?.[tag];
+
+        // Validate range definition
+        if (!woundRange || !woundRange.r1 || !woundRange.c1) {
+            const msg = `Wound range definition missing for tag: ${tag}.`;
+            console.warn(`fHealAllWounds: ${msg}`);
+            fMyConsoleLog(`   -> ⚠️ Error: ${msg}`);
+            await fShowMessage(`Error clearing wounds: ${msg}`);
+            errorsOccurred = true;
+            continue; // Skip to next tag if definition missing
+        }
+
+        // Set the value to 0
+        if (!fSetGridValue(woundRange.r1, woundRange.c1, 0)) {
+            const msg = `Failed to update grid for tag: ${tag}.`;
+            console.warn(`fHealAllWounds: ${msg}`);
+            fMyConsoleLog(`   -> ⚠️ Error: ${msg}`);
+            await fShowMessage(`Error clearing wounds: ${msg}`);
+            errorsOccurred = true;
+            // Continue trying to clear other wound types even if one fails
+        } else {
+             fMyConsoleLog(`   -> Cleared wounds for tag: ${tag}`);
+        }
+    }
+
+    // Update Vit Now & Percent only if all updates were successful
+    if (!errorsOccurred) {
+        await fVitNowNPercent_Calc(); // Update dependent Vit fields
+    } else {
+        fMyConsoleLog("   -> Skipping Vit Now/Percent update due to errors clearing wounds.");
+    }
+
+    // Build and Display Sidebar Message (always show message, even if errors occurred during set)
+    const sidebarMsg = `<span class="blue-bold">ℹ️ All Wounds Healed</span>`;
+    fPrependToSidebar(sidebarMsg);
+    fShowSidebar();
+
+    fMyConsoleLog(`✅ Clear All Wounds Process Complete ${errorsOccurred ? '(with errors)' : ''}.`);
+
+} // END fHealAllWounds
+
+
+
+
 // fMeta_SetToMax ///////////////////////////////////////////////////////////////
 // Purpose -> Sets the current Meta values (Row: 'meta', Cols: 'R' to 'B') to their maximums
 //            based on gUI.list.metaFull and gUI.range.meta. Triggered by menu.
@@ -2555,6 +2680,10 @@ function fMeta_SetToMax() {
         // Optional: fShowMessage("Error setting Meta values."); // User feedback if needed
     } else {
         fMyConsoleLog("✅ Meta Set to Max.");
+        // --- Build and Display Sidebar Message ---
+        const sidebarMsg = `<span class="blue-bold">ℹ️ Meta Set to Max:</span>`;
+        fPrependToSidebar(sidebarMsg);
+        fShowSidebar();
     }
 
 } // END fMeta_SetToMax
@@ -2628,6 +2757,9 @@ async function fLuck_SetToMax() {
         await fShowMessage(`Error: Failed to update the Luck value in the grid.`); // User feedback
     } else {
         fMyConsoleLog(`✅ Luck Set to Max (${newLuckValue}).`);
+        const sidebarMsg = `<span class="blue-bold">ℹ️ Luck Set to Max:</span>`;
+        fPrependToSidebar(sidebarMsg);
+        fShowSidebar();
     }
 
 } // END fLuck_SetToMax
@@ -3154,7 +3286,187 @@ function fToggleGearColumns() {
 
 
 // ==========================================================================
-// === Initialization & Setup Functions     (End of Menu Bar Click) ===
+// === Header Button Click     (End of Menu Bar Click) ===
+// ==========================================================================
+
+
+
+// fHandleHeaderButtonClick ///////////////////////////////////////////////////////////////////////
+// Routes header button clicks to specific action handlers.
+// MODIFIED: Added call to fRefreshMonsterData for action-showMonsters
+function fHandleHeaderButtonClick(event, buttonImg) {
+    const action = buttonImg.dataset.buttonAction;
+    fMyConsoleLog(`🖱️ Header Button Clicked: ${action}`);
+
+    event.preventDefault();
+    event.stopPropagation();
+    const grid = document.getElementById('grid');
+
+    switch (action) {
+        case 'action-rollDice':
+            fHandleRollDiceAction();
+            break;
+        case 'action-refreshData':
+            console.log("ACTION: Refresh Data button clicked (logic pending)");
+            break;
+        case 'action-jumpTop':
+            fScrollGridToTop(grid);
+            break;
+        case 'action-jumpBottom':
+            fScrollGridToBottom(grid);
+            break;
+        case 'action-showMonsters':
+            // console.log("ACTION: Show Monsters button clicked (logic pending)"); // OLD
+            fRefreshMonsterData(); // <<< NEW: Call the refresh function
+            break;
+        default:
+            console.warn(`Unhandled header button action: ${action}`);
+    }
+} // END fHandleHeaderButtonClick
+
+
+// fScrollGridToTop ///////////////////////////////////////////////////////////////////////////////
+// Scrolls the grid to the top smoothly.
+function fScrollGridToTop(grid) {
+    if (grid) {
+        grid.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+        console.warn("Could not find #grid element to scroll top.");
+    }
+} // END fScrollGridToTop
+
+
+
+
+// fScrollGridToBottom ////////////////////////////////////////////////////////////////////////////
+// Scrolls the grid to center on a specific tagged row.
+function fScrollGridToBottom(grid) {
+    if (!grid) {
+        console.warn("Could not find #grid element to scroll bottom.");
+        return;
+    }
+
+    const targetRowIndex = resolveRow('GearTblHeaderStartR');
+    if (isNaN(targetRowIndex)) {
+        console.warn("Could not resolve row tag 'GearTblHeaderStartR' for scrolling.");
+        return;
+    }
+
+    const targetCell = gUI.grid2D?.[targetRowIndex]?.[0];
+    if (!targetCell) {
+        console.warn(`Could not find cell for row ${targetRowIndex} (Tag: GearTblHeaderStartR)`);
+        return;
+    }
+
+    const scrollTop = targetCell.offsetTop - (grid.clientHeight / 2) + (targetCell.offsetHeight / 2);
+    grid.scrollTo({ top: scrollTop, behavior: 'smooth' });
+    fMyConsoleLog(`Scrolling grid to center row ${targetRowIndex} (Tag: GearTblHeaderStartR)`);
+} // END fScrollGridToBottom
+
+
+
+// fRefreshMonsterData ///////////////////////////////////////////////////////////////
+// Purpose -> Clears the first row of the monster range and fetches fresh data for the rest from the <Game> Google Sheet.
+// Inputs  -> None
+// Outputs -> None (Modifies grid via fSetRangeValues, calls server)
+async function fRefreshMonsterData() {
+    fMyConsoleLog("⚙️ Refreshing Monster Data...");
+
+    // --- 1. Get and Validate Monster Range ---
+    const monsterRangeDef = gUI.range?.monsters;
+    if (!monsterRangeDef || !fIsValidRangeObject(monsterRangeDef)) {
+        const msg = "Monster range definition (gUI.range.monsters) is missing or invalid.";
+        console.error(`fRefreshMonsterData: ${msg}`);
+        fMyConsoleLog(`❌ Monster Refresh Failed: ${msg}`);
+        await fShowMessage(`Error: ${msg}`);
+        return;
+    }
+
+    // --- 2. Resolve Indices ---
+    const resolved = fResolveRangeIndices(monsterRangeDef);
+    if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
+        const msg = `Could not resolve monster range tags: ${JSON.stringify(monsterRangeDef)}`;
+        console.error(`fRefreshMonsterData: ${msg}`);
+        fMyConsoleLog(`❌ Monster Refresh Failed: ${msg}`);
+        await fShowMessage(`Error: ${msg}`);
+        return;
+    }
+    const { r1, c1, r2, c2 } = resolved; // Use resolved 0-based indices
+
+    // --- 3. Clear First Row Locally ---
+    fMyConsoleLog(`   -> Clearing first monster row (${r1}) locally...`);
+    if (!fSetRangeValues(r1, c1, r1, c2, '')) { // Set to empty string
+        const msg = `Failed to clear the first row of the monster range locally.`;
+        console.warn(`fRefreshMonsterData: ${msg}`);
+        fMyConsoleLog(`   -> ⚠️ Warning: ${msg}`);
+        // Continue even if local clear fails? Or stop? Let's continue for now.
+        // await fShowMessage(`Warning: ${msg}`); // Optional user feedback
+    }
+
+    // --- 4. Fetch Remaining Rows from Server ---
+    const fetchStartRow = r1 + 1;
+    if (fetchStartRow > r2) {
+        fMyConsoleLog("   -> No remaining monster rows to fetch from server (range was only 1 row).");
+        fMyConsoleLog("✅ Monster Refresh Complete (only local clear).");
+        // Optional: Show success message?
+        // await fShowMessage("Monster header cleared.");
+        return; // Nothing more to do
+    }
+
+    // Convert remaining range to A1 notation
+    const a1Notation = fIndicesToA1(fetchStartRow, c1, r2, c2);
+    if (!a1Notation) {
+        const msg = "Failed to generate A1 notation for fetching monster data.";
+        console.error(`fRefreshMonsterData: ${msg}`);
+        fMyConsoleLog(`❌ Monster Refresh Failed: ${msg}`);
+        await fShowMessage(`Error: ${msg}`);
+        return;
+    }
+
+    fMyConsoleLog(`   -> Fetching monster data from Sheet range: ${a1Notation}`);
+    // @@ Optional: Add a loading indicator here
+
+    google.script.run
+        .withSuccessHandler((dataArray) => {
+            // @@ Optional: Remove loading indicator here
+            fMyConsoleLog(`   -> Received ${dataArray?.length || 0} rows of monster data from server.`);
+
+            if (!Array.isArray(dataArray)) {
+                 const errMsg = "Received invalid data format from server for monsters.";
+                 console.error(`fRefreshMonsterData Success Handler: ${errMsg}`, dataArray);
+                 fMyConsoleLog(`   -> ❌ Error: ${errMsg}`);
+                 fShowMessage(`Error: ${errMsg}`); // Use await if fShowMessage needs it
+                 return;
+            }
+
+            // Update the grid locally with the fetched data
+            fMyConsoleLog(`   -> Updating local grid rows ${fetchStartRow}-${r2}...`);
+            if (!fSetRangeValues(fetchStartRow, c1, r2, c2, dataArray)) {
+                 const errMsg = "Failed to update the grid with fetched monster data.";
+                 console.warn(`fRefreshMonsterData Success Handler: ${errMsg}`);
+                 fMyConsoleLog(`   -> ⚠️ Warning: ${errMsg}`);
+                 fShowMessage(`Warning: ${errMsg}`); // Use await if needed
+            } else {
+                fMyConsoleLog("✅ Monster Refresh Complete.");
+                // Optional: Show success message
+                // fShowMessage("Monster data refreshed successfully.");
+            }
+        })
+        .withFailureHandler((error) => {
+            // @@ Optional: Remove loading indicator here
+            const errorMsg = `Failed to fetch monster data from server: ${error.message}`;
+            console.error(`fRefreshMonsterData Failure Handler:`, error);
+            fMyConsoleLog(`❌ Monster Refresh Failed: ${errorMsg}`);
+            fShowMessage(`Error: ${errorMsg}`); // Use await if needed
+        })
+        .fCSGetRangeData(SHEET_ID, a1Notation); // Call the new server function
+
+} // END fRefreshMonsterData
+
+
+
+// ==========================================================================
+// === Initialization & Setup Functions     (End of Header Button Click) ===
 // ==========================================================================
 
 
