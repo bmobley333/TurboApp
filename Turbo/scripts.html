@@ -61,39 +61,48 @@ const gUI = {
     // { r1: 0, r2: 1 } // Example: Range using indices
   ],
   // Current Roll object
-  roll: {
-    // Ability Table Columns in with sk1CB then in Order
-    sk1CB: false,
-    skMorph: '',
-    skTyp: '',
-    skSk: '',
-    skIsOn: '',
-    skNameID: '',
-    skName: '',
-    skAct: '',
-    skDur: '',
-    skMeta: '',
-    skUses: '',
-    resTyp: '',
-    resSk: '',
-    resFlatBase: '',
-    resFlatResult: '',
-    resDif: '',
-    resFocus: '',
-    resPlus: '',
-    resPlusPlus: '',
-    resdctMult: '',
-    resMult: '',
-    resMultMult: '',
-    resCombine: '',
-    roll: '',
-    resRoll: '',
-    isUnSk: false,
-    htmlHeader: ''   // Stores the header HTML string for the roll log
+roll: {
+    // --- Input values from Sheet (populated by fResetPopulateNCleanGUIRoll) ---
+    sk1CB: false,        // Flag: True if roll originated from Sk1 CheckBox column, false if Sk2
+    ability_R: '',               // 0-based row index of the ability/gear being rolled
+    skMorph: '',         // Raw morph string from sheet ('Morph1' or 'Morph2' col)
+    skTyp: '',           // Base skill type string ('Sk', 'Atr', 'Atk', etc.) from sheet ('Sk1Typ' or 'Sk2Typ' col)
+    skSk: '',            // Base skill value (numeric >= 1 or '') from sheet ('Sk1' or 'Sk2' col)
+    skIsOn: '',          // Raw 'Is On' status from sheet
+    skNameID: '',        // Raw ability/gear name from sheet, may include ID ('Ability' col)
+    skName: '',          // Cleaned ability/gear name (ID stripped)
+    skAct: '',           // Action Point cost
+    skDur: '',           // Raw duration value from sheet
+    skMeta: '',          // Raw Meta cost value from sheet
+    skUses: '',          // Remaining uses (numeric >= 0 or '') from sheet
+
+    // --- Result values calculated after processing morphs (fProcessMorph, fApplyMorphResults) ---
+    resTyp: '',          // Resulting roll type after morphs (defaults to skTyp)
+    resSk: '',           // Resulting skill value after skill morphs (resCombine/skSk, resMult, resdctMult, resPlus, resFocus, isUnSk) - base for roll calculation
+    resFlatBase: '',     // Skill override value from '=' morph (overrides skSk/resCombine base)
+    resFlatResult: '',   // Final roll result override from '==' morph
+    resDif: '',          // Difficulty value from '^' morph
+    resFocus: '',        // Index (0-4) of last matching Meta color ('R'..'B') in morph string, adds bonus to resSk
+    resPlus: '',         // Sum of '+[num]' / '-[num]' morphs (additive modifier to resSk)
+    resPlusPlus: '',     // Sum of '++[num]' / '--[num]' morphs (additive modifier to final roll)
+    resdctMult: '',      // Cumulative multiplier from '+/-[num]dct' morphs (applies to both resSk and resRoll)
+    resMult: '',         // Cumulative multiplier from '*[num]' / '/[num]' morphs (applies to resSk)
+    resMultMult: '',     // Cumulative multiplier from '**[num]' / '//[num]' morphs (applies to final roll)
+    resCombine: '',      // Combined skill value calculated from numeric morphs + skSk (diminishing returns)
+
+    // --- Dice roll results (calculated by fCalcGUIRollRoll, fCalcGUIRollResRoll) ---
+    roll: '',            // Raw dice roll result based on resSk and resTyp (before roll morphs)
+    resRoll: '',         // Final roll result after applying roll morphs (resMultMult, resPlusPlus, resdctMult) or override (resFlatResult)
+
+    // --- Flags ---
+    isUnSk: false,       // Flag set to true if 'un' or 'unsk' morph was present
+
+    // --- Output Formatting ---
+    htmlHeader: ''       // Stores the header HTML string for the roll log entry
   },
     list: {
     // array lists
-    skTyp: ['Atr','Sk','Atk','DMG','Def','AR'], // Note free, luck, un, unSk are not skill Types and dealth with elsewhere
+    skTyp: ['Atr','Sk','Atk','DMG','Def','AR','Str'], // Note free, luck, un, unSk are not skill Types and dealth with elsewhere
     metaColor: ['R','O','Y','G','B']
   },
   // Sets to store the indices of currently hidden columns/rows
