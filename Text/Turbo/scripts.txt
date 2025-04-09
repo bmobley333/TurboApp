@@ -100,11 +100,6 @@ roll: {
     // --- Output Formatting ---
     htmlHeader: ''       // Stores the header HTML string for the roll log entry
   },
-    list: {
-    // array lists
-    skTyp: ['Atr','Sk','Atk','DMG','Def','AR','Str'], // Note free, luck, un, unSk are not skill Types and dealth with elsewhere
-    metaColor: ['R','O','Y','G','B']
-  },
   range: {
     // Define ranges using objects with r1, c1, r2, c2 properties
     morphs: [ // <-- Array is correct because there are MULTIPLE morph ranges
@@ -112,7 +107,29 @@ roll: {
       { r1: 'AbilTblStart_R', c1: 'Morph2', r2: 'AbilTblEnd_R', c2: 'Morph2' }
     ],
     monsters: { r1: 'CustMon', c1: 'NumMon', r2: 'LastMon_R', c2: 'MonSize' },
-    currentNish: { r1: 'Nish', c1: 'Nish', r2: 'Nish', c2: 'Nish' }
+    currentNish: { r1: 'Nish', c1: 'Nish', r2: 'Nish', c2: 'Nish' },
+    meta: { r1: 'meta', c1: 'R', r2: 'meta', c2: 'B' },
+    metaChannel: { r1: 'chnl', c1: 'R', r2: 'chnl', c2: 'B' },
+    luckBox: { r1: 'LuckBox', c1: 'LuckBox', r2: 'LuckBox', c2: 'LuckBox' },
+    luckBoxPlus: { r1: 'LuckPlus', c1: 'LuckBox', r2: 'LuckPlus', c2: 'LuckBox' },
+    actTotal: { r1: 'Act', c1: 'ActTot', r2: 'Act', c2: 'ActTot' },
+    actPlus: { r1: 'ActPlus', c1: 'ActTot', r2: 'ActPlus', c2: 'ActTot' },
+    fortitudeSk1: { r1: 'For', c1: 'Sk1', r2: 'For', c2: 'Sk1' },
+    vitMax: { r1: 'VitTbl', c1: 'vitMax', r2: 'VitTbl', c2: 'vitMax' },
+    vitMaxPlus: { r1: 'VitTbl', c1: 'vitPlus', r2: 'VitTbl', c2: 'vitPlus' },
+    vit1stWnds: { r1: 'VitTbl', c1: 'vit1st', r2: 'VitTbl', c2: 'vit1st' },
+    vit2ndWnds: { r1: 'VitTbl', c1: 'vit2nd', r2: 'VitTbl', c2: 'vit2nd' },
+    vit3rdWnds: { r1: 'VitTbl', c1: 'vit3rd', r2: 'VitTbl', c2: 'vit3rd' },
+    vitNow: { r1: 'VitTbl', c1: 'vitNow', r2: 'VitTbl', c2: 'vitNow' },
+    vitNowPercent: { r1: 'VitTbl', c1: 'VitNowPercent', r2: 'VitTbl', c2: 'VitNowPercent' }
+  },
+    list: {
+    // array lists
+    skTyp: ['Atr','Sk','Atk','DMG','Def','AR','Str'], // Note free, luck, un, unSk are not skill Types and dealth with elsewhere
+    metaColor: ['R','O','Y','G','B'],
+    metaFull: [5,4,3,2,1],
+    luckBoxMax: 5,
+    actMax: 5,
   },
   // Sets to store the indices of currently hidden columns/rows
   hiddenColumns: new Set(),
@@ -2434,13 +2451,22 @@ function fSetupDelegatedMenuActionClick(menuBar) {
 
              // --- Action Dispatcher ---
              switch (action) {
+
+                     // Game Menu
                      case 'game-toggleSidebar': fToggleSidebar(); break;
+                     // Set to Max grid cells/ranges
+                     case 'game-setMaxMeta': fMeta_SetToMax(); break;
+                     case 'game-setMaxLuck': fLuck_SetToMax(); break;
+                     case 'game-setMaxVit': fCalc_VitMaxNowPerc(); break;
+                     // Clear grid cells/ranges
                      case 'game-clearChanneled': fClearChanneledMeta(); break;
                      case 'game-clearCheckboxes': fClearSk1Sk2Checkboxes(); break;
                      case 'game-clearMonsters': fClearMonsters(); break;
                      case 'game-clearMorphs': fClearMorphs(); break;
                      case 'game-clearNish': fClearCurrentNish(); break;
                      case 'game-clearRollLog': fClearRollLog(); break;
+
+                     // Gear Menu
                      case 'gear-toggleGear': fToggleGearColumns(); break;
                  default:
                      console.log(`ACTION: Menu item clicked: ${action} (No handler defined yet)`);
@@ -2484,19 +2510,397 @@ function fToggleSidebar() {
 
 
 
+
+// fMeta_SetToMax ///////////////////////////////////////////////////////////////
+// Purpose -> Sets the current Meta values (Row: 'meta', Cols: 'R' to 'B') to their maximums
+//            based on gUI.list.metaFull and gUI.range.meta. Triggered by menu.
+// Inputs  -> None
+// Outputs -> None (Calls fSetRangeValues which modifies grid data and DOM)
+function fMeta_SetToMax() {
+    fMyConsoleLog("⚙️ Menu Action: Setting Meta to Max...");
+
+    // --- 1. Get Range and Max Values ---
+    const metaRange = gUI.range?.meta;
+    const maxMetaValues = gUI.list?.metaFull;
+
+    // --- 2. Validate Inputs ---
+    if (!metaRange || typeof metaRange.r1 === 'undefined' || typeof metaRange.c1 === 'undefined' || typeof metaRange.r2 === 'undefined' || typeof metaRange.c2 === 'undefined') {
+        console.warn("fMeta_SetToMax: Meta range definition is missing or incomplete in gUI.range.meta.");
+        fMyConsoleLog("⚠️ Cannot set Meta to max: Range definition missing or incomplete.");
+        fShowMessage("Error: Meta range definition is missing."); // User feedback
+        return;
+    }
+    if (!Array.isArray(maxMetaValues) || maxMetaValues.length === 0) {
+        console.warn("fMeta_SetToMax: Max Meta values are missing or empty in gUI.list.metaFull.");
+        fMyConsoleLog("⚠️ Cannot set Meta to max: Max values list missing or empty.");
+        fShowMessage("Error: Max Meta values list is missing."); // User feedback
+        return;
+    }
+
+    // --- 3. Call fSetRangeValues ---
+    // Note: fSetRangeValues expects a 1D array if the target range is 1 row high.
+    // It automatically maps the array elements across the columns of that row.
+    const success = fSetRangeValues(
+        metaRange.r1,
+        metaRange.c1,
+        metaRange.r2,
+        metaRange.c2,
+        maxMetaValues // Pass the 1D array directly
+    );
+
+    // --- 4. Log Result ---
+    if (!success) {
+        // fSetRangeValues logs its own errors, but we add context here
+        fMyConsoleLog(`⚠️ Failed to set Meta to max using fSetRangeValues.`);
+        // Optional: fShowMessage("Error setting Meta values."); // User feedback if needed
+    } else {
+        fMyConsoleLog("✅ Meta Set to Max.");
+    }
+
+} // END fMeta_SetToMax
+
+
+
+
+// fLuck_SetToMax ///////////////////////////////////////////////////////////////
+// Purpose -> Sets the current Luck value (gUI.range.luckBox) to its maximum,
+//            calculated as gUI.list.luckBoxMax + integer value of gUI.range.luckBoxPlus.
+//            Triggered by menu action 'game-setMaxLuck'.
+// Inputs  -> None
+// Outputs -> None (Calls fGetGridValue, fSetGridValue which modify grid data and DOM)
+async function fLuck_SetToMax() {
+    fMyConsoleLog("⚙️ Menu Action: Setting Luck to Max...");
+
+    // --- 1. Get Base Value and Range Definitions ---
+    const baseLuck = gUI.list?.luckBoxMax;
+    const luckBoxRange = gUI.range?.luckBox;
+    const luckBoxPlusRange = gUI.range?.luckBoxPlus;
+
+    // --- 2. Validate Base Value and Ranges ---
+    if (typeof baseLuck !== 'number' || isNaN(baseLuck)) {
+        console.warn("fLuck_SetToMax: Base Luck value is missing or invalid in gUI.list.luckBoxMax.");
+        fMyConsoleLog("⚠️ Cannot set Luck to max: Base Luck value missing or invalid.");
+        await fShowMessage("Error: Base Luck value definition is missing or invalid."); // User feedback
+        return;
+    }
+    if (!luckBoxRange || typeof luckBoxRange.r1 === 'undefined' || typeof luckBoxRange.c1 === 'undefined') {
+        // Only need r1, c1 for single cell get/set
+        console.warn("fLuck_SetToMax: LuckBox range definition is missing or incomplete in gUI.range.luckBox.");
+        fMyConsoleLog("⚠️ Cannot set Luck to max: LuckBox range definition missing or incomplete.");
+        await fShowMessage("Error: LuckBox range definition is missing."); // User feedback
+        return;
+    }
+    if (!luckBoxPlusRange || typeof luckBoxPlusRange.r1 === 'undefined' || typeof luckBoxPlusRange.c1 === 'undefined') {
+        // Only need r1, c1 for single cell get
+        console.warn("fLuck_SetToMax: LuckBoxPlus range definition is missing or incomplete in gUI.range.luckBoxPlus.");
+        fMyConsoleLog("⚠️ Cannot set Luck to max: LuckBoxPlus range definition missing or incomplete.");
+        await fShowMessage("Error: LuckBoxPlus range definition is missing."); // User feedback
+        return;
+    }
+
+    // --- 3. Get Luck Plus Bonus Value ---
+    const luckPlusValueRaw = fGetGridValue(luckBoxPlusRange.r1, luckBoxPlusRange.c1);
+    let luckPlusBonus = 0; // Default bonus to 0
+
+    // Check if raw value is a number or a string that can be converted to one
+    if (luckPlusValueRaw !== null && luckPlusValueRaw !== '' && !isNaN(Number(luckPlusValueRaw))) {
+        luckPlusBonus = Math.round(Number(luckPlusValueRaw)); // Round to nearest integer
+        fMyConsoleLog(`   -> Luck Plus Bonus found: ${luckPlusValueRaw} -> Rounded: ${luckPlusBonus}`);
+    } else {
+        fMyConsoleLog(`   -> No valid Luck Plus Bonus found in cell (${luckBoxPlusRange.r1}, ${luckBoxPlusRange.c1}). Using 0.`);
+        // Optional: Show a message if the value was present but invalid?
+        // if (luckPlusValueRaw !== null && luckPlusValueRaw !== '') {
+        //    await fShowMessage(`Warning: The value "${luckPlusValueRaw}" in the Luck Plus cell is not a valid number. Using 0 bonus.`);
+        // }
+    }
+
+    // --- 4. Calculate New Luck Value ---
+    const newLuckValue = baseLuck + luckPlusBonus;
+    fMyConsoleLog(`   -> Calculated Max Luck: ${baseLuck} (Base) + ${luckPlusBonus} (Bonus) = ${newLuckValue}`);
+
+    // --- 5. Set New Value in Grid ---
+    const success = fSetGridValue(luckBoxRange.r1, luckBoxRange.c1, newLuckValue);
+
+    // --- 6. Log Result ---
+    if (!success) {
+        // fSetGridValue logs specific errors
+        fMyConsoleLog(`⚠️ Failed to set Luck to max value (${newLuckValue}) in cell (${luckBoxRange.r1}, ${luckBoxRange.c1}).`);
+        await fShowMessage(`Error: Failed to update the Luck value in the grid.`); // User feedback
+    } else {
+        fMyConsoleLog(`✅ Luck Set to Max (${newLuckValue}).`);
+    }
+
+} // END fLuck_SetToMax
+
+
+
+// fAct_SetToMax ///////////////////////////////////////////////////////////////
+// Purpose -> Sets the current Act Total value (gUI.range.actTotal) to its maximum,
+//            calculated as gUI.list.actMax + integer value of gUI.range.actPlus.
+// Inputs  -> None
+// Outputs -> None (Calls fGetGridValue, fSetGridValue which modify grid data and DOM)
+async function fAct_SetToMax() {
+    fMyConsoleLog("⚙️ Setting Action Points to Max...");
+
+    // --- 1. Get Base Value and Range Definitions ---
+    const baseActMax = gUI.list?.actMax;
+    const actTotalRange = gUI.range?.actTotal;
+    const actPlusRange = gUI.range?.actPlus;
+
+    // --- 2. Validate Base Value and Ranges ---
+    if (typeof baseActMax !== 'number' || isNaN(baseActMax)) {
+        console.warn("fAct_SetToMax: Base Act Max value is missing or invalid in gUI.list.actMax.");
+        fMyConsoleLog("⚠️ Cannot set Act to max: Base Act Max value missing or invalid.");
+        await fShowMessage("Error: Base Action Points Max value definition is missing or invalid."); // User feedback
+        return;
+    }
+    if (!actTotalRange || typeof actTotalRange.r1 === 'undefined' || typeof actTotalRange.c1 === 'undefined') {
+        // Only need r1, c1 for single cell get/set
+        console.warn("fAct_SetToMax: Act Total range definition is missing or incomplete in gUI.range.actTotal.");
+        fMyConsoleLog("⚠️ Cannot set Act to max: Act Total range definition missing or incomplete.");
+        await fShowMessage("Error: Action Points Total range definition is missing."); // User feedback
+        return;
+    }
+    if (!actPlusRange || typeof actPlusRange.r1 === 'undefined' || typeof actPlusRange.c1 === 'undefined') {
+        // Only need r1, c1 for single cell get
+        console.warn("fAct_SetToMax: Act Plus range definition is missing or incomplete in gUI.range.actPlus.");
+        fMyConsoleLog("⚠️ Cannot set Act to max: Act Plus range definition missing or incomplete.");
+        await fShowMessage("Error: Action Points Plus range definition is missing."); // User feedback
+        return;
+    }
+
+    // --- 3. Get Act Plus Bonus Value ---
+    const actPlusValueRaw = fGetGridValue(actPlusRange.r1, actPlusRange.c1);
+    let actPlusBonus = 0; // Default bonus to 0
+
+    // Check if raw value is a number or a string that can be converted to one
+    if (actPlusValueRaw !== null && actPlusValueRaw !== '' && !isNaN(Number(actPlusValueRaw))) {
+        actPlusBonus = Math.round(Number(actPlusValueRaw)); // Round to nearest integer
+        fMyConsoleLog(`   -> Act Plus Bonus found: ${actPlusValueRaw} -> Rounded: ${actPlusBonus}`);
+    } else {
+        fMyConsoleLog(`   -> No valid Act Plus Bonus found in cell (${actPlusRange.r1}, ${actPlusRange.c1}). Using 0.`);
+        // Optional: Show a message if the value was present but invalid?
+        // if (actPlusValueRaw !== null && actPlusValueRaw !== '') {
+        //    await fShowMessage(`Warning: The value "${actPlusValueRaw}" in the Act Plus cell is not a valid number. Using 0 bonus.`);
+        // }
+    }
+
+    // --- 4. Calculate New Act Value ---
+    const newActValue = baseActMax + actPlusBonus;
+    fMyConsoleLog(`   -> Calculated Max Act: ${baseActMax} (Base) + ${actPlusBonus} (Bonus) = ${newActValue}`);
+
+    // --- 5. Set New Value in Grid ---
+    // Use actTotalRange for setting the value
+    const success = fSetGridValue(actTotalRange.r1, actTotalRange.c1, newActValue);
+
+    // --- 6. Log Result ---
+    if (!success) {
+        // fSetGridValue logs specific errors
+        fMyConsoleLog(`⚠️ Failed to set Act to max value (${newActValue}) in cell (${actTotalRange.r1}, ${actTotalRange.c1}).`);
+        await fShowMessage(`Error: Failed to update the Action Points value in the grid.`); // User feedback
+    } else {
+        fMyConsoleLog(`✅ Action Points Set to Max (${newActValue}).`);
+    }
+
+} // END fAct_SetToMax
+
+
+
+
+// fCalc_VitMaxNowPerc ///////////////////////////////////////////////////////////////
+// Purpose -> Sets the Vit Max value based on Fortitude + Vit Bonus, then updates
+//            current Vit and percentage via helper. Triggered by menu action 'game-setMaxVit'.
+// Inputs  -> None
+// Outputs -> None (Calls helper, fGetGridValue, fSetGridValue which modify grid data/DOM)
+async function fCalc_VitMaxNowPerc() {
+    fMyConsoleLog("⚙️ Menu Action: Setting Vit to Max...");
+
+    // --- 1. Get Range Definitions ---
+    const fortitudeRange = gUI.range?.fortitudeSk1;
+    const vitMaxRange = gUI.range?.vitMax;
+    const vitMaxPlusRange = gUI.range?.vitMaxPlus;
+
+    // --- 2. Validate Ranges ---
+    let errorMsg = '';
+    if (!fortitudeRange || !fortitudeRange.r1 || !fortitudeRange.c1) errorMsg = "Fortitude range definition missing.";
+    else if (!vitMaxRange || !vitMaxRange.r1 || !vitMaxRange.c1) errorMsg = "Vit Max range definition missing.";
+    else if (!vitMaxPlusRange || !vitMaxPlusRange.r1 || !vitMaxPlusRange.c1) errorMsg = "Vit Max Plus range definition missing.";
+
+    if (errorMsg) {
+        console.warn(`fCalc_VitMaxNowPerc: ${errorMsg}`);
+        fMyConsoleLog(`⚠️ Cannot set Vit to max: ${errorMsg}`);
+        await fShowMessage(`Error: ${errorMsg}`);
+        return;
+    }
+
+    // --- 3. Get Fortitude Value ---
+    const fortitudeValueRaw = fGetGridValue(fortitudeRange.r1, fortitudeRange.c1);
+    const fortitudeValue = Number(fortitudeValueRaw);
+
+    if (isNaN(fortitudeValue)) {
+        const msg = `Fortitude Sk1 value ('${fortitudeValueRaw}') is not a valid number.`;
+        console.warn(`fCalc_VitMaxNowPerc: ${msg}`);
+        fMyConsoleLog(`⚠️ Cannot set Vit to max: ${msg}`);
+        await fShowMessage(`Error: ${msg}`);
+        return;
+    }
+    fMyConsoleLog(`   -> Fortitude Sk1 value: ${fortitudeValue}`);
+
+    // --- 4. Get Vit Max Plus Bonus ---
+    const vitMaxPlusValueRaw = fGetGridValue(vitMaxPlusRange.r1, vitMaxPlusRange.c1);
+    let vitMaxPlusBonus = 0; // Default bonus to 0
+
+    if (vitMaxPlusValueRaw !== null && vitMaxPlusValueRaw !== '' && !isNaN(Number(vitMaxPlusValueRaw))) {
+        vitMaxPlusBonus = Math.round(Number(vitMaxPlusValueRaw)); // Round to nearest integer
+        fMyConsoleLog(`   -> Vit Max Plus Bonus found: ${vitMaxPlusValueRaw} -> Rounded: ${vitMaxPlusBonus}`);
+    } else {
+        fMyConsoleLog(`   -> No valid Vit Max Plus Bonus found. Using 0.`);
+    }
+
+    // --- 5. Calculate and Set New Vit Max ---
+    const newVitMax = Math.round(fortitudeValue + vitMaxPlusBonus); // Ensure integer result
+    fMyConsoleLog(`   -> Calculated New Vit Max: ${fortitudeValue} (For) + ${vitMaxPlusBonus} (Bonus) = ${newVitMax}`);
+
+    const setMaxSuccess = fSetGridValue(vitMaxRange.r1, vitMaxRange.c1, newVitMax);
+
+    if (!setMaxSuccess) {
+        fMyConsoleLog(`⚠️ Failed to set Vit Max value (${newVitMax}) in cell (${vitMaxRange.r1}, ${vitMaxRange.c1}). Aborting further updates.`);
+        await fShowMessage(`Error: Failed to update the Vit Max value in the grid.`);
+        return; // Stop if we couldn't set the new max value
+    }
+    fMyConsoleLog(`   -> Successfully set Vit Max to ${newVitMax}.`);
+
+    // --- 6. Call Helper to Update Vit Now and Percentage ---
+    await fVitNowNPercent_Calc(); // Calls the helper function below
+
+    fMyConsoleLog("✅ Vit Set to Max sequence complete.");
+
+} // END fCalc_VitMaxNowPerc
+
+
+
+
+// fVitNowNPercent_Calc /////////////////////////////////////////////////////////
+// Purpose -> Helper to calculate Vit Now (Vit Max - Wounds) and Vit Now Percent.
+//            Updates the respective grid cells. Called by fCalc_VitMaxNowPerc.
+// Inputs  -> None (Reads required values from grid using gUI.range definitions)
+// Outputs -> None (Calls fGetGridValue, fSetGridValue which modify grid data/DOM)
+async function fVitNowNPercent_Calc() {
+    fMyConsoleLog("   -> Calculating Vit Now & Percent...");
+
+    // --- 1. Get Range Definitions ---
+    const vitMaxRange = gUI.range?.vitMax;
+    const vit1stRange = gUI.range?.vit1stWnds;
+    const vit2ndRange = gUI.range?.vit2ndWnds;
+    const vit3rdRange = gUI.range?.vit3rdWnds;
+    const vitNowRange = gUI.range?.vitNow;
+    const vitNowPercentRange = gUI.range?.vitNowPercent;
+
+    // --- 2. Validate Ranges ---
+    let errorMsg = '';
+    if (!vitMaxRange || !vitMaxRange.r1 || !vitMaxRange.c1) errorMsg = "Vit Max range definition missing.";
+    else if (!vit1stRange || !vit1stRange.r1 || !vit1stRange.c1) errorMsg = "Vit 1st Wounds range definition missing.";
+    else if (!vit2ndRange || !vit2ndRange.r1 || !vit2ndRange.c1) errorMsg = "Vit 2nd Wounds range definition missing.";
+    else if (!vit3rdRange || !vit3rdRange.r1 || !vit3rdRange.c1) errorMsg = "Vit 3rd Wounds range definition missing.";
+    else if (!vitNowRange || !vitNowRange.r1 || !vitNowRange.c1) errorMsg = "Vit Now range definition missing.";
+    else if (!vitNowPercentRange || !vitNowPercentRange.r1 || !vitNowPercentRange.c1) errorMsg = "Vit Now Percent range definition missing.";
+
+    if (errorMsg) {
+        console.warn(`fVitNowNPercent_Calc: ${errorMsg}`);
+        fMyConsoleLog(`   -> ⚠️ Calculation aborted: ${errorMsg}`);
+        await fShowMessage(`Error: ${errorMsg}`);
+        return;
+    }
+
+    // --- 3. Get Current Vit Max (should be the newly set value) ---
+    const currentVitMaxRaw = fGetGridValue(vitMaxRange.r1, vitMaxRange.c1);
+    const currentVitMax = Number(currentVitMaxRaw);
+    if (isNaN(currentVitMax)) {
+        const msg = `Vit Max value ('${currentVitMaxRaw}') needed for calculation is not a number.`;
+        console.warn(`fVitNowNPercent_Calc: ${msg}`);
+        fMyConsoleLog(`   -> ⚠️ Calculation aborted: ${msg}`);
+        await fShowMessage(`Error: ${msg}`);
+        return;
+    }
+
+    // --- 4. Get and Sum Wound Values ---
+    const getWoundVal = (range) => {
+        const raw = fGetGridValue(range.r1, range.c1);
+        // Return rounded integer if valid number, otherwise 0
+        return (raw !== null && raw !== '' && !isNaN(Number(raw))) ? Math.round(Number(raw)) : 0;
+    };
+    const wounds1st = getWoundVal(vit1stRange);
+    const wounds2nd = getWoundVal(vit2ndRange);
+    const wounds3rd = getWoundVal(vit3rdRange);
+    const totalWounds = wounds1st + wounds2nd + wounds3rd;
+    fMyConsoleLog(`      -> Wounds: ${wounds1st}(1st) + ${wounds2nd}(2nd) + ${wounds3rd}(3rd) = ${totalWounds}`);
+
+    // --- 5. Calculate and Set Vit Now ---
+    const newVitNow = Math.round(currentVitMax - totalWounds); // Ensure integer
+    fMyConsoleLog(`      -> Calculated Vit Now: ${currentVitMax} (Max) - ${totalWounds} (Wounds) = ${newVitNow}`);
+    const setNowSuccess = fSetGridValue(vitNowRange.r1, vitNowRange.c1, newVitNow);
+    if (!setNowSuccess) {
+        fMyConsoleLog(`   -> ⚠️ Failed to set Vit Now value (${newVitNow}).`);
+        await fShowMessage(`Error: Failed to update the Vit Now value.`);
+        // Continue to attempt percentage calculation? Or return? Let's continue for now.
+    }
+
+    // --- 6. Calculate and Set Vit Now Percentage ---
+    const percent = (currentVitMax === 0) ? 0 : Math.round((newVitNow / currentVitMax) * 100);
+    const percentString = percent + '%';
+    fMyConsoleLog(`      -> Calculated Vit Now Percent: ${percentString}`);
+    const setPercentSuccess = fSetGridValue(vitNowPercentRange.r1, vitNowPercentRange.c1, percentString);
+     if (!setPercentSuccess) {
+        fMyConsoleLog(`   -> ⚠️ Failed to set Vit Now Percent value (${percentString}).`);
+        await fShowMessage(`Error: Failed to update the Vit Now Percent value.`);
+    }
+
+    fMyConsoleLog("   -> Vit Now & Percent Calculation complete.");
+
+} // END fVitNowNPercent_Calc
+
+
+
+
 // fClearChanneledMeta ////////////////////////////////////////////////////////////
-// Purpose -> Clears the channeled meta range (R-B) in the grid.
+// Purpose -> Clears the channeled meta range defined in gUI.range.metaChannel using fSetRangeValues.
 // Inputs  -> None
 // Outputs -> None (Calls fSetRangeValues which modifies grid data and DOM)
 function fClearChanneledMeta() {
     fMyConsoleLog("⚙️ Menu Action: Clearing Channeled Meta...");
-    // Call fSetRangeValues to set the range ('chnl', 'R') to ('chnl', 'B') with an empty string ''
-    const success = fSetRangeValues('chnl', 'R', 'chnl', 'B', '');
-    if (!success) {
-         fMyConsoleLog("⚠️ Failed to clear Channeled Meta range using fSetRangeValues.");
-         // Optional: Show an error message to the user if needed
-         // fShowMessage("Error clearing the channeled meta range.");
+
+    // --- 1. Get Range Definition ---
+    const metaChannelRange = gUI.range?.metaChannel; // Get the range definition object
+
+    // --- 2. Validate Range Object ---
+    if (!metaChannelRange || typeof metaChannelRange.r1 === 'undefined' || typeof metaChannelRange.c1 === 'undefined' || typeof metaChannelRange.r2 === 'undefined' || typeof metaChannelRange.c2 === 'undefined') {
+        console.warn("fClearChanneledMeta: Channeled Meta range definition is missing or incomplete in gUI.range.metaChannel.");
+        fMyConsoleLog("⚠️ Cannot clear Channeled Meta: Range definition missing or incomplete.");
+        fShowMessage("Error: Channeled Meta range definition is missing."); // User feedback
+        return;
     }
+
+    // --- 3. Call fSetRangeValues ---
+    // Call fSetRangeValues using properties from the metaChannelRange object
+    const success = fSetRangeValues(
+        metaChannelRange.r1,
+        metaChannelRange.c1,
+        metaChannelRange.r2,
+        metaChannelRange.c2,
+        '' // Set the range to empty strings
+    );
+
+    // --- 4. Log Result ---
+    if (!success) {
+        // fSetRangeValues logs specific errors, add context here
+        // Log uses the actual tags from the object for clarity in case of failure
+        fMyConsoleLog(`⚠️ Failed to clear Channeled Meta range (${metaChannelRange.r1},${metaChannelRange.c1} to ${metaChannelRange.r2},${metaChannelRange.c2}) using fSetRangeValues.`);
+        // Optional: Show an error message to the user if needed
+        // fShowMessage("Error clearing the channeled meta range.");
+    } else {
+        fMyConsoleLog("✅ Channeled Meta Range Cleared.");
+    }
+
 } // END fClearChanneledMeta
 
 
