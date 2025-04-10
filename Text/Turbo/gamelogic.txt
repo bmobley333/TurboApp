@@ -463,15 +463,16 @@ function fApplyMorphResults(acc) {
 
 
 
+
 // fVerifyNSetActMetaLuckUsesOnEtc ///////////////////////////////////////////////////////////
-// Purpose -> Verify ability costs (Act, Meta, Luck, Uses) and toggle 'IsOn' state.
+// Purpose -> Verify ability costs (Act, Meta, Luck, Uses) and process 'IsOn' state.
 //            Prompts user if insufficient Action Points. Halts if insufficient Meta/Luck/Uses.
-//            Applies *all* decrements *only* after *all* checks pass or are overridden.
+//            Applies *all* decrements/changes *only* after *all* checks pass or are overridden.
 // Inputs  -> None (uses gUI.roll and grid helpers).
 // Outputs -> (Promise<Boolean>): Resolves true if costs are met/overridden and applied,
 //                                resolves false if cancelled by user or insufficient resources.
 async function fVerifyNSetActMetaLuckUsesOnEtc() {
-    fMyConsoleLog("🛡️ Verifying Costs...");
+    fMyConsoleLog("🛡️ Verifying Costs & Processing 'Is On'..."); // Updated log
     const pendingChanges = []; // Array to hold { r, c, value } objects
     const pendingHeaders = []; // Array to hold strings for fAppendToHTMLHeader
 
@@ -487,6 +488,13 @@ async function fVerifyNSetActMetaLuckUsesOnEtc() {
     pendingChanges.push(...usesResult.changes); // Add changes from Uses
     pendingHeaders.push(...usesResult.headers); // Add headers from Uses
 
+    // --- 3. Is On (Copy Duration) --- <<< UPDATED SECTION
+    const isOnResult = await fIsOn_VerifyAndProcessCost();
+    // This function currently always returns success: true, so no check needed, but keep pattern
+    // if (!isOnResult.success) return false; // If verification is added later
+    pendingChanges.push(...isOnResult.changes); // Add changes from IsOn
+    pendingHeaders.push(...isOnResult.headers); // Add headers from IsOn (currently none)
+
     // --- Placeholder sections for other costs ---
     // @@ Add Meta check logic call here -> const metaResult = await fMeta_VerifyAndProcessCost();
     // if (!metaResult.success) return false;
@@ -498,14 +506,8 @@ async function fVerifyNSetActMetaLuckUsesOnEtc() {
     // pendingChanges.push(...luckResult.changes);
     // pendingHeaders.push(...luckResult.headers);
 
-    // @@ Add Is On toggle/duration logic call here -> const isOnResult = await fIsOn_ToggleAndProcess();
-    // if (!isOnResult.success) return false;
-    // pendingChanges.push(...isOnResult.changes);
-    // pendingHeaders.push(...isOnResult.headers);
-
-
     // --- If all checks passed or were overridden, apply all changes ---
-    fMyConsoleLog("✅ All Cost Verifications Passed. Applying Changes...");
+    fMyConsoleLog("✅ All Verifications Passed. Applying Changes...");
 
     // Apply pending header messages
     pendingHeaders.forEach(header => fAppendToHTMLHeader(header));
@@ -518,17 +520,17 @@ async function fVerifyNSetActMetaLuckUsesOnEtc() {
              // fSetGridValue already logs errors
         }
     });
-
     if (applyErrors) {
-        fMyConsoleLog("❌ Errors occurred while applying cost changes to the grid.");
-        await fShowMessage("Error applying some cost changes. Please check grid state.");
+        fMyConsoleLog("❌ Errors occurred while applying cost/state changes to the grid.");
+        await fShowMessage("Error applying some cost/state changes. Please check grid state.");
         return false; // Consider if partial success is acceptable or if this should be false
     }
 
-    fMyConsoleLog("✅ Costs Verified & Applied Successfully.");
+    fMyConsoleLog("✅ Costs Verified & Changes Applied Successfully.");
     return true; // Signal success
 
 } // END fVerifyNSetActMetaLuckUsesOnEtc
+
 
 
 
@@ -636,6 +638,41 @@ async function fUses_VerifyAndProcessCost() {
     // If we reached here, the cost was met or overridden successfully. Return success and pending changes/headers.
     return { success: true, changes: changes, headers: headers };
 } // END fUses_VerifyAndProcessCost
+
+
+
+
+
+
+// fIsOn_VerifyAndProcessCost ////////////////////////////////////////////////////////
+// Purpose -> Helper for fVerifyNSetActMetaLuckUsesOnEtc: Prepares to copy Duration to Is On
+//            *if* the roll originated from the Sk1 checkbox (gUI.roll.sk1CB === true).
+//            There is no other verification, just prepares the change object conditionally.
+// Inputs  -> None (reads gUI.roll.sk1CB, gUI.roll.skDur, gUI.roll.ability_R).
+// Outputs -> (Promise<Object>): { success: Boolean, changes: Array, headers: Array }
+//            'changes' contains { r, c, value } objects for grid updates if condition met.
+//            'headers' is always empty for this function.
+// NOTE: Made async for consistency with other helpers, though not strictly required now.
+async function fIsOn_VerifyAndProcessCost() {
+    const { skDur, ability_R, sk1CB } = gUI.roll; // Destructure sk1CB
+    const changes = []; // Initialize empty array for pending changes
+    const headers = []; // Always empty for this function
+
+    // --- Add conditional check for sk1CB ---
+    if (sk1CB === true) {
+        // Condition met: Prepare the change object to copy skDur to the 'On' column
+        // skDur is already cleaned in fResetPopulateNCleanGUIRoll
+        changes.push({ r: ability_R, c: 'On', value: skDur });
+        fMyConsoleLog(`   -> Is On: Set to Dur value '${skDur}' (Pending, Sk1 condition met)`);
+    } else {
+        // Condition not met: Do nothing, just log
+        fMyConsoleLog(`   -> Is On: No change (Condition sk1CB === true not met)`);
+    }
+    // --- End conditional check ---
+
+    // This function always succeeds as there's no verification step beyond the condition
+    return { success: true, changes: changes, headers: headers };
+} // END fIsOn_VerifyAndProcessCost
 
 
 
