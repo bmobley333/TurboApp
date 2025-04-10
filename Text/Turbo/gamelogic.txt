@@ -102,7 +102,7 @@ async function fResetPopulateNCleanGUIRoll(r, c) {
             skName: '',
             skAct: isSk1 ? getVal('Act') : '',
             skDur: isSk1 ? getVal('Dur') : '',
-            skMeta: isSk1 ? getVal('Meta') : '',
+            skMeta: isSk1 ? getVal('Meta') : '', // Initially populate skMeta only if Sk1 is checked
             skUses: isSk1 ? getVal('Uses') : '',
             resTyp: '',
             resSk: '',
@@ -120,8 +120,9 @@ async function fResetPopulateNCleanGUIRoll(r, c) {
             roll: '',
             resRoll: '',
             htmlHeader: ''
-         };
-        const rData = gUI.roll;
+           };
+        const rData = gUI.roll; // Alias for easier access
+
         // --- Clean string fields ---
         rData.skName = String(rData.skNameID || '').replace(/\s{2,}_\w{6}$/, '').trim();
         rData.skMorph = String(rData.skMorph || '').trim().replace(/^,+/, '');
@@ -129,6 +130,12 @@ async function fResetPopulateNCleanGUIRoll(r, c) {
         rData.skIsOn = String(rData.skIsOn || '').trim();
         rData.skDur = String(rData.skDur || '').trim();
         rData.skMeta = String(rData.skMeta || '').trim();
+
+        // Ensure skMeta is either in the allowed list or empty
+        if (rData.skMeta && !gUI.list.metaColor.includes(rData.skMeta)) {
+             rData.skMeta = '';
+        }
+
         // --- Clean numeric fields ---
         const sk = parseInt(rData.skSk, 10);
         rData.skSk = (!isNaN(sk) && sk >= 1) ? sk : '';
@@ -138,8 +145,10 @@ async function fResetPopulateNCleanGUIRoll(r, c) {
 
         const uses = parseInt(rData.skUses, 10);
         rData.skUses = !isNaN(uses) ? uses : ''; // Allow any valid number (including negatives)
+
         // --- Default resTyp to skTyp ---
         rData.resTyp = rData.skTyp;
+
         // --- Final status log ---
         fMyConsoleLog(`⚙️ Populated & Cleaned gUI.roll for row ${r} (isSk1: ${isSk1})`);
         return true;
@@ -262,7 +271,7 @@ async function fParseMorphComponents(morphComponents, morphLower, acc) {
         }
 
         // --- resFocus Check (find index of LAST match)
-        const focusIndex = gUI.list.metaColor.indexOf(lower);
+        const focusIndex = gUI.list.metaColor.indexOf(lower.toUpperCase());
         if (focusIndex > -1) acc.lastFocusIndex = focusIndex;
 
         // --- resPlus Check
@@ -465,65 +474,113 @@ function fApplyMorphResults(acc) {
 
 
 // fVerifyNSetActMetaLuckUsesOnEtc ///////////////////////////////////////////////////////////
-// Purpose -> Verify ability costs (Act, Meta, Luck, Uses) and process 'IsOn' state.
-//            Prompts user if insufficient Action Points. Halts if insufficient Meta/Luck/Uses.
+// Purpose -> Verify ability costs (Act, Meta, Luck, Uses) and process 'Is On' state.
+//            Prompts user if insufficient Action Points.
+//            Halts if insufficient Meta/Luck/Uses.
 //            Applies *all* decrements/changes *only* after *all* checks pass or are overridden.
+// MODIFIED: Temporarily updates gUI.arr between SkMeta and FocusMeta checks to ensure
+//           correct deduction when both target the same Meta pool.
 // Inputs  -> None (uses gUI.roll and grid helpers).
 // Outputs -> (Promise<Boolean>): Resolves true if costs are met/overridden and applied,
 //                                resolves false if cancelled by user or insufficient resources.
 async function fVerifyNSetActMetaLuckUsesOnEtc() {
-    fMyConsoleLog("🛡️ Verifying Costs & Processing 'Is On'..."); // Updated log
+    fMyConsoleLog("🛡️ Verifying Costs & Processing 'Is On'...");
     const pendingChanges = []; // Array to hold { r, c, value } objects
     const pendingHeaders = []; // Array to hold strings for fAppendToHTMLHeader
 
-    // --- 1. Action Points (Act) ---
-    const actResult = await fAct_VerifyAndProcessCost();
-    if (!actResult.success) return false; // Halt if Act cost failed or was cancelled
-    pendingChanges.push(...actResult.changes); // Add changes from Act
-    pendingHeaders.push(...actResult.headers); // Add headers from Act
+    // --- Variables for temporary SkMeta change ---
+    let originalSkMetaValue = null;
+    let skMetaRowIndex = -1;
+    let skMetaColIndex = -1;
+    let skMetaChangeAppliedTemporarily = false;
+    // --- End temp variables ---
 
-    // --- 2. Uses ---
-    const usesResult = await fUses_VerifyAndProcessCost();
-    if (!usesResult.success) return false; // Halt if Uses cost failed or was cancelled
-    pendingChanges.push(...usesResult.changes); // Add changes from Uses
-    pendingHeaders.push(...usesResult.headers); // Add headers from Uses
+    try { // Added try block to ensure restoration happens
 
-    // --- 3. Is On (Copy Duration) --- <<< UPDATED SECTION
-    const isOnResult = await fIsOn_VerifyAndProcessCost();
-    // This function currently always returns success: true, so no check needed, but keep pattern
-    // if (!isOnResult.success) return false; // If verification is added later
-    pendingChanges.push(...isOnResult.changes); // Add changes from IsOn
-    pendingHeaders.push(...isOnResult.headers); // Add headers from IsOn (currently none)
+        // --- 1. Action Points (Act) ---
+        const actResult = await fAct_VerifyAndProcessCost(); // [source: 1755]
+        if (!actResult.success) return false; // Halt if Act cost failed or was cancelled
+        pendingChanges.push(...actResult.changes);
+        pendingHeaders.push(...actResult.headers);
 
-    // --- Placeholder sections for other costs ---
-    // @@ Add Meta check logic call here -> const metaResult = await fMeta_VerifyAndProcessCost();
-    // if (!metaResult.success) return false;
-    // pendingChanges.push(...metaResult.changes);
-    // pendingHeaders.push(...metaResult.headers);
+        // --- 2. Uses ---
+        const usesResult = await fUses_VerifyAndProcessCost(); // [source: 1775]
+        if (!usesResult.success) return false; // Halt if Uses cost failed or was cancelled
+        pendingChanges.push(...usesResult.changes);
+        pendingHeaders.push(...usesResult.headers);
 
-    // @@ Add Luck check logic call here -> const luckResult = await fLuck_VerifyAndProcessCost();
-    // if (!luckResult.success) return false;
-    // pendingChanges.push(...luckResult.changes);
-    // pendingHeaders.push(...luckResult.headers);
+        // --- 3. Is On (Copy Duration if Sk1) ---
+        const isOnResult = await fIsOn_VerifyAndProcessCost(); // [source: 1794]
+        // if (!isOnResult.success) return false; // Keep pattern if needed later
+        pendingChanges.push(...isOnResult.changes);
+        pendingHeaders.push(...isOnResult.headers); // Currently none
 
-    // --- If all checks passed or were overridden, apply all changes ---
-    fMyConsoleLog("✅ All Verifications Passed. Applying Changes...");
+        // --- 4. SkMeta Cost (if Sk1) ---
+        const skMetaResult = await fSkMeta_VerifyAndProcessCost(); // [source: 1806]
+        if (!skMetaResult.success) return false; // Halt if SkMeta cost failed
+        pendingChanges.push(...skMetaResult.changes);
+        pendingHeaders.push(...skMetaResult.headers); // Currently none
 
+        // --- 4a. TEMPORARILY Apply SkMeta Change to gUI.arr ---
+        if (skMetaResult.success && skMetaResult.changes.length > 0) {
+            const change = skMetaResult.changes[0];
+            const r = resolveRow(change.r);
+            const c = resolveCol(change.c);
+
+            if (!isNaN(r) && !isNaN(c) && gUI.arr[r]) {
+                skMetaRowIndex = r; // Store resolved index
+                skMetaColIndex = c; // Store resolved index
+                originalSkMetaValue = gUI.arr[r][c]; // Store original value
+                gUI.arr[r][c] = change.value; // Apply change temporarily
+                skMetaChangeAppliedTemporarily = true;
+                fMyConsoleLog(`   -> Temp applied SkMeta change: gUI.arr[${r}][${c}] = ${change.value}`);
+            } else {
+                console.warn(`fVerifyNSet...: Could not resolve indices (${change.r}, ${change.c}) for temp SkMeta update.`);
+                skMetaRowIndex = -1; // Ensure indices are invalid if resolution failed
+                skMetaColIndex = -1;
+            }
+        }
+        // --- End Temporary Application ---
+
+        // --- 5. Focus Meta Cost (if resFocus set) ---
+        // This call will now read the temporarily modified gUI.arr if step 4a applied a change
+        const focusMetaResult = await fFocus_VerifyAndProcessCost(); // [source: 1823]
+        if (!focusMetaResult.success) return false; // Halt if Focus Meta cost failed
+        pendingChanges.push(...focusMetaResult.changes);
+        pendingHeaders.push(...focusMetaResult.headers); // Currently none
+
+    } finally { // Use finally to guarantee restoration
+
+        // --- 4b. RESTORE Original SkMeta Value in gUI.arr ---
+        if (skMetaChangeAppliedTemporarily && skMetaRowIndex !== -1 && skMetaColIndex !== -1) {
+            gUI.arr[skMetaRowIndex][skMetaColIndex] = originalSkMetaValue;
+            fMyConsoleLog(`   -> Restored original SkMeta value: gUI.arr[${skMetaRowIndex}][${skMetaColIndex}] = ${originalSkMetaValue}`);
+        } else if (skMetaChangeAppliedTemporarily) {
+            // Log if we thought we applied but indices were bad
+            console.warn("fVerifyNSet...: Attempted to restore SkMeta value, but indices were invalid.");
+        }
+        // --- End Restoration ---
+    }
+
+    // --- If all checks passed or were overridden, apply all *collected* changes ---
+    fMyConsoleLog("✅ All Verifications Passed. Applying Pending Changes...");
     // Apply pending header messages
-    pendingHeaders.forEach(header => fAppendToHTMLHeader(header));
+    pendingHeaders.forEach(header => fAppendToHTMLHeader(header)); // [source: 1610]
 
     // Apply pending grid changes
     let applyErrors = false;
     pendingChanges.forEach(change => {
+        // fSetGridValue is defined in scripts.html
         if (!fSetGridValue(change.r, change.c, change.value)) {
              applyErrors = true;
              // fSetGridValue already logs errors
         }
     });
+
     if (applyErrors) {
         fMyConsoleLog("❌ Errors occurred while applying cost/state changes to the grid.");
-        await fShowMessage("Error applying some cost/state changes. Please check grid state.");
-        return false; // Consider if partial success is acceptable or if this should be false
+        await fShowMessage("Error applying some cost/state changes. Please check grid state."); // [source: 2021]
+        return false; // Indicate failure if final application had errors
     }
 
     fMyConsoleLog("✅ Costs Verified & Changes Applied Successfully.");
@@ -674,6 +731,190 @@ async function fIsOn_VerifyAndProcessCost() {
     return { success: true, changes: changes, headers: headers };
 } // END fIsOn_VerifyAndProcessCost
 
+
+
+
+// fSkMeta_VerifyAndProcessCost ////////////////////////////////////////////////////
+// Purpose -> Helper for fVerifyNSetActMetaLuckUsesOnEtc: Processes the skMeta cost
+//            if sk1CB is true. Reads the meta color TAG directly from gUI.roll.skMeta,
+//            calls fSpendOneMeta to find/prepare the decrement, and handles success/failure.
+// Inputs  -> None (reads gUI.roll.sk1CB, gUI.roll.skMeta). Calls fSpendOneMeta.
+// Outputs -> (Promise<Object>): { success: Boolean, changes: Array, headers: Array }
+//            'success' is false if skMeta cost cannot be paid.
+//            'changes' contains the single change object if successful.
+//            'headers' is always empty.
+async function fSkMeta_VerifyAndProcessCost() {
+    const { sk1CB, skMeta } = gUI.roll;
+    const changes = [];
+    const headers = [];
+
+    // --- 1. Check sk1CB condition ---
+    if (sk1CB !== true) {
+        fMyConsoleLog("   -> SkMeta Cost: Skipped (Condition sk1CB === true not met)");
+        return { success: true, changes: [], headers: [] }; // Not an error, just no cost to apply
+    }
+
+    // --- 2. Check if there is an skMeta cost defined ---
+    const metaColorTag = String(skMeta || '').trim().toUpperCase(); // Get color tag from skMeta field
+    if (!metaColorTag) {
+        fMyConsoleLog("   -> SkMeta Cost: Skipped (No Meta Color Tag defined in skMeta field).");
+        return { success: true, changes: [], headers: [] }; // No cost to pay
+    }
+
+    // --- 3. Call fSpendOneMeta to find/prepare the decrement ---
+    // fSpendOneMeta handles validation of the metaColorTag internally
+    fMyConsoleLog(`   -> SkMeta Cost: Attempting to spend 1 unit of '${metaColorTag}'...`);
+    const spendResult = await fSpendOneMeta(metaColorTag);
+
+    // --- 4. Handle Result ---
+    if (spendResult.success) {
+        // Successfully found and prepared the change
+        fMyConsoleLog("      -> Success: Found 1 unit to spend.");
+        changes.push(spendResult.change); // Add the single change object
+        return { success: true, changes: changes, headers: headers };
+    } else {
+        // Failed to find 1 unit OR input color was invalid (fSpendOneMeta shows message for invalid color)
+        // Only show the "Not enough Meta" message if the color was valid but couldn't be found.
+        const metaColors = gUI.list?.metaColor || [];
+        const isValidColor = metaColors.some(c => c.toUpperCase() === metaColorTag);
+
+        if (isValidColor) {
+            // Color was valid, but couldn't find 1 unit after cycling
+             fMyConsoleLog(`      -> ❌ Failed: Could not find 1 unit of ${metaColorTag} starting from ${metaColorTag}.`);
+             await fShowMessage(`❌ Not enough Meta.<br>${gUI.roll.skName} needs @${metaColorTag}.`);
+        }
+        // If color was invalid, fSpendOneMeta already showed the message.
+        return { success: false, changes: [], headers: [] }; // Indicate failure
+    }
+
+} // END fSkMeta_VerifyAndProcessCost
+
+
+
+
+// fFocus_VerifyAndProcessCost ///////////////////////////////////////////////////
+// Purpose -> Helper for fVerifyNSetActMetaLuckUsesOnEtc: Processes the Focus meta cost
+//            if gUI.roll.resFocus is a valid index (0-4). Runs regardless of sk1CB.
+//            Determines the focus color tag from resFocus index, calls fSpendOneMeta
+//            to find/prepare the decrement, and handles success/failure with specific message.
+// Inputs  -> None (reads gUI.roll.resFocus, gUI.list.metaColor). Calls fSpendOneMeta.
+// Outputs -> (Promise<Object>): { success: Boolean, changes: Array, headers: Array }
+//            'success' is false if focus meta cost cannot be paid.
+//            'changes' contains the single change object if successful.
+//            'headers' is always empty.
+async function fFocus_VerifyAndProcessCost() {
+    const resFocus = gUI.roll.resFocus;
+    const changes = [];
+    const headers = [];
+    const metaColors = gUI.list?.metaColor;
+    // --- 1. Check if there is a valid Focus cost ---
+    const focusIndex = (typeof resFocus === 'number' && resFocus >= 0 && resFocus < metaColors?.length) ? resFocus : -1;
+
+    if (focusIndex === -1) {
+        fMyConsoleLog("   -> Focus Meta Cost: Skipped (No valid resFocus index).");
+        return { success: true, changes: [], headers: [] }; // No focus cost to apply
+    }
+
+    // --- 2. Determine Focus Color Tag ---
+    if (!Array.isArray(metaColors) || metaColors.length === 0) {
+        console.error("fFocus_VerifyAndProcessCost: gUI.list.metaColor is not defined or empty.");
+        await fShowMessage("❌ Internal Error: Meta color list not defined.");
+        return { success: false, changes: [], headers: [] }; // Indicate failure
+    }
+    const focusColorTag = metaColors[focusIndex];
+    fMyConsoleLog(`   -> Focus Meta Cost: Attempting to spend 1 unit of '${focusColorTag}' (Focus)...`);
+
+    // --- 3. Call fSpendOneMeta to find/prepare the decrement ---
+    // fSpendOneMeta handles validation of the metaColorTag internally as well, but we already know it's valid here.
+    const spendResult = await fSpendOneMeta(focusColorTag);
+
+    // --- 4. Handle Result ---
+    if (spendResult.success) {
+        // Successfully found and prepared the change
+        fMyConsoleLog(`      -> Success: Found 1 unit of Focus Meta (${focusColorTag}) to spend.`);
+        changes.push(spendResult.change); // Add the single change object
+        return { success: true, changes: changes, headers: headers };
+    } else {
+        // Failed to find 1 unit (fSpendOneMeta returns false if it cycles through all pools/colors)
+        fMyConsoleLog(`      -> ❌ Failed: Could not find 1 unit of ${focusColorTag} starting from ${focusColorTag}.`);
+        const errorMsg = `❌ Not enough Meta.<br>In addition to possible ability meta cost,<br>you are also trying to Focus @${focusColorTag}.`;
+        await fShowMessage(errorMsg);
+        return { success: false, changes: [], headers: [] }; // Indicate failure
+    }
+
+} // END fFocus_VerifyAndProcessCost
+
+
+
+
+// fSpendOneMeta /////////////////////////////////////////////////////////////////////
+// Purpose -> Helper function to find 1 available unit of Meta and prepare the change object
+//            for its decrement. Starts checking from the specified metaColor and cycles
+//            upwards ('R'->'O'->'Y'->'G'->'B'...) through colors if the starting color
+//            pools are empty. Checks Channel pool first, then Main pool for each color.
+// Inputs  -> metaColor (String): The preferred Meta color ('R','O','Y','G','B') to start spending from.
+// Outputs -> (Promise<Object>): Resolves to { success: true, change: { r, c, value } } if 1 unit found,
+//                               or { success: false } if the input color is invalid or no Meta unit
+//                               could be found after checking all colors/pools.
+async function fSpendOneMeta(metaColor) {
+    fMyConsoleLog(`   -> Attempting to spend 1 Meta unit, starting check from: ${metaColor}`);
+
+    // --- 1. Validate Input Color ---
+    const metaColors = gUI.list?.metaColor;
+    if (!Array.isArray(metaColors) || metaColors.length === 0) {
+        console.error("fSpendOneMeta: gUI.list.metaColor is not defined or empty.");
+        await fShowMessage("❌ Internal Error: Meta color list not defined.");
+        return { success: false }; // Indicate failure
+    }
+
+    const inputColorUpper = metaColor?.toUpperCase(); // Handle potential null/undefined input
+    const startIndex = metaColors.findIndex(color => color.toUpperCase() === inputColorUpper);
+
+    if (startIndex === -1) {
+        fMyConsoleLog(`      -> ❌ Invalid input: Meta Color '${metaColor}' is not allowed.`);
+        await fShowMessage(`❌ Meta Color '${metaColor}' is not allowed.`);
+        // The prompt requested ending the caller - this function signals failure back to the (future) caller.
+        return { success: false }; // Indicate failure
+    }
+    const validMetaColorTag = metaColors[startIndex]; // Use the validated tag from the list
+    fMyConsoleLog(`      -> Validated start color: ${validMetaColorTag} (Index: ${startIndex})`);
+
+    // --- 2. Cycle Through Colors to Find 1 Unit ---
+    const numColors = metaColors.length; // <- This MUST be used - it works!
+    const loopLeft = numColors - startIndex;
+    for (let i = 0; i < loopLeft; i++) {
+        const currentColorIndex = (startIndex + i) % numColors;
+        const currentColorTag = metaColors[currentColorIndex];
+        fMyConsoleLog(`         - Checking Color: ${currentColorTag}`);
+
+        // 2a. Check Channel Pool
+        const chnlVal = Math.max(0, fGetGridValue('chnl', currentColorTag, true) || 0); // Default invalid/blank to 0
+        if (chnlVal >= 1) {
+            const newVal = chnlVal - 1;
+            const change = { r: 'chnl', c: currentColorTag, value: newVal };
+            fMyConsoleLog(`           - Found in Channel pool. Preparing change: ${JSON.stringify(change)}`);
+            return { success: true, change: change }; // Found and prepared change
+        }
+
+        // 2b. Check Main Pool (if Channel was < 1)
+        const metaVal = Math.max(0, fGetGridValue('meta', currentColorTag, true) || 0); // Default invalid/blank to 0
+        if (metaVal >= 1) {
+            const newVal = metaVal - 1;
+            const change = { r: 'meta', c: currentColorTag, value: newVal };
+            fMyConsoleLog(`           - Found in Main pool. Preparing change: ${JSON.stringify(change)}`);
+            return { success: true, change: change }; // Found and prepared change
+        }
+
+         fMyConsoleLog(`           - Not found in ${currentColorTag} pools.`);
+    } // --- End Color Cycle Loop ---
+
+    // --- 3. If Loop Completes: Not Found ---
+    fMyConsoleLog(`      -> ❌ Failed: Could not find 1 unit of Meta to spend after checking all colors.`);
+    // Note: The caller function will be responsible for showing the "Not enough Meta" message
+    // if this function (and potentially others) return failure.
+    return { success: false }; // Indicate failure
+
+} // END fSpendOneMeta
 
 
 
