@@ -70,10 +70,10 @@ function fAppendToHTMLHeader(newHeader) {
 // Inputs  -> row (Number), col (Number): 0-based indices.
 // Outputs -> (Boolean): true if valid, false otherwise.
 // MODIFIED: Made async to await fShowMessage
-async function fValidateAbilityCB(row, col) {             
+async function fValidateAbilityCB(row, col) {
     const isValid = fIsSkRadioGroupMember(row, col);
     if (!isValid) {
-        await fShowMessage("⚠️ Please select a valid Ability checkbox first!"); 
+        await fShowMessage("⚠️ Please select a valid Ability checkbox first!");
     }
     return isValid;
 } // END fValidateAbilityCB
@@ -85,7 +85,7 @@ async function fValidateAbilityCB(row, col) {
 // Purpose -> Extracts and cleans ability row data into gUI.roll based on Sk1 or Sk2 checkbox.
 // Inputs  -> r (Number), c (Number): Row and column from selected radio.
 // Outputs -> (Boolean): true if success, false if extraction/cleaning fails.
-async function fResetPopulateNCleanGUIRoll(r, c) { 
+async function fResetPopulateNCleanGUIRoll(r, c) {
     try {
         const getVal = tag => gUI.arr[r]?.[resolveCol(tag)] ?? '';
         const isSk1 = (c === resolveCol('Sk1ChkBox'));
@@ -112,7 +112,7 @@ async function fResetPopulateNCleanGUIRoll(r, c) {
             resFocus: '',
             resPlus: '',
             resPlusPlus: '',
-            resdctMult: '', 
+            resdctMult: '',
             resMult: '',
             resMultMult: '',
             resCombine: '',
@@ -121,7 +121,6 @@ async function fResetPopulateNCleanGUIRoll(r, c) {
             resRoll: '',
             htmlHeader: ''
          };
-
         const rData = gUI.roll;
         // --- Clean string fields ---
         rData.skName = String(rData.skNameID || '').replace(/\s{2,}_\w{6}$/, '').trim();
@@ -161,19 +160,18 @@ async function fResetPopulateNCleanGUIRoll(r, c) {
 // Inputs  -> None (uses gUI.roll and gUI.list).
 // Outputs -> (Boolean): true if ability is valid, false otherwise.
 // MODIFIED: Made async to await fShowMessage
-async function fVerifyAbility() {                           
+async function fVerifyAbility() {
     const { skName, skTyp, sk1CB } = gUI.roll;
-
     // --- Check: Ability name must exist ---
     if (!skName) {
-        await fShowMessage("⚠️ Please select an Ability with a name!"); 
+        await fShowMessage("⚠️ Please select an Ability with a name!");
         return false;
     }
 
     // --- Check: Skill Typ must be a string ---
     if (!skTyp || typeof skTyp !== 'string') {
         const is2ndCol = !sk1CB;
-        await fShowMessage(`⚠️ No skill Typ found${is2ndCol ? '<br><br>You may have wanted the 1st column.' : ''}`); 
+        await fShowMessage(`⚠️ No skill Typ found${is2ndCol ? '<br><br>You may have wanted the 1st column.' : ''}`);
         return false;
     }
 
@@ -181,7 +179,7 @@ async function fVerifyAbility() {
     const skTypLower = skTyp.trim().toLowerCase();
     const isValidSkTyp = gUI.list.skTyp.some(type => type.toLowerCase() === skTypLower);
     if (!isValidSkTyp) {
-        await fShowMessage(`⚠️ ${skTyp} is an invalid Skill Type!`); 
+        await fShowMessage(`⚠️ ${skTyp} is an invalid Skill Type!`);
         return false;
     }
 
@@ -195,7 +193,7 @@ async function fVerifyAbility() {
 // Purpose -> Processes gUI.roll.skMorph string to extract modifiers and flags into res* fields.
 // Inputs  -> None (reads gUI.roll.skMorph, gUI.roll.skSk, gUI.list).
 // Outputs -> None (updates gUI.roll directly).
-async function fProcessMorph() { 
+async function fProcessMorph() {
     const skMorph = gUI.roll.skMorph || '';
     if (!skMorph) {
         fMyConsoleLog("ℹ️ No skMorph string to process.");
@@ -230,7 +228,6 @@ async function fProcessMorph() {
     await fParseMorphComponents(morphComponents, morphLower, acc);
 
     fApplyMorphResults(acc);
-
     fMyConsoleLog("⚙️ Processed skMorph string.");
 } // END fProcessMorph
 
@@ -240,7 +237,7 @@ async function fProcessMorph() {
 // fParseMorphComponents ////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Parses each morph component and mutates gUI.roll and acc accordingly.
 // MODIFIED: Made async, changed forEach to for...of, added await to fShowMessage, added DCT logic
-async function fParseMorphComponents(morphComponents, morphLower, acc) { 
+async function fParseMorphComponents(morphComponents, morphLower, acc) {
     const plusMinusRegex = /^([-+])(\d+)$/;
     const numberOnlyRegex = /^\d+$/;
     const plusPlusMinusMinusRegex = /^(?:(\+\+)|(--))(\d+)$/;
@@ -252,14 +249,12 @@ async function fParseMorphComponents(morphComponents, morphLower, acc) {
     const dctRegex = /^([-+])(\d+)([dct])$/i; // <<< ADDED: Case-insensitive
 
     // Use for...of loop instead of forEach to allow await
-    let index = 0;
-    // Manual index tracking needed for morphLower
+    let index = 0; // Manual index tracking needed for morphLower
     for (const component of morphComponents) {
 
         const lower = morphLower[index];
         // --- isUnSk Check
         if (lower === 'un' || lower === 'unsk') gUI.roll.isUnSk = true;
-
         // --- resTyp Check (find LAST match)
         if (gUI.list.skTyp.some(t => t.toLowerCase() === lower)) {
             acc.lastResTypMatch = component;
@@ -299,7 +294,6 @@ async function fParseMorphComponents(morphComponents, morphLower, acc) {
             } else {
                 // Use await here
                 await fShowMessage("❌ Morph includes illegal '/0'. Please correct and try again.");
-                
                 console.warn("resMult divide by zero:", component);
                 // Consider adding 'return;' or 'throw new Error(...);' here if this error should halt processing
             }
@@ -317,7 +311,6 @@ async function fParseMorphComponents(morphComponents, morphLower, acc) {
             } else {
                 // Use await here
                 await fShowMessage("❌ Morph includes illegal '//0'. Please correct and try again.");
-                
                 console.warn("resMultMult divide by zero:", component);
                 // Consider adding 'return;' or 'throw new Error(...);' here if this error should halt processing
             }
@@ -331,7 +324,6 @@ async function fParseMorphComponents(morphComponents, morphLower, acc) {
             const num = parseInt(dctMatch[2], 10);
             const type = dctMatch[3].toLowerCase();
             let multiplier = 1.0;
-
             if (num !== 0) { // Ignore if number is 0
                 const isPositive = (sign === '+');
                 switch (type) {
@@ -351,7 +343,7 @@ async function fParseMorphComponents(morphComponents, morphLower, acc) {
                         break;
                     case 'd':
                         const dTierTerm = (1 + (num / 3));
-                         if (dTierTerm === 0) { // Avoid division by zero
+                        if (dTierTerm === 0) { // Avoid division by zero
                              console.warn("DCT Morph resulted in divide by zero (dTierTerm):", component);
                              multiplier = 1;  // Or handle as error
                          } else {
@@ -367,7 +359,7 @@ async function fParseMorphComponents(morphComponents, morphLower, acc) {
                      acc.foundResdctMult = true;
                  } else {
                       console.warn(`Invalid DCT multiplier calculated for "${component}": ${multiplier}. Skipping this morph.`);
-                      // Optional await fShowMessage(`⚠️ Invalid result for morph "${component}". Check value.`);
+                     // Optional await fShowMessage(`⚠️ Invalid result for morph "${component}". Check value.`);
                  }
             }
         }
@@ -474,30 +466,67 @@ function fApplyMorphResults(acc) {
 // fVerifyNSetActMetaLuckUsesOnEtc ///////////////////////////////////////////////////////////
 // Purpose -> Verify ability costs (Act, Meta, Luck, Uses) and toggle 'IsOn' state.
 //            Prompts user if insufficient Action Points. Halts if insufficient Meta/Luck/Uses.
-//            Decrements resources if proceeding.
+//            Applies *all* decrements *only* after *all* checks pass or are overridden.
 // Inputs  -> None (uses gUI.roll and grid helpers).
 // Outputs -> (Promise<Boolean>): Resolves true if costs are met/overridden and applied,
 //                                resolves false if cancelled by user or insufficient resources.
 async function fVerifyNSetActMetaLuckUsesOnEtc() {
-    fMyConsoleLog("🛡️ Verifying & Setting Costs...");
+    fMyConsoleLog("🛡️ Verifying Costs...");
+    const pendingChanges = []; // Array to hold { r, c, value } objects
+    const pendingHeaders = []; // Array to hold strings for fAppendToHTMLHeader
 
     // --- 1. Action Points (Act) ---
-    const actOk = await fAct_VerifyAndProcessCost();
-    if (!actOk) return false; // Halt if Act cost failed or was cancelled
+    const actResult = await fAct_VerifyAndProcessCost();
+    if (!actResult.success) return false; // Halt if Act cost failed or was cancelled
+    pendingChanges.push(...actResult.changes); // Add changes from Act
+    pendingHeaders.push(...actResult.headers); // Add headers from Act
 
     // --- 2. Uses ---
-    const usesOk = await fUses_VerifyAndProcessCost(); 
-    if (!usesOk) return false; // <<< Halt if Uses cost failed or was cancelled
+    const usesResult = await fUses_VerifyAndProcessCost();
+    if (!usesResult.success) return false; // Halt if Uses cost failed or was cancelled
+    pendingChanges.push(...usesResult.changes); // Add changes from Uses
+    pendingHeaders.push(...usesResult.headers); // Add headers from Uses
 
-    // --- Placeholder sections for other costs (Meta, Luck, On) ---
-    // @@ Add Meta check logic call here -> await fMeta_VerifyAndProcessCost(); if (!metaOk) return false;
-    // @@ Add Luck check logic call here -> await fLuck_VerifyAndProcessCost(); if (!luckOk) return false;
-    // @@ Add Is On toggle/duration logic call here -> await fIsOn_ToggleAndProcess(); if (!isOnOk) return false;
+    // --- Placeholder sections for other costs ---
+    // @@ Add Meta check logic call here -> const metaResult = await fMeta_VerifyAndProcessCost();
+    // if (!metaResult.success) return false;
+    // pendingChanges.push(...metaResult.changes);
+    // pendingHeaders.push(...metaResult.headers);
+
+    // @@ Add Luck check logic call here -> const luckResult = await fLuck_VerifyAndProcessCost();
+    // if (!luckResult.success) return false;
+    // pendingChanges.push(...luckResult.changes);
+    // pendingHeaders.push(...luckResult.headers);
+
+    // @@ Add Is On toggle/duration logic call here -> const isOnResult = await fIsOn_ToggleAndProcess();
+    // if (!isOnResult.success) return false;
+    // pendingChanges.push(...isOnResult.changes);
+    // pendingHeaders.push(...isOnResult.headers);
 
 
-    // --- If all checks passed or were overridden ---
-    fMyConsoleLog("✅ Costs Verified & Applied Successfully (for implemented checks).");
-    return true; // Signal success if all checks passed
+    // --- If all checks passed or were overridden, apply all changes ---
+    fMyConsoleLog("✅ All Cost Verifications Passed. Applying Changes...");
+
+    // Apply pending header messages
+    pendingHeaders.forEach(header => fAppendToHTMLHeader(header));
+
+    // Apply pending grid changes
+    let applyErrors = false;
+    pendingChanges.forEach(change => {
+        if (!fSetGridValue(change.r, change.c, change.value)) {
+             applyErrors = true;
+             // fSetGridValue already logs errors
+        }
+    });
+
+    if (applyErrors) {
+        fMyConsoleLog("❌ Errors occurred while applying cost changes to the grid.");
+        await fShowMessage("Error applying some cost changes. Please check grid state.");
+        return false; // Consider if partial success is acceptable or if this should be false
+    }
+
+    fMyConsoleLog("✅ Costs Verified & Applied Successfully.");
+    return true; // Signal success
 
 } // END fVerifyNSetActMetaLuckUsesOnEtc
 
@@ -505,24 +534,28 @@ async function fVerifyNSetActMetaLuckUsesOnEtc() {
 
 
 // fAct_VerifyAndProcessCost /////////////////////////////////////////////////////////
-// Purpose -> Helper for fVerifyNSetActMetaLuckUsesOnEtc: Checks and processes Action Point cost.
-//            Prompts user if insufficient, decrements if proceeding.
+// Purpose -> Helper for fVerifyNSetActMetaLuckUsesOnEtc: Checks Action Point cost.
+//            Prompts user if insufficient. Calculates changes but does NOT apply them.
 // Inputs  -> None (reads gUI.roll.skAct, gUI.roll.skName, and uses grid helpers).
-// Outputs -> (Promise<Boolean>): true if cost met/overridden and updated, false otherwise.
+// Outputs -> (Promise<Object>): { success: Boolean, changes: Array, headers: Array }
+//            'changes' contains { r, c, value } objects for grid updates.
+//            'headers' contains strings for sidebar messages.
 async function fAct_VerifyAndProcessCost() {
     const { skAct, skName } = gUI.roll;
-    const actCost = Number(skAct); // Should be a number from fResetPopulateNCleanGUIRoll
+    const actCost = Number(skAct);
+    const changes = []; // Initialize empty array for pending changes
+    const headers = []; // Initialize empty array for pending headers
 
     // Only process if there is an actual Action Point cost
     if (actCost > 0) {
         // Get current Action Points total
-        let currentAct = fGetGridValue('Act', 'ActTot', true); // Use 'let' as it might be updated
+        let currentAct = fGetGridValue('Act', 'ActTot', true);
 
         // Check if reading the value failed (returns NaN)
         if (isNaN(currentAct)) {
             await fShowMessage(`❌ Error reading current Action Points from cell ('Act', 'ActTot'). Cannot proceed.`);
             fMyConsoleLog("🚫 Failed to verify Act cost: Could not read Action Points.");
-            return false; // Halt if we can't read the current value
+            return { success: false, changes: [], headers: [] }; // Return failure
         }
 
         // Check if cost exceeds current points
@@ -532,43 +565,41 @@ async function fAct_VerifyAndProcessCost() {
             const proceed = await fShowPrompt(`Not Enough Action Points (${currentAct}) to use '${skName}' (Cost: ${actCost})<br><br>Do you want to go negative?`);
             if (!proceed) {
                 fMyConsoleLog("🚫 User cancelled Act cost due to insufficient points.");
-                return false; // User chose No
+                return { success: false, changes: [], headers: [] }; // User chose No
             }
             // User chose Yes, log it and add header note
             fMyConsoleLog("✅ User chose to proceed despite insufficient Action Points.");
-            fAppendToHTMLHeader(`⚠️ NEGATIVE ACT POINTS: ${currentAct - actCost}`);
+            headers.push(`⚠️ NEGATIVE ACT POINTS: ${currentAct - actCost}`); // Add header to pending list
         }
 
-        // Decrement Action Points
+        // Calculate the new Action Points total
         const newActTotal = currentAct - actCost;
-        if (!fSetGridValue('Act', 'ActTot', newActTotal)) {
-             // Show error and halt if update fails
-             await fShowMessage(`❌ Error updating Action Points ('Act', 'ActTot'). Aborting.`);
-             fMyConsoleLog("🚫 Failed to verify Act cost: Could not update Action Points.");
-             return false; // Stop if update failed
-        }
-        // Log successful update
-        fMyConsoleLog(`   -> Action Points: ${currentAct} -> ${newActTotal}`);
+        // Add the intended change to the pending list
+        changes.push({ r: 'Act', c: 'ActTot', value: newActTotal });
+        fMyConsoleLog(`   -> Action Points: ${currentAct} -> ${newActTotal} (Pending)`);
     } else {
         // No action cost, trivially succeed this check
         fMyConsoleLog("   -> No Action Point cost for this ability.");
     }
 
-    // If we reached here, the cost was 0, met, overridden, or updated successfully
-    return true;
-
+    // If we reached here, the cost was 0, met, or overridden successfully. Return success and pending changes/headers.
+    return { success: true, changes: changes, headers: headers };
 } // END fAct_VerifyAndProcessCost
 
 
 
 
 // fUses_VerifyAndProcessCost ////////////////////////////////////////////////////////
-// Purpose -> Helper for fVerifyNSetActMetaLuckUsesOnEtc: Checks and processes Uses cost.
-//            Prompts user if insufficient, decrements if proceeding.
-// Inputs  -> None (reads gUI.roll.skUses, gUI.roll.skName, gUI.roll.r and uses grid helpers).
-// Outputs -> (Promise<Boolean>): true if cost met/overridden and updated, false otherwise.
+// Purpose -> Helper for fVerifyNSetActMetaLuckUsesOnEtc: Checks Uses cost.
+//            Prompts user if insufficient. Calculates changes but does NOT apply them.
+// Inputs  -> None (reads gUI.roll.skUses, gUI.roll.skName, gUI.roll.ability_R and uses grid helpers).
+// Outputs -> (Promise<Object>): { success: Boolean, changes: Array, headers: Array }
+//            'changes' contains { r, c, value } objects for grid updates.
+//            'headers' contains strings for sidebar messages.
 async function fUses_VerifyAndProcessCost() {
-    const { skUses, skName, ability_R } = gUI.roll; // Destructure skUses, skName, and ability_R
+    const { skUses, skName, ability_R } = gUI.roll;
+    const changes = []; // Initialize empty array for pending changes
+    const headers = []; // Initialize empty array for pending headers
 
     // Check if skUses exists and is a valid number
     const usesCost = 1; // cost per use is always 1
@@ -577,7 +608,7 @@ async function fUses_VerifyAndProcessCost() {
     if (skUses === '' || isNaN(currentUses)) {
         // If skUses is empty string, null, undefined, or NaN, assume no 'Uses' cost applies.
         fMyConsoleLog("   -> No 'Uses' cost defined for this ability.");
-        return true; // Pass the check if no uses are defined
+        return { success: true, changes: [], headers: [] }; // Pass the check if no uses are defined
     }
 
     // Calculate the new value after decrementing
@@ -590,28 +621,20 @@ async function fUses_VerifyAndProcessCost() {
         const proceed = await fShowPrompt(`Not Enough Uses Left (${currentUses}) to use '${skName}' (Cost: ${usesCost})<br><br>Do you want to go negative?`);
         if (!proceed) {
             fMyConsoleLog("🚫 User cancelled Uses cost due to insufficient points.");
-            return false; // User chose No
+            return { success: false, changes: [], headers: [] }; // User chose No
         }
         // User chose Yes, log it and add header note if needed
         fMyConsoleLog("✅ User chose to proceed despite insufficient Uses.");
-        fAppendToHTMLHeader(`⚠️ NEGATIVE USES: ${newUses}`);
+        headers.push(`⚠️ NEGATIVE USES: ${newUses}`); // Add header to pending list
     }
 
-    // Decrement Uses in the grid
-    // Use gUI.roll.r (aliased as ability_R) for the row index
-    if (!fSetGridValue(ability_R, 'Uses', newUses)) {
-         // Show error and halt if update fails
-         await fShowMessage(`❌ Error updating Uses for '${skName}' (Row: ${ability_R}, Col: 'Uses'). Aborting.`);
-         fMyConsoleLog("🚫 Failed to verify Uses cost: Could not update Uses in grid.");
-         return false; // Stop if update failed
-    }
+    // Add the intended change to the pending list
+    // Use gUI.roll.ability_R (the original row index) for the row reference
+    changes.push({ r: ability_R, c: 'Uses', value: newUses });
+    fMyConsoleLog(`   -> Uses: ${currentUses} -> ${newUses} (Pending)`);
 
-    // Log successful update
-    fMyConsoleLog(`   -> Uses: ${currentUses} -> ${newUses}`);
-
-    // If we reached here, the cost was met, overridden, or updated successfully
-    return true;
-
+    // If we reached here, the cost was met or overridden successfully. Return success and pending changes/headers.
+    return { success: true, changes: changes, headers: headers };
 } // END fUses_VerifyAndProcessCost
 
 
@@ -673,7 +696,6 @@ function fCalcGUIRollResSk() {
 
         // --- Diagnostic Output ---
         // console.log(`DEBUG fCalcGUIRollResSk: Value before final check/assignment:`, currentResSk);
-
         // --- Final Assignment: Round valid positive results, else empty ---
         // Ensure result is a number and >= 1 after all calculations
         if (!isNaN(currentResSk) && currentResSk >= 1) {
@@ -698,11 +720,7 @@ function fCalcGUIRollResSk() {
 // Outputs -> None (writes gUI.roll.roll).
 function fCalcGUIRollRoll() {
     const resSkValue = gUI.roll.resSk;
-    const resTypValue = (typeof gUI.roll.resTyp === 'string')
-        ? gUI.roll.resTyp.trim().toLowerCase()
-        : '';
-
-
+    const resTypValue = (typeof gUI.roll.resTyp === 'string') ? gUI.roll.resTyp.trim().toLowerCase() : '';
     // --- Validate resSk (must be a number >= 1) ---
     if (typeof resSkValue !== 'number' || resSkValue < 1) {
         gUI.roll.roll = '';
@@ -727,20 +745,12 @@ function fCalcGUIRollRoll() {
 
         // Attack roll
         case 'atk': gUI.roll.roll = fCSAtk(resSkValue); break;
-
-
         // Damage roll
         case 'dmg': gUI.roll.roll = fCSDDmg(resSkValue); break;
-
-
         // Defense roll
         case 'def': gUI.roll.roll = fCSDef(resSkValue); break;
-
-
         // Armor roll (may return decimal)
         case 'ar': gUI.roll.roll = fCSDArmor(resSkValue); break;
-
-
         // Unexpected usage of 'unsk' as final roll type
         case 'un':
         case 'unsk':
@@ -794,7 +804,6 @@ function fCalcGUIRollResRoll() {
 
     // --- Apply Modifiers ---
     let currentResRoll = initialRoll;
-
     // Apply resMultMult
     if (typeof gUI.roll.resMultMult === 'number' && gUI.roll.resMultMult !== '') {
         currentResRoll *= gUI.roll.resMultMult;
@@ -858,7 +867,6 @@ function fCalcGUIRollResRoll() {
     let currentResRoll = initialRoll;
     if (typeof gUI.roll.resMultMult === 'number' && gUI.roll.resMultMult !== '') currentResRoll *= gUI.roll.resMultMult;
     if (typeof gUI.roll.resPlusPlus === 'number' && gUI.roll.resPlusPlus !== '') currentResRoll += gUI.roll.resPlusPlus;
-
     // --- Final Rounding, Clamping, and Assignment ---
     if (!isNaN(currentResRoll)) {
         const isArType = (typeof gUI.roll.resTyp === 'string') && gUI.roll.resTyp.trim().toLowerCase() === 'ar';
@@ -903,7 +911,6 @@ function fBuildRollLogHTML() {
     let title = `<span class="sidebar-ability-name">${gUI.roll.skName || 'Unknown Ability'}</span>`;
     if (skTyp) title += ` ${skTyp}`;
     if (resTyp && resTyp !== skTyp) title += ` (<span class="red-bold">now</span> ${resTyp})`;
-
     // --- Get Morph String ---
     const morph = (typeof gUI.roll.skMorph === 'string' && gUI.roll.skMorph !== ',') ? gUI.roll.skMorph.trim() : '';
 
@@ -945,7 +952,6 @@ function fBuildRollLogHTML() {
     let roll1 = `${rollBase}${rollResult}${rollDif}${rollSuccess}`.trim();
     const tc = fCStc();
     if (roll1 && tc) roll1 += `   ${tc}`;
-
     // --- Build Final HTML ---
     let html = gUI.roll.htmlHeader;
     if (title) html += `${title}`;
@@ -958,7 +964,7 @@ function fBuildRollLogHTML() {
 
 // ==========================================================================
 // === Base Die Rolling          (End of Die Roll Button ) ===
-// ========================================================================== 
+// ==========================================================================
 
 
 // fCSd //////////////////////////////////////////////////////////////////////
@@ -1193,7 +1199,6 @@ async function fShowMessage(message) {
 
     // Set message content (using innerHTML allows basic tags like <br>)
     gUI.messageModalText.innerHTML = message;
-
     // Show the modal
     gUI.messageModalOverlay.style.display = 'flex'; // Using flex as defined in CSS
 
@@ -1201,7 +1206,6 @@ async function fShowMessage(message) {
     return new Promise((resolve) => {
         gUI.messagePromiseResolve = resolve; // Store the resolve function globally
     });
-
 } // END fShowMessage
 
 
@@ -1222,7 +1226,7 @@ function fHideMessage() {
 
     // Resolve the promise if a resolve function is stored
     if (typeof gUI.messagePromiseResolve === 'function') {
-        gUI.messagePromiseResolve();          // Call the stored resolve function
+        gUI.messagePromiseResolve(); // Call the stored resolve function
         gUI.messagePromiseResolve = null; // Clear the stored function
         fMyConsoleLog("Message Promise Resolved"); // Optional log
     }
@@ -1244,7 +1248,6 @@ function fSetupMessageModalListeners() {
     const overlayElement = document.getElementById('messageModal');
     const closeButtonElement = document.getElementById('closeMessageModal');
     // We still need the overlay for the other listeners, might as well fetch it too.
-
     // Check if elements were found *now*
     if (!overlayElement) {
         console.error("Setup failed: Message modal overlay element (#messageModal) not found *during listener setup*.");
@@ -1269,7 +1272,6 @@ function fSetupMessageModalListeners() {
             fHideMessage(); // Calls the (now modified) hide function
         }
     });
-
     // Listener for the Escape key (uses document, and checks overlay visibility)
     document.addEventListener('keydown', (event) => {
         // Check overlay visibility using the fetched element reference
@@ -1277,7 +1279,6 @@ function fSetupMessageModalListeners() {
              fHideMessage(); // Calls the (now modified) hide function
         }
     });
-
     fMyConsoleLog("✅ Message Modal Listeners Attached.");
 
 } // END fSetupMessageModalListeners
@@ -1309,10 +1310,8 @@ async function fShowPrompt(message) {
 
     // Set prompt content
     gUI.promptModalText.innerHTML = message;
-
     // Show the modal
     gUI.promptModalOverlay.style.display = 'flex';
-
     // Create and return a new Promise
     // We store both resolve and reject, although reject might not be used often for simple Yes/No
     return new Promise((resolve, reject) => {
@@ -1358,7 +1357,6 @@ function fHandlePromptResponse(userResponse) {
 // Outputs -> None
 function fSetupPromptModalListeners() {
     fMyConsoleLog("🖱️ Setting up Prompt Modal Listeners...");
-
     // --- Cache elements if not already done (or get directly) ---
     if (!gUI.promptYesButton) gUI.promptYesButton = document.getElementById('promptYesButton');
     if (!gUI.promptNoButton) gUI.promptNoButton = document.getElementById('promptNoButton');
@@ -1379,17 +1377,14 @@ function fSetupPromptModalListeners() {
 
     // Listener for the 'Yes' button
     gUI.promptYesButton.addEventListener('click', () => fHandlePromptResponse(true));
-
     // Listener for the 'No' button
     gUI.promptNoButton.addEventListener('click', () => fHandlePromptResponse(false));
-
     // @@Optional: Add Escape key listener here if needed (could call fHandlePromptResponse(false) or reject)
     // document.addEventListener('keydown', (event) => {
     //   if (gUI.promptModalOverlay && gUI.promptModalOverlay.style.display !== 'none' && event.key === 'Escape') {
     //     fHandlePromptResponse(false); // Or potentially reject if you use the reject function
     //   }
     // });
-
     fMyConsoleLog("✅ Prompt Modal Listeners Attached.");
 } // END fSetupPromptModalListeners
 

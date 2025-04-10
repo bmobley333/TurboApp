@@ -100,6 +100,34 @@ roll: {
     // --- Output Formatting ---
     htmlHeader: ''       // Stores the header HTML string for the roll log entry
   },
+  dropDownBox: [
+    // Is On
+    { choices: ['','Y','N',1,2,3,4,5,6,7,8,9,10,'P','I','~','E','*'],
+      ranges: [ { r1: 'AbilTblStart_R', c1: 'On', r2: 'AbilTblEnd_R', c2: 'On' } ]
+    },
+    // Monster #
+    { choices: ['',1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30],
+      ranges: [ { r1: 'CustMon', c1: 'NumMon', r2: 'LastMon_R', c2: 'NumMon' } ]
+    }
+  ],
+  fontColorRange: [
+    { color: '#FF0000', // Red
+      ranges: [ { r1: 'FrozenHeader', c1: 'R', r2: 'FrozenHeader', c2: 'R' },
+        { r1: 'ULMonsterTbl', c1: 'MonAtk', r2: 'LastMon_R', c2: 'MonDmg' } ]
+    },
+    { color: '#FFA500', // Orange
+      ranges: [ { r1: 'FrozenHeader', c1: 'O', r2: 'FrozenHeader', c2: 'O' } ]
+    },
+    { color: '#fcba03', // Gold
+      ranges: [ { r1: 'FrozenHeader', c1: 'Y', r2: 'FrozenHeader', c2: 'Y' } ]
+    },
+    { color: '#008000', // Green
+      ranges: [ { r1: 'FrozenHeader', c1: 'G', r2: 'FrozenHeader', c2: 'G' } ]
+    },
+    { color: '#0000FF', // Blue
+      ranges: [ { r1: 'FrozenHeader', c1: 'B', r2: 'FrozenHeader', c2: 'B' } ]
+    }
+  ],
   range: {
     // Define ranges using objects with r1, c1, r2, c2 properties
     morphs: [ // <-- Array is correct because there are MULTIPLE morph ranges
@@ -969,6 +997,95 @@ function fApplyManualBorders() {
 
 
 
+// fApplyManualColoring ////////////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Applies specific font colors to predefined ranges based on gUI.fontColorRange (new array structure).
+//            Includes contrast check against background color.
+// MODIFIED: Iterates through an array of color objects, using the 'color' property directly.
+function fApplyManualColoring() {
+    fMyConsoleLog("🎨 Applying Manual Font Colors (Hex Config)...");
+    const colorConfigArray = gUI.fontColorRange; // Now expects an array
+
+    // Check if the config is a valid array
+    if (!Array.isArray(colorConfigArray)) {
+        fMyConsoleLog("ℹ️ Manual font color configuration (gUI.fontColorRange) is not an array or is missing.");
+        return;
+    }
+    if (colorConfigArray.length === 0) {
+        fMyConsoleLog("ℹ️ Manual font color configuration is empty.");
+        return;
+    }
+
+    let colorsAppliedCount = 0;
+    let contrastAppliedCount = 0;
+
+    // Iterate through each color definition object in the array
+    colorConfigArray.forEach((colorDef, index) => {
+        // Validate the structure of the current color definition object
+        if (!colorDef || typeof colorDef.color !== 'string' || !Array.isArray(colorDef.ranges)) {
+             console.warn(`Skipping invalid color definition at index ${index}:`, colorDef);
+             return; // Skip to the next definition in the forEach loop
+        }
+
+        const cssColor = colorDef.color; // Get the hex color string directly
+        const ranges = colorDef.ranges;   // Get the array of ranges for this color
+
+        // Iterate through each range object for the current color
+        ranges.forEach(range => {
+            if (!fIsValidRangeObject(range)) {
+                 console.warn(`Skipping invalid range object for color '${cssColor}':`, range);
+                 return;
+            }
+
+            const resolved = fResolveRangeIndices(range);
+            if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
+                 console.warn(`Could not resolve tags for range in color '${cssColor}':`, range);
+                 return;
+            }
+
+            const rMin = Math.min(resolved.r1, resolved.r2);
+            const rMax = Math.max(resolved.r1, resolved.r2);
+            const cMin = Math.min(resolved.c1, resolved.c2);
+            const cMax = Math.max(resolved.c1, resolved.c2);
+
+            // Iterate through cells in the resolved range
+            for (let r = rMin; r <= rMax; r++) {
+                for (let c = cMin; c <= cMax; c++) {
+                    const cell = gUI.grid2D?.[r]?.[c];
+                    if (!cell || cell.style.display === 'none') continue;
+
+                    let cellBgColor = window.getComputedStyle(cell).backgroundColor;
+                     if (cellBgColor && cellBgColor.startsWith('rgb')) {
+                        try {
+                            const rgb = cellBgColor.match(/\d+/g).map(Number);
+                             cellBgColor = '#' + rgb.map(x => { const hex = x.toString(16); return hex.length === 1 ? '0' + hex : hex; }).join('');
+                         } catch (e) {
+                             cellBgColor = cell.style.backgroundColor || gUI.format?.bg?.[r]?.[c] || '#ffffff';
+                         }
+                     } else {
+                         cellBgColor = cell.style.backgroundColor || gUI.format?.bg?.[r]?.[c] || '#ffffff';
+                     }
+                    const cleanBgColor = cellBgColor.toLowerCase();
+                    const intendedFontColor = cssColor.toLowerCase(); // Use the hex color
+
+                    // Apply color, considering contrast
+                    if (intendedFontColor === cleanBgColor) {
+                        cell.style.color = fGetContrastColor(cleanBgColor);
+                        contrastAppliedCount++;
+                    } else {
+                        cell.style.color = intendedFontColor;
+                        colorsAppliedCount++;
+                    }
+                } // end col loop
+            } // end row loop
+        }); // end forEach range
+    }); // end forEach colorDef
+
+    fMyConsoleLog(`✅ Manual Colors Applied (${colorsAppliedCount} direct, ${contrastAppliedCount} contrast).`);
+
+}; // END fApplyManualColoring
+
+
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////// START fAddHeaderButtons and helpers
 
 
@@ -1453,7 +1570,148 @@ function fHandleCellMouseOut(event) {
 
 
 // ==========================================================================
-// === Grid Interaction Logic          (End of Grid Hover) ===
+// === Dropdown Boxes           (End of Grid Hover or appropriate section) ===
+// ==========================================================================
+
+
+
+
+// fCreateDropdownElement ///////////////////////////////////////////////////////////////////
+// Purpose -> Creates an HTML select element for a grid cell dropdown.
+// Inputs  -> r (Number): Row index.
+//         -> c (Number): Column index.
+//         -> choices (Array): Array of option values for the dropdown.
+//         -> currentValue (Any): The current value from gUI.arr to pre-select.
+// Outputs -> (HTMLElement): The configured <select> element.
+function fCreateDropdownElement(r, c, choices, currentValue) {
+    const select = document.createElement('select');
+    select.classList.add('grid-dropdown'); // Add class for styling
+    select.dataset.r = r; // Store row index
+    select.dataset.c = c; // Store col index
+
+    // Ensure currentValue is a string for comparison (select values are strings)
+    const currentValStr = String(currentValue ?? '');
+
+    choices.forEach(choice => {
+        const option = document.createElement('option');
+        option.value = choice;
+        option.textContent = choice;
+        // Pre-select the option matching the current value
+        if (String(choice) === currentValStr) {
+            option.selected = true;
+        }
+        select.appendChild(option);
+    });
+
+    return select;
+
+} // END fCreateDropdownElement
+
+
+
+
+// fHandleDropdownChange ////////////////////////////////////////////////////////////////////
+// Purpose -> Handles the 'change' event for grid dropdowns. Updates gUI.arr.
+// Inputs  -> event (Event): The change event object from the select element.
+// Outputs -> None (Modifies gUI.arr).
+function fHandleDropdownChange(event) {
+    const select = event.target;
+    const r = parseInt(select.dataset.r, 10);
+    const c = parseInt(select.dataset.c, 10);
+    const newValue = select.value; // The selected value is always a string
+
+    // Validate indices
+    if (isNaN(r) || isNaN(c) || !gUI.arr?.[r]) {
+         console.warn(`Dropdown change handler: Invalid coordinates [${r}, ${c}] from dataset.`);
+         return;
+    }
+
+    // Attempt to convert back to number if original choices included numbers
+    // This is a simple heuristic; might need refinement if choices mix strings/numbers ambiguously
+    const originalChoice = gUI.dropDownBox
+        .find(config => config.ranges.some(range => { // Find the config that applies to this cell
+            const resolved = fResolveRangeIndices(range);
+            return !isNaN(resolved.r1) && !isNaN(resolved.c1) && !isNaN(resolved.r2) && !isNaN(resolved.c2) &&
+                   r >= Math.min(resolved.r1, resolved.r2) && r <= Math.max(resolved.r1, resolved.r2) &&
+                   c >= Math.min(resolved.c1, resolved.c2) && c <= Math.max(resolved.c1, resolved.c2);
+        }))?.choices.find(choice => String(choice) === newValue);
+
+    const finalValue = (typeof originalChoice === 'number') ? Number(newValue) : newValue;
+
+    // Update data model if value actually changed
+    if (gUI.arr[r][c] !== finalValue) {
+        gUI.arr[r][c] = finalValue;
+        fMyConsoleLog(`Dropdown [${r}, ${c}] changed to: "${finalValue}" (Type: ${typeof finalValue})`);
+        // Note: DOM select element is already updated visually by the browser.
+        // If we need to trigger other updates based on this change, add them here.
+    }
+
+} // END fHandleDropdownChange
+
+
+
+
+// fApplyDropdownsToGrid ////////////////////////////////////////////////////////////////////
+// Purpose -> Iterates through gUI.dropDownBox configs and replaces relevant cell content with dropdowns.
+// Inputs  -> None (Uses gUI.dropDownBox, gUI.arr, gUI.grid2D).
+// Outputs -> None (Modifies DOM).
+function fApplyDropdownsToGrid() {
+    fMyConsoleLog("🧬 Applying Dropdowns to Grid...");
+    let dropdownsApplied = 0;
+
+    if (!gUI.dropDownBox || !Array.isArray(gUI.dropDownBox)) {
+        fMyConsoleLog("ℹ️ No dropdown configurations found in gUI.dropDownBox.");
+        return;
+    }
+
+    gUI.dropDownBox.forEach(config => {
+        if (!config.choices || !config.ranges || !Array.isArray(config.choices) || !Array.isArray(config.ranges)) {
+            console.warn("Skipping invalid dropdown config:", config);
+            return;
+        }
+
+        config.ranges.forEach(range => {
+            if (!fIsValidRangeObject(range)) {
+                 console.warn("Skipping invalid range object within dropdown config:", range);
+                 return;
+            }
+            const resolved = fResolveRangeIndices(range);
+            if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
+                 console.warn("Skipping dropdown range due to unresolved indices:", range);
+                 return;
+            }
+
+            const rMin = Math.min(resolved.r1, resolved.r2);
+            const rMax = Math.max(resolved.r1, resolved.r2);
+            const cMin = Math.min(resolved.c1, resolved.c2);
+            const cMax = Math.max(resolved.c1, resolved.c2);
+
+            for (let r = rMin; r <= rMax; r++) {
+                for (let c = cMin; c <= cMax; c++) {
+                    const cell = gUI.grid2D?.[r]?.[c];
+                    // Only apply to existing, visible cells that aren't checkboxes or already dropdowns
+                    if (cell && cell.style.display !== 'none' && !cell.querySelector('input[type="checkbox"]') && !cell.querySelector('select.grid-dropdown')) {
+                         const currentValue = gUI.arr?.[r]?.[c];
+                         const dropdown = fCreateDropdownElement(r, c, config.choices, currentValue);
+                         cell.innerHTML = ''; // Clear existing content (like text value)
+                         cell.appendChild(dropdown);
+                         cell.style.padding = '0'; // Remove padding to fit dropdown
+                         cell.style.overflow = 'visible'; // Allow dropdown to overflow cell bounds visually
+                         dropdownsApplied++;
+                    }
+                }
+            }
+        });
+    });
+
+    fMyConsoleLog(`✅ Applied ${dropdownsApplied} Dropdowns.`);
+
+} // END fApplyDropdownsToGrid
+
+
+
+// ==========================================================================
+// === Grid Interaction Logic          (End of Dropdown Boxes ) ===
 // ==========================================================================
 
 
@@ -3473,25 +3731,33 @@ async function fRefreshMonsterData() {
 
 
 // fSetupGridClickListeners ////////////////////////////////////////////////////////////////////////////////////////////
-// Purpose -> Attaches a general delegated click listener to the grid container.
+// Purpose -> Attaches delegated click and change listeners to the grid container.
 // Inputs  -> gridElement (HTMLElement): The grid container element.
 // Outputs -> None.
 function fSetupGridClickListeners(gridElement) {
 
     // Validate input
     if (!gridElement) {
-        console.error("❌ Cannot setup grid click listener: Grid element not provided.");
+        console.error("❌ Cannot setup grid listeners: Grid element not provided.");
         return;
     }
 
     // Log setup start
-    fMyConsoleLog("🖱️ Setting up General Grid Click Listener...");
+    fMyConsoleLog("🖱️ Setting up Grid Click & Change Listeners...");
 
-    // Add the single delegated handler for various click types (checkboxes, URLs)
+    // Add the single delegated handler for various click types (checkboxes, URLs, buttons)
     gridElement.addEventListener('click', fHandleGridClick);
 
+    // Add delegated handler for dropdown changes <<< NEW LISTENER ADDED
+    gridElement.addEventListener('change', (event) => {
+        // Check if the changed element is one of our grid dropdowns
+        if (event.target.tagName === 'SELECT' && event.target.classList.contains('grid-dropdown')) {
+            fHandleDropdownChange(event);
+        }
+    });
+
     // Log setup end
-    fMyConsoleLog("✅ General Grid Click Listener Attached.");
+    fMyConsoleLog("✅ Grid Click & Change Listeners Attached.");
 
 }; // END fSetupGridClickListeners
 
@@ -3719,18 +3985,24 @@ function fAttachGridListeners(gridElement) {
 function fRunPostRenderFormatting() {
     fMyConsoleLog("🚀 Applying Post-Render Formatting...");
     fApplyDynamicMerges();
-    fAddHeaderButtons(); // <<< ADD CALL HERE
+    fAddHeaderButtons();
     fApplyManualBorders();
     fApplyInitialVisibility();
-    fSetHeader();
-    fMarkOverflowingCells();
-    fClearSk1Sk2Checkboxes();
+    fApplyManualColoring(); // [cite: 594]
+    fSetHeader(); // [cite: 528]
+
+    // --- Apply Dropdowns AFTER merges/visibility might hide cells ---
+    fApplyDropdownsToGrid(); // <<< ADDED CALL HERE
+
+    // --- These should generally run last ---
+    fMarkOverflowingCells(); // Check overflow after layout changes // [cite: 637]
+    fClearSk1Sk2Checkboxes(); // Reset checkboxes if needed // [cite: 1113]
 
     const gridElement = document.getElementById('grid');
-    fAttachGridListeners(gridElement);
+    fAttachGridListeners(gridElement); // Attach delegated listeners
 
-    if (fModalElementsAvailable()) { // Check gUI properties
-        fSetupModalListeners();
+    if (fModalElementsAvailable()) { // Check gUI properties // [cite: 1251]
+        fSetupModalListeners(); // [cite: 1219]
     }
 
     fMyConsoleLog("✅ All Post-Render Formatting Done!");

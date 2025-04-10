@@ -23,7 +23,4 @@ for %%F in (=*) do (
 
 cd ..
 
-echo Done.
 pause
-
-
