@@ -452,24 +452,79 @@ function fMakeCheckBox(r, c) {
 // Inputs  -> r, c, value, rowFormat (see original for detailed descriptions)
 // Outputs -> HTMLElement: Configured cell div
 function fCreateAndFormatCell(r, c, value, rowFormat) {
-    const cell = document.createElement("div");
-    cell.className = "cell";
+    const cell = document.createElement("div"); 
+    cell.className = "cell"; 
 
-    const originalValue = value ?? "";
-    const valStr = String(originalValue).toUpperCase();
-    const isCheckbox = value === true || value === false || valStr === "TRUE" || valStr === "FALSE";
+    const originalValue = value ?? ""; 
+    const valStr = String(originalValue).toUpperCase(); 
+    const isCheckbox = value === true || 
+                       value === false || valStr === "TRUE" || valStr === "FALSE"; 
 
-    const bgColor = rowFormat.bg?.[c];
-    const isEditable = fCheckIfEditable(bgColor, isCheckbox);
+    const bgColor = rowFormat.bg?.[c]; 
+    const isEditable = fCheckIfEditable(bgColor, isCheckbox); 
+    fSetCellAttributes(cell, r, c, isEditable); 
+    fCheckAndTagNote(cell, r, c); 
 
-    fSetCellAttributes(cell, r, c, isEditable);
-    fCheckAndTagNote(cell, r, c);
-    const { displayValue, isUrl } = fCheckAndTagUrl(cell, originalValue);
-    fPopulateCellContent(cell, r, c, displayValue, isCheckbox);
-    fApplyCellFormatting(cell, c, bgColor, rowFormat, isUrl);
+    // Check if dropdown applies
+    const dropConfig = fFindDropdownMatch(r, c); 
+    if (dropConfig) { 
+        const select = fMakeDropdown(r, c, dropConfig, value); 
+        cell.appendChild(select); 
+    } else { 
+        const { displayValue, isUrl } = fCheckAndTagUrl(cell, originalValue); 
+        fPopulateCellContent(cell, r, c, displayValue, isCheckbox); 
+    } 
 
-    return cell;
-};
+    fApplyCellFormatting(cell, c, bgColor, rowFormat); 
+
+    return cell; // 
+} // END fCreateAndFormatCell
+
+
+
+
+// fFindDropdownMatch ///////////////////////////////////////////////////////////////////////////
+// Purpose -> Checks if (r,c) falls within any gUI.dropDownBox.range. Returns the config or null.
+// Outputs -> (Object|null): The dropdown config object or null.
+function fFindDropdownMatch(r, c) {
+    for (const config of gUI.dropDownBox) {
+        for (const range of config.ranges) {
+            const r1 = resolveRow(range.r1), r2 = resolveRow(range.r2);
+            const c1 = resolveCol(range.c1), c2 = resolveCol(range.c2);
+            if (
+                !isNaN(r1) && !isNaN(r2) && !isNaN(c1) && !isNaN(c2) &&
+                r >= Math.min(r1, r2) && r <= Math.max(r1, r2) &&
+                c >= Math.min(c1, c2) && c <= Math.max(c1, c2)
+            ) return config;
+        }
+    }
+    return null;
+} // END fFindDropdownMatch
+
+
+
+
+// fMakeDropdown ///////////////////////////////////////////////////////////////////////////////
+// Purpose -> Builds a <select> element populated with dropdown choices.
+// Inputs  -> r (row), c (col), config (from dropDownBox), currentVal (value in cell)
+// Outputs -> HTMLSelectElement
+function fMakeDropdown(r, c, config, currentVal) {
+    const select = document.createElement("select");
+    select.dataset.r = r;
+    select.dataset.c = c;
+
+    for (const choice of config.choices) {
+        const option = document.createElement("option");
+        option.value = String(choice);
+        option.textContent = String(choice);
+        if (String(choice) === String(currentVal)) option.selected = true;
+        select.appendChild(option);
+    }
+
+    select.classList.add("dropdown-cell");
+    return select;
+} // END fMakeDropdown
+
 
 
 
@@ -1227,23 +1282,42 @@ function fApplyHeaderButtonToCell(cell, img) {
 
 // fMarkOverflowingCells //////////////////////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Adds 'overflow-left' class to cells where content width exceeds cell width.
-// From older scripts.html - Run AFTER merges and column widths are set.
+//            Optimized to reduce forced reflows by batching reads and writes.
 function fMarkOverflowingCells() {
-    fMyConsoleLog("↔️ Checking Cell Overflow...");
-    // Query all rendered cells that are not part of a hidden merge area
+    fMyConsoleLog("↔️ Checking Cell Overflow (Optimized)...");
     const cells = document.querySelectorAll('#grid .cell:not([style*="display: none"])');
-    let count = 0;
+    let cellsToModify = []; // Array to store { cellElement: cell, shouldOverflow: boolean }
+
+    // --- Phase 1: Read ---
+    // Read dimensions without modifying the DOM
     cells.forEach(cell => {
-        // Check scrollWidth vs clientWidth for overflow
-        // Use a small tolerance? e.g., > cell.clientWidth + 1
-        if (cell.scrollWidth > cell.clientWidth + 1) {
+        // Read clientWidth and scrollWidth
+        const clientW = cell.clientWidth;
+        const scrollW = cell.scrollWidth;
+        // Determine if overflow class should be applied (using a small tolerance)
+        const shouldOverflow = scrollW > clientW + 1;
+        // Store the result and the element reference
+        cellsToModify.push({ cellElement: cell, shouldOverflow: shouldOverflow });
+    });
+
+    // --- Phase 2: Write ---
+    // Apply class changes based on stored results
+    let count = 0;
+    cellsToModify.forEach(item => {
+        const cell = item.cellElement;
+        const currentlyHasClass = cell.classList.contains('overflow-left');
+
+        if (item.shouldOverflow && !currentlyHasClass) {
             cell.classList.add('overflow-left');
             count++;
-        } else {
-            cell.classList.remove('overflow-left'); // Ensure class is removed if not overflowing
+        } else if (!item.shouldOverflow && currentlyHasClass) {
+            cell.classList.remove('overflow-left');
+            // Optionally count removals or just net additions: count++;
         }
+        // If shouldOverflow === currentlyHasClass, do nothing.
     });
-     fMyConsoleLog(`✅ Overflow Checked (${count} cells marked)`);
+
+    fMyConsoleLog(`✅ Overflow Checked (Optimized - ${count} cells newly marked)`);
 }; // END fMarkOverflowingCells
 
 
@@ -3988,21 +4062,21 @@ function fRunPostRenderFormatting() {
     fAddHeaderButtons();
     fApplyManualBorders();
     fApplyInitialVisibility();
-    fApplyManualColoring(); // [cite: 594]
-    fSetHeader(); // [cite: 528]
+    fApplyManualColoring(); 
+    fSetHeader(); 
 
     // --- Apply Dropdowns AFTER merges/visibility might hide cells ---
     fApplyDropdownsToGrid(); // <<< ADDED CALL HERE
 
     // --- These should generally run last ---
-    fMarkOverflowingCells(); // Check overflow after layout changes // [cite: 637]
-    fClearSk1Sk2Checkboxes(); // Reset checkboxes if needed // [cite: 1113]
+    fMarkOverflowingCells(); // Check overflow after layout changes 
+    fClearSk1Sk2Checkboxes(); // Reset checkboxes if needed 
 
     const gridElement = document.getElementById('grid');
     fAttachGridListeners(gridElement); // Attach delegated listeners
 
-    if (fModalElementsAvailable()) { // Check gUI properties // [cite: 1251]
-        fSetupModalListeners(); // [cite: 1219]
+    if (fModalElementsAvailable()) { // Check gUI properties 
+        fSetupModalListeners(); 
     }
 
     fMyConsoleLog("✅ All Post-Render Formatting Done!");
