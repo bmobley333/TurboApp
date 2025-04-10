@@ -246,6 +246,7 @@ async function fProcessMorph() {
 // fParseMorphComponents ////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Parses each morph component and mutates gUI.roll and acc accordingly.
 // MODIFIED: Made async, changed forEach to for...of, added await to fShowMessage, added DCT logic
+// MODIFIED: Changed acc.lastFocusIndex to acc.lastFocusTag to store the color TAG ('R'...'B').
 async function fParseMorphComponents(morphComponents, morphLower, acc) {
     const plusMinusRegex = /^([-+])(\d+)$/;
     const numberOnlyRegex = /^\d+$/;
@@ -255,7 +256,7 @@ async function fParseMorphComponents(morphComponents, morphLower, acc) {
     const equalsRegex = /^=(\d+)$/;
     const equalsEqualsRegex = /^==(\d+)$/;
     const caretRegex = /^\^(\d+)$/;
-    const dctRegex = /^([-+])(\d+)([dct])$/i; // <<< ADDED: Case-insensitive
+    const dctRegex = /^([-+])(\d+)([dct])$/i; // Case-insensitive
 
     // Use for...of loop instead of forEach to allow await
     let index = 0; // Manual index tracking needed for morphLower
@@ -270,9 +271,12 @@ async function fParseMorphComponents(morphComponents, morphLower, acc) {
             acc.foundResTyp = true;
         }
 
-        // --- resFocus Check (find index of LAST match)
-        const focusIndex = gUI.list.metaColor.indexOf(lower.toUpperCase());
-        if (focusIndex > -1) acc.lastFocusIndex = focusIndex;
+        // --- resFocus Check (find LAST matching TAG) --- <<< MODIFIED
+        const focusTag = lower.toUpperCase(); // Prepare tag for check
+        if (gUI.list.metaColor.includes(focusTag)) { // Check if tag is valid
+            acc.lastFocusTag = focusTag; // Store the TAG ('R', 'O', etc.)
+        }
+        // --- End resFocus Check ---
 
         // --- resPlus Check
         const plusMatch = component.match(plusMinusRegex);
@@ -368,7 +372,7 @@ async function fParseMorphComponents(morphComponents, morphLower, acc) {
                      acc.foundResdctMult = true;
                  } else {
                       console.warn(`Invalid DCT multiplier calculated for "${component}": ${multiplier}. Skipping this morph.`);
-                     // Optional await fShowMessage(`⚠️ Invalid result for morph "${component}". Check value.`);
+                      // Optional await fShowMessage(`⚠️ Invalid result for morph "${component}". Check value.`);
                  }
             }
         }
@@ -395,6 +399,7 @@ async function fParseMorphComponents(morphComponents, morphLower, acc) {
 
 // fApplyMorphResults ////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Applies accumulated morph data to gUI.roll.
+// MODIFIED: Changed gUI.roll.resFocus assignment to use acc.lastFocusTag.
 function fApplyMorphResults(acc) {
     const r = gUI.roll;
     // MUST BE FIRST: Assign resFlatBase (also sets skSk)
@@ -411,10 +416,15 @@ function fApplyMorphResults(acc) {
         r.resTyp = acc.lastResTypMatch || r.skTyp;
     }
 
-    // Assign resFocus (index of last match found)
-    if (acc.lastFocusIndex > -1) {
-        r.resFocus = acc.lastFocusIndex;
+    // Assign resFocus (last matching TAG found) --- <<< MODIFIED
+    // Check if lastFocusTag exists and is not empty
+    if (acc.lastFocusTag && acc.lastFocusTag !== '') {
+        r.resFocus = acc.lastFocusTag; // Assign the tag ('R', 'O', etc.)
+    } else {
+        // Ensure resFocus is explicitly cleared if no tag was found
+        r.resFocus = '';
     }
+    // --- End resFocus Assignment ---
 
     // Assign resPlus
     if (acc.foundResPlus) {
@@ -794,38 +804,44 @@ async function fSkMeta_VerifyAndProcessCost() {
 
 // fFocus_VerifyAndProcessCost ///////////////////////////////////////////////////
 // Purpose -> Helper for fVerifyNSetActMetaLuckUsesOnEtc: Processes the Focus meta cost
-//            if gUI.roll.resFocus is a valid index (0-4). Runs regardless of sk1CB.
-//            Determines the focus color tag from resFocus index, calls fSpendOneMeta
-//            to find/prepare the decrement, and handles success/failure with specific message.
+//            if gUI.roll.resFocus is a valid meta color TAG ('R'...'B').
+// MODIFIED: Reads tag directly from gUI.roll.resFocus, validates it, then calls fSpendOneMeta.
+//            Runs regardless of sk1CB.
 // Inputs  -> None (reads gUI.roll.resFocus, gUI.list.metaColor). Calls fSpendOneMeta.
 // Outputs -> (Promise<Object>): { success: Boolean, changes: Array, headers: Array }
-//            'success' is false if focus meta cost cannot be paid.
+//            'success' is false if focus meta cost cannot be paid or tag is invalid.
 //            'changes' contains the single change object if successful.
 //            'headers' is always empty.
 async function fFocus_VerifyAndProcessCost() {
-    const resFocus = gUI.roll.resFocus;
+    const focusColorTag = gUI.roll.resFocus; // Now holds the tag ('R', 'O', etc.) or ''
     const changes = [];
     const headers = [];
-    const metaColors = gUI.list?.metaColor;
-    // --- 1. Check if there is a valid Focus cost ---
-    const focusIndex = (typeof resFocus === 'number' && resFocus >= 0 && resFocus < metaColors?.length) ? resFocus : -1;
+    const metaColors = gUI.list?.metaColor; // e.g., ['R','O','Y','G','B']
 
-    if (focusIndex === -1) {
-        fMyConsoleLog("   -> Focus Meta Cost: Skipped (No valid resFocus index).");
+    // --- 1. Check if there is a Focus cost defined ---
+    if (!focusColorTag || typeof focusColorTag !== 'string') {
+        fMyConsoleLog("   -> Focus Meta Cost: Skipped (No resFocus tag defined).");
         return { success: true, changes: [], headers: [] }; // No focus cost to apply
     }
 
-    // --- 2. Determine Focus Color Tag ---
+    // --- 2. Validate the Focus Color Tag ---
     if (!Array.isArray(metaColors) || metaColors.length === 0) {
         console.error("fFocus_VerifyAndProcessCost: gUI.list.metaColor is not defined or empty.");
         await fShowMessage("❌ Internal Error: Meta color list not defined.");
         return { success: false, changes: [], headers: [] }; // Indicate failure
     }
-    const focusColorTag = metaColors[focusIndex];
-    fMyConsoleLog(`   -> Focus Meta Cost: Attempting to spend 1 unit of '${focusColorTag}' (Focus)...`);
+    const isValidFocusTag = metaColors.includes(focusColorTag.toUpperCase()); // Ensure case-insensitive check if needed, but list is uppercase
+    if (!isValidFocusTag) {
+        const msg = `Invalid Focus Meta tag specified in morph: '${focusColorTag}'. Allowed: ${metaColors.join(', ')}.`;
+        console.warn(`fFocus_VerifyAndProcessCost: ${msg}`);
+        fMyConsoleLog(`   -> ❌ Focus Meta Cost Failed: ${msg}`);
+        await fShowMessage(`❌ ${msg}`);
+        return { success: false, changes: [], headers: [] }; // Indicate failure due to invalid tag
+    }
 
-    // --- 3. Call fSpendOneMeta to find/prepare the decrement ---
-    // fSpendOneMeta handles validation of the metaColorTag internally as well, but we already know it's valid here.
+    // --- 3. Call fSpendOneMeta with the validated tag ---
+    fMyConsoleLog(`   -> Focus Meta Cost: Attempting to spend 1 unit of '${focusColorTag}' (Focus)...`);
+    // fSpendOneMeta handles validation again internally, but we've pre-validated here.
     const spendResult = await fSpendOneMeta(focusColorTag);
 
     // --- 4. Handle Result ---
@@ -836,9 +852,11 @@ async function fFocus_VerifyAndProcessCost() {
         return { success: true, changes: changes, headers: headers };
     } else {
         // Failed to find 1 unit (fSpendOneMeta returns false if it cycles through all pools/colors)
-        fMyConsoleLog(`      -> ❌ Failed: Could not find 1 unit of ${focusColorTag} starting from ${focusColorTag}.`);
+        // fSpendOneMeta would have logged/shown errors for invalid *input* tags, but we validated first.
+        // So this failure means not enough meta of the specified (or higher) color was found.
+        fMyConsoleLog(`      -> ❌ Failed: Could not find 1 unit of ${focusColorTag} (or higher) to spend.`);
         const errorMsg = `❌ Not enough Meta.<br>In addition to possible ability meta cost,<br>you are also trying to Focus @${focusColorTag}.`;
-        await fShowMessage(errorMsg);
+        await fShowMessage(errorMsg); // Show the "Not enough Meta" message specific to Focus failure
         return { success: false, changes: [], headers: [] }; // Indicate failure
     }
 
@@ -921,6 +939,7 @@ async function fSpendOneMeta(metaColor) {
 
 // fCalcGUIRollResSk /////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Calculates final resulting skill value (gUI.roll.resSk) using morph-derived modifiers.
+// MODIFIED: Calculates focus bonus based on the index of the gUI.roll.resFocus TAG within gUI.list.metaColor.
 // Inputs  -> None (reads from gUI.roll).
 // Outputs -> None (writes gUI.roll.resSk).
 function fCalcGUIRollResSk() {
@@ -955,10 +974,19 @@ function fCalcGUIRollResSk() {
             currentResSk += gUI.roll.resPlus;
         }
 
-        // Apply resFocus (focus index adds 5 * (1 + index))
-        if (typeof gUI.roll.resFocus === 'number' && gUI.roll.resFocus >= 0) {
-            currentResSk += 5 * (1 + gUI.roll.resFocus);
+        // Apply resFocus --- <<< MODIFIED
+        // Check if resFocus holds a valid TAG ('R'...'B')
+        const focusTag = gUI.roll.resFocus;
+        if (focusTag && typeof focusTag === 'string' && gUI.list.metaColor) {
+            const focusIndex = gUI.list.metaColor.indexOf(focusTag.toUpperCase()); // Find index of the tag
+            if (focusIndex > -1) { // Check if tag was found
+                const focusBonus = 5 * (1 + focusIndex);
+                currentResSk += focusBonus;
+                fMyConsoleLog(`      -> Applying Focus Bonus: +${focusBonus} (Tag: ${focusTag}, Index: ${focusIndex})`);
+            }
+            // else: Tag wasn't found in metaColor list, no bonus applied (should have been caught earlier if invalid tag)
         }
+        // --- End resFocus Modification ---
 
 
         // Apply isUnSk (cut in half) AFTER all multipliers and additions
