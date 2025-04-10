@@ -128,7 +128,7 @@ function fIsSheetTrulyEmpty(sh, arr) {
 function fBuildFormatObject(sh, rngData, numCols) {
     const fontColorObjects = rngData.getFontColorObjects();
     const fontColorHex = fontColorObjects.map(row =>
-        row.map(obj => obj?.asRgbColor?.()?.asHexString?.() ?? null)
+      row.map(obj => obj?.asRgbColor?.()?.asHexString?.()?.replace(/^#ff/, '#') ?? null)
     );
 
     const colWidths = Array.from({ length: numCols }, (_, c) =>
