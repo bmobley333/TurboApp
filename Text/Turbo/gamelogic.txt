@@ -16,15 +16,16 @@
 // Purpose -> Top-level handler for "Roll Dice" action. Handles single or multi-rolls (# morph).
 //            Verifies target, populates gUI.roll, processes morphs (incl. #, 'free', 'luck').
 //            Verifies ALL costs (Luck and Standard, unless free roll) using pendingChangesMap.
-//            Branches based on roll type ('Atk' vs standard) and difficulty morph ('^').
-//            Calls appropriate helper (fPerformStandardRolls or fPerformMonsterAttackRolls).
+//            Branches based on roll type ('Atk', 'Def', standard) and difficulty morph ('^').
+//            Calls appropriate helper (fPerformStandardRolls, fPerformPlayerAttackRolls, fPerformPlayerDefenseRolls).
 //            Applies costs from pendingChangesMap ONLY AFTER helper function succeeds.
 //            Builds initial log header, passes to helper, prepends final combined log ONCE.
 // Inputs  -> None (uses gUI.currentSkRadioChecked, gUI.roll).
 // Outputs -> None (updates gUI, DOM, and logs to sidebar).
+// MODIFIED: Added branching for resTyp === 'Def' to call fPerformPlayerDefenseRolls.
 // MODIFIED: Deferred ALL cost application (Luck, Standard) until AFTER roll helpers succeed.
 // MODIFIED: Luck cost verification now adds change to pendingChangesMap instead of applying directly.
-// MODIFIED: Prepends an extra blank PARAGRAPH before monster attack logs for spacing.
+// MODIFIED: Prepends an extra blank PARAGRAPH before Player Attack/defense logs for spacing.
 async function fHandleRollDiceAction() {
     fMyConsoleLog("🎲 Roll Dice Action Triggered");
 
@@ -166,28 +167,45 @@ async function fHandleRollDiceAction() {
     initialLogHtml = initialLogHtml.trim();
 
 
-    // --- 4. Branch Based on Roll Type and Difficulty Morph ---
+    // --- 4. Branch Based on Roll Type and Difficulty Morph --- <<< MODIFIED BLOCK
     let finalLogHtml = ''; // To hold combined log from helpers
     let helperSucceeded = false; // Flag to track if the specific roll helper succeeded
+    let wasMonsterInteractionRoll = false; // Flag for adding extra space later
 
-    if (resTyp === 'Atk' && !hasDifficultyMorph) {
-        // --- 4a. Monster Attack ---
-        fMyConsoleLog("⚔️ Performing Monster Attack Rolls (Validation first)...");
-        const monsterRollResult = await fPerformMonsterAttackRolls(initialLogHtml);
+    if (resTyp.toLowerCase() === 'atk' && !hasDifficultyMorph) {
+        // --- 4a. Player Attack ---
+        fMyConsoleLog("⚔️ Performing Player Attack Rolls (Validation first)...");
+        const monsterRollResult = await fPerformPlayerAttackRolls(initialLogHtml);
         if (monsterRollResult.success) {
             finalLogHtml = monsterRollResult.logHtml;
-            helperSucceeded = true; // Mark success
-            fMyConsoleLog("   -> Monster Attack roll sequence completed.");
+            helperSucceeded = true;
+            wasMonsterInteractionRoll = true; // Mark as monster roll for spacing
+            fMyConsoleLog("   -> Player Attack roll sequence completed.");
         } else {
-            fMyConsoleLog("   -> Monster Attack sequence halted during validation (message shown). Costs NOT applied.");
+            fMyConsoleLog("   -> Player Attack sequence halted during validation (message shown). Costs NOT applied.");
+            gUI.pendingChangesMap = {}; // Clear any prepared costs
+            return; // Halt the entire action
+        }
+    } else if (resTyp.toLowerCase() === 'def' && !hasDifficultyMorph) {
+        // --- 4b. Player Defense ---
+        fMyConsoleLog("🛡️ Performing Player Defense Rolls (Validation first)...");
+        const monsterDefResult = await fPerformPlayerDefenseRolls(initialLogHtml); // Call new helper
+        if (monsterDefResult.success) {
+            finalLogHtml = monsterDefResult.logHtml;
+            helperSucceeded = true;
+            wasMonsterInteractionRoll = true; // Mark as monster roll for spacing
+            fMyConsoleLog("   -> Player Defense roll sequence completed.");
+        } else {
+            fMyConsoleLog("   -> Player Defense sequence halted during validation (message shown). Costs NOT applied.");
             gUI.pendingChangesMap = {}; // Clear any prepared costs
             return; // Halt the entire action
         }
     } else {
-        // --- 4b. Standard Roll ---
+        // --- 4c. Standard Roll (Any other type OR Atk/Def with ^ morph) ---
         fMyConsoleLog("🎯 Performing Standard Roll(s)...");
         finalLogHtml = fPerformStandardRolls(initialLogHtml);
         helperSucceeded = true; // Standard roll always 'succeeds' its phase
+        wasMonsterInteractionRoll = false; // Not a monster interaction roll
         fMyConsoleLog("   -> Standard roll sequence completed.");
     }
     // --- End Roll Branching Block ---
@@ -223,15 +241,12 @@ async function fHandleRollDiceAction() {
     // --- End Cost Application Block ---
 
 
-    // --- 6. Prepend Final Combined Log to Sidebar --- <<< REVISED BLOCK
+    // --- 6. Prepend Final Combined Log to Sidebar ---
     if (finalLogHtml) { // Check if there's anything to log
-        // Check if this was a successful monster attack
-        const wasMonsterAttack = (helperSucceeded && resTyp === 'Atk' && !hasDifficultyMorph);
-
-        // --- TWEAK: Add extra blank line paragraph BEFORE prepending monster attack output ---
-        if (wasMonsterAttack) {
+        // --- TWEAK: Add extra blank line paragraph BEFORE Player Attack/defense output ---
+        if (wasMonsterInteractionRoll) { // Check the flag set during branching
             fPrependToSidebar('&nbsp;'); // Prepend a paragraph with just a space
-            fMyConsoleLog("   -> Prepended extra blank line paragraph for monster attack log spacing.");
+            fMyConsoleLog("   -> Prepended extra blank line paragraph for monster interaction log spacing.");
         }
         // --- End Tweak ---
 
@@ -241,7 +256,6 @@ async function fHandleRollDiceAction() {
        fMyConsoleLog("ℹ️ No final log message generated.");
     }
     gUI.roll.htmlHeader = ''; // Clear header base
-    // --- End Revised Block ---
 
 
     fMyConsoleLog(`✅ Roll Dice Action Completed.`);
@@ -1224,7 +1238,7 @@ function fPerformStandardRolls(initialLogHtml) {
 
 
 
-// fPerformMonsterAttackRolls /////////////////////////////////////////////////////////
+// fPerformPlayerAttackRolls /////////////////////////////////////////////////////////
 // Purpose -> Handles 'Atk' rolls against monsters listed in the grid when no explicit
 //            difficulty morph ('^') is provided. Validates targets, performs rolls,
 //            builds log lines. If no valid targets, performs a standard roll instead.
@@ -1232,18 +1246,18 @@ function fPerformStandardRolls(initialLogHtml) {
 // Outputs -> (Promise<Object>): Resolves with { logHtml: String, success: Boolean }.
 //                               logHtml contains the appropriate roll log lines.
 //                               success indicates if validation/rolls completed without halting errors.
-// MODIFIED: Changed "Custom" monster name logic for sidebar log and error message.
+// MODIFIED: Changed "Custom" monster name logic to include name from sheet cell.
 // MODIFIED: Changed separator between monsters from '|' to '↓'.
 // MODIFIED: Ensure separator always appears before the first monster.
 // MODIFIED: If no valid monsters found, clears difficulty and calls fPerformStandardRolls.
-async function fPerformMonsterAttackRolls(initialLogHtml) {
-    fMyConsoleLog("   -> Entering Monster Attack Logic...");
+async function fPerformPlayerAttackRolls(initialLogHtml) {
+    fMyConsoleLog("   -> Entering Player Attack Logic...");
 
     // --- 1. Get Monster Table Range ---
     const monsterRangeDef = gUI.range?.monsters;
     if (!monsterRangeDef || !fIsValidRangeObject(monsterRangeDef)) {
         const msg = "Monster range definition (gUI.range.monsters) missing/invalid.";
-        console.warn(`fPerformMonsterAttackRolls: ${msg}`);
+        console.warn(`fPerformPlayerAttackRolls: ${msg}`);
         await fShowMessage(`❌ Error: ${msg}`);
         return { logHtml: '', success: false };
     }
@@ -1252,7 +1266,7 @@ async function fPerformMonsterAttackRolls(initialLogHtml) {
     const resolved = fResolveRangeIndices(monsterRangeDef);
     if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
         const msg = `Could not resolve monster range tags: ${JSON.stringify(monsterRangeDef)}`;
-        console.warn(`fPerformMonsterAttackRolls: ${msg}`);
+        console.warn(`fPerformPlayerAttackRolls: ${msg}`);
         await fShowMessage(`❌ Error: ${msg}`);
         return { logHtml: '', success: false };
     }
@@ -1264,7 +1278,7 @@ async function fPerformMonsterAttackRolls(initialLogHtml) {
 
     if ([cNumMon, cMonDef, cMonName].some(isNaN)) {
          const msg = "Could not resolve required monster column tags (NumMon, MonDef, MonName).";
-         console.warn(`fPerformMonsterAttackRolls: ${msg}`);
+         console.warn(`fPerformPlayerAttackRolls: ${msg}`);
          await fShowMessage(`❌ Error: ${msg}`);
          return { logHtml: '', success: false };
     }
@@ -1296,10 +1310,14 @@ async function fPerformMonsterAttackRolls(initialLogHtml) {
                  return { logHtml: '', success: false }; // Halt
             }
 
-            let monName = String(gUI.arr?.[mon_R]?.[cMonName] || `Row ${mon_R + 1}`).trim();
+            // --- Get Monster Name (MODIFIED for Custom row) ---
+            let originalMonName = String(gUI.arr?.[mon_R]?.[cMonName] || '').trim(); // Get original name, default to empty string
+            let monName = originalMonName || `Row ${mon_R + 1}`; // Use original name or fallback to Row X+1 for non-custom rows if name blank
             if (isCustomRow) {
-                monName = 'Custom';
+                // Prepend "Custom " to the original name (which might be empty)
+                monName = `Custom ${originalMonName}`.trim(); // Use original name, trim potential trailing space if name was empty
             }
+            // --- End Monster Name Modification ---
 
             monsterTargets.push({
                 mon_R: mon_R, numRolls: numMon, monName: monName, monDef: monDef
@@ -1314,26 +1332,22 @@ async function fPerformMonsterAttackRolls(initialLogHtml) {
 
     // --- 4. Check if any valid targets were found ---
     if (monsterTargets.length === 0) {
-        // --- MODIFIED BLOCK: No targets found, perform standard roll ---
+        // --- No targets found, perform standard roll ---
         fMyConsoleLog("      -> No valid monster targets found. Performing standard roll instead.");
-        await fShowMessage("ℹ️ No valid monsters found. Performing standard roll."); // Inform user
+        await fShowMessage("ℹ️ No valid monsters found. Performing standard roll.");
 
-        // Ensure difficulty is cleared for the standard roll
         gUI.roll.resDif = '';
         fMyConsoleLog("         -> Cleared resDif for standard roll.");
 
-        // Call the standard roll helper to generate the log lines
         const standardRollHtml = fPerformStandardRolls(initialLogHtml);
-
-        // Return the standard roll log, indicating overall success for fHandleRollDiceAction
         return { logHtml: standardRollHtml, success: true };
-        // --- End Modified Block ---
+        // --- End Fallback ---
     }
 
-    // --- If targets *were* found, proceed with monster attack logic (Steps 5 & 6) ---
+    // --- If targets *were* found, proceed with Player Attack logic (Steps 5 & 6) ---
     fMyConsoleLog(`      -> Found ${monsterTargets.length} valid monster target(s).`);
 
-    // --- 5. Perform Rolls & Build Log (Monster Attack Path) ---
+    // --- 5. Perform Rolls & Build Log (Player Attack Path) ---
     let isOverallFirstRoll = true;
     const monsterLogLines = [];
 
@@ -1342,10 +1356,10 @@ async function fPerformMonsterAttackRolls(initialLogHtml) {
 
         // Always add separator before monster header
         monsterLogLines.push('↓');
-
+        // Monster name header now includes sheet name for Custom row
         monsterLogLines.push(`--- <span style="color: purple; font-weight: bold;">Mon: ${target.monName}</span> (Def: ${target.monDef}) ---`);
 
-        gUI.roll.resDif = target.monDef; // Set difficulty for this monster
+        gUI.roll.resDif = target.monDef;
 
         for (let rollNum = 1; rollNum <= target.numRolls; rollNum++) {
             fMyConsoleLog(`      -> Roll ${rollNum} of ${target.numRolls} against ${target.monName}...`);
@@ -1364,13 +1378,174 @@ async function fPerformMonsterAttackRolls(initialLogHtml) {
         fMyConsoleLog(`   --- Finished Attacking: ${target.monName} ---`);
     } // End monster target loop
 
-    // --- 6. Return Result (Monster Attack Path) ---
+    // --- 6. Return Result (Player Attack Path) ---
     const finalLogHtml = initialLogHtml + '<br>' + monsterLogLines.join('<br>');
-    fMyConsoleLog("   -> Monster Attack Logic Complete.");
+    fMyConsoleLog("   -> Player Attack Logic Complete.");
     return { logHtml: finalLogHtml, success: true };
 
-} // END fPerformMonsterAttackRolls
+} // END fPerformPlayerAttackRolls
 
+
+
+
+// fPerformPlayerDefenseRolls //////////////////////////////////////////////////////
+// Purpose -> Handles 'Def' rolls against monsters listed in the grid when no explicit
+//            difficulty morph ('^') is provided. Uses MonAtk column for difficulty.
+//            Validates targets, performs rolls, builds log lines.
+//            If no valid targets, performs a standard roll instead.
+// Inputs  -> initialLogHtml (String): The pre-built log header string (costs, title, morph).
+// Outputs -> (Promise<Object>): Resolves with { logHtml: String, success: Boolean }.
+//                               logHtml contains the appropriate roll log lines.
+//                               success indicates if validation/rolls completed without halting errors.
+// MODIFIED: Changed "Custom" monster name logic to include name from sheet cell.
+// MODIFIED: Changed separator between monsters from '|' to '↓'.
+// MODIFIED: Ensure separator always appears before the first monster.
+// MODIFIED: If no valid monsters found, clears difficulty and calls fPerformStandardRolls.
+async function fPerformPlayerDefenseRolls(initialLogHtml) {
+    fMyConsoleLog("   -> Entering Player Defense Logic...");
+
+    // --- 1. Get Monster Table Range ---
+    const monsterRangeDef = gUI.range?.monsters;
+    if (!monsterRangeDef || !fIsValidRangeObject(monsterRangeDef)) {
+        const msg = "Monster range definition (gUI.range.monsters) missing/invalid.";
+        console.warn(`fPerformPlayerDefenseRolls: ${msg}`);
+        await fShowMessage(`❌ Error: ${msg}`);
+        return { logHtml: '', success: false };
+    }
+
+    // --- 2. Resolve Indices (Including MonAtk) ---
+    const resolved = fResolveRangeIndices(monsterRangeDef);
+    if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
+        const msg = `Could not resolve monster range tags: ${JSON.stringify(monsterRangeDef)}`;
+        console.warn(`fPerformPlayerDefenseRolls: ${msg}`);
+        await fShowMessage(`❌ Error: ${msg}`);
+        return { logHtml: '', success: false };
+    }
+    const rMin = Math.min(resolved.r1, resolved.r2);
+    const rMax = Math.max(resolved.r1, resolved.r2);
+    const cNumMon = resolveCol('NumMon');
+    const cMonAtk = resolveCol('MonAtk'); // <<< USE MonAtk column
+    const cMonName = resolveCol('MonName');
+
+    if ([cNumMon, cMonAtk, cMonName].some(isNaN)) {
+         const msg = "Could not resolve required monster column tags (NumMon, MonAtk, MonName).";
+         console.warn(`fPerformPlayerDefenseRolls: ${msg}`);
+         await fShowMessage(`❌ Error: ${msg}`);
+         return { logHtml: '', success: false };
+    }
+     fMyConsoleLog(`      -> Monster Table Range: Rows ${rMin}-${rMax}, Cols Atk:${cMonAtk}, Num:${cNumMon}, Name:${cMonName}`);
+
+    // --- 3. Identify & Validate Targets (Using MonAtk) ---
+    const monsterTargets = [];
+    const firstMonsterRowIndex = rMin; // Index of the 'Custom' row
+
+    for (let mon_R = rMin; mon_R <= rMax; mon_R++) {
+        const isCustomRow = (mon_R === firstMonsterRowIndex);
+
+        // Get NumMon value
+        const numMonRaw = gUI.arr?.[mon_R]?.[cNumMon];
+        const numMon = parseInt(numMonRaw, 10);
+
+        // Check if NumMon is valid
+        if (!isNaN(numMon) && numMon >= 1 && numMon <= 30) {
+            fMyConsoleLog(`      -> Row ${mon_R}: Found valid NumMon: ${numMon}`);
+            // Get MonAtk value (Difficulty for Defense roll)
+            const monAtkRaw = gUI.arr?.[mon_R]?.[cMonAtk]; // <<< Get MonAtk
+            const monAtk = Number(monAtkRaw); // Use Number()
+
+            // Validate MonAtk
+            if (isNaN(monAtk) || String(monAtkRaw).trim() === '') {
+                 let errMsg = `❌ Invalid Monster Attack value ('${monAtkRaw}') found in row ${mon_R + 1}. Cannot complete defense roll.`; // Use mon_R + 1 for user
+                 if (isCustomRow) {
+                     errMsg = `❌ Invalid Monster Attack value ('${monAtkRaw}') found for Custom Monster. Cannot complete defense roll.`;
+                 }
+                 fMyConsoleLog(`         -> Validation Failed: ${errMsg}`);
+                 await fShowMessage(errMsg);
+                 return { logHtml: '', success: false }; // Halt
+            }
+
+            // --- Get Monster Name (MODIFIED for Custom row) ---
+            let originalMonName = String(gUI.arr?.[mon_R]?.[cMonName] || '').trim(); // Get original name, default to empty string
+            let monName = originalMonName || `Row ${mon_R + 1}`; // Use original name or fallback for non-custom blank names
+            if (isCustomRow) {
+                // Prepend "Custom " to the original name (which might be empty)
+                monName = `Custom ${originalMonName}`.trim(); // Use original name, trim potential trailing space
+            }
+            // --- End Monster Name Modification ---
+
+            // Add valid target
+            monsterTargets.push({
+                mon_R: mon_R,
+                numRolls: numMon,
+                monName: monName, // Includes "Custom [NameFromSheet]" if applicable
+                monAtk: monAtk // <<< Store Monster Attack as difficulty
+            });
+            fMyConsoleLog(`         -> Valid Target Added: Name='${monName}', Atk=${monAtk}, Rolls=${numMon}`);
+        } else {
+             if (numMonRaw !== '' && numMonRaw != null) {
+                 fMyConsoleLog(`      -> Row ${mon_R}: Skipping - Invalid NumMon value: '${numMonRaw}'`);
+             }
+        }
+    } // End loop through monster rows
+
+    // --- 4. Check if any valid targets were found ---
+    if (monsterTargets.length === 0) {
+        // --- No targets found, perform standard roll ---
+        fMyConsoleLog("      -> No valid monster targets found (with MonAtk). Performing standard defense roll instead.");
+        await fShowMessage("ℹ️ No valid monsters found with Attack values. Performing standard defense roll.");
+
+        gUI.roll.resDif = '';
+        fMyConsoleLog("         -> Cleared resDif for standard roll.");
+
+        const standardRollHtml = fPerformStandardRolls(initialLogHtml);
+        return { logHtml: standardRollHtml, success: true };
+        // --- End Fallback ---
+    }
+
+    // --- If targets *were* found, proceed with Player Defense logic (Steps 5 & 6) ---
+    fMyConsoleLog(`      -> Found ${monsterTargets.length} valid monster target(s) with Attack values.`);
+
+    // --- 5. Perform Rolls & Build Log (Player Defense Path) ---
+    let isOverallFirstRoll = true;
+    const monsterLogLines = [];
+
+    for (const target of monsterTargets) {
+        fMyConsoleLog(`   --- Defending Against: ${target.monName} (Atk: ${target.monAtk}, Rolls: ${target.numRolls}) ---`);
+
+        // Always add separator before monster header
+        monsterLogLines.push('↓');
+        // Monster name header now includes sheet name for Custom row
+        monsterLogLines.push(`--- <span style="color: purple; font-weight: bold;">Mon: ${target.monName}</span> (Atk: ${target.monAtk}) ---`);
+
+        // Set difficulty for this defense roll
+        gUI.roll.resDif = target.monAtk; // <<< Use Monster Attack as Difficulty
+
+        // Loop for the number of defenses against this specific monster
+        for (let rollNum = 1; rollNum <= target.numRolls; rollNum++) {
+            fMyConsoleLog(`      -> Defense Roll ${rollNum} of ${target.numRolls} against ${target.monName}...`);
+            // Recalculate player roll values
+            fCalcGUIRollResSk();
+            fCalcGUIRollRoll();
+            fCalcGUIRollResRoll();
+
+            // Build the roll line HTML for this single roll
+            const rollLineHtml = fBuildRollLogHTML(rollNum, target.numRolls, isOverallFirstRoll);
+            monsterLogLines.push(rollLineHtml);
+
+            if (isOverallFirstRoll) {
+                isOverallFirstRoll = false;
+            }
+        } // End inner roll loop
+
+        fMyConsoleLog(`   --- Finished Defending Against: ${target.monName} ---`);
+    } // End monster target loop
+
+    // --- 6. Return Result (Player Defense Path) ---
+    const finalLogHtml = initialLogHtml + '<br>' + monsterLogLines.join('<br>');
+    fMyConsoleLog("   -> Player Defense Logic Complete.");
+    return { logHtml: finalLogHtml, success: true };
+
+} // END fPerformPlayerDefenseRolls
 
 
 
