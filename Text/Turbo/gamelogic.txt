@@ -814,14 +814,24 @@ async function fSkMeta_VerifyAndProcessCost(pendingChangesMap) { // <<< Added pe
 // fFocus_VerifyAndProcessCost ///////////////////////////////////////////////////
 // Purpose -> Helper for fVerifyNSetActMetaLuckUsesOnEtc: Processes the Focus meta cost
 //            if gUI.roll.resFocus is a valid meta color TAG ('R'...'B').
+<<<<<<< HEAD
 // MODIFIED: Accepts pendingChangesMap and passes it to fSpendOneMeta.
 //            Runs regardless of sk1CB. Reads tag directly from gUI.roll.resFocus, validates it.
 // Inputs  -> pendingChangesMap (Object): Map of pending changes.
+=======
+// MODIFIED: Reads tag directly from gUI.roll.resFocus, validates it, then calls fSpendOneMeta.
+//            Runs regardless of sk1CB.
+// Inputs  -> None (reads gUI.roll.resFocus, gUI.list.metaColor). Calls fSpendOneMeta.
+>>>>>>> 1e0b6004fdb4e518d9b086e3dc238d1e3568900e
 // Outputs -> (Promise<Object>): { success: Boolean, changes: Array, headers: Array }
 //            'success' is false if focus meta cost cannot be paid or tag is invalid.
 //            'changes' contains the single change object if successful.
 //            'headers' is always empty.
+<<<<<<< HEAD
 async function fFocus_VerifyAndProcessCost(pendingChangesMap) { // <<< Added pendingChangesMap param
+=======
+async function fFocus_VerifyAndProcessCost() {
+>>>>>>> 1e0b6004fdb4e518d9b086e3dc238d1e3568900e
     const focusColorTag = gUI.roll.resFocus; // Now holds the tag ('R', 'O', etc.) or ''
     const changes = [];
     const headers = [];
@@ -839,7 +849,11 @@ async function fFocus_VerifyAndProcessCost(pendingChangesMap) { // <<< Added pen
         await fShowMessage("❌ Internal Error: Meta color list not defined.");
         return { success: false, changes: [], headers: [] }; // Indicate failure
     }
+<<<<<<< HEAD
     const isValidFocusTag = metaColors.includes(focusColorTag.toUpperCase());
+=======
+    const isValidFocusTag = metaColors.includes(focusColorTag.toUpperCase()); // Ensure case-insensitive check if needed, but list is uppercase
+>>>>>>> 1e0b6004fdb4e518d9b086e3dc238d1e3568900e
     if (!isValidFocusTag) {
         const msg = `Invalid Focus Meta tag specified in morph: '${focusColorTag}'. Allowed: ${metaColors.join(', ')}.`;
         console.warn(`fFocus_VerifyAndProcessCost: ${msg}`);
@@ -850,7 +864,12 @@ async function fFocus_VerifyAndProcessCost(pendingChangesMap) { // <<< Added pen
 
     // --- 3. Call fSpendOneMeta with the validated tag ---
     fMyConsoleLog(`   -> Focus Meta Cost: Attempting to spend 1 unit of '${focusColorTag}' (Focus)...`);
+<<<<<<< HEAD
     const spendResult = await fSpendOneMeta(focusColorTag, pendingChangesMap); // <<< Pass map to fSpendOneMeta
+=======
+    // fSpendOneMeta handles validation again internally, but we've pre-validated here.
+    const spendResult = await fSpendOneMeta(focusColorTag);
+>>>>>>> 1e0b6004fdb4e518d9b086e3dc238d1e3568900e
 
     // --- 4. Handle Result ---
     if (spendResult.success) {
@@ -859,10 +878,16 @@ async function fFocus_VerifyAndProcessCost(pendingChangesMap) { // <<< Added pen
         changes.push(spendResult.change); // Add the single change object
         return { success: true, changes: changes, headers: headers };
     } else {
+<<<<<<< HEAD
         // Failed to find 1 unit
+=======
+        // Failed to find 1 unit (fSpendOneMeta returns false if it cycles through all pools/colors)
+        // fSpendOneMeta would have logged/shown errors for invalid *input* tags, but we validated first.
+        // So this failure means not enough meta of the specified (or higher) color was found.
+>>>>>>> 1e0b6004fdb4e518d9b086e3dc238d1e3568900e
         fMyConsoleLog(`      -> ❌ Failed: Could not find 1 unit of ${focusColorTag} (or higher) to spend.`);
         const errorMsg = `❌ Not enough Meta.<br>In addition to possible ability meta cost,<br>you are also trying to Focus @${focusColorTag}.`;
-        await fShowMessage(errorMsg);
+        await fShowMessage(errorMsg); // Show the "Not enough Meta" message specific to Focus failure
         return { success: false, changes: [], headers: [] }; // Indicate failure
     }
 
