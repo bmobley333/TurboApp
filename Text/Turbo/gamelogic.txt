@@ -15,15 +15,16 @@
 // fHandleRollDiceAction /////////////////////////////////////////////////////////////////////////
 // Purpose -> Top-level handler for "Roll Dice" action. Handles single or multi-rolls (# morph).
 //            Verifies target, populates gUI.roll, processes morphs (incl. #, 'free', 'luck').
-//            Handles Luck cost FIRST if applicable.
-//            Verifies and applies standard costs *before* looping IF NOT free/lucked roll.
-//            Loops for calculations.
-//            Builds a single log entry string (incl. Free/Lucked Roll notice) and prepends it ONCE after the loop.
+//            Verifies ALL costs (Luck and Standard, unless free roll) using pendingChangesMap.
+//            Branches based on roll type ('Atk' vs standard) and difficulty morph ('^').
+//            Calls appropriate helper (fPerformStandardRolls or fPerformMonsterAttackRolls).
+//            Applies costs from pendingChangesMap ONLY AFTER helper function succeeds.
+//            Builds initial log header, passes to helper, prepends final combined log ONCE.
 // Inputs  -> None (uses gUI.currentSkRadioChecked, gUI.roll).
 // Outputs -> None (updates gUI, DOM, and logs to sidebar).
-// MODIFIED: Skips cost verification and application if gUI.roll.isFreeRoll OR isLuckedRoll is true.
-// MODIFIED: Adds "Free Roll" / "Lucked Roll" indicator to the log header if applicable.
-// MODIFIED: Handles Luck cost immediately if isLuckedRoll is true.
+// MODIFIED: Deferred ALL cost application (Luck, Standard) until AFTER roll helpers succeed.
+// MODIFIED: Luck cost verification now adds change to pendingChangesMap instead of applying directly.
+// MODIFIED: Prepends an extra blank PARAGRAPH before monster attack logs for spacing.
 async function fHandleRollDiceAction() {
     fMyConsoleLog("🎲 Roll Dice Action Triggered");
 
@@ -32,140 +33,170 @@ async function fHandleRollDiceAction() {
     if (!await fValidateAbilityCB(r, c)) return;
     if (!await fResetPopulateNCleanGUIRoll(r, c)) return; // Populates gUI.roll
     if (!await fVerifyAbility()) return;
-    await fProcessMorph(); // Processes morphs, populates gUI.roll flags (isFreeRoll, isLuckedRoll) & multiRollCount
+
+    await fProcessMorph(); // Processes morphs, populates flags & multiRollCount
 
     const multiRollCount = gUI.roll.multiRollCount;
     const isFreeRoll = gUI.roll.isFreeRoll;
-    const isLuckedRoll = gUI.roll.isLuckedRoll; // <<< Get the luck flag
+    const isLuckedRoll = gUI.roll.isLuckedRoll;
+    const resTyp = gUI.roll.resTyp; // <<< Keep accessible for final logging step
+    const hasDifficultyMorph = (typeof gUI.roll.resDif === 'number'); // <<< Keep accessible for final logging step
+
+    fMyConsoleLog(`   -> Roll Type: ${resTyp}`);
     fMyConsoleLog(`   -> Multi-Roll Count: ${multiRollCount}`);
     fMyConsoleLog(`   -> Is Free Roll: ${isFreeRoll}`);
     fMyConsoleLog(`   -> Is Lucked Roll: ${isLuckedRoll}`);
+    fMyConsoleLog(`   -> Has Difficulty Morph (^): ${hasDifficultyMorph}`);
 
-    // --- Initialize shared variables for standard costs ---
-    const pendingHeaders = []; // Holds standard cost headers
-    let allCostsMet = true; // Assume true, verification block might set to false
-    let userCancelled = false; // Track if prompts are cancelled
+    // --- Initialize shared variables ---
+    const pendingHeaders = [];
+    let allCostsMet = true;
+    let userCancelled = false;
+    gUI.pendingChangesMap = {}; // Initialize map for ALL potential cost changes
+
+    // Helper to add changes to the map
+    const addChangesToMap = (changesArray) => {
+        if (!Array.isArray(changesArray)) return;
+        changesArray.forEach(change => {
+            if (change && typeof change.r !== 'undefined' && typeof change.c !== 'undefined') {
+                const key = `${change.r},${change.c}`;
+                gUI.pendingChangesMap[key] = change.value;
+            } else {
+                console.warn("addChangesToMap received invalid change:", change);
+            }
+        });
+    };
 
 
-    // --- 1a. Handle Luck Cost (Upfront, If Applicable) --- <<< NEW BLOCK
-    if (isLuckedRoll) {
-        fMyConsoleLog("🍀 Applying Luck Cost Upfront...");
-        const luckCost = 1;
-        const currentLuck = fGetGridValue('LuckBox', 'LuckBox', true);
+    // --- 2. Verify ALL Costs (Luck and Standard, UNLESS Free Roll) ---
+    if (!isFreeRoll) {
+        fMyConsoleLog("🛡️ Verifying Costs (Luck and/or Standard)...");
 
-        if (isNaN(currentLuck)) {
-             await fShowMessage("❌ Error reading current Luck value. Cannot perform Lucked Roll.");
-             fMyConsoleLog("🚫 Failed Lucked Roll: Could not read LuckBox value.");
-             return; // Halt
+        // --- 2a. Verify Luck Cost (if applicable) ---
+        if (isLuckedRoll) {
+            fMyConsoleLog("   -> Verifying Luck Cost...");
+            const luckCost = 1;
+            const currentLuck = fGetGridValue('LuckBox', 'LuckBox', true);
+            if (isNaN(currentLuck)) {
+                await fShowMessage("❌ Error reading current Luck value. Cannot perform Lucked Roll.");
+                fMyConsoleLog("🚫 Failed Luck Cost Verification: Could not read LuckBox value.");
+                allCostsMet = false; // Halt
+            } else if (currentLuck < luckCost) {
+                await fShowMessage("❌ Not Enough Luck!");
+                fMyConsoleLog("🚫 Failed Luck Cost Verification: Insufficient Luck.");
+                allCostsMet = false; // Halt
+            } else {
+                // Sufficient luck, PREPARE the change
+                const newLuck = currentLuck - luckCost;
+                addChangesToMap([{ r: 'LuckBox', c: 'LuckBox', value: newLuck }]); // Add to map
+                pendingHeaders.push('⚠️ <span class="blue-bold">Lucked Roll Below:</span>'); // Prepare header
+                fMyConsoleLog(`      -> Luck Cost OK (${currentLuck} -> ${newLuck}). Change added to map.`);
+            }
         }
+        // --- End Luck Cost Verification ---
 
-        if (currentLuck < luckCost) {
-            await fShowMessage("❌ Not Enough Luck!");
-            fMyConsoleLog("🚫 Failed Lucked Roll: Insufficient Luck.");
-            return; // Halt
+        // --- 2b. Verify Standard Costs (ONLY if NOT Lucked Roll AND cost check hasn't already failed) ---
+        if (!isLuckedRoll && allCostsMet) {
+            fMyConsoleLog("   -> Verifying Standard Costs...");
+            // Verify Uses
+            const usesResult = await fUses_VerifyAndProcessCost(multiRollCount);
+            if (!usesResult.success) { allCostsMet = false; userCancelled = true; }
+            else { addChangesToMap(usesResult.changes); pendingHeaders.push(...usesResult.headers); }
+
+            // Verify Act (if previous checks passed)
+            if (allCostsMet) {
+                const actResult = await fAct_VerifyAndProcessCost();
+                if (!actResult.success) { allCostsMet = false; userCancelled = true; }
+                else { addChangesToMap(actResult.changes); pendingHeaders.push(...actResult.headers); }
+            }
+
+            // Prepare IsOn change (always succeeds, just adds to map)
+            if (allCostsMet) {
+                const isOnResult = await fIsOn_VerifyAndProcessCost();
+                addChangesToMap(isOnResult.changes); pendingHeaders.push(...isOnResult.headers);
+            }
+
+            // Verify SkMeta (if previous checks passed)
+            if (allCostsMet) {
+                const skMetaResult = await fSkMeta_VerifyAndProcessCost(gUI.pendingChangesMap);
+                if (!skMetaResult.success) { allCostsMet = false; } // Fail silently
+                else { addChangesToMap(skMetaResult.changes); pendingHeaders.push(...skMetaResult.headers); }
+            }
+
+            // Verify Focus Meta (if previous checks passed)
+            if (allCostsMet) {
+                const focusMetaResult = await fFocus_VerifyAndProcessCost(gUI.pendingChangesMap);
+                if (!focusMetaResult.success) { allCostsMet = false; } // Fail silently
+                else { addChangesToMap(focusMetaResult.changes); pendingHeaders.push(...focusMetaResult.headers); }
+            }
         }
+        // --- End Standard Cost Verification ---
 
-        // Sufficient luck, apply cost immediately
-        const newLuck = currentLuck - luckCost;
-        if (!fSetGridValue('LuckBox', 'LuckBox', newLuck)) {
-            await fShowMessage("❌ Error applying Luck cost to the grid.");
-            fMyConsoleLog("🚫 Failed Lucked Roll: Error setting LuckBox value.");
-            return; // Halt if setting grid fails
-        }
-        fMyConsoleLog(`   -> Luck Cost Applied: ${currentLuck} -> ${newLuck}`);
-        fAppendToHTMLHeader('⚠️ <span class="blue-bold">Lucked Roll Below:</span>'); // Add log header line
-
-    }
-    // --- End Luck Cost Block ---
-
-
-    // --- 2. Standard Cost Verification & Preparation (Upfront, SKIPPED if Free OR Lucked Roll) --- <<< MODIFIED CONDITION
-    if (!isFreeRoll && !isLuckedRoll) {
-        fMyConsoleLog("🛡️ Verifying Standard Costs Upfront...");
-        gUI.pendingChangesMap = {}; // Initialize map only if checking standard costs
-
-        // Helper to add changes to the map (remains the same)
-        const addChangesToMap = (changesArray) => {
-            if (!Array.isArray(changesArray)) return;
-            changesArray.forEach(change => {
-                if (change && typeof change.r !== 'undefined' && typeof change.c !== 'undefined') {
-                    const key = `${change.r},${change.c}`;
-                    gUI.pendingChangesMap[key] = change.value;
-                } else {
-                     console.warn("addChangesToMap received invalid change:", change);
-                }
-            });
-        };
-
-        // --- Verify standard costs ---
-        const usesResult = await fUses_VerifyAndProcessCost(multiRollCount); // Uses cost depends on multi-roll
-        if (!usesResult.success) { allCostsMet = false; userCancelled = true; }
-        else { addChangesToMap(usesResult.changes); pendingHeaders.push(...usesResult.headers); }
-
-        if (allCostsMet) { // Only proceed if Uses check passed/cancelled
-            const actResult = await fAct_VerifyAndProcessCost(); // Action cost is per activation (not per roll)
-            if (!actResult.success) { allCostsMet = false; userCancelled = true; }
-            else { addChangesToMap(actResult.changes); pendingHeaders.push(...actResult.headers); }
-
-            const isOnResult = await fIsOn_VerifyAndProcessCost(); // IsOn is per activation
-            addChangesToMap(isOnResult.changes); pendingHeaders.push(...isOnResult.headers);
-
-            const skMetaResult = await fSkMeta_VerifyAndProcessCost(gUI.pendingChangesMap); // SkMeta is per activation
-            if (!skMetaResult.success) { allCostsMet = false; } // Fail silently (message shown in helper)
-            else { addChangesToMap(skMetaResult.changes); pendingHeaders.push(...skMetaResult.headers); }
-
-            const focusMetaResult = await fFocus_VerifyAndProcessCost(gUI.pendingChangesMap); // Focus Meta is per activation
-            if (!focusMetaResult.success) { allCostsMet = false; } // Fail silently
-            else { addChangesToMap(focusMetaResult.changes); pendingHeaders.push(...focusMetaResult.headers); }
-        }
-
-        // --- Halt if Costs Failed or User Cancelled ---
+        // --- Halt if ANY Costs Failed or User Cancelled ---
         if (!allCostsMet || userCancelled) {
-            const reason = userCancelled ?
-                "cost verification failure or cancellation" : "insufficient Meta/Focus";
-            fMyConsoleLog(`🚦 Halting Roll Dice Action due to ${reason}.`);
-            gUI.pendingChangesMap = {}; // Clear map if halting
-            return;
+            const reason = userCancelled ? "cost verification cancelled by user" : "insufficient resources (Luck/Act/Uses/Meta/Focus)";
+            fMyConsoleLog(`🚦 Halting Roll Dice Action due to ${reason}. Costs NOT applied.`);
+            gUI.pendingChangesMap = {}; // Clear map
+            return; // Exit before branching or applying costs
         }
+        fMyConsoleLog("✅ All necessary costs verified successfully. Changes prepared in map.");
 
     } else {
-        const skipReason = isLuckedRoll ? "Lucked Roll" : "Free Roll";
-        fMyConsoleLog(`✅ Skipping Standard Cost Verification (${skipReason}).`);
+        fMyConsoleLog(`✅ Skipping ALL Cost Verification (Free Roll).`);
         gUI.pendingChangesMap = {}; // Ensure map is empty
     }
-    // --- End Standard Cost Verification Block ---
+    // --- End Cost Verification Block ---
 
 
     // --- 3. Build Initial Log Header String ---
-    // Start with base header (from morphs), add Lucked/Free Roll notice if needed, then cost headers (if any)
-    let combinedLogHtml = gUI.roll.htmlHeader; // Contains Lucked header if applicable (added by fAppendToHTMLHeader)
+    let initialLogHtml = ''; // Start fresh
 
-    // --- Add Free Roll Indicator (if free AND NOT lucked) --- <<< MODIFIED CONDITION
-    if (isFreeRoll && !isLuckedRoll) {
-        combinedLogHtml += `⚠️ <span class="blue-bold">Free Roll</span>.<br>`; // Add indicator with line break
-    }
-    // --- End Free Roll Indicator ---
-
-    // Add standard cost headers (will be empty if free/lucked)
-    pendingHeaders.forEach(header => combinedLogHtml += `${header}<br>`);
+    // Add cost/notice headers collected during verification
+    pendingHeaders.forEach(header => initialLogHtml += `${header}<br>`);
 
     // Add ability title/type
     let title = `<span class="sidebar-ability-name">${gUI.roll.skName || 'Unknown Ability'}</span>`;
     if (gUI.roll.skTyp) title += ` ${gUI.roll.skTyp}`;
     if (gUI.roll.resTyp && gUI.roll.resTyp !== gUI.roll.skTyp) title += ` (<span class="red-bold">now</span> ${gUI.roll.resTyp})`;
-    combinedLogHtml += title;
+    initialLogHtml += title;
 
     // Add morph string if present
-    const morph = (typeof gUI.roll.skMorph === 'string' && gUI.roll.skMorph !== ',') ?
-        gUI.roll.skMorph.trim() : '';
-    if (morph) combinedLogHtml += `<br>morph: ${morph}`;
-    combinedLogHtml = combinedLogHtml.trim(); // Trim any leading/trailing whitespace
+    const morph = (typeof gUI.roll.skMorph === 'string' && gUI.roll.skMorph !== ',') ? gUI.roll.skMorph.trim() : '';
+    if (morph) initialLogHtml += `<br>morph: ${morph}`;
+    initialLogHtml = initialLogHtml.trim();
 
 
-    // --- 4. Apply ALL Pending STANDARD Costs *Before* the Loop (SKIPPED if Free OR Lucked Roll) --- <<< MODIFIED CONDITION
+    // --- 4. Branch Based on Roll Type and Difficulty Morph ---
+    let finalLogHtml = ''; // To hold combined log from helpers
+    let helperSucceeded = false; // Flag to track if the specific roll helper succeeded
+
+    if (resTyp === 'Atk' && !hasDifficultyMorph) {
+        // --- 4a. Monster Attack ---
+        fMyConsoleLog("⚔️ Performing Monster Attack Rolls (Validation first)...");
+        const monsterRollResult = await fPerformMonsterAttackRolls(initialLogHtml);
+        if (monsterRollResult.success) {
+            finalLogHtml = monsterRollResult.logHtml;
+            helperSucceeded = true; // Mark success
+            fMyConsoleLog("   -> Monster Attack roll sequence completed.");
+        } else {
+            fMyConsoleLog("   -> Monster Attack sequence halted during validation (message shown). Costs NOT applied.");
+            gUI.pendingChangesMap = {}; // Clear any prepared costs
+            return; // Halt the entire action
+        }
+    } else {
+        // --- 4b. Standard Roll ---
+        fMyConsoleLog("🎯 Performing Standard Roll(s)...");
+        finalLogHtml = fPerformStandardRolls(initialLogHtml);
+        helperSucceeded = true; // Standard roll always 'succeeds' its phase
+        fMyConsoleLog("   -> Standard roll sequence completed.");
+    }
+    // --- End Roll Branching Block ---
+
+
+    // --- 5. Apply ALL Pending Costs (IF helper succeeded AND map has changes) ---
     let applyErrors = false;
-    if (!isFreeRoll && !isLuckedRoll && Object.keys(gUI.pendingChangesMap).length > 0) { // Only apply if standard costs were checked AND map has changes
-        fMyConsoleLog("✅ Standard Costs Verified Upfront. Applying Pending Changes...");
+    if (helperSucceeded && Object.keys(gUI.pendingChangesMap).length > 0) {
+        fMyConsoleLog("✅ Roll sequence successful. Applying Pending Cost Changes...");
         const changeEntries = Object.entries(gUI.pendingChangesMap);
         fMyConsoleLog(`   -> Applying ${changeEntries.length} changes from map...`);
         for (const [key, value] of changeEntries) {
@@ -181,56 +212,39 @@ async function fHandleRollDiceAction() {
         gUI.pendingChangesMap = {}; // Clean up map
 
         if (applyErrors) {
-            fMyConsoleLog("❌ Errors occurred while applying standard cost/state changes.");
-            await fShowMessage("Error applying some standard cost/state changes. Please check grid state.");
-            return; // Halt if application failed critically
+            fMyConsoleLog("❌ Errors occurred while applying cost/state changes AFTER roll success.");
+            await fShowMessage("Error applying some cost/state changes post-roll. Please check grid state.");
+        } else {
+             fMyConsoleLog("✅ Costs Applied Successfully.");
         }
-        fMyConsoleLog("✅ Standard Costs Applied Successfully.");
+    } else if (helperSucceeded) {
+         fMyConsoleLog("✅ Roll sequence successful. No Pending Cost Changes to Apply.");
+    }
+    // --- End Cost Application Block ---
 
-    } else if (!isFreeRoll && !isLuckedRoll) {
-         fMyConsoleLog("✅ No Pending Standard Cost Changes to Apply.");
+
+    // --- 6. Prepend Final Combined Log to Sidebar --- <<< REVISED BLOCK
+    if (finalLogHtml) { // Check if there's anything to log
+        // Check if this was a successful monster attack
+        const wasMonsterAttack = (helperSucceeded && resTyp === 'Atk' && !hasDifficultyMorph);
+
+        // --- TWEAK: Add extra blank line paragraph BEFORE prepending monster attack output ---
+        if (wasMonsterAttack) {
+            fPrependToSidebar('&nbsp;'); // Prepend a paragraph with just a space
+            fMyConsoleLog("   -> Prepended extra blank line paragraph for monster attack log spacing.");
+        }
+        // --- End Tweak ---
+
+        fPrependToSidebar(finalLogHtml); // Prepend the actual content paragraph
+        fShowSidebar(); // Ensure sidebar is visible
     } else {
-         // Already logged skipping verification
+       fMyConsoleLog("ℹ️ No final log message generated.");
     }
-    // --- End Standard Cost Application Block ---
+    gUI.roll.htmlHeader = ''; // Clear header base
+    // --- End Revised Block ---
 
 
-    // --- 5. Perform Rolls in a Loop & Collect Results ---
-    fMyConsoleLog(`🔄 Starting Roll Loop (${multiRollCount} rolls)...`);
-    const rollResultLines = []; // Array to collect individual roll HTML lines
-
-    for (let rollNum = 1; rollNum <= multiRollCount; rollNum++) {
-        const isFirstRoll = (rollNum === 1);
-        fMyConsoleLog(`   --- Roll ${rollNum} of ${multiRollCount} ---`);
-
-        // Recalculate roll-dependent values (needed for each roll)
-        fCalcGUIRollResSk();
-        fCalcGUIRollRoll();
-        fCalcGUIRollResRoll();
-
-        // Build individual roll result line HTML
-        const rollLineHtml = fBuildRollLogHTML(rollNum, multiRollCount, isFirstRoll); // Pass necessary args
-        rollResultLines.push(rollLineHtml); // Add line to array
-    } // --- End Roll Loop ---
-
-
-    // --- 6. Combine Header and Results, Prepend ONCE ---
-    // Add collected roll lines to the initial header string, joined by <br>
-    if (rollResultLines.length > 0) {
-        // Add a line break after the header only if there are roll results following
-        if (combinedLogHtml) combinedLogHtml += '<br>';
-        combinedLogHtml += rollResultLines.join('<br>');
-    }
-
-    // Prepend the single, complete log entry
-    if (combinedLogHtml) { // Check if there's anything to log
-      fPrependToSidebar(combinedLogHtml);
-      fShowSidebar(); // Ensure sidebar is visible
-    }
-    gUI.roll.htmlHeader = ''; // Clear header base for next time
-
-
-    fMyConsoleLog(`✅ Roll Dice Action Completed (${multiRollCount} rolls).`);
+    fMyConsoleLog(`✅ Roll Dice Action Completed.`);
 } // END fHandleRollDiceAction
 
 
@@ -1172,6 +1186,194 @@ async function fSpendOneMeta(metaColor, pendingChangesMap) {
 
 
 
+// fPerformStandardRolls ///////////////////////////////////////////////////////////////////
+// Purpose -> Handles the standard rolling loop for abilities targeting a specific difficulty
+//            (either from a '^' morph or non-'Atk' roll types). Calculates rolls,
+//            builds log lines, and appends them to the initial header HTML.
+// Inputs  -> initialLogHtml (String): The pre-built log header string (costs, title, morph).
+// Outputs -> (String): The complete HTML string for the log entry (header + roll lines).
+function fPerformStandardRolls(initialLogHtml) {
+    const multiRollCount = gUI.roll.multiRollCount;
+    fMyConsoleLog(`🔄 Starting Standard Roll Loop (${multiRollCount} rolls)...`);
+    const rollResultLines = []; // Array to collect individual roll HTML lines
+
+    for (let rollNum = 1; rollNum <= multiRollCount; rollNum++) {
+        const isFirstRoll = (rollNum === 1);
+        fMyConsoleLog(`   --- Roll ${rollNum} of ${multiRollCount} ---`);
+        // Recalculate roll-dependent values (needed for each roll)
+        fCalcGUIRollResSk();
+        fCalcGUIRollRoll();
+        fCalcGUIRollResRoll();
+        // Build individual roll result line HTML, passing isFirstRoll for T/C
+        const rollLineHtml = fBuildRollLogHTML(rollNum, multiRollCount, isFirstRoll);
+        rollResultLines.push(rollLineHtml); // Add line to array
+    } // --- End Roll Loop ---
+
+    // Combine Header and Results
+    let finalLogHtml = initialLogHtml;
+    if (rollResultLines.length > 0) {
+        // Add a line break after the header only if there are roll results following
+        if (finalLogHtml) finalLogHtml += '<br>';
+        finalLogHtml += rollResultLines.join('<br>');
+    }
+
+     fMyConsoleLog(`✅ Standard Roll Loop Completed.`);
+    return finalLogHtml; // Return the fully combined HTML string
+} // END fPerformStandardRolls
+
+
+
+
+// fPerformMonsterAttackRolls /////////////////////////////////////////////////////////
+// Purpose -> Handles 'Atk' rolls against monsters listed in the grid when no explicit
+//            difficulty morph ('^') is provided. Validates targets, performs rolls,
+//            builds log lines. If no valid targets, performs a standard roll instead.
+// Inputs  -> initialLogHtml (String): The pre-built log header string (costs, title, morph).
+// Outputs -> (Promise<Object>): Resolves with { logHtml: String, success: Boolean }.
+//                               logHtml contains the appropriate roll log lines.
+//                               success indicates if validation/rolls completed without halting errors.
+// MODIFIED: Changed "Custom" monster name logic for sidebar log and error message.
+// MODIFIED: Changed separator between monsters from '|' to '↓'.
+// MODIFIED: Ensure separator always appears before the first monster.
+// MODIFIED: If no valid monsters found, clears difficulty and calls fPerformStandardRolls.
+async function fPerformMonsterAttackRolls(initialLogHtml) {
+    fMyConsoleLog("   -> Entering Monster Attack Logic...");
+
+    // --- 1. Get Monster Table Range ---
+    const monsterRangeDef = gUI.range?.monsters;
+    if (!monsterRangeDef || !fIsValidRangeObject(monsterRangeDef)) {
+        const msg = "Monster range definition (gUI.range.monsters) missing/invalid.";
+        console.warn(`fPerformMonsterAttackRolls: ${msg}`);
+        await fShowMessage(`❌ Error: ${msg}`);
+        return { logHtml: '', success: false };
+    }
+
+    // --- 2. Resolve Indices ---
+    const resolved = fResolveRangeIndices(monsterRangeDef);
+    if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
+        const msg = `Could not resolve monster range tags: ${JSON.stringify(monsterRangeDef)}`;
+        console.warn(`fPerformMonsterAttackRolls: ${msg}`);
+        await fShowMessage(`❌ Error: ${msg}`);
+        return { logHtml: '', success: false };
+    }
+    const rMin = Math.min(resolved.r1, resolved.r2);
+    const rMax = Math.max(resolved.r1, resolved.r2);
+    const cNumMon = resolveCol('NumMon');
+    const cMonDef = resolveCol('MonDef');
+    const cMonName = resolveCol('MonName');
+
+    if ([cNumMon, cMonDef, cMonName].some(isNaN)) {
+         const msg = "Could not resolve required monster column tags (NumMon, MonDef, MonName).";
+         console.warn(`fPerformMonsterAttackRolls: ${msg}`);
+         await fShowMessage(`❌ Error: ${msg}`);
+         return { logHtml: '', success: false };
+    }
+     fMyConsoleLog(`      -> Monster Table Range: Rows ${rMin}-${rMax}, Cols Def:${cMonDef}, Num:${cNumMon}, Name:${cMonName}`);
+
+    // --- 3. Identify & Validate Targets ---
+    const monsterTargets = [];
+    const firstMonsterRowIndex = rMin; // Index of the 'Custom' row
+
+    for (let mon_R = rMin; mon_R <= rMax; mon_R++) {
+        const isCustomRow = (mon_R === firstMonsterRowIndex);
+
+        // Get NumMon value
+        const numMonRaw = gUI.arr?.[mon_R]?.[cNumMon];
+        const numMon = parseInt(numMonRaw, 10);
+
+        if (!isNaN(numMon) && numMon >= 1 && numMon <= 30) {
+            fMyConsoleLog(`      -> Row ${mon_R}: Found valid NumMon: ${numMon}`);
+            const monDefRaw = gUI.arr?.[mon_R]?.[cMonDef];
+            const monDef = Number(monDefRaw);
+
+            if (isNaN(monDef) || String(monDefRaw).trim() === '') {
+                 let errMsg = `❌ Invalid Monster Defense ('${monDefRaw}') found in row ${mon_R + 1}. Cannot complete attack.`;
+                 if (isCustomRow) {
+                     errMsg = `❌ Invalid Monster Defense ('${monDefRaw}') found for Custom Monster. Cannot complete attack.`;
+                 }
+                 fMyConsoleLog(`         -> Validation Failed: ${errMsg}`);
+                 await fShowMessage(errMsg);
+                 return { logHtml: '', success: false }; // Halt
+            }
+
+            let monName = String(gUI.arr?.[mon_R]?.[cMonName] || `Row ${mon_R + 1}`).trim();
+            if (isCustomRow) {
+                monName = 'Custom';
+            }
+
+            monsterTargets.push({
+                mon_R: mon_R, numRolls: numMon, monName: monName, monDef: monDef
+            });
+            fMyConsoleLog(`         -> Valid Target Added: Name='${monName}', Def=${monDef}, Rolls=${numMon}`);
+        } else {
+             if (numMonRaw !== '' && numMonRaw != null) {
+                 fMyConsoleLog(`      -> Row ${mon_R}: Skipping - Invalid NumMon value: '${numMonRaw}'`);
+             }
+        }
+    } // End loop through monster rows
+
+    // --- 4. Check if any valid targets were found ---
+    if (monsterTargets.length === 0) {
+        // --- MODIFIED BLOCK: No targets found, perform standard roll ---
+        fMyConsoleLog("      -> No valid monster targets found. Performing standard roll instead.");
+        await fShowMessage("ℹ️ No valid monsters found. Performing standard roll."); // Inform user
+
+        // Ensure difficulty is cleared for the standard roll
+        gUI.roll.resDif = '';
+        fMyConsoleLog("         -> Cleared resDif for standard roll.");
+
+        // Call the standard roll helper to generate the log lines
+        const standardRollHtml = fPerformStandardRolls(initialLogHtml);
+
+        // Return the standard roll log, indicating overall success for fHandleRollDiceAction
+        return { logHtml: standardRollHtml, success: true };
+        // --- End Modified Block ---
+    }
+
+    // --- If targets *were* found, proceed with monster attack logic (Steps 5 & 6) ---
+    fMyConsoleLog(`      -> Found ${monsterTargets.length} valid monster target(s).`);
+
+    // --- 5. Perform Rolls & Build Log (Monster Attack Path) ---
+    let isOverallFirstRoll = true;
+    const monsterLogLines = [];
+
+    for (const target of monsterTargets) {
+        fMyConsoleLog(`   --- Attacking: ${target.monName} (Def: ${target.monDef}, Rolls: ${target.numRolls}) ---`);
+
+        // Always add separator before monster header
+        monsterLogLines.push('↓');
+
+        monsterLogLines.push(`--- <span style="color: purple; font-weight: bold;">Mon: ${target.monName}</span> (Def: ${target.monDef}) ---`);
+
+        gUI.roll.resDif = target.monDef; // Set difficulty for this monster
+
+        for (let rollNum = 1; rollNum <= target.numRolls; rollNum++) {
+            fMyConsoleLog(`      -> Roll ${rollNum} of ${target.numRolls} against ${target.monName}...`);
+            fCalcGUIRollResSk();
+            fCalcGUIRollRoll();
+            fCalcGUIRollResRoll();
+
+            const rollLineHtml = fBuildRollLogHTML(rollNum, target.numRolls, isOverallFirstRoll);
+            monsterLogLines.push(rollLineHtml);
+
+            if (isOverallFirstRoll) {
+                isOverallFirstRoll = false;
+            }
+        } // End inner roll loop
+
+        fMyConsoleLog(`   --- Finished Attacking: ${target.monName} ---`);
+    } // End monster target loop
+
+    // --- 6. Return Result (Monster Attack Path) ---
+    const finalLogHtml = initialLogHtml + '<br>' + monsterLogLines.join('<br>');
+    fMyConsoleLog("   -> Monster Attack Logic Complete.");
+    return { logHtml: finalLogHtml, success: true };
+
+} // END fPerformMonsterAttackRolls
+
+
+
+
 // fCalcGUIRollResSk /////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Calculates final resulting skill value (gUI.roll.resSk) using morph-derived modifiers.
 // MODIFIED: Calculates focus bonus based on the index of the gUI.roll.resFocus TAG within gUI.list.metaColor.
@@ -1375,53 +1577,6 @@ function fCalcGUIRollResRoll() {
 
     fMyConsoleLog(`⚙️ Calculated final resRoll: ${gUI.roll.resRoll}`);
 } // END fCalcGUIRollResRoll
-
-
-
-
-
-// fCalcGUIRollResRoll /////////////////////////////////////////////////////////////////////////////////
-// Purpose -> Calculates final gUI.roll.resRoll using overrides or morph-based modifiers.
-// Inputs  -> None (reads gUI.roll).
-// Outputs -> None (writes gUI.roll.resRoll).
-function fCalcGUIRollResRoll() {
-
-    // --- Check for Flat Result Override ---
-    const flatResult = (typeof gUI.roll.resFlatResult === 'number' && gUI.roll.resFlatResult !== '') ? gUI.roll.resFlatResult : null;
-
-    if (flatResult !== null) {
-        const isArType = (typeof gUI.roll.resTyp === 'string') && gUI.roll.resTyp.trim().toLowerCase() === 'ar';
-        const roundedFlatResult = isArType ? Number(flatResult.toFixed(2)) : Math.round(flatResult);
-        gUI.roll.resRoll = Math.max(0, roundedFlatResult);
-        fMyConsoleLog(`⚙️ Calculated resRoll (override, ${isArType ? 'AR-rounded' : 'INT-rounded'}): ${gUI.roll.resRoll}`);
-        return;
-    }
-
-    // --- Validate Base Roll ---
-    const initialRoll = gUI.roll.roll;
-    if (typeof initialRoll !== 'number' || initialRoll === '') {
-        gUI.roll.resRoll = '';
-        fMyConsoleLog(`ℹ️ Cannot calculate resRoll: Invalid initial roll value (${initialRoll}).`);
-        return;
-    }
-
-    // --- Apply Modifiers ---
-    let currentResRoll = initialRoll;
-    if (typeof gUI.roll.resMultMult === 'number' && gUI.roll.resMultMult !== '') currentResRoll *= gUI.roll.resMultMult;
-    if (typeof gUI.roll.resPlusPlus === 'number' && gUI.roll.resPlusPlus !== '') currentResRoll += gUI.roll.resPlusPlus;
-    // --- Final Rounding, Clamping, and Assignment ---
-    if (!isNaN(currentResRoll)) {
-        const isArType = (typeof gUI.roll.resTyp === 'string') && gUI.roll.resTyp.trim().toLowerCase() === 'ar';
-        const roundedResRoll = isArType ? Number(currentResRoll.toFixed(2)) : Math.round(currentResRoll);
-        gUI.roll.resRoll = Math.max(0, roundedResRoll);
-    } else {
-        gUI.roll.resRoll = '';
-        console.warn("fCalcGUIRollResRoll: Calculation resulted in NaN.");
-    }
-
-    fMyConsoleLog(`⚙️ Calculated final resRoll: ${gUI.roll.resRoll}`);
-} // END fCalcGUIRollResRoll
-
 
 
 
