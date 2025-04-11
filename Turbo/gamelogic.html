@@ -13,40 +13,153 @@
 
 
 // fHandleRollDiceAction /////////////////////////////////////////////////////////////////////////
-// Purpose -> Top-level handler for "Roll Dice" action. Populates gUI.roll, validates inputs,
-//            runs morph/roll/resolution logic, and posts result.
+// Purpose -> Top-level handler for "Roll Dice" action. Handles single or multi-rolls (# morph).
+//            Verifies target, populates gUI.roll, processes morphs (incl. #).
+//            Verifies and applies costs *before* looping. Loops for calculations.
+//            Builds a single log entry string and prepends it ONCE after the loop.
 // Inputs  -> None (uses gUI.currentSkRadioChecked).
-// Outputs -> None (updates gUI and DOM).
+// Outputs -> None (updates gUI, DOM, and logs to sidebar).
+// MODIFIED: Revision 2 - Collects roll lines during loop, prepends combined log entry once.
 async function fHandleRollDiceAction() {
     fMyConsoleLog("🎲 Roll Dice Action Triggered");
 
+    // --- 1. Initial Validation & Setup ---
     const { r, c } = gUI.currentSkRadioChecked;
-    // Validate target is a valid Sk1/Sk2 checkbox
-    if (!await fValidateAbilityCB(r, c)) return; // Early exit if invalid target
+    if (!await fValidateAbilityCB(r, c)) return;
+    if (!await fResetPopulateNCleanGUIRoll(r, c)) return;
+    if (!await fVerifyAbility()) return;
+    await fProcessMorph(); // Processes morphs, populates gUI.roll.multiRollCount
 
-    // Populate gUI.roll from sheet and clean it
-    if (!await fResetPopulateNCleanGUIRoll(r, c)) return; // Early exit if population fails
+    const multiRollCount = gUI.roll.multiRollCount;
+    fMyConsoleLog(`   -> Multi-Roll Count: ${multiRollCount}`);
 
-    // Confirm ability has valid name and type
-    if (!await fVerifyAbility()) return; // Early exit if ability invalid
+    // --- 2. Cost Verification & Preparation (Upfront) ---
+    fMyConsoleLog("🛡️ Verifying Costs Upfront...");
+    gUI.pendingChangesMap = {};
+    const pendingHeaders = [];
+    let allCostsMet = true;
+    let userCancelled = false;
 
-    // Process morphs (can potentially show messages, but doesn't typically halt flow)
-    await fProcessMorph();
+    const addChangesToMap = (changesArray) => {
+        // (Helper function remains the same as previous version)
+        if (!Array.isArray(changesArray)) return;
+        changesArray.forEach(change => {
+            if (change && typeof change.r !== 'undefined' && typeof change.c !== 'undefined') {
+                const key = `${change.r},${change.c}`;
+                gUI.pendingChangesMap[key] = change.value;
+                // fMyConsoleLog(`      -> Pending Change Added/Updated: ${key} = ${change.value}`); // Keep commented unless debugging
+            } else {
+                 console.warn("addChangesToMap received invalid change:", change);
+            }
+        });
+    };
 
-    // *** CHECK THE RESULT of the verification function ***
-    const costsOk = await fVerifyNSetActMetaLuckUsesOnEtc();
-    if (!costsOk) {
-        fMyConsoleLog("🚦 Halting Roll Dice Action due to cost verification failure or cancellation.");
-        return; // *** EXIT HERE if costs not met/verified ***
+    // Verify TOTAL Uses Cost
+    const usesResult = await fUses_VerifyAndProcessCost(multiRollCount);
+    if (!usesResult.success) { allCostsMet = false; userCancelled = true; }
+    else { addChangesToMap(usesResult.changes); pendingHeaders.push(...usesResult.headers); }
+
+    // Verify Costs for the FIRST roll only (Act, Meta, Focus, Is On)
+    if (allCostsMet) {
+        const actResult = await fAct_VerifyAndProcessCost();
+        if (!actResult.success) { allCostsMet = false; userCancelled = true; }
+        else { addChangesToMap(actResult.changes); pendingHeaders.push(...actResult.headers); }
+
+        const isOnResult = await fIsOn_VerifyAndProcessCost();
+        addChangesToMap(isOnResult.changes); pendingHeaders.push(...isOnResult.headers);
+
+        const skMetaResult = await fSkMeta_VerifyAndProcessCost(gUI.pendingChangesMap);
+        if (!skMetaResult.success) { allCostsMet = false; }
+        else { addChangesToMap(skMetaResult.changes); pendingHeaders.push(...skMetaResult.headers); }
+
+        const focusMetaResult = await fFocus_VerifyAndProcessCost(gUI.pendingChangesMap);
+        if (!focusMetaResult.success) { allCostsMet = false; }
+        else { addChangesToMap(focusMetaResult.changes); pendingHeaders.push(...focusMetaResult.headers); }
     }
 
-    // --- Costs OK, proceed with calculations and logging ---
-    fCalcGUIRollResSk();
-    fCalcGUIRollRoll();
-    fCalcGUIRollResRoll();
-    fCalcRollLogPrepend();
+    // --- 3. Halt if Costs Failed or User Cancelled ---
+    if (!allCostsMet || userCancelled) {
+        const reason = userCancelled ? "cost verification failure or cancellation" : "insufficient Meta/Focus";
+        fMyConsoleLog(`🚦 Halting Roll Dice Action due to ${reason}.`);
+        gUI.pendingChangesMap = {}; return;
+    }
 
-    fMyConsoleLog("✅ Roll Dice Action Completed"); // Optional: Log completion
+    // --- 4. Build Initial Log Header String (BEFORE Applying Costs) ---
+    // This part only contains informational headers, not the roll results yet.
+    let combinedLogHtml = gUI.roll.htmlHeader; // Start with headers from morphs (if any)
+    pendingHeaders.forEach(header => combinedLogHtml += `${header}<br>`); // Add cost notices
+
+    let title = `<span class="sidebar-ability-name">${gUI.roll.skName || 'Unknown Ability'}</span>`;
+    if (gUI.roll.skTyp) title += ` ${gUI.roll.skTyp}`;
+    if (gUI.roll.resTyp && gUI.roll.resTyp !== gUI.roll.skTyp) title += ` (<span class="red-bold">now</span> ${gUI.roll.resTyp})`;
+    combinedLogHtml += title;
+
+    const morph = (typeof gUI.roll.skMorph === 'string' && gUI.roll.skMorph !== ',') ? gUI.roll.skMorph.trim() : '';
+    if (morph) combinedLogHtml += `<br>morph: ${morph}`;
+    combinedLogHtml = combinedLogHtml.trim(); // Trim any leading/trailing whitespace
+
+
+    // --- 5. Apply ALL Pending Costs *Before* the Loop ---
+    fMyConsoleLog("✅ Costs Verified Upfront. Applying Pending Changes...");
+    let applyErrors = false;
+    const changeEntries = Object.entries(gUI.pendingChangesMap);
+    fMyConsoleLog(`   -> Applying ${changeEntries.length} changes from map...`);
+    for (const [key, value] of changeEntries) {
+        try {
+            const keyParts = key.split(',');
+            if (keyParts.length !== 2) { console.warn(`Invalid key format: "${key}"`); applyErrors = true; continue; }
+            const [rowPart, colPart] = keyParts;
+            let rowRef = parseInt(rowPart, 10);
+            if (isNaN(rowRef) || rowRef < 0) { rowRef = rowPart; }
+            if (!fSetGridValue(rowRef, colPart, value)) { applyErrors = true; /* fSetGridValue logs error */ }
+        } catch (parseError) { console.error(`Error processing change key "${key}":`, parseError); applyErrors = true; }
+    }
+    gUI.pendingChangesMap = {}; // Clean up map
+
+    if (applyErrors) {
+        fMyConsoleLog("❌ Errors occurred while applying cost/state changes.");
+        await fShowMessage("Error applying some cost/state changes. Please check grid state.");
+        return; // Halt if application failed critically
+    }
+    fMyConsoleLog("✅ Costs Applied Successfully.");
+
+
+    // --- 6. Perform Rolls in a Loop & Collect Results ---
+    fMyConsoleLog(`🔄 Starting Roll Loop (${multiRollCount} rolls)...`);
+    const rollResultLines = []; // <<< Array to collect individual roll HTML lines
+
+    for (let rollNum = 1; rollNum <= multiRollCount; rollNum++) {
+        const isFirstRoll = (rollNum === 1);
+        fMyConsoleLog(`   --- Roll ${rollNum} of ${multiRollCount} ---`);
+
+        // Recalculate roll-dependent values
+        fCalcGUIRollResSk();
+        fCalcGUIRollRoll();
+        fCalcGUIRollResRoll();
+
+        // Build individual roll result line HTML
+        const rollLineHtml = fBuildRollLogHTML(rollNum, multiRollCount, isFirstRoll);
+        rollResultLines.push(rollLineHtml); // <<< Add line to array
+    } // --- End Roll Loop ---
+
+
+    // --- 7. Combine Header and Results, Prepend ONCE ---
+    // Add collected roll lines to the initial header string, joined by <br>
+    if (rollResultLines.length > 0) {
+        // Add a line break after the header only if there are roll results following
+        if (combinedLogHtml) combinedLogHtml += '<br>';
+        combinedLogHtml += rollResultLines.join('<br>');
+    }
+
+    // Prepend the single, complete log entry
+    if (combinedLogHtml) { // Check if there's anything to log
+      fPrependToSidebar(combinedLogHtml);
+      fShowSidebar(); // Ensure sidebar is visible
+    }
+    gUI.roll.htmlHeader = ''; // Clear header base for next time
+
+
+    fMyConsoleLog(`✅ Roll Dice Action Completed (${multiRollCount} rolls).`);
 
 } // END fHandleRollDiceAction
 
@@ -83,6 +196,7 @@ async function fValidateAbilityCB(row, col) {
 
 // fResetPopulateNCleanGUIRoll //////////////////////////////////////////////////////////////////
 // Purpose -> Extracts and cleans ability row data into gUI.roll based on Sk1 or Sk2 checkbox.
+//            Initializes multiRollCount to 1.
 // Inputs  -> r (Number), c (Number): Row and column from selected radio.
 // Outputs -> (Boolean): true if success, false if extraction/cleaning fails.
 async function fResetPopulateNCleanGUIRoll(r, c) {
@@ -102,7 +216,7 @@ async function fResetPopulateNCleanGUIRoll(r, c) {
             skName: '',
             skAct: isSk1 ? getVal('Act') : '',
             skDur: isSk1 ? getVal('Dur') : '',
-            skMeta: isSk1 ? getVal('Meta') : '', // Initially populate skMeta only if Sk1 is checked
+            skMeta: isSk1 ? getVal('Meta') : '',
             skUses: isSk1 ? getVal('Uses') : '',
             resTyp: '',
             resSk: '',
@@ -117,6 +231,7 @@ async function fResetPopulateNCleanGUIRoll(r, c) {
             resMultMult: '',
             resCombine: '',
             isUnSk: false,
+            multiRollCount: 1,
             roll: '',
             resRoll: '',
             htmlHeader: ''
@@ -130,7 +245,6 @@ async function fResetPopulateNCleanGUIRoll(r, c) {
         rData.skIsOn = String(rData.skIsOn || '').trim();
         rData.skDur = String(rData.skDur || '').trim();
         rData.skMeta = String(rData.skMeta || '').trim();
-
         // Ensure skMeta is either in the allowed list or empty
         if (rData.skMeta && !gUI.list.metaColor.includes(rData.skMeta)) {
              rData.skMeta = '';
@@ -148,7 +262,6 @@ async function fResetPopulateNCleanGUIRoll(r, c) {
 
         // --- Default resTyp to skTyp ---
         rData.resTyp = rData.skTyp;
-
         // --- Final status log ---
         fMyConsoleLog(`⚙️ Populated & Cleaned gUI.roll for row ${r} (isSk1: ${isSk1})`);
         return true;
@@ -245,8 +358,7 @@ async function fProcessMorph() {
 
 // fParseMorphComponents ////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Parses each morph component and mutates gUI.roll and acc accordingly.
-// MODIFIED: Made async, changed forEach to for...of, added await to fShowMessage, added DCT logic
-// MODIFIED: Changed acc.lastFocusIndex to acc.lastFocusTag to store the color TAG ('R'...'B').
+// MODIFIED: Added handling for '#N' multi-roll morph.
 async function fParseMorphComponents(morphComponents, morphLower, acc) {
     const plusMinusRegex = /^([-+])(\d+)$/;
     const numberOnlyRegex = /^\d+$/;
@@ -257,26 +369,42 @@ async function fParseMorphComponents(morphComponents, morphLower, acc) {
     const equalsEqualsRegex = /^==(\d+)$/;
     const caretRegex = /^\^(\d+)$/;
     const dctRegex = /^([-+])(\d+)([dct])$/i; // Case-insensitive
+    const multiRollRegex = /^#(\d+)$/; // <<< NEW: Regex for multi-roll morph (e.g., #3)
 
     // Use for...of loop instead of forEach to allow await
     let index = 0; // Manual index tracking needed for morphLower
     for (const component of morphComponents) {
 
         const lower = morphLower[index];
+
         // --- isUnSk Check
         if (lower === 'un' || lower === 'unsk') gUI.roll.isUnSk = true;
+
         // --- resTyp Check (find LAST match)
         if (gUI.list.skTyp.some(t => t.toLowerCase() === lower)) {
             acc.lastResTypMatch = component;
             acc.foundResTyp = true;
         }
 
-        // --- resFocus Check (find LAST matching TAG) --- <<< MODIFIED
-        const focusTag = lower.toUpperCase(); // Prepare tag for check
-        if (gUI.list.metaColor.includes(focusTag)) { // Check if tag is valid
-            acc.lastFocusTag = focusTag; // Store the TAG ('R', 'O', etc.)
+        // --- resFocus Check (find LAST matching TAG) ---
+        const focusTag = lower.toUpperCase();
+        if (gUI.list.metaColor.includes(focusTag)) {
+            acc.lastFocusTag = focusTag;
         }
         // --- End resFocus Check ---
+
+        // --- Multi-Roll Check --- <<< NEW BLOCK
+        const multiRollMatch = component.match(multiRollRegex);
+        if (multiRollMatch) {
+            const count = parseInt(multiRollMatch[1], 10);
+            if (!isNaN(count) && count >= 2) { // Ensure it's a number >= 2
+                gUI.roll.multiRollCount = count;
+                fMyConsoleLog(`   -> Multi-Roll Morph detected: Rolling ${count} times.`);
+            } else {
+                 fMyConsoleLog(`   -> Multi-Roll Morph ignored: Invalid count "${multiRollMatch[1]}". Must be integer >= 2.`);
+            }
+        }
+        // --- End Multi-Roll Check ---
 
         // --- resPlus Check
         const plusMatch = component.match(plusMinusRegex);
@@ -288,6 +416,7 @@ async function fParseMorphComponents(morphComponents, morphLower, acc) {
 
         // --- resCombine Check (collect numbers)
         if (numberOnlyRegex.test(component)) acc.combineNumbers.push(parseInt(component, 10));
+
         // --- resPlusPlus Check
         const ppMatch = component.match(plusPlusMinusMinusRegex);
         if (ppMatch) {
@@ -305,10 +434,8 @@ async function fParseMorphComponents(morphComponents, morphLower, acc) {
             } else if (val !== 0) {
                  acc.totalMult /= val;
             } else {
-                // Use await here
                 await fShowMessage("❌ Morph includes illegal '/0'. Please correct and try again.");
                 console.warn("resMult divide by zero:", component);
-                // Consider adding 'return;' or 'throw new Error(...);' here if this error should halt processing
             }
             acc.foundResMult = true;
         }
@@ -322,10 +449,8 @@ async function fParseMorphComponents(morphComponents, morphLower, acc) {
             } else if (val !== 0) {
                 acc.totalMultMult /= val;
             } else {
-                // Use await here
                 await fShowMessage("❌ Morph includes illegal '//0'. Please correct and try again.");
                 console.warn("resMultMult divide by zero:", component);
-                // Consider adding 'return;' or 'throw new Error(...);' here if this error should halt processing
             }
             acc.foundResMultMult = true;
         }
@@ -337,42 +462,37 @@ async function fParseMorphComponents(morphComponents, morphLower, acc) {
             const num = parseInt(dctMatch[2], 10);
             const type = dctMatch[3].toLowerCase();
             let multiplier = 1.0;
-            if (num !== 0) { // Ignore if number is 0
+            if (num !== 0) {
                 const isPositive = (sign === '+');
                 switch (type) {
                     case 'c':
                         const critFactor = 2 * num;
-                        if (critFactor === 0) { // Avoid division by zero
+                        if (critFactor === 0) {
                             console.warn("DCT Morph resulted in divide by zero (critFactor):", component);
-                            multiplier = 1; // Or handle as error
+                            multiplier = 1;
                         } else {
                              multiplier = isPositive ? critFactor : (1 / critFactor);
                         }
                         break;
                     case 't':
-                        // 10^0 is 1, so 1/1 is 1. Handle large numbers if needed.
                         const tremFactor = Math.pow(10, num);
                         multiplier = isPositive ? tremFactor : (1 / tremFactor);
                         break;
                     case 'd':
                         const dTierTerm = (1 + (num / 3));
-                        if (dTierTerm === 0) { // Avoid division by zero
+                        if (dTierTerm === 0) {
                              console.warn("DCT Morph resulted in divide by zero (dTierTerm):", component);
-                             multiplier = 1;  // Or handle as error
+                             multiplier = 1;
                          } else {
                               multiplier = isPositive ? dTierTerm : (1 / dTierTerm);
                          }
                         break;
                 }
-
-                 // Additional check for invalid multipliers (NaN, Infinity) before applying
                  if (!isNaN(multiplier) && isFinite(multiplier) && multiplier > 0) {
-                     // Apply the multiplier cumulatively
                      acc.totalResdctMult *= multiplier;
                      acc.foundResdctMult = true;
                  } else {
                       console.warn(`Invalid DCT multiplier calculated for "${component}": ${multiplier}. Skipping this morph.`);
-                      // Optional await fShowMessage(`⚠️ Invalid result for morph "${component}". Check value.`);
                  }
             }
         }
@@ -667,35 +787,37 @@ async function fAct_VerifyAndProcessCost() {
 
 
 // fUses_VerifyAndProcessCost ////////////////////////////////////////////////////////
-// Purpose -> Helper for fVerifyNSetActMetaLuckUsesOnEtc: Checks Uses cost.
-//            Prompts user if insufficient. Calculates changes but does NOT apply them.
-// Inputs  -> None (reads gUI.roll.skUses, gUI.roll.skName, gUI.roll.ability_R and uses grid helpers).
+// Purpose -> Helper for cost verification: Checks Uses cost based on multiRollCount.
+//            Prompts user if insufficient. Calculates change but does NOT apply it.
+// Inputs  -> multiRollCount (Number): The total number of rolls being made.
 // Outputs -> (Promise<Object>): { success: Boolean, changes: Array, headers: Array }
 //            'changes' contains { r, c, value } objects for grid updates.
 //            'headers' contains strings for sidebar messages.
-async function fUses_VerifyAndProcessCost() {
+async function fUses_VerifyAndProcessCost(multiRollCount) {
     const { skUses, skName, ability_R } = gUI.roll;
     const changes = []; // Initialize empty array for pending changes
     const headers = []; // Initialize empty array for pending headers
 
     // Check if skUses exists and is a valid number
-    const usesCost = 1; // cost per use is always 1
     const currentUses = Number(skUses);
-
     if (skUses === '' || isNaN(currentUses)) {
         // If skUses is empty string, null, undefined, or NaN, assume no 'Uses' cost applies.
         fMyConsoleLog("   -> No 'Uses' cost defined for this ability.");
         return { success: true, changes: [], headers: [] }; // Pass the check if no uses are defined
     }
 
-    // Calculate the new value after decrementing
-    const newUses = currentUses - usesCost;
+    // Calculate the TOTAL cost based on multiRollCount (minimum cost is 1)
+    const totalUsesCost = Math.max(1, multiRollCount);
+    fMyConsoleLog(`   -> Uses Check: Current=${currentUses}, Total Cost for ${multiRollCount} rolls=${totalUsesCost}`);
 
-    // Check if uses are already depleted or will be depleted
-    if (currentUses <= 0) {
-        fMyConsoleLog(`⚠️ Insufficient Uses Left (Have ${currentUses})`);
+    // Calculate the new value after decrementing by total cost
+    const newUses = currentUses - totalUsesCost;
+
+    // Check if uses are already depleted or if cost exceeds current uses
+    if (currentUses < totalUsesCost) {
+        fMyConsoleLog(`⚠️ Insufficient Uses Left (Need ${totalUsesCost}, Have ${currentUses})`);
         // Prompt user if they want to proceed (go negative)
-        const proceed = await fShowPrompt(`Not Enough Uses Left (${currentUses}) to use '${skName}' (Cost: ${usesCost})<br><br>Do you want to go negative?`);
+        const proceed = await fShowPrompt(`Not Enough Uses Left (${currentUses}) to use '${skName}' ${multiRollCount} times (Cost: ${totalUsesCost})<br><br>Do you want to go negative?`);
         if (!proceed) {
             fMyConsoleLog("🚫 User cancelled Uses cost due to insufficient points.");
             return { success: false, changes: [], headers: [] }; // User chose No
@@ -705,12 +827,13 @@ async function fUses_VerifyAndProcessCost() {
         headers.push(`⚠️ NEGATIVE USES: ${newUses}`); // Add header to pending list
     }
 
-    // Add the intended change to the pending list
+    // Add the intended change (decrementing by TOTAL cost) to the pending list
     // Use gUI.roll.ability_R (the original row index) for the row reference
     changes.push({ r: ability_R, c: 'Uses', value: newUses });
-    fMyConsoleLog(`   -> Uses: ${currentUses} -> ${newUses} (Pending)`);
+    fMyConsoleLog(`   -> Uses: ${currentUses} -> ${newUses} (Pending, cost: ${totalUsesCost})`);
 
-    // If we reached here, the cost was met or overridden successfully. Return success and pending changes/headers.
+    // If we reached here, the cost was met or overridden successfully.
+    // Return success and pending changes/headers.
     return { success: true, changes: changes, headers: headers };
 } // END fUses_VerifyAndProcessCost
 
@@ -872,83 +995,83 @@ async function fFocus_VerifyAndProcessCost(pendingChangesMap) { // <<< Added pen
 
 // fSpendOneMeta /////////////////////////////////////////////////////////////////////
 // Purpose -> Helper function to find 1 available unit of Meta and prepare the change object
-//            for its decrement. Starts checking from the specified metaColor and cycles
-//            upwards ('R'->'O'->'Y'->'G'->'B'...) through colors if the starting color
-//            pools are empty. Checks Channel pool first, then Main pool for each color.
-// MODIFIED: Accepts pendingChangesMap argument and checks it before reading from gUI.arr.
+//            for its decrement. Starts check from specified color, cycles upwards (R->O->Y->G->B...).
+//            Checks Channel pool first, then Main pool. Checks pending changes map.
+//            Ensures the resulting change value is '' if the new numeric value would be < 1.
 // Inputs  -> metaColor (String): The preferred Meta color ('R','O','Y','G','B') to start spending from.
 //         -> pendingChangesMap (Object): Map holding pending changes {'rTag,cTag': newValue}.
 // Outputs -> (Promise<Object>): Resolves to { success: true, change: { r, c, value } } if 1 unit found,
-//                               or { success: false } if the input color is invalid or no Meta unit
-//                               could be found after checking all colors/pools.
-async function fSpendOneMeta(metaColor, pendingChangesMap) { // <<< Added pendingChangesMap param
+//                               or { success: false } if invalid color or no unit found.
+// MODIFIED: Sets change value to '' if decremented value < 1.
+async function fSpendOneMeta(metaColor, pendingChangesMap) {
     fMyConsoleLog(`   -> Attempting to spend 1 Meta unit, starting check from: ${metaColor}`);
     // --- 1. Validate Input Color ---
     const metaColors = gUI.list?.metaColor;
     if (!Array.isArray(metaColors) || metaColors.length === 0) {
         console.error("fSpendOneMeta: gUI.list.metaColor is not defined or empty.");
         await fShowMessage("❌ Internal Error: Meta color list not defined.");
-        return { success: false }; // Indicate failure
+        return { success: false };
     }
-
-    const inputColorUpper = metaColor?.toUpperCase(); // Handle potential null/undefined input
+    const inputColorUpper = metaColor?.toUpperCase();
     const startIndex = metaColors.findIndex(color => color.toUpperCase() === inputColorUpper);
     if (startIndex === -1) {
         fMyConsoleLog(`      -> ❌ Invalid input: Meta Color '${metaColor}' is not allowed.`);
         await fShowMessage(`❌ Meta Color '${metaColor}' is not allowed.`);
-        return { success: false }; // Indicate failure
+        return { success: false };
     }
-    const validMetaColorTag = metaColors[startIndex]; // Use the validated tag from the list
+    const validMetaColorTag = metaColors[startIndex];
     fMyConsoleLog(`      -> Validated start color: ${validMetaColorTag} (Index: ${startIndex})`);
 
     // --- Helper function to get current value, considering pending changes ---
     const getCurrentValue = (rowTag, colTag) => {
-        const key = `${rowTag},${colTag}`; // Use tags for map keys for consistency
+        const key = `${rowTag},${colTag}`;
         if (pendingChangesMap.hasOwnProperty(key)) {
             const pendingValue = Number(pendingChangesMap[key]);
-            fMyConsoleLog(`         - Found pending value for ${key}: ${pendingValue}`);
-            return isNaN(pendingValue) ? 0 : pendingValue; // Use pending value if valid number, else 0
+            // fMyConsoleLog(`         - Found pending value for ${key}: ${pendingValue}`); // Keep commented unless debugging
+            // Treat pending non-numbers or < 1 as 0 for calculation purposes here
+            return (!isNaN(pendingValue) && pendingValue >= 1) ? pendingValue : 0;
         } else {
-            // Read from grid, default invalid/blank to 0
-            return Math.max(0, fGetGridValue(rowTag, colTag, true) || 0);
+            // Read from grid, default invalid/blank/< 1 to 0
+            const gridVal = fGetGridValue(rowTag, colTag, true); // Get as number
+            return (gridVal >= 1) ? gridVal : 0; // Ensure we only consider values >= 1
         }
     };
     // --- End Helper ---
 
     // --- 2. Cycle Through Colors to Find 1 Unit ---
     const numColors = metaColors.length;
-    const loopLeft = numColors - startIndex; // <<< Correction from previous logic, ensures only checking UPWARDS from start index
-    for (let i = 0; i < loopLeft; i++) { // <<< Corrected loop condition
-        const currentColorIndex = (startIndex + i); // <<< Removed modulo, checks R->O->Y etc.
-        if (currentColorIndex >= numColors) continue; // Should not happen with loopLeft, but safe check
-
+    const loopLeft = numColors - startIndex;
+    for (let i = 0; i < loopLeft; i++) {
+        const currentColorIndex = (startIndex + i);
+        if (currentColorIndex >= numColors) continue;
         const currentColorTag = metaColors[currentColorIndex];
         fMyConsoleLog(`         - Checking Color: ${currentColorTag}`);
 
-        // 2a. Check Channel Pool using helper
+        // Check Channel Pool
         const chnlVal = getCurrentValue('chnl', currentColorTag);
         if (chnlVal >= 1) {
             const newVal = chnlVal - 1;
-            const change = { r: 'chnl', c: currentColorTag, value: newVal }; // Keep using tags here
+            // <<< MODIFIED: Set value to '' if newVal < 1
+            const change = { r: 'chnl', c: currentColorTag, value: newVal >= 1 ? newVal : '' };
             fMyConsoleLog(`           - Found in Channel pool. Preparing change: ${JSON.stringify(change)}`);
-            return { success: true, change: change }; // Found and prepared change
+            return { success: true, change: change };
         }
 
-        // 2b. Check Main Pool (if Channel was < 1) using helper
+        // Check Main Pool (if Channel was < 1)
         const metaVal = getCurrentValue('meta', currentColorTag);
         if (metaVal >= 1) {
             const newVal = metaVal - 1;
-            const change = { r: 'meta', c: currentColorTag, value: newVal }; // Keep using tags here
+            // <<< MODIFIED: Set value to '' if newVal < 1
+            const change = { r: 'meta', c: currentColorTag, value: newVal >= 1 ? newVal : '' };
             fMyConsoleLog(`           - Found in Main pool. Preparing change: ${JSON.stringify(change)}`);
-            return { success: true, change: change }; // Found and prepared change
+            return { success: true, change: change };
         }
 
          fMyConsoleLog(`           - Not found in ${currentColorTag} pools.`);
     } // --- End Color Cycle Loop ---
 
     // --- 3. If Loop Completes: Not Found ---
-    fMyConsoleLog(`      -> ❌ Failed: Could not find 1 unit of Meta to spend after checking all valid colors starting from ${validMetaColorTag}.`);
-    // Note: The caller function is responsible for showing the "Not enough Meta" message.
+    fMyConsoleLog(`      -> ❌ Failed: Could not find 1 unit of Meta to spend after checking valid colors starting from ${validMetaColorTag}.`);
     return { success: false }; // Indicate failure
 
 } // END fSpendOneMeta
@@ -1226,24 +1349,25 @@ function fCalcRollLogPrepend() {
 
 
 // fBuildRollLogHTML /////////////////////////////////////////////////////////////////////////////////
-// Purpose -> Constructs and returns the formatted HTML log line based on gUI.roll data.
-// Inputs  -> None (reads gUI.roll).
-// Outputs -> (String): HTML string to insert in sidebar.
-function fBuildRollLogHTML() {
+// Purpose -> Constructs and returns the formatted HTML log line for a *single roll* based on gUI.roll data.
+//            Handles multi-roll prefix ('#> ') and conditional T/C roll.
+// Inputs  -> rollNum (Number): The current roll number in the sequence (e.g., 1, 2, ...).
+//         -> totalRolls (Number): The total number of rolls in the sequence (gUI.roll.multiRollCount).
+//         -> isFirstRoll (Boolean): True if this is the first roll in the sequence.
+// Outputs -> (String): HTML string for one roll line to insert in sidebar.
+// MODIFIED: Accepts rollNum, totalRolls, isFirstRoll. Adds prefix. Conditional T/C. Simplified scope.
+function fBuildRollLogHTML(rollNum, totalRolls, isFirstRoll) {
 
-    // --- Build Title ---
-    const skTyp = (typeof gUI.roll.skTyp === 'string') ? gUI.roll.skTyp.trim() : '';
+    // --- Get relevant data from gUI.roll ---
     const resTyp = (typeof gUI.roll.resTyp === 'string') ? gUI.roll.resTyp.trim() : '';
-    let title = `<span class="sidebar-ability-name">${gUI.roll.skName || 'Unknown Ability'}</span>`;
-    if (skTyp) title += ` ${skTyp}`;
-    if (resTyp && resTyp !== skTyp) title += ` (<span class="red-bold">now</span> ${resTyp})`;
-    // --- Get Morph String ---
-    const morph = (typeof gUI.roll.skMorph === 'string' && gUI.roll.skMorph !== ',') ? gUI.roll.skMorph.trim() : '';
-
-    // --- Build Roll Base String (Type(Sk->ResSk)) ---
-    let rollBase = resTyp || skTyp;
     const skSk = gUI.roll.skSk;
     const resSk = gUI.roll.resSk;
+    const roll = gUI.roll.roll;
+    const resRoll = gUI.roll.resRoll;
+    const dif = gUI.roll.resDif;
+
+    // --- Build Roll Base String (Type(Sk->ResSk)) ---
+    let rollBase = resTyp; // Start with the resulting type
     if (typeof skSk === 'number' && skSk !== '') {
         rollBase += `(${skSk}${(typeof resSk === 'number' && resSk !== '' && resSk !== skSk) ? `->${resSk}` : ''})`;
     } else if (typeof resSk === 'number' && resSk !== '') {
@@ -1251,38 +1375,46 @@ function fBuildRollLogHTML() {
     }
 
     // --- Build Roll Result String (~Roll->ResRoll) ---
-    const roll = gUI.roll.roll;
-    const resRoll = gUI.roll.resRoll;
     let rollResult = '';
     if ((typeof roll === 'number' || (typeof roll === 'string' && roll !== '')) && roll != null) {
         rollResult += ` ~${roll}`;
-        if ((typeof resRoll === 'number' || (typeof resRoll === 'string' && resRoll !== '')) && resRoll != null && resRoll !== roll) {
+        // Show arrow only if resRoll is different and valid
+        if ((typeof resRoll === 'number' || (typeof resRoll === 'string' && resRoll !== '')) && resRoll != null && String(resRoll) !== String(roll)) {
             rollResult += `->${resRoll}`;
         }
     } else if ((typeof resRoll === 'number' || (typeof resRoll === 'string' && resRoll !== '')) && resRoll != null) {
+        // If only resRoll is valid, show it directly
         rollResult += ` ~${resRoll}`;
     }
 
+
     // --- Build Difficulty (^Dif) ---
-    const dif = gUI.roll.resDif;
     let rollDif = (typeof dif === 'number' || (typeof dif === 'string' && dif !== '')) && dif != null ? `^${dif}` : '';
 
     // --- Build Success Delta (=/+Δ) ---
     let rollSuccess = '';
+    // Only calculate success if BOTH resRoll and dif are valid numbers
     if (typeof resRoll === 'number' && typeof dif === 'number') {
         const delta = resRoll - dif;
         rollSuccess = delta >= 0 ? ` =+${delta} ✅` : ` =${delta} ❌`;
     }
 
-    // --- Combine Roll1 Summary and add possible TC ---
+    // --- Combine Roll1 Summary (Base + Result + Diff + Success) ---
     let roll1 = `${rollBase}${rollResult}${rollDif}${rollSuccess}`.trim();
-    const tc = fCStc();
+
+    // --- Add T/C Result (ONLY for the first roll) ---
+    const tc = isFirstRoll ? fCStc() : ""; // Call fCStc only if isFirstRoll is true
     if (roll1 && tc) roll1 += `   ${tc}`;
-    // --- Build Final HTML ---
-    let html = gUI.roll.htmlHeader;
-    if (title) html += `${title}`;
-    if (morph) html += `<br>morph: ${morph}`;
-    if (roll1) html += `<br>${roll1}`;
+
+    // --- Prepend Multi-Roll Prefix if needed ---
+    if (totalRolls > 1) {
+      roll1 = `<span class="roll-prefix">${rollNum}></span> ${roll1}`; // Add prefix span
+    }
+
+    // --- Build Final HTML (Only the roll line itself) ---
+    // The header (Costs, Title, Morph) is now handled separately before the loop
+    const html = roll1; // This function now only returns the formatted roll line
+
     return html;
 } // END fBuildRollLogHTML
 

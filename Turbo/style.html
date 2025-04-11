@@ -327,7 +327,12 @@ body {
   line-height: 1.3;
 }
 
-
+/* Style a multi-rolls '1> ', '2> ', etc. */
+.roll-prefix {
+  display: inline-block; /* Keep inline-block for consistent spacing behavior */
+  padding-left: .5em;   /* <<< ADDED: Indent the prefix */
+  font-weight: bold;   /* Keep bold weight as it was optional but present */
+}
 
 
 /* ========================================================================== */
