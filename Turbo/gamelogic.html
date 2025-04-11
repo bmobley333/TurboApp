@@ -14,136 +14,207 @@
 
 // fHandleRollDiceAction /////////////////////////////////////////////////////////////////////////
 // Purpose -> Top-level handler for "Roll Dice" action. Handles single or multi-rolls (# morph).
-//            Verifies target, populates gUI.roll, processes morphs (incl. #).
-//            Verifies and applies costs *before* looping. Loops for calculations.
-//            Builds a single log entry string and prepends it ONCE after the loop.
-// Inputs  -> None (uses gUI.currentSkRadioChecked).
+//            Verifies target, populates gUI.roll, processes morphs (incl. #, 'free', 'luck').
+//            Handles Luck cost FIRST if applicable.
+//            Verifies and applies standard costs *before* looping IF NOT free/lucked roll.
+//            Loops for calculations.
+//            Builds a single log entry string (incl. Free/Lucked Roll notice) and prepends it ONCE after the loop.
+// Inputs  -> None (uses gUI.currentSkRadioChecked, gUI.roll).
 // Outputs -> None (updates gUI, DOM, and logs to sidebar).
-// MODIFIED: Revision 2 - Collects roll lines during loop, prepends combined log entry once.
+// MODIFIED: Skips cost verification and application if gUI.roll.isFreeRoll OR isLuckedRoll is true.
+// MODIFIED: Adds "Free Roll" / "Lucked Roll" indicator to the log header if applicable.
+// MODIFIED: Handles Luck cost immediately if isLuckedRoll is true.
 async function fHandleRollDiceAction() {
     fMyConsoleLog("🎲 Roll Dice Action Triggered");
 
     // --- 1. Initial Validation & Setup ---
     const { r, c } = gUI.currentSkRadioChecked;
     if (!await fValidateAbilityCB(r, c)) return;
-    if (!await fResetPopulateNCleanGUIRoll(r, c)) return;
+    if (!await fResetPopulateNCleanGUIRoll(r, c)) return; // Populates gUI.roll
     if (!await fVerifyAbility()) return;
-    await fProcessMorph(); // Processes morphs, populates gUI.roll.multiRollCount
+    await fProcessMorph(); // Processes morphs, populates gUI.roll flags (isFreeRoll, isLuckedRoll) & multiRollCount
 
     const multiRollCount = gUI.roll.multiRollCount;
+    const isFreeRoll = gUI.roll.isFreeRoll;
+    const isLuckedRoll = gUI.roll.isLuckedRoll; // <<< Get the luck flag
     fMyConsoleLog(`   -> Multi-Roll Count: ${multiRollCount}`);
+    fMyConsoleLog(`   -> Is Free Roll: ${isFreeRoll}`);
+    fMyConsoleLog(`   -> Is Lucked Roll: ${isLuckedRoll}`);
 
-    // --- 2. Cost Verification & Preparation (Upfront) ---
-    fMyConsoleLog("🛡️ Verifying Costs Upfront...");
-    gUI.pendingChangesMap = {};
-    const pendingHeaders = [];
-    let allCostsMet = true;
-    let userCancelled = false;
+    // --- Initialize shared variables for standard costs ---
+    const pendingHeaders = []; // Holds standard cost headers
+    let allCostsMet = true; // Assume true, verification block might set to false
+    let userCancelled = false; // Track if prompts are cancelled
 
-    const addChangesToMap = (changesArray) => {
-        // (Helper function remains the same as previous version)
-        if (!Array.isArray(changesArray)) return;
-        changesArray.forEach(change => {
-            if (change && typeof change.r !== 'undefined' && typeof change.c !== 'undefined') {
-                const key = `${change.r},${change.c}`;
-                gUI.pendingChangesMap[key] = change.value;
-                // fMyConsoleLog(`      -> Pending Change Added/Updated: ${key} = ${change.value}`); // Keep commented unless debugging
-            } else {
-                 console.warn("addChangesToMap received invalid change:", change);
-            }
-        });
-    };
 
-    // Verify TOTAL Uses Cost
-    const usesResult = await fUses_VerifyAndProcessCost(multiRollCount);
-    if (!usesResult.success) { allCostsMet = false; userCancelled = true; }
-    else { addChangesToMap(usesResult.changes); pendingHeaders.push(...usesResult.headers); }
+    // --- 1a. Handle Luck Cost (Upfront, If Applicable) --- <<< NEW BLOCK
+    if (isLuckedRoll) {
+        fMyConsoleLog("🍀 Applying Luck Cost Upfront...");
+        const luckCost = 1;
+        const currentLuck = fGetGridValue('LuckBox', 'LuckBox', true);
 
-    // Verify Costs for the FIRST roll only (Act, Meta, Focus, Is On)
-    if (allCostsMet) {
-        const actResult = await fAct_VerifyAndProcessCost();
-        if (!actResult.success) { allCostsMet = false; userCancelled = true; }
-        else { addChangesToMap(actResult.changes); pendingHeaders.push(...actResult.headers); }
+        if (isNaN(currentLuck)) {
+             await fShowMessage("❌ Error reading current Luck value. Cannot perform Lucked Roll.");
+             fMyConsoleLog("🚫 Failed Lucked Roll: Could not read LuckBox value.");
+             return; // Halt
+        }
 
-        const isOnResult = await fIsOn_VerifyAndProcessCost();
-        addChangesToMap(isOnResult.changes); pendingHeaders.push(...isOnResult.headers);
+        if (currentLuck < luckCost) {
+            await fShowMessage("❌ Not Enough Luck!");
+            fMyConsoleLog("🚫 Failed Lucked Roll: Insufficient Luck.");
+            return; // Halt
+        }
 
-        const skMetaResult = await fSkMeta_VerifyAndProcessCost(gUI.pendingChangesMap);
-        if (!skMetaResult.success) { allCostsMet = false; }
-        else { addChangesToMap(skMetaResult.changes); pendingHeaders.push(...skMetaResult.headers); }
+        // Sufficient luck, apply cost immediately
+        const newLuck = currentLuck - luckCost;
+        if (!fSetGridValue('LuckBox', 'LuckBox', newLuck)) {
+            await fShowMessage("❌ Error applying Luck cost to the grid.");
+            fMyConsoleLog("🚫 Failed Lucked Roll: Error setting LuckBox value.");
+            return; // Halt if setting grid fails
+        }
+        fMyConsoleLog(`   -> Luck Cost Applied: ${currentLuck} -> ${newLuck}`);
+        fAppendToHTMLHeader('⚠️ <span class="blue-bold">Lucked Roll Below:</span>'); // Add log header line
 
-        const focusMetaResult = await fFocus_VerifyAndProcessCost(gUI.pendingChangesMap);
-        if (!focusMetaResult.success) { allCostsMet = false; }
-        else { addChangesToMap(focusMetaResult.changes); pendingHeaders.push(...focusMetaResult.headers); }
     }
+    // --- End Luck Cost Block ---
 
-    // --- 3. Halt if Costs Failed or User Cancelled ---
-    if (!allCostsMet || userCancelled) {
-        const reason = userCancelled ? "cost verification failure or cancellation" : "insufficient Meta/Focus";
-        fMyConsoleLog(`🚦 Halting Roll Dice Action due to ${reason}.`);
-        gUI.pendingChangesMap = {}; return;
+
+    // --- 2. Standard Cost Verification & Preparation (Upfront, SKIPPED if Free OR Lucked Roll) --- <<< MODIFIED CONDITION
+    if (!isFreeRoll && !isLuckedRoll) {
+        fMyConsoleLog("🛡️ Verifying Standard Costs Upfront...");
+        gUI.pendingChangesMap = {}; // Initialize map only if checking standard costs
+
+        // Helper to add changes to the map (remains the same)
+        const addChangesToMap = (changesArray) => {
+            if (!Array.isArray(changesArray)) return;
+            changesArray.forEach(change => {
+                if (change && typeof change.r !== 'undefined' && typeof change.c !== 'undefined') {
+                    const key = `${change.r},${change.c}`;
+                    gUI.pendingChangesMap[key] = change.value;
+                } else {
+                     console.warn("addChangesToMap received invalid change:", change);
+                }
+            });
+        };
+
+        // --- Verify standard costs ---
+        const usesResult = await fUses_VerifyAndProcessCost(multiRollCount); // Uses cost depends on multi-roll
+        if (!usesResult.success) { allCostsMet = false; userCancelled = true; }
+        else { addChangesToMap(usesResult.changes); pendingHeaders.push(...usesResult.headers); }
+
+        if (allCostsMet) { // Only proceed if Uses check passed/cancelled
+            const actResult = await fAct_VerifyAndProcessCost(); // Action cost is per activation (not per roll)
+            if (!actResult.success) { allCostsMet = false; userCancelled = true; }
+            else { addChangesToMap(actResult.changes); pendingHeaders.push(...actResult.headers); }
+
+            const isOnResult = await fIsOn_VerifyAndProcessCost(); // IsOn is per activation
+            addChangesToMap(isOnResult.changes); pendingHeaders.push(...isOnResult.headers);
+
+            const skMetaResult = await fSkMeta_VerifyAndProcessCost(gUI.pendingChangesMap); // SkMeta is per activation
+            if (!skMetaResult.success) { allCostsMet = false; } // Fail silently (message shown in helper)
+            else { addChangesToMap(skMetaResult.changes); pendingHeaders.push(...skMetaResult.headers); }
+
+            const focusMetaResult = await fFocus_VerifyAndProcessCost(gUI.pendingChangesMap); // Focus Meta is per activation
+            if (!focusMetaResult.success) { allCostsMet = false; } // Fail silently
+            else { addChangesToMap(focusMetaResult.changes); pendingHeaders.push(...focusMetaResult.headers); }
+        }
+
+        // --- Halt if Costs Failed or User Cancelled ---
+        if (!allCostsMet || userCancelled) {
+            const reason = userCancelled ?
+                "cost verification failure or cancellation" : "insufficient Meta/Focus";
+            fMyConsoleLog(`🚦 Halting Roll Dice Action due to ${reason}.`);
+            gUI.pendingChangesMap = {}; // Clear map if halting
+            return;
+        }
+
+    } else {
+        const skipReason = isLuckedRoll ? "Lucked Roll" : "Free Roll";
+        fMyConsoleLog(`✅ Skipping Standard Cost Verification (${skipReason}).`);
+        gUI.pendingChangesMap = {}; // Ensure map is empty
     }
+    // --- End Standard Cost Verification Block ---
 
-    // --- 4. Build Initial Log Header String (BEFORE Applying Costs) ---
-    // This part only contains informational headers, not the roll results yet.
-    let combinedLogHtml = gUI.roll.htmlHeader; // Start with headers from morphs (if any)
-    pendingHeaders.forEach(header => combinedLogHtml += `${header}<br>`); // Add cost notices
 
+    // --- 3. Build Initial Log Header String ---
+    // Start with base header (from morphs), add Lucked/Free Roll notice if needed, then cost headers (if any)
+    let combinedLogHtml = gUI.roll.htmlHeader; // Contains Lucked header if applicable (added by fAppendToHTMLHeader)
+
+    // --- Add Free Roll Indicator (if free AND NOT lucked) --- <<< MODIFIED CONDITION
+    if (isFreeRoll && !isLuckedRoll) {
+        combinedLogHtml += `⚠️ <span class="blue-bold">Free Roll</span>.<br>`; // Add indicator with line break
+    }
+    // --- End Free Roll Indicator ---
+
+    // Add standard cost headers (will be empty if free/lucked)
+    pendingHeaders.forEach(header => combinedLogHtml += `${header}<br>`);
+
+    // Add ability title/type
     let title = `<span class="sidebar-ability-name">${gUI.roll.skName || 'Unknown Ability'}</span>`;
     if (gUI.roll.skTyp) title += ` ${gUI.roll.skTyp}`;
     if (gUI.roll.resTyp && gUI.roll.resTyp !== gUI.roll.skTyp) title += ` (<span class="red-bold">now</span> ${gUI.roll.resTyp})`;
     combinedLogHtml += title;
 
-    const morph = (typeof gUI.roll.skMorph === 'string' && gUI.roll.skMorph !== ',') ? gUI.roll.skMorph.trim() : '';
+    // Add morph string if present
+    const morph = (typeof gUI.roll.skMorph === 'string' && gUI.roll.skMorph !== ',') ?
+        gUI.roll.skMorph.trim() : '';
     if (morph) combinedLogHtml += `<br>morph: ${morph}`;
     combinedLogHtml = combinedLogHtml.trim(); // Trim any leading/trailing whitespace
 
 
-    // --- 5. Apply ALL Pending Costs *Before* the Loop ---
-    fMyConsoleLog("✅ Costs Verified Upfront. Applying Pending Changes...");
+    // --- 4. Apply ALL Pending STANDARD Costs *Before* the Loop (SKIPPED if Free OR Lucked Roll) --- <<< MODIFIED CONDITION
     let applyErrors = false;
-    const changeEntries = Object.entries(gUI.pendingChangesMap);
-    fMyConsoleLog(`   -> Applying ${changeEntries.length} changes from map...`);
-    for (const [key, value] of changeEntries) {
-        try {
-            const keyParts = key.split(',');
-            if (keyParts.length !== 2) { console.warn(`Invalid key format: "${key}"`); applyErrors = true; continue; }
-            const [rowPart, colPart] = keyParts;
-            let rowRef = parseInt(rowPart, 10);
-            if (isNaN(rowRef) || rowRef < 0) { rowRef = rowPart; }
-            if (!fSetGridValue(rowRef, colPart, value)) { applyErrors = true; /* fSetGridValue logs error */ }
-        } catch (parseError) { console.error(`Error processing change key "${key}":`, parseError); applyErrors = true; }
+    if (!isFreeRoll && !isLuckedRoll && Object.keys(gUI.pendingChangesMap).length > 0) { // Only apply if standard costs were checked AND map has changes
+        fMyConsoleLog("✅ Standard Costs Verified Upfront. Applying Pending Changes...");
+        const changeEntries = Object.entries(gUI.pendingChangesMap);
+        fMyConsoleLog(`   -> Applying ${changeEntries.length} changes from map...`);
+        for (const [key, value] of changeEntries) {
+            try {
+                const keyParts = key.split(',');
+                if (keyParts.length !== 2) { console.warn(`Invalid key format: "${key}"`); applyErrors = true; continue; }
+                const [rowPart, colPart] = keyParts;
+                let rowRef = parseInt(rowPart, 10);
+                if (isNaN(rowRef) || rowRef < 0) { rowRef = rowPart; }
+                if (!fSetGridValue(rowRef, colPart, value)) { applyErrors = true; /* fSetGridValue logs error */ }
+            } catch (parseError) { console.error(`Error processing change key "${key}":`, parseError); applyErrors = true; }
+        }
+        gUI.pendingChangesMap = {}; // Clean up map
+
+        if (applyErrors) {
+            fMyConsoleLog("❌ Errors occurred while applying standard cost/state changes.");
+            await fShowMessage("Error applying some standard cost/state changes. Please check grid state.");
+            return; // Halt if application failed critically
+        }
+        fMyConsoleLog("✅ Standard Costs Applied Successfully.");
+
+    } else if (!isFreeRoll && !isLuckedRoll) {
+         fMyConsoleLog("✅ No Pending Standard Cost Changes to Apply.");
+    } else {
+         // Already logged skipping verification
     }
-    gUI.pendingChangesMap = {}; // Clean up map
-
-    if (applyErrors) {
-        fMyConsoleLog("❌ Errors occurred while applying cost/state changes.");
-        await fShowMessage("Error applying some cost/state changes. Please check grid state.");
-        return; // Halt if application failed critically
-    }
-    fMyConsoleLog("✅ Costs Applied Successfully.");
+    // --- End Standard Cost Application Block ---
 
 
-    // --- 6. Perform Rolls in a Loop & Collect Results ---
+    // --- 5. Perform Rolls in a Loop & Collect Results ---
     fMyConsoleLog(`🔄 Starting Roll Loop (${multiRollCount} rolls)...`);
-    const rollResultLines = []; // <<< Array to collect individual roll HTML lines
+    const rollResultLines = []; // Array to collect individual roll HTML lines
 
     for (let rollNum = 1; rollNum <= multiRollCount; rollNum++) {
         const isFirstRoll = (rollNum === 1);
         fMyConsoleLog(`   --- Roll ${rollNum} of ${multiRollCount} ---`);
 
-        // Recalculate roll-dependent values
+        // Recalculate roll-dependent values (needed for each roll)
         fCalcGUIRollResSk();
         fCalcGUIRollRoll();
         fCalcGUIRollResRoll();
 
         // Build individual roll result line HTML
-        const rollLineHtml = fBuildRollLogHTML(rollNum, multiRollCount, isFirstRoll);
-        rollResultLines.push(rollLineHtml); // <<< Add line to array
+        const rollLineHtml = fBuildRollLogHTML(rollNum, multiRollCount, isFirstRoll); // Pass necessary args
+        rollResultLines.push(rollLineHtml); // Add line to array
     } // --- End Roll Loop ---
 
 
-    // --- 7. Combine Header and Results, Prepend ONCE ---
+    // --- 6. Combine Header and Results, Prepend ONCE ---
     // Add collected roll lines to the initial header string, joined by <br>
     if (rollResultLines.length > 0) {
         // Add a line break after the header only if there are roll results following
@@ -160,7 +231,6 @@ async function fHandleRollDiceAction() {
 
 
     fMyConsoleLog(`✅ Roll Dice Action Completed (${multiRollCount} rolls).`);
-
 } // END fHandleRollDiceAction
 
 
@@ -358,7 +428,14 @@ async function fProcessMorph() {
 
 // fParseMorphComponents ////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Parses each morph component and mutates gUI.roll and acc accordingly.
-// MODIFIED: Added handling for '#N' multi-roll morph.
+//            Checks for 'free' or 'luck' morphs to set corresponding flags.
+// Inputs  -> morphComponents (Array): Trimmed components of the skMorph string.
+//         -> morphLower (Array): Lowercased version of morphComponents.
+//         -> acc (Object): Accumulator for temporary results during parsing.
+// Outputs -> None (mutates gUI.roll and acc).
+// MODIFIED: Added handling for '#N' multi-roll morph, capped at 30.
+// MODIFIED: Added handling for 'free' morph (case-insensitive) to set gUI.roll.isFreeRoll.
+// MODIFIED: Added handling for 'luck' morph (case-insensitive) to set gUI.roll.isLuckedRoll.
 async function fParseMorphComponents(morphComponents, morphLower, acc) {
     const plusMinusRegex = /^([-+])(\d+)$/;
     const numberOnlyRegex = /^\d+$/;
@@ -368,14 +445,29 @@ async function fParseMorphComponents(morphComponents, morphLower, acc) {
     const equalsRegex = /^=(\d+)$/;
     const equalsEqualsRegex = /^==(\d+)$/;
     const caretRegex = /^\^(\d+)$/;
-    const dctRegex = /^([-+])(\d+)([dct])$/i; // Case-insensitive
-    const multiRollRegex = /^#(\d+)$/; // <<< NEW: Regex for multi-roll morph (e.g., #3)
+    const dctRegex = /^([-+])(\d+)([dct])$/i;
+    const multiRollRegex = /^#(\d+)$/;
 
     // Use for...of loop instead of forEach to allow await
-    let index = 0; // Manual index tracking needed for morphLower
+    let index = 0;
     for (const component of morphComponents) {
 
         const lower = morphLower[index];
+
+        // --- Free Roll Check ---
+        if (lower === 'free') {
+            gUI.roll.isFreeRoll = true;
+            fMyConsoleLog(`   -> Free Roll detected.`);
+        }
+        // --- End Free Roll Check ---
+
+        // --- Lucked Roll Check --- <<< NEW BLOCK
+        if (lower === 'luck') {
+            gUI.roll.isLuckedRoll = true;
+            fMyConsoleLog(`   -> Lucked Roll detected.`);
+        }
+        // --- End Lucked Roll Check ---
+
 
         // --- isUnSk Check
         if (lower === 'un' || lower === 'unsk') gUI.roll.isUnSk = true;
@@ -393,18 +485,29 @@ async function fParseMorphComponents(morphComponents, morphLower, acc) {
         }
         // --- End resFocus Check ---
 
-        // --- Multi-Roll Check --- <<< NEW BLOCK
+        // --- Multi-Roll Check ---
         const multiRollMatch = component.match(multiRollRegex);
         if (multiRollMatch) {
-            const count = parseInt(multiRollMatch[1], 10);
-            if (!isNaN(count) && count >= 2) { // Ensure it's a number >= 2
-                gUI.roll.multiRollCount = count;
-                fMyConsoleLog(`   -> Multi-Roll Morph detected: Rolling ${count} times.`);
+            let count = parseInt(multiRollMatch[1], 10);
+            if (!isNaN(count)) { // Check if it's a number first
+                if (count > 30) { // Cap the count at 30
+                    count = 30;
+                    fMyConsoleLog(`   -> Multi-Roll Morph capped at 30 (Original: ${multiRollMatch[1]})`);
+                }
+                if (count >= 2) { // Now check if the (potentially capped) count is >= 2
+                    gUI.roll.multiRollCount = count;
+                    fMyConsoleLog(`   -> Multi-Roll Count set to: ${count}`);
+                } else {
+                    // This case handles parsed numbers less than 2 (e.g., #0, #1)
+                     fMyConsoleLog(`   -> Multi-Roll Morph ignored: Count ${count} is less than 2.`);
+                }
             } else {
-                 fMyConsoleLog(`   -> Multi-Roll Morph ignored: Invalid count "${multiRollMatch[1]}". Must be integer >= 2.`);
+                // This case handles if parseInt failed (e.g., ##)
+                fMyConsoleLog(`   -> Multi-Roll Morph ignored: Invalid number "${multiRollMatch[1]}".`);
             }
         }
         // --- End Multi-Roll Check ---
+
 
         // --- resPlus Check
         const plusMatch = component.match(plusMinusRegex);
@@ -467,12 +570,8 @@ async function fParseMorphComponents(morphComponents, morphLower, acc) {
                 switch (type) {
                     case 'c':
                         const critFactor = 2 * num;
-                        if (critFactor === 0) {
-                            console.warn("DCT Morph resulted in divide by zero (critFactor):", component);
-                            multiplier = 1;
-                        } else {
-                             multiplier = isPositive ? critFactor : (1 / critFactor);
-                        }
+                        if (critFactor === 0) { console.warn("DCT critFactor zero:", component); multiplier = 1; }
+                        else { multiplier = isPositive ? critFactor : (1 / critFactor); }
                         break;
                     case 't':
                         const tremFactor = Math.pow(10, num);
@@ -480,20 +579,14 @@ async function fParseMorphComponents(morphComponents, morphLower, acc) {
                         break;
                     case 'd':
                         const dTierTerm = (1 + (num / 3));
-                        if (dTierTerm === 0) {
-                             console.warn("DCT Morph resulted in divide by zero (dTierTerm):", component);
-                             multiplier = 1;
-                         } else {
-                              multiplier = isPositive ? dTierTerm : (1 / dTierTerm);
-                         }
+                        if (dTierTerm === 0) { console.warn("DCT dTierTerm zero:", component); multiplier = 1; }
+                        else { multiplier = isPositive ? dTierTerm : (1 / dTierTerm); }
                         break;
                 }
                  if (!isNaN(multiplier) && isFinite(multiplier) && multiplier > 0) {
                      acc.totalResdctMult *= multiplier;
                      acc.foundResdctMult = true;
-                 } else {
-                      console.warn(`Invalid DCT multiplier calculated for "${component}": ${multiplier}. Skipping this morph.`);
-                 }
+                 } else { console.warn(`Invalid DCT multiplier for "${component}": ${multiplier}.`); }
             }
         }
         // --- End resdctMult Check ---
@@ -502,7 +595,7 @@ async function fParseMorphComponents(morphComponents, morphLower, acc) {
         const eq1 = component.match(equalsRegex);
         if (eq1) acc.lastFlatBaseMatch = eq1[1];
 
-        // 10. resFlatResult Check (find LAST match)
+        // --- resFlatResult Check (find LAST match)
         const eq2 = component.match(equalsEqualsRegex);
         if (eq2) acc.lastFlatResultMatch = eq2[1];
 
@@ -1356,6 +1449,7 @@ function fCalcRollLogPrepend() {
 //         -> isFirstRoll (Boolean): True if this is the first roll in the sequence.
 // Outputs -> (String): HTML string for one roll line to insert in sidebar.
 // MODIFIED: Accepts rollNum, totalRolls, isFirstRoll. Adds prefix. Conditional T/C. Simplified scope.
+// MODIFIED: Removed !isFreeRoll check from T/C condition to allow T/C on Lucked Rolls.
 function fBuildRollLogHTML(rollNum, totalRolls, isFirstRoll) {
 
     // --- Get relevant data from gUI.roll ---
@@ -1365,6 +1459,7 @@ function fBuildRollLogHTML(rollNum, totalRolls, isFirstRoll) {
     const roll = gUI.roll.roll;
     const resRoll = gUI.roll.resRoll;
     const dif = gUI.roll.resDif;
+    // No need to get isFreeRoll or isLuckedRoll here anymore for T/C logic
 
     // --- Build Roll Base String (Type(Sk->ResSk)) ---
     let rollBase = resTyp; // Start with the resulting type
@@ -1402,7 +1497,7 @@ function fBuildRollLogHTML(rollNum, totalRolls, isFirstRoll) {
     // --- Combine Roll1 Summary (Base + Result + Diff + Success) ---
     let roll1 = `${rollBase}${rollResult}${rollDif}${rollSuccess}`.trim();
 
-    // --- Add T/C Result (ONLY for the first roll) ---
+    // --- Add T/C Result (ONLY for the first roll) --- <<< MODIFIED CONDITION
     const tc = isFirstRoll ? fCStc() : ""; // Call fCStc only if isFirstRoll is true
     if (roll1 && tc) roll1 += `   ${tc}`;
 
@@ -1412,7 +1507,7 @@ function fBuildRollLogHTML(rollNum, totalRolls, isFirstRoll) {
     }
 
     // --- Build Final HTML (Only the roll line itself) ---
-    // The header (Costs, Title, Morph) is now handled separately before the loop
+    // The header (Costs, Title, Morph, Free/Lucked notice) is now handled separately before the loop
     const html = roll1; // This function now only returns the formatted roll line
 
     return html;
