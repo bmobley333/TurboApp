@@ -15,6 +15,8 @@ const gUI = {
   format: {},     // Object containing formatting arrays (bg, fonts, borders, merges, etc.)
   notes: [],      // <<< NEW: 2D array of cell notes (parallel to arr)
   grid2D: [],     // 2D array holding references to the created cell DOM elements
+  pendingChangesMap: {}, // Holds { 'r,c': newValue } during ability roll cost verification steps (or similar process)
+
   // Add the manual border definitions here:
   manualBorderSections: [
     // Added 'edges' property based on old fSetAllBorders calls
