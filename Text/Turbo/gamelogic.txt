@@ -1222,12 +1222,12 @@ async function fSpendOneMeta(metaColor, pendingChangesMap) {
 
 // fPerformStandardRolls ///////////////////////////////////////////////////////////////////
 // Purpose -> Handles the standard rolling loop for abilities targeting a specific difficulty
-//            (either from a '^' morph or non-'Atk'/'Def'/'DMG'/'AR' roll types). Calculates rolls,
-//            builds log lines, and appends them to the initial header HTML.
-//            Includes wound summation for multi-roll 'AR' and 'DMG' types.
+//            (either from a '^' morph or non-'Atk'/'Def'/'DMG'/'AR' roll types).
+//            Calculates rolls, builds log lines, and appends them to the initial header HTML.
+//            Includes wound summation and Apply button for multi-roll 'AR' and 'DMG' types.
 // Inputs  -> initialLogHtml (String): The pre-built log header string (costs, title, morph).
-// Outputs -> (String): The complete HTML string for the log entry (header + roll lines + optional total).
-// MODIFIED: Added wound summation for multi-roll 'DMG' types with explicit difficulty.
+// Outputs -> (String): The complete HTML string for the log entry (header + roll lines + optional total + button).
+// MODIFIED: Added Apply Wounds button to multi-roll AR total line.
 function fPerformStandardRolls(initialLogHtml) {
     const multiRollCount = gUI.roll.multiRollCount;
     const resTypLower = (gUI.roll.resTyp || '').toLowerCase(); // Get roll type
@@ -1287,13 +1287,15 @@ function fPerformStandardRolls(initialLogHtml) {
     if (multiRollCount > 1) { // Only add total if more than one roll occurred
         if (isArmorRoll) {
             finalLogHtml += '<br>↓'; // Add separator
-            // Wrap the Total Wounds line in the red-bold span
-            finalLogHtml += `<br><span class="red-bold">Total Wounds to PC = ${totalWoundsOverall}</span>`;
-            fMyConsoleLog(`      -> Added Total AR Wounds line: ${totalWoundsOverall}`);
+            // Wrap the Total Wounds line in the red-bold span and add button
+            const positiveWoundAmount = Math.abs(totalWoundsOverall); // Store the absolute value
+            finalLogHtml += `<br><span class="red-bold">Total Wounds to PC = ${totalWoundsOverall}</span> <button class="apply-wounds-btn" data-wound-amount="${positiveWoundAmount}">Apply</button>`;
+            fMyConsoleLog(`      -> Added Total AR Wounds line: ${totalWoundsOverall} (Button amount: ${positiveWoundAmount})`);
         } else if (isDamageRoll) {
              finalLogHtml += '<br>↓'; // Add separator
              // Standard bold, positive sign prefix
              finalLogHtml += `<br><span style="font-weight:bold;">Total Wounds = +${totalWoundsOverall}</span>`;
+             // Note: No "Apply" button needed for damage dealt TO monsters currently.
              fMyConsoleLog(`      -> Added Total DMG Wounds line: +${totalWoundsOverall}`);
         }
     }
@@ -1803,13 +1805,12 @@ async function fPerformPlayerDefenseRolls(initialLogHtml) {
 // Purpose -> Handles 'AR' rolls against monsters listed in the grid when no explicit
 //            difficulty morph ('^') is provided. Uses MonDmg column for difficulty.
 //            Calculates wounds based on -(MonDmg / PlayerARRoll). Sums and logs wounds.
-//            (STAGE 4: Added Wound Calculation, Summation, and Logging)
+//            (STAGE 5: Added Apply Wounds button)
 // Inputs  -> initialLogHtml (String): The pre-built log header string.
 // Outputs -> (Promise<Object>): Resolves with { logHtml: String, success: Boolean }.
-// MODIFIED: Added red-bold class to Total Wounds line.
+// MODIFIED: Added Apply Wounds button to the Total Wounds line.
 async function fPerformPlayerArmorRolls(initialLogHtml) {
-    fMyConsoleLog("   -> Entering Player Armor Logic (Stage 4)...");
-
+    fMyConsoleLog("   -> Entering Player Armor Logic (Stage 5)...");
     // --- 1. Get Monster Table Range ---
     const monsterRangeDef = gUI.range?.monsters;
     if (!monsterRangeDef || !fIsValidRangeObject(monsterRangeDef)) {
@@ -1832,7 +1833,6 @@ async function fPerformPlayerArmorRolls(initialLogHtml) {
     const cNumMon = resolveCol('NumMon');
     const cMonDmg = resolveCol('MonDmg'); // <<< USE MonDmg column tag
     const cMonName = resolveCol('MonName');
-
     if ([cNumMon, cMonDmg, cMonName].some(isNaN)) {
          const msg = "Could not resolve required monster column tags (NumMon, MonDmg, MonName).";
          console.warn(`fPerformPlayerArmorRolls: ${msg}`);
@@ -1840,7 +1840,6 @@ async function fPerformPlayerArmorRolls(initialLogHtml) {
          return { logHtml: '', success: false };
     }
      fMyConsoleLog(`      -> Monster Table Range: Rows ${rMin}-${rMax}, Cols Dmg:${cMonDmg}, Num:${cNumMon}, Name:${cMonName}`);
-
     // --- 3. Identify & Validate Targets (Using MonDmg) ---
     const monsterTargets = [];
     const firstMonsterRowIndex = rMin; // Index of the 'Custom' row
@@ -1899,7 +1898,6 @@ async function fPerformPlayerArmorRolls(initialLogHtml) {
 
         gUI.roll.resDif = ''; // Clear difficulty for standard roll
         fMyConsoleLog("         -> Cleared resDif for standard roll.");
-
         const standardRollHtml = fPerformStandardRolls(initialLogHtml);
         return { logHtml: standardRollHtml, success: true };
         // --- End Fallback ---
@@ -1920,7 +1918,6 @@ async function fPerformPlayerArmorRolls(initialLogHtml) {
         monsterLogLines.push('↓');
         // Monster name header
         monsterLogLines.push(`--- <span style="color: purple; font-weight: bold;">Mon: ${target.monName}</span> (Dmg: ${target.monDmg}) ---`);
-
         // Set difficulty for this armor roll using Monster Damage
         gUI.roll.resDif = target.monDmg; // <<< Use Monster Damage as Difficulty
 
@@ -1957,23 +1954,20 @@ async function fPerformPlayerArmorRolls(initialLogHtml) {
         } // End inner roll loop
 
         // Add Wound Summation Line for this monster
-        // (Keep bold, no color change needed here per original example)
         monsterLogLines.push(`<span style="font-weight:bold;">${target.monName} Wounds to PC = ${totalWoundsPerMonster}</span>`);
         fMyConsoleLog(`   --- Finished Rolling vs: ${target.monName} (Wounds This Monster: ${totalWoundsPerMonster}) ---`);
-
     } // End monster target loop
 
-    // Add Overall Wound Summation Line
+    // Add Overall Wound Summation Line with Apply Button
     monsterLogLines.push('↓'); // Add separator
-    // <<< Wrap the Total Wounds line in the red-bold span >>>
-    monsterLogLines.push(`<span class="red-bold">Total Wounds to PC = ${totalWoundsOverall}</span>`);
-    fMyConsoleLog(`      -> Overall Wounds Inflicted on PC: ${totalWoundsOverall}`);
-
+    const positiveWoundAmount = Math.abs(totalWoundsOverall); // Store the absolute value for the button
+    // Add red-bold class to the text part. Add button HTML after the text.
+    monsterLogLines.push(`<span class="red-bold">Total Wounds to PC = ${totalWoundsOverall}</span> <button class="apply-wounds-btn" data-wound-amount="${positiveWoundAmount}">Apply</button>`);
+    fMyConsoleLog(`      -> Overall Wounds Inflicted on PC: ${totalWoundsOverall} (Button amount: ${positiveWoundAmount})`);
     // --- 6. Return Result ---
     const finalLogHtml = initialLogHtml + '<br>' + monsterLogLines.join('<br>');
     fMyConsoleLog("   -> Player Armor Logic Complete.");
     return { logHtml: finalLogHtml, success: true };
-
 } // END fPerformPlayerArmorRolls
 
 

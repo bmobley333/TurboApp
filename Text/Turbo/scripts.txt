@@ -2564,6 +2564,98 @@ function fHideSidebar() {
 
 
 
+// fHandleApplyWoundsClick ////////////////////////////////////////////////////////
+// Purpose -> Handles clicks on the dynamically added "Apply" wounds button in the sidebar.
+// Inputs  -> event (MouseEvent): The click event object.
+// Outputs -> None (Modifies grid data/DOM via helpers).
+async function fHandleApplyWoundsClick(event) {
+    const button = event.target; // The element that was actually clicked
+
+    // --- Validate: Ensure it's the correct button ---
+    if (!button || !button.classList.contains('apply-wounds-btn')) {
+        // Click was not on an apply button, ignore
+        return;
+    }
+    fMyConsoleLog(`🖱️ Sidebar 'Apply Wounds' Button Clicked...`);
+
+    // --- Prevent accidental double-clicks ---
+    if (button.disabled) {
+        fMyConsoleLog("   -> Button already disabled. Ignoring click.");
+        return;
+    }
+    button.disabled = true; // Disable immediately
+    button.textContent = 'Applied'; // Change text
+
+    // --- Get Wound Amount ---
+    const woundAmountStr = button.dataset.woundAmount;
+    const woundAmount = Number(woundAmountStr);
+    if (isNaN(woundAmount) || woundAmount < 0) { // Should be positive from data attribute
+        console.error(`Invalid wound amount stored on button: ${woundAmountStr}`);
+        fMyConsoleLog(`❌ Error applying wounds: Invalid amount '${woundAmountStr}'.`);
+        await fShowMessage("Error: Could not read a valid wound amount from the button.");
+        // Re-enable button on error? Maybe not, state might be inconsistent.
+        return;
+    }
+    fMyConsoleLog(`   -> Wound Amount to Apply: ${woundAmount}`);
+
+    // --- Get Current 1st Degree Wounds ---
+    const targetRow = 'VitTbl';
+    const targetCol = 'vit1st';
+    let currentVit1st = fGetGridValue(targetRow, targetCol, true); // Get as number
+    if (isNaN(currentVit1st)) {
+        fMyConsoleLog(`   -> Warning: Current value in ('${targetRow}', '${targetCol}') is not a number. Treating as 0.`);
+        currentVit1st = 0; // Default to 0 if NaN or empty
+    }
+    fMyConsoleLog(`   -> Current 1st Degree Wounds: ${currentVit1st}`);
+
+    // --- Calculate New Value ---
+    const newWoundValue = Math.round(currentVit1st + woundAmount); // Add the positive wounds
+    fMyConsoleLog(`   -> Calculated New 1st Degree Wounds: ${newWoundValue}`);
+
+    // --- Update Grid ---
+    if (!fSetGridValue(targetRow, targetCol, newWoundValue)) {
+        fMyConsoleLog(`❌ Error applying wounds: fSetGridValue failed for ('${targetRow}', '${targetCol}').`);
+        await fShowMessage("Error: Failed to update the 1st Degree Wounds cell.");
+        // Consider what to do with the button state here if applying fails
+        return;
+    }
+
+    // --- Update Dependent Cells (Vit Now, Percent) ---
+    fMyConsoleLog("   -> Recalculating Vit Now & Percent...");
+    await fVitNowNPercent_Calc();
+
+    fMyConsoleLog("✅ Wounds Applied Successfully.");
+
+} // END fHandleApplyWoundsClick
+
+
+
+
+// fSetupSidebarActionListeners ///////////////////////////////////////////////////
+// Purpose -> Sets up delegated event listeners for interactive elements within the sidebar.
+// Inputs  -> None.
+// Outputs -> None.
+function fSetupSidebarActionListeners() {
+    fMyConsoleLog("🖱️ Setting up Sidebar Action Listeners...");
+    const sidebarContent = document.getElementById('sidebar-content');
+
+    if (!sidebarContent) {
+        console.error("Cannot setup sidebar listeners: #sidebar-content element not found.");
+        fMyConsoleLog("⚠️ Sidebar Action Listeners NOT Attached (content area missing).");
+        return;
+    }
+
+    // Delegated listener for Apply Wounds buttons
+    sidebarContent.addEventListener('click', fHandleApplyWoundsClick);
+
+    // Add other delegated listeners here if needed in the future
+
+    fMyConsoleLog("✅ Sidebar Action Listeners Attached.");
+
+} // END fSetupSidebarActionListeners
+
+
+
 // ==========================================================================
 // === Menu Bar Setup                 (End of Sidebar) ===
 // ==========================================================================
@@ -4160,10 +4252,11 @@ function fLoadGameSheet() {
 // DOMContentLoaded Hook //////////////////////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Starts the UI logic and listeners once the page DOM is ready
 window.addEventListener("DOMContentLoaded", () => {
-    fLoadGameSheet(); 
+    fLoadGameSheet();
     fSetupMenuInteractivity();
     fSetupMessageModalListeners();
-    fSetupPromptModalListeners(); 
+    fSetupPromptModalListeners();
+    fSetupSidebarActionListeners(); // <<< ADD THIS LINE
 });
 
 
