@@ -2443,8 +2443,110 @@ async function fExecuteNishSequence() {
 } // END fExecuteNishSequence
 
 
+
+
 // ==========================================================================
-// === Base Die Rolling          (End of Nish ) ===
+// === Grid Roll (Chaos/d,D)          (End of Nish ) ===
+// ==========================================================================
+
+
+
+
+// fHandleChaosGemClick /////////////////////////////////////////////////////////////
+// Purpose -> Checks if the clicked cell coordinates correspond to a usable Chaos Gem.
+//            If so, decrements uses and logs to sidebar. Called by <Roll> button handler.
+// Inputs  -> r (Number): Row index of the clicked cell.
+//         -> c (Number): Column index of the clicked cell.
+// Outputs -> (Promise<Boolean>): Resolves true if a Chaos Gem was successfully handled, false otherwise.
+async function fHandleChaosGemClick(r, c) { // Accepts r, c parameters
+    fMyConsoleLog("💎 Checking for Chaos Gem click...");
+
+    // --- 1. Validate Input Coords ---
+    // No need to read from gUI.cellClickInfo here
+    if (r === null || c === null || isNaN(r) || isNaN(c)) {
+        fMyConsoleLog("   -> Cannot check Chaos Gem: Invalid coordinates passed.");
+        return false; // Invalid coordinates passed
+    }
+
+    // --- 2. Get Chaos Gem Range Definition & Validate ---
+    const chaosRangeDef = gUI.range?.chaosGems; // [cite: 1116]
+    if (!chaosRangeDef || !fIsValidRangeObject(chaosRangeDef)) { //
+        fMyConsoleLog("   -> Cannot check Chaos Gem: Range definition missing/invalid.");
+        // Don't show user message here, as this check happens on every Roll button click
+        return false;
+    }
+
+    // --- 3. Resolve Range & Check if Click Was Inside ---
+    const resolved = fResolveRangeIndices(chaosRangeDef); //
+    if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
+        fMyConsoleLog(`   -> Cannot check Chaos Gem: Failed to resolve range tags: ${JSON.stringify(chaosRangeDef)}`);
+        return false;
+    }
+    const rMin = Math.min(resolved.r1, resolved.r2);
+    const rMax = Math.max(resolved.r1, resolved.r2);
+    const cMin = Math.min(resolved.c1, resolved.c2);
+    const cMax = Math.max(resolved.c1, resolved.c2);
+
+    if (r < rMin || r > rMax || c < cMin || c > cMax) {
+        fMyConsoleLog(`   -> Click [${r}, ${c}] is outside Chaos Gem range [${rMin}-${rMax}, ${cMin}-${cMax}].`);
+        return false; // Click was not in the Chaos Gem area
+    }
+    fMyConsoleLog(`   -> Click [${r}, ${c}] is inside Chaos Gem range.`);
+
+    // --- 4. Check Conditions (Uses & Ability Text) ---
+    const usesCol = resolveCol('ChaosUses'); //
+    const abilityCol = resolveCol('ChaosAbility'); //
+
+    if (isNaN(usesCol) || isNaN(abilityCol)) {
+        fMyConsoleLog("   -> Cannot check Chaos Gem: Could not resolve 'ChaosUses' or 'ChaosAbility' column tags.");
+        await fShowMessage("Error: Chaos Gem column tags are not defined correctly."); //
+        return false; // Indicate failure, as configuration is wrong
+    }
+
+    const currentUses = fGetGridValue(r, usesCol, true); // Get as number
+    const abilityText = fGetGridValue(r, abilityCol); //
+
+    if (isNaN(currentUses) || currentUses < 1) {
+        fMyConsoleLog(`   -> Chaos Gem condition unmet: Uses are ${currentUses}.`);
+        await fShowMessage("Chaos Crystal has no uses left!"); //
+        return false; // Not enough uses, but don't treat as an error, just unmet condition
+    }
+
+    if (!abilityText || String(abilityText).trim() === '') {
+        fMyConsoleLog(`   -> Chaos Gem condition unmet: Ability text is empty.`);
+        await fShowMessage("Chaos Crystal has no ability text defined!"); //
+        return false; // No ability text, unmet condition
+    }
+
+    // --- 5. Conditions Met - Perform Actions ---
+    fMyConsoleLog(`   -> Chaos Gem conditions met: Uses=${currentUses}, Ability="${String(abilityText).substring(0,30)}..."`);
+    const newUses = currentUses - 1;
+
+    // Update Grid
+    if (!fSetGridValue(r, usesCol, newUses)) { //
+        fMyConsoleLog(`   -> ❌ Failed to update ChaosUses cell [${r}, ${usesCol}].`);
+        await fShowMessage("Error: Failed to update Chaos Crystal uses."); //
+        // Return true because we *did* handle the gem click, even if update failed? Or false?
+        // Let's return true, indicating the click was processed as a gem click, preventing standard roll.
+        return true;
+    }
+
+    // Build Sidebar Message
+    const sidebarMsg = `<span class="blue-bold">Chaos Crystal</span> (${newUses} Uses Left):<br>${String(abilityText).trim()}`;
+
+    // Update Sidebar
+    fPrependToSidebar(sidebarMsg); //
+    fShowSidebar(); //
+
+    fMyConsoleLog("✅ Chaos Gem Used Successfully.");
+    return true; // Signal that the gem was handled
+
+} // END fHandleChaosGemClick
+
+
+
+// ==========================================================================
+// === Base Die Rolling          (End of Grid Roll (Chaos/d,D) ) ===
 // ==========================================================================
 
 

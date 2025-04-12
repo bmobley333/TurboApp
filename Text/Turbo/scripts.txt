@@ -17,6 +17,8 @@ const gUI = {
   notes: [],      // <<< NEW: 2D array of cell notes (parallel to arr)
   grid2D: [],     // 2D array holding references to the created cell DOM elements
   pendingChangesMap: {}, // Holds { 'r,c': newValue } during ability roll cost verification steps (or similar process)
+  cellClickInfo: { r: null, c: null, text: null }, // Info about the last clicked cell
+
 
   // Add the manual border definitions here:
   manualBorderSections: [
@@ -167,7 +169,8 @@ const gUI = {
     isONDur: [ 
       { r1: 'NishAtr_R', c1: 'On', r2: 'AbilTblEnd_R', c2: 'On' },
       { r1: 'GearTblStart_R', c1: 'On', r2: 'GearTblEnd_R', c2: 'On' }
-    ]
+    ],
+    chaosGems: { r1: 'Chaos1', c1: 'ChaosUses', r2: 'ChaosWrist', c2: 'ChaosAbility' }
   },
     list: {
     // array lists
@@ -1928,34 +1931,76 @@ function fUncheckOldSkGroupBox(oldR, oldC) {
 
 // fHandleGridClick ///////////////////////////////////////////////////////////////////////////////
 // Delegated click handler for cells: routes to header buttons, checkboxes, URLs, etc.
+// MODIFIED: Updates gUI.cellClickInfo with details of the clicked cell.
 // MODIFIED: 'action-rollDice' case now calls fHandleRollDiceAction
-function fHandleGridClick(event) {
+// REVERTED: Removed check for <Roll> button state and calls to Chaos/Standard Roll handlers.
+async function fHandleGridClick(event) { // Keep async for potential future needs
     const target = event.target;
 
     // --- Check for Header Button Click FIRST ---
     const buttonImg = target.closest('.header-button-img[data-button-action]');
     if (buttonImg) {
-        fHandleHeaderButtonClick(event, buttonImg);
+        fHandleHeaderButtonClick(event, buttonImg); //
+        // Returning here means cellClickInfo is NOT updated for header button clicks.
         return; // Handled the button click
     }
 
-    // --- End Header Button Check ---
+    // --- Get the Cell Element ---
     const cellDiv = target.closest('.cell');
-    if (!cellDiv) return;
+    if (!cellDiv) return; // Click was not inside a grid cell
 
-    if (fIsCheckboxClick(target)) {
-        fHandleGridCheckboxClick(event);
+    // --- Update gUI.cellClickInfo ---
+    try {
+        const r_str = cellDiv.dataset.r;
+        const c_str = cellDiv.dataset.c;
+        const r = parseInt(r_str, 10);
+        const c = parseInt(c_str, 10);
+        const text = cellDiv.textContent?.trim() ?? ''; // Get visible text
+
+        if (!isNaN(r) && !isNaN(c)) {
+            gUI.cellClickInfo = { r, c, text };
+            // Shortened log message for clarity
+            fMyConsoleLog(`🖱️ Cell Click: [${r}, ${c}]`);
+        } else {
+            console.warn(`fHandleGridClick: Invalid row/col data attributes found: r='<span class="math-inline">\{r\_str\}', c\='</span>{c_str}'`);
+            gUI.cellClickInfo = { r: null, c: null, text: null }; // Clear if invalid
+        }
+    } catch (e) {
+        console.error("Error updating gUI.cellClickInfo:", e);
+        gUI.cellClickInfo = { r: null, c: null, text: null }; // Clear on error
+    }
+    // --- End Update gUI.cellClickInfo ---
+
+
+    // --- <<< REMOVED Chaos Gem / Standard Roll Check Block >>> ---
+    // The logic is now handled directly within the #btn-roll listener
+
+
+    // --- Existing Click Routing Logic (Handles clicks not related to Roll button state) ---
+    if (fIsCheckboxClick(target)) { //
+        fHandleGridCheckboxClick(event); // Handles its own logic
         return;
     }
 
-    if (fIsEditableCell(cellDiv)) return;
-
-    if (fIsUrlLinkCell(cellDiv)) {
-        fHandleUrlClick(cellDiv);
+    // If clicking inside an already focused editable cell, do nothing further here
+    if (fIsEditableCell(cellDiv) && document.activeElement === cellDiv) { // [cite: 1518]
         return;
     }
 
-    // Future: Add general cell click behaviors here
+    // Allow click to focus an editable cell, but don't treat as URL etc.
+    if (fIsEditableCell(cellDiv)) { // [cite: 1518]
+        return;
+    }
+
+
+    if (fIsUrlLinkCell(cellDiv)) { // [cite: 1519]
+        fHandleUrlClick(cellDiv); // Handles URL logic
+        return;
+    }
+
+    // Fallback for general cell clicks not handled above
+    // fMyConsoleLog(`General click on non-interactive cell [${gUI.cellClickInfo.r}, ${gUI.cellClickInfo.c}]`);
+
 } // END fHandleGridClick
 
 
@@ -2678,23 +2723,57 @@ function fSetupSidebarActionListeners() {
 // Purpose -> Adds click listeners to the main menu bar buttons (Nish, Roll, Free, Luck, Game, Gear).
 // MODIFIED: Listener for 'Nish' button now calls fHandleNishButtonClick.
 // MODIFIED: Listeners for Roll, Free, Luck now call fSetButtonOrMenuState then fHandleRollDiceAction.
+// MODIFIED: Listener for 'Roll' button now checks context (last click) and calls appropriate handler directly.
 function fSetupMenuButtonListeners(btnNish, btnRoll, btnFree, btnLuck, btnGame, dropdownGame, btnGear, dropdownGear) {
 
-    // Listener for 'Nish' button <<< UPDATED
-    btnNish.addEventListener('click', fHandleNishButtonClick); // Call the new dedicated handler
+    // Listener for 'Nish' button <<< Calls dedicated handler
+    btnNish.addEventListener('click', fHandleNishButtonClick); //
 
-    // Listener for 'Roll' button (Sets state, then calls main handler)
-    btnRoll.addEventListener('click', (event) => {
+    // Listener for 'Roll' button <<< MODIFIED: Checks context, calls handler >>>
+    btnRoll.addEventListener('click', async (event) => { // <<< Made async
         event.stopPropagation();
-        fCloseAllDropdowns();
+        fCloseAllDropdowns(); //
         fSetButtonOrMenuState('Roll'); // Set state
-        fHandleRollDiceAction();       // Call main handler
-    });
+
+        // --- Check Context and Decide Action ---
+        const { r: lastClickR, c: lastClickC } = gUI.cellClickInfo; // Get coords of last cell click
+
+        // --- Attempt Chaos Gem First ---
+        let chaosGemHandled = false;
+        if (lastClickR !== null && lastClickC !== null) { // Only try if a cell was clicked previously
+             fMyConsoleLog(`   -> <Roll> Click: Checking Chaos Gem for last clicked cell [${lastClickR}, ${lastClickC}]...`);
+             chaosGemHandled = await fHandleChaosGemClick(lastClickR, lastClickC); // Pass coords
+        } else {
+             fMyConsoleLog("   -> <Roll> Click: No previous cell click info for Chaos Gem check.");
+        }
+
+
+        // --- If Chaos Gem Not Handled, Try Standard Roll ---
+        if (!chaosGemHandled) {
+             fMyConsoleLog("   -> <Roll> Click: Chaos Gem not used. Checking for active Sk checkbox...");
+             const { r: checked_r, c: checked_c } = gUI.currentSkRadioChecked;
+             if (checked_r !== null && checked_c !== null) {
+                 fMyConsoleLog(`   -> <Roll> Click: Active Sk checkbox [${checked_r}, ${checked_c}] found. Triggering standard roll...`);
+                 await fHandleRollDiceAction(); // Await standard roll
+                 // fHandleRollDiceAction resets state on completion/failure
+             } else {
+                 fMyConsoleLog("   -> <Roll> Click: No Chaos Gem used AND no active Sk checkbox. No action taken.");
+                 await fShowMessage("Click on an ability checkbox or a usable Chaos Crystal first!"); //
+                 fSetButtonOrMenuState(null); // Reset state if no action occurred
+             }
+        } else {
+            // Chaos Gem *was* handled by fHandleChaosGemClick
+             fMyConsoleLog("   -> <Roll> Click: Chaos Gem action completed.");
+             fSetButtonOrMenuState(null); // Reset state after successful gem use
+        }
+        // --- End Context Check ---
+    }); // End Roll button listener
+
 
     // Listener for 'Free' button (Sets state, then calls main handler)
     btnFree.addEventListener('click', (event) => {
         event.stopPropagation();
-        fCloseAllDropdowns();
+        fCloseAllDropdowns(); //
         fSetButtonOrMenuState('Free'); // Set state
         fHandleRollDiceAction();       // Call main handler
     });
@@ -2702,7 +2781,7 @@ function fSetupMenuButtonListeners(btnNish, btnRoll, btnFree, btnLuck, btnGame, 
     // Listener for 'Luck' button (Sets state, then calls main handler)
     btnLuck.addEventListener('click', (event) => {
         event.stopPropagation();
-        fCloseAllDropdowns();
+        fCloseAllDropdowns(); //
         fSetButtonOrMenuState('Luck'); // Set state
         fHandleRollDiceAction();       // Call main handler
     });
@@ -2726,7 +2805,6 @@ function fSetupMenuButtonListeners(btnNish, btnRoll, btnFree, btnLuck, btnGame, 
             dropdownGear.classList.add('show');
         }
     });
-
 }; // END fSetupMenuButtonListeners
 
 
