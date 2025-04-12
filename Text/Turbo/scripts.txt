@@ -4189,6 +4189,7 @@ function fToggleGearColumns() {
 // fHandleHeaderButtonClick ///////////////////////////////////////////////////////////////////////
 // Routes header button clicks to specific action handlers.
 // MODIFIED: Added call to fRefreshMonsterData for action-showMonsters
+// MODIFIED: 'action-rollDice' case now simulates a click on the main #btn-roll button.
 function fHandleHeaderButtonClick(event, buttonImg) {
     const action = buttonImg.dataset.buttonAction;
     fMyConsoleLog(`🖱️ Header Button Clicked: ${action}`);
@@ -4199,7 +4200,17 @@ function fHandleHeaderButtonClick(event, buttonImg) {
 
     switch (action) {
         case 'action-rollDice':
-            fHandleRollDiceAction();
+            // Simulate a click on the main Roll button in the menu bar
+            const rollButton = document.getElementById('btn-roll');
+            if (rollButton) {
+                fMyConsoleLog("   -> Simulating click on #btn-roll...");
+                rollButton.click();
+            } else {
+                console.error("fHandleHeaderButtonClick: Could not find #btn-roll element to simulate click!");
+                fMyConsoleLog("   -> ❌ Error: Could not find #btn-roll.");
+                // Optional: Show error message to user?
+                // fShowMessage("Error: Could not find the main Roll button.");
+            }
             break;
         case 'action-refreshData':
             console.log("ACTION: Refresh Data button clicked (logic pending)");
@@ -4211,8 +4222,7 @@ function fHandleHeaderButtonClick(event, buttonImg) {
             fScrollGridToBottom(grid);
             break;
         case 'action-showMonsters':
-            // console.log("ACTION: Show Monsters button clicked (logic pending)"); // OLD
-            fRefreshMonsterData(); // <<< NEW: Call the refresh function
+            fRefreshMonsterData(); // Call the refresh function
             break;
         default:
             console.warn(`Unhandled header button action: ${action}`);

@@ -356,7 +356,7 @@ body {
 #sidebar-content p {
   margin-top: 0;
   /* Increase margin-bottom for more space between entries */
-  margin-bottom: 1.2em; /* Adjust value as needed (e.g., 1em, 1.5em) */
+  margin-bottom: 2.5em; /* Adjust value as needed (e.g., 1em, 1.5em) */
   line-height: 1.3;
 }
 
