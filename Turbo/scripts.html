@@ -64,7 +64,13 @@ const gUI = {
     // { r1: 0, r2: 1 } // Example: Range using indices
   ],
   // Current Roll object
-roll: {
+  buttonOrMenu: { // Tracks the source of the current button or menu acton
+    isNish: false, // Nish button pressed
+    isRoll: false, // Standard Roll button pressed
+    isFree: false, // Free button pressed
+    isLuck: false // Luck button pressed
+  },
+  roll: {
     // --- Input values from Sheet (populated by fResetPopulateNCleanGUIRoll) ---
     sk1CB: false,        // Flag: True if roll originated from Sk1 CheckBox column, false if Sk2
     ability_R: '',               // 0-based row index of the ability/gear being rolled
@@ -2663,26 +2669,44 @@ function fSetupSidebarActionListeners() {
 
 
 // fSetupMenuButtonListeners ///////////////////////////////////////////////////////////////////////////////////////////
-// Purpose -> Adds click listeners to the main menu bar buttons (Nish, Roll, Game, Gear).
-// MODIFIED: Added btnRoll parameter and listener
-// MODIFIED: btnRoll listener now calls fHandleRollDiceAction
-function fSetupMenuButtonListeners(btnNish, btnRoll, btnGame, dropdownGame, btnGear, dropdownGear) { // <<< Added btnRoll
+// Purpose -> Adds click listeners to the main menu bar buttons (Nish, Roll, Free, Luck, Game, Gear).
+// MODIFIED: Listeners for Roll, Free, Luck now call fSetButtonOrMenuState then fHandleRollDiceAction.
+function fSetupMenuButtonListeners(btnNish, btnRoll, btnFree, btnLuck, btnGame, dropdownGame, btnGear, dropdownGear) {
 
     // Listener for 'Nish' button (Direct Action)
     btnNish.addEventListener('click', (event) => {
         event.stopPropagation();
         fCloseAllDropdowns();
+        // fSetButtonOrMenuState('Nish'); // Example if Nish button were to trigger a state
         console.log("ACTION: Nish button clicked (logic pending)");
         fMyConsoleLog("🖱️ Nish Clicked");
         // @@ Add logic for Nish button here later
     });
 
-    // Listener for 'Roll' button (Direct Action) // <<< UPDATED LISTENER
+    // Listener for 'Roll' button (Direct Action) <<< UPDATED
     btnRoll.addEventListener('click', (event) => {
         event.stopPropagation();
         fCloseAllDropdowns();
-        fHandleRollDiceAction(); // <<< Call the shared action function
+        fSetButtonOrMenuState('Roll'); // <<< Set state
+        fHandleRollDiceAction();       // <<< Call main handler
     });
+
+    // Listener for 'Free' button (Direct Action) <<< UPDATED
+    btnFree.addEventListener('click', (event) => {
+        event.stopPropagation();
+        fCloseAllDropdowns();
+        fSetButtonOrMenuState('Free'); // <<< Set state
+        fHandleRollDiceAction();       // <<< Call main handler
+    });
+
+    // Listener for 'Luck' button (Direct Action) <<< UPDATED
+    btnLuck.addEventListener('click', (event) => {
+        event.stopPropagation();
+        fCloseAllDropdowns();
+        fSetButtonOrMenuState('Luck'); // <<< Set state
+        fHandleRollDiceAction();       // <<< Call main handler
+    });
+
 
     // Listener for 'Game' button (Toggle Dropdown)
     btnGame.addEventListener('click', (event) => {
@@ -2706,6 +2730,45 @@ function fSetupMenuButtonListeners(btnNish, btnRoll, btnGame, dropdownGame, btnG
 
 }; // END fSetupMenuButtonListeners
 
+
+
+
+// fSetButtonOrMenuState ///////////////////////////////////////////////////////////////////
+// Purpose -> Sets the state of the gUI.buttonOrMenu object to indicate which
+//            button/menu item initiated the current roll action. Resets all flags first.
+// Inputs  -> buttonType (String | null): The type of button ('Roll', 'Free', 'Luck', 'Nish', etc.)
+//                                         or null to reset all flags to false.
+// Outputs -> None (modifies gUI.buttonOrMenu).
+function fSetButtonOrMenuState(buttonType) {
+    const validTypes = { // Map input string to the gUI property name
+        'Nish': 'isNish',
+        'Roll': 'isRoll',
+        'Free': 'isFree',
+        'Luck': 'isLuck'
+        // Add other mappings here if needed later
+    };
+
+    // Reset all flags first
+    for (const key in gUI.buttonOrMenu) {
+        if (Object.hasOwnProperty.call(gUI.buttonOrMenu, key)) {
+            gUI.buttonOrMenu[key] = false;
+        }
+    }
+
+    // Set the specific flag if a valid type is provided
+    if (buttonType && validTypes[buttonType]) {
+        const flagToSet = validTypes[buttonType];
+        gUI.buttonOrMenu[flagToSet] = true;
+        fMyConsoleLog(`🚦 Button/Menu State Set: ${flagToSet} = true`);
+    } else if (buttonType !== null) {
+        console.warn(`fSetButtonOrMenuState: Invalid buttonType provided: ${buttonType}`);
+        fMyConsoleLog(`🚦 Button/Menu State: Invalid type '${buttonType}', all flags remain false.`);
+    } else {
+        // If buttonType is null, just reset (already done above)
+        fMyConsoleLog("🚦 Button/Menu State Reset (all flags false).");
+    }
+
+} // END fSetButtonOrMenuState
 
 
 
@@ -4020,32 +4083,41 @@ function fSetupModalListeners() {
 
 // fSetupMenuInteractivity //////////////////////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Orchestrates the setup of all menu-related event listeners.
-// MODIFIED: Added btnRoll reference and check
+// MODIFIED: Added btnFree, btnLuck element retrieval and passing to fSetupMenuButtonListeners.
 function fSetupMenuInteractivity() {
     fMyConsoleLog("⚙️ Setting up Menu Interactivity...");
-
     // --- Get Element References ---
     const menuBar = document.getElementById('menu-bar');
     const btnNish = document.getElementById('btn-nish');
-    const btnRoll = document.getElementById('btn-roll'); // <<< Get Roll button ref
+    const btnRoll = document.getElementById('btn-roll');
+    const btnFree = document.getElementById('btn-free');     // <<< ADDED Get Element
+    const btnLuck = document.getElementById('btn-luck');     // <<< ADDED Get Element
     const btnGame = document.getElementById('btn-game-menu');
     const dropdownGame = document.getElementById('dropdown-game');
     const btnGear = document.getElementById('btn-gear-menu');
     const dropdownGear = document.getElementById('dropdown-gear');
     const sidebarCloseBtn = document.getElementById('sidebar-close-btn');
 
-    // Check if *main* elements exist before adding listeners
-    // Added check for btnRoll and sidebarCloseBtn
-    if (!menuBar || !btnNish || !btnRoll || !btnGame || !dropdownGame || !btnGear || !dropdownGear || !sidebarCloseBtn) { // <<< Added btnRoll check
+    // Check if *all* elements exist before adding listeners
+    // Added checks for btnFree, btnLuck
+    if (!menuBar || !btnNish || !btnRoll || !btnFree || !btnLuck || !btnGame || !dropdownGame || !btnGear || !dropdownGear || !sidebarCloseBtn) { // <<< ADDED btnFree, btnLuck checks
         console.error("❌ Could not find all required menu/sidebar elements for interactivity setup.");
-        if(!btnRoll) console.error("     -> Missing: #btn-roll"); // Log if specific button missing
+        // Add specific logs if needed
+        if(!btnNish) console.error("     -> Missing: #btn-nish");
+        if(!btnRoll) console.error("     -> Missing: #btn-roll");
+        if(!btnFree) console.error("     -> Missing: #btn-free"); // <<< ADDED Log
+        if(!btnLuck) console.error("     -> Missing: #btn-luck"); // <<< ADDED Log
+        if(!btnGame) console.error("     -> Missing: #btn-game-menu");
+        if(!dropdownGame) console.error("     -> Missing: #dropdown-game");
+        if(!btnGear) console.error("     -> Missing: #btn-gear-menu");
+        if(!dropdownGear) console.error("     -> Missing: #dropdown-gear");
         if(!sidebarCloseBtn) console.error("     -> Missing: #sidebar-close-btn");
         return; // Stop if essential elements are missing
     }
 
     // --- Call Helper Functions to Attach Listeners ---
-    // Pass btnRoll to the button listener setup function
-    fSetupMenuButtonListeners(btnNish, btnRoll, btnGame, dropdownGame, btnGear, dropdownGear); // <<< Pass btnRoll
+    // Pass ALL button references to the button listener setup function
+    fSetupMenuButtonListeners(btnNish, btnRoll, btnFree, btnLuck, btnGame, dropdownGame, btnGear, dropdownGear); // <<< UPDATED Call Signature
     fSetupWindowClickListener();
     fSetupDelegatedMenuActionClick(menuBar);
     fSetupSubMenuHover(menuBar);

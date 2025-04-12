@@ -6,24 +6,17 @@
 
 <div id="menu-bar">
 
-  <button id="btn-nish">Nish</button>
-  <button id="btn-roll">Roll</button>
-
+  <button id="btn-nish"><span class="button-icon">▶️</span> Nish</button>
+  <button id="btn-roll"><span class="button-icon">🎲</span> Roll</button>
+  <button id="btn-free"><span class="button-icon">🆓</span> Free</button>
+  <button id="btn-luck"><span class="button-icon">🍀</span> Luck</button>
   <div id="game-menu-item" class="menu-item">
-    <button id="btn-game-menu">Game</button>
+    <button id="btn-game-menu"><span class="button-icon">🎮</span> Game</button>
     <div id="dropdown-game" class="dropdown-content">
 
       <a href="#" data-action="game-nishStartEnd">Nish Start or End</a>
       <a href="#" data-action="game-toggleSidebar">Sidebar (Show/Hide)</a>
       <a href="#" data-action="game-gmAward">GM Award</a>
-
-      <div class="sub-menu-item">
-        <a href="#">Roll</a>
-        <div class="dropdown-content sub-menu">
-          <a href="#" data-action="game-rollLucked">Roll Lucked</a>
-          <a href="#" data-action="game-rollFree">Roll Free</a>
-        </div>
-      </div>
 
       <div class="sub-menu-item">
         <a href="#">Jump</a>
@@ -33,6 +26,7 @@
         </div>
       </div>
 
+      
       <div class="sub-menu-item">
         <a href="#">Meta</a>
         <div class="dropdown-content sub-menu">
@@ -57,6 +51,7 @@
         </div>
       </div>
 
+      
       <div class="sub-menu-item">
         <a href="#">Clear</a>
         <div class="dropdown-content sub-menu">
@@ -89,9 +84,10 @@
   </div>
 
   <div id="gear-menu-item" class="menu-item">
-    <button id="btn-gear-menu">Gear</button>
+    <button id="btn-gear-menu"><span class="button-icon">⚙️</span> Gear</button>
     <div id="dropdown-gear" class="dropdown-content">
       <a href="#" data-action="gear-toggleGear">Gear (Show/Hide)</a>
+   
       <a href="#" data-action="gear-loot">Loot</a>
 
       <div class="sub-menu-item">
@@ -102,12 +98,12 @@
           <a href="#" data-action="gear-lootGear">Gear</a>
           <a href="#" data-action="gear-lootGem">Gem (for socket)</a>
           <a href="#" data-action="gear-lootSocketed">Socketed Gear</a>
+    
           <a href="#" data-action="gear-lootValuables">Valuables</a>
         </div>
       </div>
     </div>
   </div>
-
 </div>
 
 <!-- ========================================================================== -->
