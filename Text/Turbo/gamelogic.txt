@@ -16,40 +16,34 @@
 // Purpose -> Top-level handler for "Roll Dice" action. Handles single or multi-rolls (# morph).
 //            Verifies target, populates gUI.roll, processes morphs (incl. #, 'free', 'luck').
 //            Verifies ALL costs (Luck and Standard, unless free roll) using pendingChangesMap.
-//            Branches based on roll type ('Atk', 'Def', 'DMG', standard) and difficulty morph ('^').
-//            Calls appropriate helper (fPerformStandardRolls, fPerformPlayerAttackRolls, fPerformPlayerDefenseRolls, fPerformPlayerDamageRolls).
+//            Branches based on roll type ('Atk', 'Def', 'DMG', 'AR', standard) and difficulty morph ('^').
+//            Calls appropriate helper (fPerformStandardRolls, fPerformPlayerAttackRolls, fPerformPlayerDefenseRolls, fPerformPlayerDamageRolls, fPerformPlayerArmorRolls).
 //            Applies costs from pendingChangesMap ONLY AFTER helper function succeeds.
 //            Builds initial log header, passes to helper, prepends final combined log ONCE.
 // Inputs  -> None (uses gUI.currentSkRadioChecked, gUI.roll).
 // Outputs -> None (updates gUI, DOM, and logs to sidebar).
-// MODIFIED: Added branching for resTyp === 'Def' to call fPerformPlayerDefenseRolls.
-// MODIFIED: Deferred ALL cost application (Luck, Standard) until AFTER roll helpers succeed.
-// MODIFIED: Luck cost verification now adds change to pendingChangesMap instead of applying directly.
-// MODIFIED: Prepends an extra blank PARAGRAPH before Player Attack/defense logs for spacing.
-// MODIFIED: Added branching for resTyp === 'DMG' to call fPerformPlayerDamageRolls.
+// MODIFIED: Added branching for resTyp === 'AR' to call fPerformPlayerArmorRolls.
 async function fHandleRollDiceAction() {
     fMyConsoleLog("🎲 Roll Dice Action Triggered");
-
     // --- 1. Initial Validation & Setup ---
     const { r, c } = gUI.currentSkRadioChecked;
     if (!await fValidateAbilityCB(r, c)) return;
     if (!await fResetPopulateNCleanGUIRoll(r, c)) return; // Populates gUI.roll
     if (!await fVerifyAbility()) return;
-
     await fProcessMorph(); // Processes morphs, populates flags & multiRollCount
 
     const multiRollCount = gUI.roll.multiRollCount;
     const isFreeRoll = gUI.roll.isFreeRoll;
     const isLuckedRoll = gUI.roll.isLuckedRoll;
     const resTyp = gUI.roll.resTyp; // <<< Keep accessible for final logging step
-    const hasDifficultyMorph = (typeof gUI.roll.resDif === 'number'); // <<< Keep accessible for final logging step
+    const hasDifficultyMorph = (typeof gUI.roll.resDif === 'number' && gUI.roll.resDif !== ''); // Check if number AND not empty string
+    // <<< Keep accessible for final logging step
 
     fMyConsoleLog(`   -> Roll Type: ${resTyp}`);
     fMyConsoleLog(`   -> Multi-Roll Count: ${multiRollCount}`);
     fMyConsoleLog(`   -> Is Free Roll: ${isFreeRoll}`);
     fMyConsoleLog(`   -> Is Lucked Roll: ${isLuckedRoll}`);
     fMyConsoleLog(`   -> Has Difficulty Morph (^): ${hasDifficultyMorph}`);
-
     // --- Initialize shared variables ---
     const pendingHeaders = [];
     let allCostsMet = true;
@@ -69,67 +63,65 @@ async function fHandleRollDiceAction() {
         });
     };
 
-
-    // --- 2. Verify ALL Costs (Luck and Standard, UNLESS Free Roll) ---
+    // --- 2. Verify ALL Costs (Luck and Standard, UNLESS Free Roll) --- //
     if (!isFreeRoll) {
         fMyConsoleLog("🛡️ Verifying Costs (Luck and/or Standard)...");
-
-        // --- 2a. Verify Luck Cost (if applicable) ---
+        // --- 2a. Verify Luck Cost (if applicable) --- //
         if (isLuckedRoll) {
             fMyConsoleLog("   -> Verifying Luck Cost...");
             const luckCost = 1;
             const currentLuck = fGetGridValue('LuckBox', 'LuckBox', true);
             if (isNaN(currentLuck)) {
-                await fShowMessage("❌ Error reading current Luck value. Cannot perform Lucked Roll.");
+                await fShowMessage("❌ Error reading current Luck value. Cannot perform Lucked Roll."); //
                 fMyConsoleLog("🚫 Failed Luck Cost Verification: Could not read LuckBox value.");
-                allCostsMet = false; // Halt
+                allCostsMet = false;
             } else if (currentLuck < luckCost) {
-                await fShowMessage("❌ Not Enough Luck!");
+                await fShowMessage("❌ Not Enough Luck!"); //
                 fMyConsoleLog("🚫 Failed Luck Cost Verification: Insufficient Luck.");
-                allCostsMet = false; // Halt
+                allCostsMet = false;
             } else {
                 // Sufficient luck, PREPARE the change
                 const newLuck = currentLuck - luckCost;
                 addChangesToMap([{ r: 'LuckBox', c: 'LuckBox', value: newLuck }]); // Add to map
-                pendingHeaders.push('⚠️ <span class="blue-bold">Lucked Roll Below:</span>'); // Prepare header
+                pendingHeaders.push('⚠️ <span class="blue-bold">Lucked Roll Below:</span>'); //
                 fMyConsoleLog(`      -> Luck Cost OK (${currentLuck} -> ${newLuck}). Change added to map.`);
             }
         }
         // --- End Luck Cost Verification ---
 
-        // --- 2b. Verify Standard Costs (ONLY if NOT Lucked Roll AND cost check hasn't already failed) ---
+        // --- 2b. Verify Standard Costs (ONLY if NOT Lucked Roll AND cost check hasn't already failed) --- //
         if (!isLuckedRoll && allCostsMet) {
             fMyConsoleLog("   -> Verifying Standard Costs...");
-            // Verify Uses
-            const usesResult = await fUses_VerifyAndProcessCost(multiRollCount);
-            if (!usesResult.success) { allCostsMet = false; userCancelled = true; }
-            else { addChangesToMap(usesResult.changes); pendingHeaders.push(...usesResult.headers); }
+            // Verify Uses //
+            const usesResult = await fUses_VerifyAndProcessCost(multiRollCount); //
+            if (!usesResult.success) { allCostsMet = false; userCancelled = true; } //
+            else { addChangesToMap(usesResult.changes); pendingHeaders.push(...usesResult.headers); } //
 
-            // Verify Act (if previous checks passed)
+            // Verify Act (if previous checks passed) //
             if (allCostsMet) {
-                const actResult = await fAct_VerifyAndProcessCost();
-                if (!actResult.success) { allCostsMet = false; userCancelled = true; }
-                else { addChangesToMap(actResult.changes); pendingHeaders.push(...actResult.headers); }
+                const actResult = await fAct_VerifyAndProcessCost(); //
+                if (!actResult.success) { allCostsMet = false; userCancelled = true; } //
+                else { addChangesToMap(actResult.changes); pendingHeaders.push(...actResult.headers); } //
             }
 
             // Prepare IsOn change (always succeeds, just adds to map)
             if (allCostsMet) {
-                const isOnResult = await fIsOn_VerifyAndProcessCost();
-                addChangesToMap(isOnResult.changes); pendingHeaders.push(...isOnResult.headers);
+                const isOnResult = await fIsOn_VerifyAndProcessCost(); //
+                addChangesToMap(isOnResult.changes); pendingHeaders.push(...isOnResult.headers); //
             }
 
             // Verify SkMeta (if previous checks passed)
             if (allCostsMet) {
-                const skMetaResult = await fSkMeta_VerifyAndProcessCost(gUI.pendingChangesMap);
-                if (!skMetaResult.success) { allCostsMet = false; } // Fail silently
-                else { addChangesToMap(skMetaResult.changes); pendingHeaders.push(...skMetaResult.headers); }
+                const skMetaResult = await fSkMeta_VerifyAndProcessCost(gUI.pendingChangesMap); //
+                if (!skMetaResult.success) { allCostsMet = false; } // Fail silently //
+                else { addChangesToMap(skMetaResult.changes); pendingHeaders.push(...skMetaResult.headers); } //
             }
 
             // Verify Focus Meta (if previous checks passed)
             if (allCostsMet) {
-                const focusMetaResult = await fFocus_VerifyAndProcessCost(gUI.pendingChangesMap);
-                if (!focusMetaResult.success) { allCostsMet = false; } // Fail silently
-                else { addChangesToMap(focusMetaResult.changes); pendingHeaders.push(...focusMetaResult.headers); }
+                const focusMetaResult = await fFocus_VerifyAndProcessCost(gUI.pendingChangesMap); //
+                if (!focusMetaResult.success) { allCostsMet = false; } // Fail silently //
+                else { addChangesToMap(focusMetaResult.changes); pendingHeaders.push(...focusMetaResult.headers); } //
             }
         }
         // --- End Standard Cost Verification ---
@@ -153,19 +145,17 @@ async function fHandleRollDiceAction() {
     let initialLogHtml = ''; // Start fresh
 
     // Add cost/notice headers collected during verification
-    pendingHeaders.forEach(header => initialLogHtml += `${header}<br>`);
-
+    pendingHeaders.forEach(header => initialLogHtml += `${header}<br>`); //
     // Add ability title/type
-    let title = `<span class="sidebar-ability-name">${gUI.roll.skName || 'Unknown Ability'}</span>`;
-    if (gUI.roll.skTyp) title += ` ${gUI.roll.skTyp}`;
-    if (gUI.roll.resTyp && gUI.roll.resTyp !== gUI.roll.skTyp) title += ` (<span class="red-bold">now</span> ${gUI.roll.resTyp})`;
+    let title = `<span class="sidebar-ability-name">${gUI.roll.skName || 'Unknown Ability'}</span>`; //
+    if (gUI.roll.skTyp) title += ` ${gUI.roll.skTyp}`; //
+    if (gUI.roll.resTyp && gUI.roll.resTyp !== gUI.roll.skTyp) title += ` (<span class="red-bold">now</span> ${gUI.roll.resTyp})`; //
     initialLogHtml += title;
 
     // Add morph string if present
-    const morph = (typeof gUI.roll.skMorph === 'string' && gUI.roll.skMorph !== ',') ? gUI.roll.skMorph.trim() : '';
-    if (morph) initialLogHtml += `<br>morph: ${morph}`;
-    initialLogHtml = initialLogHtml.trim();
-
+    const morph = (typeof gUI.roll.skMorph === 'string' && gUI.roll.skMorph !== ',') ? gUI.roll.skMorph.trim() : ''; //
+    if (morph) initialLogHtml += `<br>morph: ${morph}`; //
+    initialLogHtml = initialLogHtml.trim(); //
 
     // --- 4. Branch Based on Roll Type and Difficulty Morph --- <<< MODIFIED BLOCK
     let finalLogHtml = ''; // To hold combined log from helpers
@@ -176,9 +166,9 @@ async function fHandleRollDiceAction() {
     if (resTypLower === 'atk' && !hasDifficultyMorph) {
         // --- 4a. Player Attack ---
         fMyConsoleLog("⚔️ Performing Player Attack Rolls (Validation first)...");
-        const monsterRollResult = await fPerformPlayerAttackRolls(initialLogHtml);
+        const monsterRollResult = await fPerformPlayerAttackRolls(initialLogHtml); //
         if (monsterRollResult.success) {
-            finalLogHtml = monsterRollResult.logHtml;
+            finalLogHtml = monsterRollResult.logHtml; //
             helperSucceeded = true;
             wasMonsterInteractionRoll = true; // Mark as monster roll for spacing
             fMyConsoleLog("   -> Player Attack roll sequence completed.");
@@ -192,7 +182,7 @@ async function fHandleRollDiceAction() {
         fMyConsoleLog("🛡️ Performing Player Defense Rolls (Validation first)...");
         const monsterDefResult = await fPerformPlayerDefenseRolls(initialLogHtml); // Call new helper
         if (monsterDefResult.success) {
-            finalLogHtml = monsterDefResult.logHtml;
+            finalLogHtml = monsterDefResult.logHtml; //
             helperSucceeded = true;
             wasMonsterInteractionRoll = true; // Mark as monster roll for spacing
             fMyConsoleLog("   -> Player Defense roll sequence completed.");
@@ -201,12 +191,12 @@ async function fHandleRollDiceAction() {
             gUI.pendingChangesMap = {}; // Clear any prepared costs
             return; // Halt the entire action
         }
-    } else if (resTypLower === 'dmg' && !hasDifficultyMorph) { // <<< --- NEW BRANCH ---
+    } else if (resTypLower === 'dmg' && !hasDifficultyMorph) { // <<< --- DMG BRANCH ---
         // --- 4c. Player Damage ---
         fMyConsoleLog("💥 Performing Player Damage Rolls (Validation first)...");
         const monsterDmgResult = await fPerformPlayerDamageRolls(initialLogHtml); // Call new helper
         if (monsterDmgResult.success) {
-            finalLogHtml = monsterDmgResult.logHtml;
+            finalLogHtml = monsterDmgResult.logHtml; //
             helperSucceeded = true;
             wasMonsterInteractionRoll = true; // Mark as monster roll for spacing
             fMyConsoleLog("   -> Player Damage roll sequence completed.");
@@ -215,11 +205,25 @@ async function fHandleRollDiceAction() {
             gUI.pendingChangesMap = {}; // Clear any prepared costs
             return; // Halt the entire action
         }
-        // <<< --- END NEW BRANCH ---
+    } else if (resTypLower === 'ar' && !hasDifficultyMorph) { // <<< --- NEW 'AR' BRANCH ---
+        // --- 4d. Player Armor ---
+        fMyConsoleLog("🛡️ Performing Player Armor Rolls (Validation first)...");
+        const monsterArmorResult = await fPerformPlayerArmorRolls(initialLogHtml); // <<< CALL NEW HELPER
+        if (monsterArmorResult.success) {
+            finalLogHtml = monsterArmorResult.logHtml; //
+            helperSucceeded = true;
+            wasMonsterInteractionRoll = true; // Mark as monster roll for spacing
+            fMyConsoleLog("   -> Player Armor roll sequence completed.");
+        } else {
+            fMyConsoleLog("   -> Player Armor sequence halted during validation (message shown). Costs NOT applied.");
+            gUI.pendingChangesMap = {}; // Clear any prepared costs
+            return; // Halt the entire action
+        }
+        // <<< --- END NEW 'AR' BRANCH ---
     } else {
-        // --- 4d. Standard Roll (Any other type OR Atk/Def/DMG with ^ morph) ---
+        // --- 4e. Standard Roll (Any other type OR Atk/Def/DMG/AR with ^ morph) ---
         fMyConsoleLog("🎯 Performing Standard Roll(s)...");
-        finalLogHtml = fPerformStandardRolls(initialLogHtml);
+        finalLogHtml = fPerformStandardRolls(initialLogHtml); //
         helperSucceeded = true; // Standard roll always 'succeeds' its phase
         wasMonsterInteractionRoll = false; // Not a monster interaction roll
         fMyConsoleLog("   -> Standard roll sequence completed.");
@@ -228,53 +232,53 @@ async function fHandleRollDiceAction() {
 
 
     // --- 5. Apply ALL Pending Costs (IF helper succeeded AND map has changes) ---
-    let applyErrors = false;
-    if (helperSucceeded && Object.keys(gUI.pendingChangesMap).length > 0) {
-        fMyConsoleLog("✅ Roll sequence successful. Applying Pending Cost Changes...");
-        const changeEntries = Object.entries(gUI.pendingChangesMap);
-        fMyConsoleLog(`   -> Applying ${changeEntries.length} changes from map...`);
-        for (const [key, value] of changeEntries) {
-            try {
-                const keyParts = key.split(',');
-                if (keyParts.length !== 2) { console.warn(`Invalid key format: "${key}"`); applyErrors = true; continue; }
-                const [rowPart, colPart] = keyParts;
-                let rowRef = parseInt(rowPart, 10);
-                if (isNaN(rowRef) || rowRef < 0) { rowRef = rowPart; }
-                if (!fSetGridValue(rowRef, colPart, value)) { applyErrors = true; /* fSetGridValue logs error */ }
-            } catch (parseError) { console.error(`Error processing change key "${key}":`, parseError); applyErrors = true; }
-        }
-        gUI.pendingChangesMap = {}; // Clean up map
+    let applyErrors = false; //
+    if (helperSucceeded && Object.keys(gUI.pendingChangesMap).length > 0) { //
+        fMyConsoleLog("✅ Roll sequence successful. Applying Pending Cost Changes..."); //
+        const changeEntries = Object.entries(gUI.pendingChangesMap); //
+        fMyConsoleLog(`   -> Applying ${changeEntries.length} changes from map...`); //
+        for (const [key, value] of changeEntries) { //
+            try { //
+                const keyParts = key.split(','); //
+                if (keyParts.length !== 2) { console.warn(`Invalid key format: "${key}"`); applyErrors = true; continue; } //
+                const [rowPart, colPart] = keyParts; //
+                let rowRef = parseInt(rowPart, 10); //
+                if (isNaN(rowRef) || rowRef < 0) { rowRef = rowPart; } //
+                if (!fSetGridValue(rowRef, colPart, value)) { applyErrors = true; /* fSetGridValue logs error */ } //
+            } catch (parseError) { console.error(`Error processing change key "${key}":`, parseError); applyErrors = true; } //
+        } //
+        gUI.pendingChangesMap = {}; // Clean up map //
 
-        if (applyErrors) {
-            fMyConsoleLog("❌ Errors occurred while applying cost/state changes AFTER roll success.");
-            await fShowMessage("Error applying some cost/state changes post-roll. Please check grid state.");
-        } else {
-             fMyConsoleLog("✅ Costs Applied Successfully.");
-        }
-    } else if (helperSucceeded) {
-         fMyConsoleLog("✅ Roll sequence successful. No Pending Cost Changes to Apply.");
-    }
+        if (applyErrors) { //
+            fMyConsoleLog("❌ Errors occurred while applying cost/state changes AFTER roll success."); //
+            await fShowMessage("Error applying some cost/state changes post-roll. Please check grid state."); //
+        } else { //
+             fMyConsoleLog("✅ Costs Applied Successfully."); //
+        } //
+    } else if (helperSucceeded) { //
+         fMyConsoleLog("✅ Roll sequence successful. No Pending Cost Changes to Apply."); //
+    } //
     // --- End Cost Application Block ---
 
 
     // --- 6. Prepend Final Combined Log to Sidebar ---
     if (finalLogHtml) { // Check if there's anything to log
-        // --- TWEAK: Add extra blank line paragraph BEFORE Player Attack/defense/damage output ---
+        // --- TWEAK: Add extra blank line paragraph BEFORE Player Attack/defense/damage/armor output ---
         if (wasMonsterInteractionRoll) { // Check the flag set during branching
             fPrependToSidebar('&nbsp;'); // Prepend a paragraph with just a space
-            fMyConsoleLog("   -> Prepended extra blank line paragraph for monster interaction log spacing.");
-        }
+            fMyConsoleLog("   -> Prepended extra blank line paragraph for monster interaction log spacing."); //
+        } //
         // --- End Tweak ---
 
         fPrependToSidebar(finalLogHtml); // Prepend the actual content paragraph
         fShowSidebar(); // Ensure sidebar is visible
-    } else {
-       fMyConsoleLog("ℹ️ No final log message generated.");
-    }
+    } else { //
+       fMyConsoleLog("ℹ️ No final log message generated."); //
+    } //
     gUI.roll.htmlHeader = ''; // Clear header base
 
 
-    fMyConsoleLog(`✅ Roll Dice Action Completed.`);
+    fMyConsoleLog(`✅ Roll Dice Action Completed.`); //
 } // END fHandleRollDiceAction
 
 
@@ -1218,12 +1222,19 @@ async function fSpendOneMeta(metaColor, pendingChangesMap) {
 
 // fPerformStandardRolls ///////////////////////////////////////////////////////////////////
 // Purpose -> Handles the standard rolling loop for abilities targeting a specific difficulty
-//            (either from a '^' morph or non-'Atk' roll types). Calculates rolls,
+//            (either from a '^' morph or non-'Atk'/'Def'/'DMG'/'AR' roll types). Calculates rolls,
 //            builds log lines, and appends them to the initial header HTML.
+//            Includes wound summation for multi-roll 'AR' and 'DMG' types.
 // Inputs  -> initialLogHtml (String): The pre-built log header string (costs, title, morph).
-// Outputs -> (String): The complete HTML string for the log entry (header + roll lines).
+// Outputs -> (String): The complete HTML string for the log entry (header + roll lines + optional total).
+// MODIFIED: Added wound summation for multi-roll 'DMG' types with explicit difficulty.
 function fPerformStandardRolls(initialLogHtml) {
     const multiRollCount = gUI.roll.multiRollCount;
+    const resTypLower = (gUI.roll.resTyp || '').toLowerCase(); // Get roll type
+    const isArmorRoll = (resTypLower === 'ar'); // Check if it's an armor roll
+    const isDamageRoll = (resTypLower === 'dmg'); // Check if it's a damage roll
+    let totalWoundsOverall = 0; // Initialize wound accumulator
+
     fMyConsoleLog(`🔄 Starting Standard Roll Loop (${multiRollCount} rolls)...`);
     const rollResultLines = []; // Array to collect individual roll HTML lines
 
@@ -1234,6 +1245,31 @@ function fPerformStandardRolls(initialLogHtml) {
         fCalcGUIRollResSk();
         fCalcGUIRollRoll();
         fCalcGUIRollResRoll();
+
+        // --- Accumulate Wounds if it's a multi-roll AR or DMG type ---
+        // Accumulation happens only when difficulty is present (checked implicitly by calculation logic)
+        if (multiRollCount > 1) {
+            const currentRollResult = gUI.roll.resRoll;
+            const difficulty = gUI.roll.resDif;
+            let woundsDealt = 0;
+
+            if (isArmorRoll && typeof currentRollResult === 'number' && typeof difficulty === 'number' && currentRollResult !== 0) {
+                // AR Wounds: -(Difficulty / ArmorRollResult), ensure negative/zero, round
+                woundsDealt = Math.min(0, Math.round(-(difficulty / currentRollResult)));
+                fMyConsoleLog(`      -> Accumulating AR Wounds: ${woundsDealt}`);
+                totalWoundsOverall += woundsDealt;
+            } else if (isDamageRoll && typeof currentRollResult === 'number' && typeof difficulty === 'number' && difficulty !== 0) {
+                // DMG Wounds: (Roll / ArmorDifficulty), ensure non-negative, round
+                woundsDealt = Math.max(0, Math.round(currentRollResult / difficulty));
+                fMyConsoleLog(`      -> Accumulating DMG Wounds: +${woundsDealt}`);
+                totalWoundsOverall += woundsDealt; // Add positive wounds
+            } else if (isArmorRoll || isDamageRoll) {
+                 // Log if it's AR/DMG but inputs invalid for calculation
+                 fMyConsoleLog(`      -> Skipping Wound Accumulation: Invalid input (Dif=${difficulty}, Roll=${currentRollResult})`);
+            }
+        }
+        // --- End Wound Accumulation ---
+
         // Build individual roll result line HTML, passing isFirstRoll for T/C
         const rollLineHtml = fBuildRollLogHTML(rollNum, multiRollCount, isFirstRoll);
         rollResultLines.push(rollLineHtml); // Add line to array
@@ -1246,6 +1282,22 @@ function fPerformStandardRolls(initialLogHtml) {
         if (finalLogHtml) finalLogHtml += '<br>';
         finalLogHtml += rollResultLines.join('<br>');
     }
+
+    // --- Add Overall Wound Summation Line if applicable ---
+    if (multiRollCount > 1) { // Only add total if more than one roll occurred
+        if (isArmorRoll) {
+            finalLogHtml += '<br>↓'; // Add separator
+            // Wrap the Total Wounds line in the red-bold span
+            finalLogHtml += `<br><span class="red-bold">Total Wounds to PC = ${totalWoundsOverall}</span>`;
+            fMyConsoleLog(`      -> Added Total AR Wounds line: ${totalWoundsOverall}`);
+        } else if (isDamageRoll) {
+             finalLogHtml += '<br>↓'; // Add separator
+             // Standard bold, positive sign prefix
+             finalLogHtml += `<br><span style="font-weight:bold;">Total Wounds = +${totalWoundsOverall}</span>`;
+             fMyConsoleLog(`      -> Added Total DMG Wounds line: +${totalWoundsOverall}`);
+        }
+    }
+    // --- End Wound Summation ---
 
      fMyConsoleLog(`✅ Standard Roll Loop Completed.`);
     return finalLogHtml; // Return the fully combined HTML string
@@ -1746,6 +1798,186 @@ async function fPerformPlayerDefenseRolls(initialLogHtml) {
 
 
 
+
+// fPerformPlayerArmorRolls //////////////////////////////////////////////////////
+// Purpose -> Handles 'AR' rolls against monsters listed in the grid when no explicit
+//            difficulty morph ('^') is provided. Uses MonDmg column for difficulty.
+//            Calculates wounds based on -(MonDmg / PlayerARRoll). Sums and logs wounds.
+//            (STAGE 4: Added Wound Calculation, Summation, and Logging)
+// Inputs  -> initialLogHtml (String): The pre-built log header string.
+// Outputs -> (Promise<Object>): Resolves with { logHtml: String, success: Boolean }.
+// MODIFIED: Added red-bold class to Total Wounds line.
+async function fPerformPlayerArmorRolls(initialLogHtml) {
+    fMyConsoleLog("   -> Entering Player Armor Logic (Stage 4)...");
+
+    // --- 1. Get Monster Table Range ---
+    const monsterRangeDef = gUI.range?.monsters;
+    if (!monsterRangeDef || !fIsValidRangeObject(monsterRangeDef)) {
+        const msg = "Monster range definition (gUI.range.monsters) missing/invalid.";
+        console.warn(`fPerformPlayerArmorRolls: ${msg}`);
+        await fShowMessage(`❌ Error: ${msg}`);
+        return { logHtml: '', success: false };
+    }
+
+    // --- 2. Resolve Indices (Including MonDmg) ---
+    const resolved = fResolveRangeIndices(monsterRangeDef);
+    if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
+        const msg = `Could not resolve monster range tags: ${JSON.stringify(monsterRangeDef)}`;
+        console.warn(`fPerformPlayerArmorRolls: ${msg}`);
+        await fShowMessage(`❌ Error: ${msg}`);
+        return { logHtml: '', success: false };
+    }
+    const rMin = Math.min(resolved.r1, resolved.r2);
+    const rMax = Math.max(resolved.r1, resolved.r2);
+    const cNumMon = resolveCol('NumMon');
+    const cMonDmg = resolveCol('MonDmg'); // <<< USE MonDmg column tag
+    const cMonName = resolveCol('MonName');
+
+    if ([cNumMon, cMonDmg, cMonName].some(isNaN)) {
+         const msg = "Could not resolve required monster column tags (NumMon, MonDmg, MonName).";
+         console.warn(`fPerformPlayerArmorRolls: ${msg}`);
+         await fShowMessage(`❌ Error: ${msg}`);
+         return { logHtml: '', success: false };
+    }
+     fMyConsoleLog(`      -> Monster Table Range: Rows ${rMin}-${rMax}, Cols Dmg:${cMonDmg}, Num:${cNumMon}, Name:${cMonName}`);
+
+    // --- 3. Identify & Validate Targets (Using MonDmg) ---
+    const monsterTargets = [];
+    const firstMonsterRowIndex = rMin; // Index of the 'Custom' row
+
+    for (let mon_R = rMin; mon_R <= rMax; mon_R++) {
+        const isCustomRow = (mon_R === firstMonsterRowIndex);
+        // Get NumMon value
+        const numMonRaw = gUI.arr?.[mon_R]?.[cNumMon];
+        const numMon = parseInt(numMonRaw, 10);
+        // Check if NumMon is valid
+        if (!isNaN(numMon) && numMon >= 1 && numMon <= 30) {
+            fMyConsoleLog(`      -> Row ${mon_R}: Found valid NumMon: ${numMon}`);
+            // Get MonDmg value (Difficulty for Armor roll)
+            const monDmgRaw = gUI.arr?.[mon_R]?.[cMonDmg]; // <<< Get MonDmg
+            const monDmg = Number(monDmgRaw); // Use Number()
+
+            // Validate MonDmg
+            if (isNaN(monDmg) || String(monDmgRaw).trim() === '') {
+                 let errMsg = `❌ Invalid Monster Damage ('${monDmgRaw}') found in row ${mon_R + 1}. Cannot complete armor roll.`;
+                 if (isCustomRow) {
+                     errMsg = `❌ Invalid Monster Damage ('${monDmgRaw}') found for Custom Monster. Cannot complete armor roll.`;
+                 }
+                 fMyConsoleLog(`         -> Validation Failed: ${errMsg}`);
+                 await fShowMessage(errMsg);
+                 return { logHtml: '', success: false }; // Halt
+            }
+
+            // --- Get Monster Name (Handles Custom row) ---
+            let originalMonName = String(gUI.arr?.[mon_R]?.[cMonName] || '').trim();
+            let monName = originalMonName || `Row ${mon_R + 1}`;
+            if (isCustomRow) {
+                monName = `Custom ${originalMonName}`.trim();
+            }
+            // --- End Monster Name ---
+
+            // Add valid target
+            monsterTargets.push({
+                mon_R: mon_R,
+                numRolls: numMon,
+                monName: monName,
+                monDmg: monDmg // <<< Store Monster Damage as difficulty
+            });
+            fMyConsoleLog(`         -> Valid Target Added: Name='${monName}', Dmg=${monDmg}, Rolls=${numMon}`);
+        } else {
+             if (numMonRaw !== '' && numMonRaw != null) {
+                 fMyConsoleLog(`      -> Row ${mon_R}: Skipping - Invalid NumMon value: '${numMonRaw}'`);
+             }
+        }
+    } // End loop through monster rows
+
+    // --- 4. Check if any valid targets were found ---
+    if (monsterTargets.length === 0) {
+        // --- No targets found, perform standard roll ---
+        fMyConsoleLog("      -> No valid monster targets found (with MonDmg). Performing standard armor roll instead.");
+        await fShowMessage("ℹ️ No valid monsters found with Damage values. Performing standard armor roll.");
+
+        gUI.roll.resDif = ''; // Clear difficulty for standard roll
+        fMyConsoleLog("         -> Cleared resDif for standard roll.");
+
+        const standardRollHtml = fPerformStandardRolls(initialLogHtml);
+        return { logHtml: standardRollHtml, success: true };
+        // --- End Fallback ---
+    }
+
+    // --- If targets *were* found, proceed with Player Armor logic ---
+    fMyConsoleLog(`      -> Found ${monsterTargets.length} valid monster target(s) with Damage values.`);
+    // --- 5. Perform Rolls & Build Log (Player Armor Path) ---
+    let isOverallFirstRoll = true;
+    const monsterLogLines = [];
+    let totalWoundsOverall = 0; // <<< Initialize overall wound accumulator
+
+    for (const target of monsterTargets) {
+        fMyConsoleLog(`   --- Rolling Armor vs: ${target.monName} (Dmg: ${target.monDmg}, Rolls: ${target.numRolls}) ---`);
+        let totalWoundsPerMonster = 0; // <<< Initialize per-monster wound accumulator
+
+        // Always add separator before monster header
+        monsterLogLines.push('↓');
+        // Monster name header
+        monsterLogLines.push(`--- <span style="color: purple; font-weight: bold;">Mon: ${target.monName}</span> (Dmg: ${target.monDmg}) ---`);
+
+        // Set difficulty for this armor roll using Monster Damage
+        gUI.roll.resDif = target.monDmg; // <<< Use Monster Damage as Difficulty
+
+        // Loop for the number of armor rolls against this specific monster's attack(s)
+        for (let rollNum = 1; rollNum <= target.numRolls; rollNum++) {
+            fMyConsoleLog(`      -> Armor Roll ${rollNum} of ${target.numRolls} against ${target.monName}...`);
+            // Recalculate player roll values (resSk -> roll -> resRoll)
+            fCalcGUIRollResSk();
+            fCalcGUIRollRoll();
+            fCalcGUIRollResRoll(); // This now contains the player's armor roll result
+
+            // Calculate Wounds for *this specific roll*
+            const armorRollResult = gUI.roll.resRoll;
+            const monsterDamage = gUI.roll.resDif; // Which is target.monDmg
+            let woundsDealt = 0;
+            if (typeof armorRollResult === 'number' && armorRollResult !== 0 && typeof monsterDamage === 'number') {
+                 // -(Difficulty / ArmorRollResult), ensure negative/zero, then round
+                 woundsDealt = Math.min(0, Math.round(-(monsterDamage / armorRollResult)));
+                 fMyConsoleLog(`         -> Wound Calc: Dmg=${monsterDamage}, AR Roll=${armorRollResult} => Wounds = min(0, round(-(${monsterDamage} / ${armorRollResult}))) = ${woundsDealt}`);
+            } else {
+                 fMyConsoleLog(`         -> Wound Calc: Invalid input (Dmg=${monsterDamage}, AR Roll=${armorRollResult}). Wounds = 0`);
+            }
+            // Add wounds from this roll to accumulators
+            totalWoundsPerMonster += woundsDealt;
+            totalWoundsOverall += woundsDealt;
+
+            // Build the roll line HTML for this single roll (fBuildRollLogHTML handles AR format)
+            const rollLineHtml = fBuildRollLogHTML(rollNum, target.numRolls, isOverallFirstRoll);
+            monsterLogLines.push(rollLineHtml);
+
+            if (isOverallFirstRoll) {
+                isOverallFirstRoll = false;
+            }
+        } // End inner roll loop
+
+        // Add Wound Summation Line for this monster
+        // (Keep bold, no color change needed here per original example)
+        monsterLogLines.push(`<span style="font-weight:bold;">${target.monName} Wounds to PC = ${totalWoundsPerMonster}</span>`);
+        fMyConsoleLog(`   --- Finished Rolling vs: ${target.monName} (Wounds This Monster: ${totalWoundsPerMonster}) ---`);
+
+    } // End monster target loop
+
+    // Add Overall Wound Summation Line
+    monsterLogLines.push('↓'); // Add separator
+    // <<< Wrap the Total Wounds line in the red-bold span >>>
+    monsterLogLines.push(`<span class="red-bold">Total Wounds to PC = ${totalWoundsOverall}</span>`);
+    fMyConsoleLog(`      -> Overall Wounds Inflicted on PC: ${totalWoundsOverall}`);
+
+    // --- 6. Return Result ---
+    const finalLogHtml = initialLogHtml + '<br>' + monsterLogLines.join('<br>');
+    fMyConsoleLog("   -> Player Armor Logic Complete.");
+    return { logHtml: finalLogHtml, success: true };
+
+} // END fPerformPlayerArmorRolls
+
+
+
 // fCalcGUIRollResSk /////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Calculates final resulting skill value (gUI.roll.resSk) using morph-derived modifiers.
 // MODIFIED: Calculates focus bonus based on the index of the gUI.roll.resFocus TAG within gUI.list.metaColor.
@@ -1970,15 +2202,12 @@ function fCalcRollLogPrepend() {
 
 // fBuildRollLogHTML /////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Constructs and returns the formatted HTML log line for a *single roll* based on gUI.roll data.
-//            Handles multi-roll prefix ('#> '), conditional T/C roll, and special formatting for 'DMG' type.
+//            Handles multi-roll prefix ('#> '), conditional T/C roll, and special formatting for 'DMG'/'AR' types.
 // Inputs  -> rollNum (Number): The current roll number in the sequence (e.g., 1, 2, ...).
 //         -> totalRolls (Number): The total number of rolls in the sequence (gUI.roll.multiRollCount).
 //         -> isFirstRoll (Boolean): True if this is the first roll in the sequence.
 // Outputs -> (String): HTML string for one roll line to insert in sidebar.
-// MODIFIED: Accepts rollNum, totalRolls, isFirstRoll. Adds prefix. Conditional T/C. Simplified scope.
-// MODIFIED: Removed !isFreeRoll check from T/C condition to allow T/C on Lucked Rolls.
-// MODIFIED: Added specific handling for 'DMG' type: uses '/' for difficulty and shows '= +Wounds' instead of check/cross.
-// MODIFIED: Changed DMG wound display calculation to Math.max(0, Math.round(resRoll / dif)).
+// MODIFIED: Removed spaces around '/' for DMG and AR difficulty indicators.
 function fBuildRollLogHTML(rollNum, totalRolls, isFirstRoll) {
 
     // --- Get relevant data from gUI.roll ---
@@ -1986,9 +2215,11 @@ function fBuildRollLogHTML(rollNum, totalRolls, isFirstRoll) {
     const resTypLower = resTyp.toLowerCase(); // Cache lowercase type for checks
     const skSk = gUI.roll.skSk;
     const resSk = gUI.roll.resSk;
-    const roll = gUI.roll.roll;
-    const resRoll = gUI.roll.resRoll;
-    const dif = gUI.roll.resDif; // Difficulty (Standard ^ or Calculated AR for DMG)
+    const roll = gUI.roll.roll; // Initial roll before final modifiers
+    const resRoll = gUI.roll.resRoll; // Final roll result (Player's Armor roll for AR type)
+    const dif = gUI.roll.resDif; // Difficulty (Standard ^, MonAR for DMG, MonDmg for AR)
+    // Check if difficulty is validly defined for this roll
+    const hasDifficulty = ((typeof dif === 'number' || (typeof dif === 'string' && dif !== '')) && dif != null);
 
     // --- Build Roll Base String (Type(Sk->ResSk)) ---
     let rollBase = resTyp; // Start with the resulting type
@@ -1999,38 +2230,57 @@ function fBuildRollLogHTML(rollNum, totalRolls, isFirstRoll) {
     }
 
     // --- Build Roll Result String (~Roll->ResRoll) ---
+    // Show this part UNLESS it's an AR roll *with* a specified difficulty
     let rollResult = '';
-    if ((typeof roll === 'number' || (typeof roll === 'string' && roll !== '')) && roll != null) {
-        rollResult += ` ~${roll}`;
-        // Show arrow only if resRoll is different and valid
-        if ((typeof resRoll === 'number' || (typeof resRoll === 'string' && resRoll !== '')) && resRoll != null && String(resRoll) !== String(roll)) {
-            rollResult += `->${resRoll}`;
+    if (!(resTypLower === 'ar' && hasDifficulty)) { // Don't show for AR vs Monster Dmg
+        if ((typeof roll === 'number' || (typeof roll === 'string' && roll !== '')) && roll != null) {
+            rollResult += ` ~${roll}`;
+            // Show arrow only if resRoll is different and valid
+            if ((typeof resRoll === 'number' || (typeof resRoll === 'string' && resRoll !== '')) && resRoll != null && String(resRoll) !== String(roll)) {
+                rollResult += `->${resRoll}`;
+            }
+        } else if ((typeof resRoll === 'number' || (typeof resRoll === 'string' && resRoll !== '')) && resRoll != null) {
+            // If only resRoll is valid, show it directly
+            rollResult += ` ~${resRoll}`;
         }
-    } else if ((typeof resRoll === 'number' || (typeof resRoll === 'string' && resRoll !== '')) && resRoll != null) {
-        // If only resRoll is valid, show it directly
-        rollResult += ` ~${resRoll}`;
     }
 
-    // --- Build Difficulty Indicator (/Dif for DMG, ^Dif otherwise) ---
+    // --- Build Difficulty Indicator ---
+    // Build this only if difficulty is actually present
     let rollDifIndicator = '';
-    if ((typeof dif === 'number' || (typeof dif === 'string' && dif !== '')) && dif != null) {
-        rollDifIndicator = (resTypLower === 'dmg') ? `/` : `^`; // Use '/' for DMG, '^' otherwise
-        rollDifIndicator += dif;
+    if (hasDifficulty) {
+        if (resTypLower === 'ar') {
+            // Format for AR (vs Monster Dmg): Difficulty/~RollResult (No spaces around /)
+            rollDifIndicator = ` ${dif}/~${(typeof resRoll === 'number' ? resRoll : '?')}`; // <<< MODIFIED
+        } else if (resTypLower === 'dmg') {
+            // Format for DMG (vs Monster AR): /ArmorDifficulty (No space before /)
+            rollDifIndicator = `/${dif}`; // <<< MODIFIED
+        } else {
+            // Standard format: ^Difficulty (Keep space for readability)
+            rollDifIndicator = ` ^${dif}`;
+        }
     }
 
-    // --- Build Success Delta (=+Δ ✅ / =Δ ❌ OR = +Wounds for DMG) --- <<< MODIFIED LOGIC FOR DMG
+    // --- Build Success Delta ---
+    // Build this only if difficulty is present and resRoll is valid
     let rollSuccessDelta = '';
-    // Only calculate if BOTH resRoll and dif are valid numbers
-    if (typeof resRoll === 'number' && typeof dif === 'number') {
-        if (resTypLower === 'dmg') {
-            // For DMG rolls, calculate Wounds (resRoll / dif, rounded, max 0) for display
+    if (hasDifficulty && typeof resRoll === 'number') {
+        if (resTypLower === 'ar') {
+            // Calculate AR Wounds: -(Difficulty / ArmorRollResult), rounded, ensure negative or zero
+            let wounds = 0;
+            if (resRoll !== 0) { // Avoid division by zero
+                wounds = Math.min(0, Math.round(-(dif / resRoll))); // Calculate negative wounds, ensure min 0, then round
+            }
+            rollSuccessDelta = ` = ${wounds} Wnds`; // Display the calculated negative (or zero) wounds
+        } else if (resTypLower === 'dmg') {
+            // Calculate DMG Wounds: (resRoll / ArmorDifficulty), rounded, max 0
             let wounds = 0;
             if (dif !== 0) { // Avoid division by zero
                  wounds = Math.max(0, Math.round(resRoll / dif)); // Divide then round
             }
             rollSuccessDelta = ` = +${wounds} Wounds`; // Format as specified
         } else {
-            // For other roll types, use existing check/cross format based on subtraction
+            // Standard check/cross format based on subtraction
             const delta = resRoll - dif;
             rollSuccessDelta = delta >= 0 ? ` =+${delta} ✅` : ` =${delta} ❌`;
         }
@@ -2050,7 +2300,6 @@ function fBuildRollLogHTML(rollNum, totalRolls, isFirstRoll) {
 
     // --- Build Final HTML (Only the roll line itself) ---
     const html = roll1;
-
     return html;
 } // END fBuildRollLogHTML
 
