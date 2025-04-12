@@ -2899,8 +2899,10 @@ function fSetupSingleSubMenuItem(item, index) {
 // fSetupDelegatedMenuActionClick //////////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Adds delegated listener to the menu bar to handle clicks on items with data-action.
 // MODIFIED: Added case for 'game-clearCheckboxes'
+// MODIFIED: Added case for 'game-metaFlood'
 function fSetupDelegatedMenuActionClick(menuBar) {
-     if (!menuBar) return; // Should not happen based on main check, but safe practice
+     if (!menuBar) return;
+     // Should not happen based on main check, but safe practice
 
      menuBar.addEventListener('click', (event) => {
          // Handle clicks on action links
@@ -2917,6 +2919,7 @@ function fSetupDelegatedMenuActionClick(menuBar) {
 
                      // Game Menu
                      case 'game-toggleSidebar': fToggleSidebar(); break;
+                     case 'game-metaFlood': fMetaFlood(); break; // <<< ADDED THIS CASE
                      // Healing
                      case 'game-healingNatural': fCalc_NaturalHealing(); break;
                      case 'game-healingAll': fHealAllWounds(); break;
@@ -2974,6 +2977,206 @@ function fToggleSidebar() {
     }
 }; // END fToggleSidebar
 
+
+
+
+// fMetaFlood //////////////////////////////////////////////////////////////////////
+// Purpose -> Handles the <Game><Meta><Flood> menu action. Randomly selects a Meta
+//            column index, increases it and preceding columns by increasing amounts
+//            (1 for selected, 2 for previous, etc.), caps the results according
+//            to gUI.list.metaFull, and updates the grid. Values < 1 become ''.
+// Inputs  -> None
+// Outputs -> None (Modifies grid data/DOM via fSetRangeValues)
+// MODIFIED: Simplified sidebar log message.
+async function fMetaFlood() {
+    fMyConsoleLog("⚙️ Menu Action: Meta Flood...");
+
+    // --- 1. Get Definitions & Validate ---
+    const metaRangeDef = gUI.range?.meta;
+    const metaCaps = gUI.list?.metaFull;
+    const metaColorTags = gUI.list?.metaColor; // For logging/mapping
+
+    if (!metaRangeDef || !fIsValidRangeObject(metaRangeDef)) {
+        const msg = "Meta range definition missing or invalid.";
+        console.warn(`fMetaFlood: ${msg}`);
+        fMyConsoleLog(`⚠️ Meta Flood failed: ${msg}`);
+        await fShowMessage(`Error: ${msg}`);
+        return;
+    }
+    if (!Array.isArray(metaCaps) || metaCaps.length === 0) {
+        const msg = "Meta caps list (gUI.list.metaFull) missing or invalid.";
+        console.warn(`fMetaFlood: ${msg}`);
+        fMyConsoleLog(`⚠️ Meta Flood failed: ${msg}`);
+        await fShowMessage(`Error: ${msg}`);
+        return;
+    }
+    if (!Array.isArray(metaColorTags) || metaColorTags.length === 0) {
+        const msg = "Meta color tags list (gUI.list.metaColor) missing or invalid.";
+        console.warn(`fMetaFlood: ${msg}`);
+        fMyConsoleLog(`⚠️ Meta Flood failed: ${msg}`);
+        // Don't necessarily stop, but logging might be less clear
+    }
+
+    // --- 2. Resolve Range & Get Dimensions ---
+    const metaRowTag = metaRangeDef.r1; // e.g., 'meta'
+    const startCol = resolveCol(metaRangeDef.c1);
+    const endCol = resolveCol(metaRangeDef.c2);
+
+    if ([startCol, endCol].some(isNaN)) {
+        const msg = `Could not resolve Meta column tags: ${metaRangeDef.c1}, ${metaRangeDef.c2}.`;
+        console.warn(`fMetaFlood: ${msg}`);
+        fMyConsoleLog(`⚠️ Meta Flood failed: ${msg}`);
+        await fShowMessage(`Error: ${msg}`);
+        return;
+    }
+
+    const numMetaCols = Math.abs(endCol - startCol) + 1;
+    if (numMetaCols !== metaCaps.length) {
+        const msg = `Mismatch between number of Meta columns (${numMetaCols}) and Meta caps (${metaCaps.length}).`;
+        console.warn(`fMetaFlood: ${msg}`);
+        fMyConsoleLog(`⚠️ Meta Flood failed: ${msg}`);
+        await fShowMessage(`Error: ${msg}`);
+        return;
+    }
+
+    // --- 3. Random Selection ---
+    const selectedIndex = Math.floor(Math.random() * numMetaCols); // 0 to numMetaCols-1
+    const selectedColIndex = startCol + selectedIndex; // Actual column index in grid
+    const selectedColTag = metaColorTags?.[selectedIndex] ?? `Index ${selectedIndex}`;
+    fMyConsoleLog(`   -> Selected Meta Index: ${selectedIndex} (Column ${selectedColIndex} - Tag: ${selectedColTag})`);
+
+    // --- 4. Flood Calculation & Capping ---
+    const finalValues = []; // Array to hold final values for the affected range (0 to selectedIndex)
+    let amountToAdd = 1;
+    // Removed sidebarLogDetails array initialization
+
+    for (let i = selectedIndex; i >= 0; i--) {
+        const currentColIndex = startCol + i;
+        const currentColTag = metaColorTags?.[i] ?? `Index ${i}`;
+        const currentVal = fGetGridValue(metaRowTag, currentColIndex, true) || 0; // Get as number, default 0
+        const newValRaw = currentVal + amountToAdd;
+        const cap = metaCaps[i]; // Get cap for this specific index
+        const finalVal = Math.min(newValRaw, cap); // Apply cap
+
+        fMyConsoleLog(`      -> Index ${i} (${currentColTag}): Current=${currentVal}, Add=${amountToAdd}, Raw=${newValRaw}, Cap=${cap} => Final=${finalVal}`);
+        // Store final value for this index (at the beginning of the array)
+        finalValues.unshift(finalVal);
+        // Removed population of sidebarLogDetails
+
+        amountToAdd++; // Increment for the next (lower index) column
+    }
+
+    // --- 5. Update Grid ---
+    fMyConsoleLog(`   -> Updating Meta columns ${startCol} to ${selectedColIndex} with final values: [${finalValues.join(', ')}]`);
+    const success = fSetRangeValues(
+        metaRowTag,
+        startCol,
+        metaRowTag, // Same row
+        selectedColIndex, // End at the selected column
+        finalValues // The array of final values (length matches selectedIndex + 1)
+    );
+
+    // --- 6. Log Result ---
+    if (!success) {
+        const msg = `fSetRangeValues failed to update Meta grid.`;
+        fMyConsoleLog(`   -> ⚠️ Meta Flood Error: ${msg}`);
+        await fShowMessage(`Error: ${msg}`);
+    } else {
+        fMyConsoleLog("✅ Meta Flood Update Complete.");
+        // Build and Display Sidebar Message (Simplified)
+        const sidebarMsg = `<span class="blue-bold">ℹ️ Meta Flood (Rolled ${selectedColTag}):</span>`; // <<< MODIFIED LINE
+        fPrependToSidebar(sidebarMsg);
+        fShowSidebar();
+    }
+
+} // END fMetaFlood
+
+
+
+// fMetaChannel ////////////////////////////////////////////////////////////////////
+// Purpose -> Handles Meta Channeling logic. Randomly selects a Meta Channel column
+//            index (rolling twice, taking lowest), increments that single cell by 1.
+//            Updates the grid, displaying 0 as ''. No upper cap.
+// Inputs  -> None
+// Outputs -> None (Modifies grid data/DOM via fSetGridValue)
+// NOTE: This function is NOT currently triggered by any menu action.
+async function fMetaChannel() {
+    fMyConsoleLog("⚙️ Calculating Meta Channel...");
+
+    // --- 1. Get Definitions & Validate ---
+    const channelRangeDef = gUI.range?.metaChannel; // <<< Use metaChannel range
+    const metaColorTags = gUI.list?.metaColor;     // For logging/mapping
+
+    if (!channelRangeDef || !fIsValidRangeObject(channelRangeDef)) {
+        const msg = "Meta Channel range definition missing or invalid.";
+        console.warn(`fMetaChannel: ${msg}`);
+        fMyConsoleLog(`⚠️ Meta Channel failed: ${msg}`);
+        await fShowMessage(`Error: ${msg}`);
+        return;
+    }
+    // No need to validate metaCaps (gUI.list.metaFull) as there's no upper limit
+
+    if (!Array.isArray(metaColorTags) || metaColorTags.length === 0) {
+        const msg = "Meta color tags list (gUI.list.metaColor) missing or invalid.";
+        console.warn(`fMetaChannel: ${msg}`);
+        fMyConsoleLog(`⚠️ Meta Channel failed: ${msg}`);
+        // Don't stop, but logging might be less clear
+    }
+
+    // --- 2. Resolve Range & Get Dimensions ---
+    const channelRowTag = channelRangeDef.r1; // e.g., 'chnl'
+    const startCol = resolveCol(channelRangeDef.c1);
+    const endCol = resolveCol(channelRangeDef.c2);
+
+    if ([startCol, endCol].some(isNaN)) {
+        const msg = `Could not resolve Meta Channel column tags: ${channelRangeDef.c1}, ${channelRangeDef.c2}.`;
+        console.warn(`fMetaChannel: ${msg}`);
+        fMyConsoleLog(`⚠️ Meta Channel failed: ${msg}`);
+        await fShowMessage(`Error: ${msg}`);
+        return;
+    }
+
+    const numMetaCols = Math.abs(endCol - startCol) + 1;
+    // No need to compare numMetaCols to metaCaps.length
+
+    // --- 3. Random Selection (Roll Twice, Take Lowest) ---
+    const roll1 = Math.floor(Math.random() * numMetaCols); // 0 to numMetaCols-1
+    const roll2 = Math.floor(Math.random() * numMetaCols); // 0 to numMetaCols-1
+    const lowestSelectedIndex = Math.min(roll1, roll2);     // <<< Take lowest
+    const finalColIndex = startCol + lowestSelectedIndex; // Actual column index
+    const selectedColTag = metaColorTags?.[lowestSelectedIndex] ?? `Index ${lowestSelectedIndex}`;
+    fMyConsoleLog(`   -> Meta Channel Rolls: ${roll1}, ${roll2}. Lowest Index: ${lowestSelectedIndex} (Column ${finalColIndex} - Tag: ${selectedColTag})`);
+
+    // --- 4. Get Current Value & Calculate New Value ---
+    const currentVal = fGetGridValue(channelRowTag, finalColIndex, true) || 0; // Get as number, default 0
+    const newValue = currentVal + 1; // <<< Always increment by 1
+    // No capping needed
+
+    fMyConsoleLog(`      -> Index ${lowestSelectedIndex} (${selectedColTag}): Current=${currentVal}, Add=1 => New=${newValue}`);
+
+    // --- 5. Update Grid (Single Cell) ---
+    // Use fSetGridValue for the single target cell. It handles 0 -> '' for meta cells.
+    fMyConsoleLog(`   -> Updating Meta Channel cell [${channelRowTag}, ${finalColIndex}] to ${newValue}`);
+    const success = fSetGridValue(
+        channelRowTag,
+        finalColIndex,
+        newValue
+    );
+
+    // --- 6. Log Result ---
+    if (!success) {
+        const msg = `fSetGridValue failed to update Meta Channel grid cell [${channelRowTag}, ${finalColIndex}].`;
+        fMyConsoleLog(`   -> ⚠️ Meta Channel Error: ${msg}`);
+        await fShowMessage(`Error: ${msg}`);
+    } else {
+        fMyConsoleLog("✅ Meta Channel Update Complete.");
+        // Build and Display Sidebar Message (New Format)
+        const sidebarMsg = `<span class="blue-bold">ℹ️ Meta Channeled (${selectedColTag}):</span> ${currentVal} &rarr; ${newValue}`; // <<< MODIFIED FORMAT
+        fPrependToSidebar(sidebarMsg);
+        fShowSidebar();
+    }
+
+} // END fMetaChannel
 
 
 
