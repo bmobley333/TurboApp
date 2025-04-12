@@ -142,9 +142,11 @@ const gUI = {
   ],
   range: {
     // Define ranges using objects with r1, c1, r2, c2 properties
-    morphs: [ // <-- Array is correct because there are MULTIPLE morph ranges
+    morphs: [ 
       { r1: 'AbilTblStart_R', c1: 'Morph1', r2: 'AbilTblEnd_R', c2: 'Morph1' },
-      { r1: 'AbilTblStart_R', c1: 'Morph2', r2: 'AbilTblEnd_R', c2: 'Morph2' }
+      { r1: 'GearTblStart_R', c1: 'Morph1', r2: 'GearTblEnd_R', c2: 'Morph1' },
+      { r1: 'AbilTblStart_R', c1: 'Morph2', r2: 'AbilTblEnd_R', c2: 'Morph2' },
+      { r1: 'GearTblStart_R', c1: 'Morph2', r2: 'GearTblEnd_R', c2: 'Morph2' }
     ],
     monsters: { r1: 'CustMon', c1: 'NumMon', r2: 'LastMon_R', c2: 'MonSize' },
     currentNish: { r1: 'Nish', c1: 'Nish', r2: 'Nish', c2: 'Nish' },
@@ -161,7 +163,11 @@ const gUI = {
     vit2ndWnds: { r1: 'VitTbl', c1: 'vit2nd', r2: 'VitTbl', c2: 'vit2nd' },
     vit3rdWnds: { r1: 'VitTbl', c1: 'vit3rd', r2: 'VitTbl', c2: 'vit3rd' },
     vitNow: { r1: 'VitTbl', c1: 'vitNow', r2: 'VitTbl', c2: 'vitNow' },
-    vitNowPercent: { r1: 'VitTbl', c1: 'VitNowPercent', r2: 'VitTbl', c2: 'VitNowPercent' }
+    vitNowPercent: { r1: 'VitTbl', c1: 'VitNowPercent', r2: 'VitTbl', c2: 'VitNowPercent' },
+    isONDur: [ 
+      { r1: 'NishAtr_R', c1: 'On', r2: 'AbilTblEnd_R', c2: 'On' },
+      { r1: 'GearTblStart_R', c1: 'On', r2: 'GearTblEnd_R', c2: 'On' }
+    ]
   },
     list: {
     // array lists
@@ -2670,43 +2676,36 @@ function fSetupSidebarActionListeners() {
 
 // fSetupMenuButtonListeners ///////////////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Adds click listeners to the main menu bar buttons (Nish, Roll, Free, Luck, Game, Gear).
+// MODIFIED: Listener for 'Nish' button now calls fHandleNishButtonClick.
 // MODIFIED: Listeners for Roll, Free, Luck now call fSetButtonOrMenuState then fHandleRollDiceAction.
 function fSetupMenuButtonListeners(btnNish, btnRoll, btnFree, btnLuck, btnGame, dropdownGame, btnGear, dropdownGear) {
 
-    // Listener for 'Nish' button (Direct Action)
-    btnNish.addEventListener('click', (event) => {
-        event.stopPropagation();
-        fCloseAllDropdowns();
-        // fSetButtonOrMenuState('Nish'); // Example if Nish button were to trigger a state
-        console.log("ACTION: Nish button clicked (logic pending)");
-        fMyConsoleLog("🖱️ Nish Clicked");
-        // @@ Add logic for Nish button here later
-    });
+    // Listener for 'Nish' button <<< UPDATED
+    btnNish.addEventListener('click', fHandleNishButtonClick); // Call the new dedicated handler
 
-    // Listener for 'Roll' button (Direct Action) <<< UPDATED
+    // Listener for 'Roll' button (Sets state, then calls main handler)
     btnRoll.addEventListener('click', (event) => {
         event.stopPropagation();
         fCloseAllDropdowns();
-        fSetButtonOrMenuState('Roll'); // <<< Set state
-        fHandleRollDiceAction();       // <<< Call main handler
+        fSetButtonOrMenuState('Roll'); // Set state
+        fHandleRollDiceAction();       // Call main handler
     });
 
-    // Listener for 'Free' button (Direct Action) <<< UPDATED
+    // Listener for 'Free' button (Sets state, then calls main handler)
     btnFree.addEventListener('click', (event) => {
         event.stopPropagation();
         fCloseAllDropdowns();
-        fSetButtonOrMenuState('Free'); // <<< Set state
-        fHandleRollDiceAction();       // <<< Call main handler
+        fSetButtonOrMenuState('Free'); // Set state
+        fHandleRollDiceAction();       // Call main handler
     });
 
-    // Listener for 'Luck' button (Direct Action) <<< UPDATED
+    // Listener for 'Luck' button (Sets state, then calls main handler)
     btnLuck.addEventListener('click', (event) => {
         event.stopPropagation();
         fCloseAllDropdowns();
-        fSetButtonOrMenuState('Luck'); // <<< Set state
-        fHandleRollDiceAction();       // <<< Call main handler
+        fSetButtonOrMenuState('Luck'); // Set state
+        fHandleRollDiceAction();       // Call main handler
     });
-
 
     // Listener for 'Game' button (Toggle Dropdown)
     btnGame.addEventListener('click', (event) => {
@@ -3177,6 +3176,106 @@ async function fMetaChannel() {
     }
 
 } // END fMetaChannel
+
+
+
+// fIsOn_NewNishSet ///////////////////////////////////////////////////////////////////
+// Purpose -> Scans defined 'On/Dur' ranges, decrements positive integers, changes 0/'i'/'p'/'n' to ''.
+//            Handles case-insensitivity for 'i', 'p', and 'n'. Updates grid data and DOM. No sidebar effects.
+// Inputs  -> None (uses gUI.range.isONDur).
+// Outputs -> None (modifies gUI.arr and gUI.grid2D via fSetGridValue).
+async function fIsOn_NewNishSet() {
+    fMyConsoleLog("⚙️ Processing 'Is On/Duration' cells for Nish turn...");
+
+    const rangeDefs = gUI.range?.isONDur; // Get the array of range definitions
+
+    if (!Array.isArray(rangeDefs) || rangeDefs.length === 0) {
+        fMyConsoleLog("⚠️ Cannot process 'Is On': Range definitions missing or empty in gUI.range.isONDur.");
+        // Optional: Show a message if this is unexpected
+        // await fShowMessage("Error: 'Is On/Duration' range definitions not found.");
+        return;
+    }
+
+    let cellsProcessed = 0;
+    let cellsChanged = 0;
+    let errorsEncountered = false;
+
+    // Iterate through each range definition object in the array
+    for (const range of rangeDefs) {
+        if (!fIsValidRangeObject(range)) { // Use existing helper
+             console.warn("fIsOn_NewNishSet: Skipping invalid range object", range);
+             errorsEncountered = true;
+             continue; // Skip malformed ranges
+        }
+
+        // Resolve the tags/indices for the current range
+        const resolved = fResolveRangeIndices(range); // Use existing helper function
+        if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
+             console.warn("fIsOn_NewNishSet: Skipping range due to unresolved indices", range);
+             errorsEncountered = true;
+             continue; // Skip ranges with invalid tags/indices
+        }
+
+        const rMin = Math.min(resolved.r1, resolved.r2);
+        const rMax = Math.max(resolved.r1, resolved.r2);
+        const cMin = Math.min(resolved.c1, resolved.c2);
+        const cMax = Math.max(resolved.c1, resolved.c2);
+
+        // Iterate through each cell within the resolved range
+        for (let r = rMin; r <= rMax; r++) {
+            for (let c = cMin; c <= cMax; c++) {
+                cellsProcessed++;
+                const currentValue = fGetGridValue(r, c); // Use existing helper
+                let newValue = currentValue; // Default to keeping the current value
+
+                if (currentValue === null || typeof currentValue === 'undefined') {
+                    // If cell is truly empty/null, treat as ''. No change needed.
+                    newValue = '';
+                } else {
+                    const currentValueStrLower = String(currentValue).toLowerCase();
+
+                    // Check for 'i', 'p', or 'n' (case-insensitive) <<< MODIFIED LINE
+                    if (currentValueStrLower === 'i' || currentValueStrLower === 'p' || currentValueStrLower === 'n') {
+                        newValue = ''; // Change 'i', 'p', or 'n' to empty string
+                    } else {
+                        // Attempt to treat as a number
+                        const numericValue = Number(currentValue);
+
+                        if (!isNaN(numericValue)) {
+                            // It's a valid number
+                            if (numericValue > 0) {
+                                newValue = numericValue - 1; // Decrement positive integers
+                                // Check if decrementing results in 0
+                                if (newValue === 0) {
+                                    newValue = ''; // Change resulting 0 to empty string
+                                }
+                            } else if (numericValue === 0) {
+                                // If it was already 0
+                                newValue = ''; // Change 0 to empty string
+                            }
+                            // Negative numbers are left unchanged (newValue === currentValue already)
+                        }
+                        // Else: It wasn't 'i', 'p', 'n', or a number. Keep original value.
+                    }
+                }
+
+                // Update the grid only if the value has actually changed
+                if (newValue !== currentValue) {
+                    if (fSetGridValue(r, c, newValue)) { // Use existing helper
+                        cellsChanged++;
+                        // fMyConsoleLog(`   -> Changed cell [${r}, ${c}] from '${currentValue}' to '${newValue}'`); // Log individual changes if needed
+                    } else {
+                        // fSetGridValue logs its own errors
+                        errorsEncountered = true;
+                    }
+                }
+            } // end column loop
+        } // end row loop
+    } // end loop through range definitions
+
+    fMyConsoleLog(`✅ 'Is On/Duration' Processing Complete. Processed: ${cellsProcessed}, Changed: ${cellsChanged}${errorsEncountered ? ' (with errors)' : ''}.`);
+
+} // END fIsOn_NewNishSet
 
 
 

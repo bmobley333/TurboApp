@@ -17,13 +17,10 @@
 //            Verifies target, populates gUI.roll (base state).
 //            Processes morphs for ALL triggers.
 //            Verifies ALL costs based on final Free/Luck state, branches roll logic, applies costs, logs result.
+// MODIFIED: Calls fExecuteNishSequence conditionally for Checkbox+Roll/Free/Luck triggers of Nish ability.
+// MODIFIED: Updates ('Nish','Nish') cell with final roll result if the ability was Nish.
 // Inputs  -> None (uses gUI.currentSkRadioChecked, gUI.buttonOrMenu, gUI.roll).
 // Outputs -> None (updates gUI, DOM, logs to sidebar).
-// MODIFIED: Uses gUI.buttonOrMenu state to control flag setting and morph processing.
-// MODIFIED: Calls fSetButtonOrMenuState(null) on exit/completion.
-// MODIFIED: Adds '⚠️ Free/Lucked Roll Below:' header based on final state.
-// MODIFIED: Ensures fProcessMorph runs for ALL triggers (Std, Free, Luck).
-// MODIFIED: Determines final Free/Luck state based on Button OR Morph.
 async function fHandleRollDiceAction() {
     fMyConsoleLog("🎲 Roll Dice Action Triggered");
 
@@ -44,40 +41,47 @@ async function fHandleRollDiceAction() {
         return;
     }
 
-    // --- 2. Process Morphs (Now runs for ALL triggers) --- <<< MODIFIED BLOCK
-    let ranMorphProcessing = false; // Track if fProcessMorph was run
+    // --- <<< NISH CHECK & CONDITIONAL SEQUENCE EXECUTION >>> ---
+    const nishRowIndex = resolveRow('NishAtr_R'); // Resolve Nish row index once
+    const isNishAbilityRoll = (gUI.roll.ability_R === nishRowIndex); // Check if current ability is Nish
 
-    // ALWAYS process morphs, regardless of the trigger (Standard, Free, Luck, Nish, etc.)
+    if (isNishAbilityRoll && !gUI.buttonOrMenu.isNish) {
+        // If it IS the Nish ability AND it was NOT triggered by the Nish button
+        // (meaning it was triggered by Checkbox + Roll/Free/Luck)
+        fMyConsoleLog("   -> Nish ability triggered via Checkbox + Roll/Free/Luck. Executing Nish sequence first...");
+        await fExecuteNishSequence(); // Run the pre-roll Nish sequence
+    } else if (isNishAbilityRoll) {
+        fMyConsoleLog("   -> Nish ability triggered via Nish Button. Sequence already executed.");
+    }
+    // --- <<< END NISH CHECK >>> ---
+
+    // --- 2. Process Morphs (Now runs for ALL triggers) ---
+    let ranMorphProcessing = false; // Track if fProcessMorph was run
     fMyConsoleLog("   -> Processing morph string (Standard, Free, Luck, or other trigger)...");
     await fProcessMorph(); // Processes morphs, MAY set isFreeRoll/isLuckedRoll flags from the morph string
     ranMorphProcessing = true; // Mark that morphs were processed
-    // --- End Modified Block ---
 
-    // Ensure multiRollCount defaults to 1 (should only happen if fProcessMorph somehow fails unexpectedly)
     if (typeof gUI.roll.multiRollCount === 'undefined') {
         gUI.roll.multiRollCount = 1;
         fMyConsoleLog("   -> Warning: multiRollCount was undefined after morph processing, defaulting to 1.");
     }
 
-    // --- 3. Determine Final Flags & Prepare --- <<< MODIFIED FLAG LOGIC
+    // --- 3. Determine Final Flags & Prepare ---
     const multiRollCount = gUI.roll.multiRollCount;
-    // Determine final isFreeRoll state: true if Free Button was pressed OR 'free' morph was found
-    const isFreeRoll = gUI.buttonOrMenu.isFree || gUI.roll.isFreeRoll;
+    // Determine final isFreeRoll state: true if Free Button was pressed OR 'free' morph was found OR Nish Button was pressed
+    const isFreeRoll = gUI.buttonOrMenu.isFree || gUI.roll.isFreeRoll || (isNishAbilityRoll && gUI.buttonOrMenu.isNish); // Nish button implies free roll
     // Determine final isLuckedRoll state: true if Luck Button was pressed OR 'luck' morph was found
     const isLuckedRoll = gUI.buttonOrMenu.isLuck || gUI.roll.isLuckedRoll;
     const resTyp = gUI.roll.resTyp;
     const hasDifficultyMorph = (typeof gUI.roll.resDif === 'number' && gUI.roll.resDif !== '');
-
     // Update gUI.roll flags with the combined states for subsequent checks
     gUI.roll.isFreeRoll = isFreeRoll;
     gUI.roll.isLuckedRoll = isLuckedRoll;
-
     fMyConsoleLog(`   -> Final Roll Type: ${resTyp}`);
     fMyConsoleLog(`   -> Final Multi-Roll Count: ${multiRollCount}`);
     fMyConsoleLog(`   -> Final Is Free Roll: ${isFreeRoll}`); // Log the combined state
     fMyConsoleLog(`   -> Final Is Lucked Roll: ${isLuckedRoll}`); // Log the combined state
     fMyConsoleLog(`   -> Final Has Difficulty Morph (^): ${hasDifficultyMorph}`);
-    // --- End Modified Flag Logic ---
 
     const pendingHeaders = []; // Array to hold cost/status header strings
     let allCostsMet = true;
@@ -85,7 +89,7 @@ async function fHandleRollDiceAction() {
     gUI.pendingChangesMap = {}; // Reset pending changes map
 
     const addChangesToMap = (changesArray) => {
-        // (Helper function remains the same as before)
+        // (Helper function remains the same)
         if (!Array.isArray(changesArray)) return;
         changesArray.forEach(change => {
             if (change && typeof change.r !== 'undefined' && typeof change.c !== 'undefined') {
@@ -96,21 +100,24 @@ async function fHandleRollDiceAction() {
     };
 
     // --- 4. Add Pre-Cost Headers (Lucked/Free) ---
-    // Add header for Lucked Roll if applicable (uses final combined state)
     if (isLuckedRoll) {
          pendingHeaders.push('⚠️ <span class="blue-bold">Lucked Roll Below:</span>');
     }
-    // Add header for Free Roll if applicable (uses final combined state)
-    if (isFreeRoll) {
+    // Note: Free roll header added by fExecuteNishSequence if Nish button used,
+    // or added here if 'free' morph or Free button used for non-Nish ability.
+    if (isFreeRoll && !(isNishAbilityRoll && gUI.buttonOrMenu.isNish)) { // Add header unless it was Nish button (sequence added divider)
          pendingHeaders.push('⚠️ <span class="blue-bold">Free Roll Below:</span>');
+    } else if (isFreeRoll && isNishAbilityRoll && gUI.buttonOrMenu.isNish) {
+         // If Nish button triggered it, maybe add a note that costs are bypassed?
+         // pendingHeaders.push('ℹ️ Nish Button: Standard costs bypassed.'); // Optional clarification
     }
 
-    // --- 5. Verify ALL Costs (Luck and Standard, UNLESS Free Roll) --- //
-    if (!isFreeRoll) { // <<< Correctly uses the final combined flag state
-        fMyConsoleLog("🛡️ Verifying Costs (Luck and/or Standard)...");
 
+    // --- 5. Verify ALL Costs (Luck and Standard, UNLESS Free Roll) --- //
+    if (!isFreeRoll) { // Correctly uses the final combined flag state
+        fMyConsoleLog("🛡️ Verifying Costs (Luck and/or Standard)...");
         // Verify Luck Cost (if applicable)
-        if (isLuckedRoll) { // <<< Correctly uses the final combined flag state
+        if (isLuckedRoll) { // Correctly uses the final combined flag state
              fMyConsoleLog("   -> Verifying Luck Cost...");
              const luckCost = 1;
              const currentLuck = fGetGridValue('LuckBox', 'LuckBox', true);
@@ -125,36 +132,38 @@ async function fHandleRollDiceAction() {
              } else {
                  const newLuck = currentLuck - luckCost;
                  addChangesToMap([{ r: 'LuckBox', c: 'LuckBox', value: newLuck }]);
-                 // Header already added in step 4
+                 // Header already added
                  fMyConsoleLog(`      -> Luck Cost OK (${currentLuck} -> ${newLuck}). Change added to map.`);
              }
         }
 
         // Verify Standard Costs (ONLY if NOT Lucked Roll AND cost check hasn't already failed)
-        if (!isLuckedRoll && allCostsMet) { // <<< Correctly skips if Luck flag is set
+        if (!isLuckedRoll && allCostsMet) { // Correctly skips if Luck flag is set
             fMyConsoleLog("   -> Verifying Standard Costs...");
-            // Verify Uses, Act, IsOn, SkMeta, FocusMeta (code remains the same as before)
+            // Verify Uses, Act, IsOn, SkMeta, FocusMeta
              const usesResult = await fUses_VerifyAndProcessCost(multiRollCount);
-             if (!usesResult.success) { allCostsMet = false; userCancelled = usesResult.cancelledByUser; } // Check for cancellation
+             if (!usesResult.success) { allCostsMet = false; userCancelled = usesResult.cancelledByUser; }
              else { addChangesToMap(usesResult.changes); pendingHeaders.push(...usesResult.headers); }
 
              if (allCostsMet) {
                  const actResult = await fAct_VerifyAndProcessCost();
-                 if (!actResult.success) { allCostsMet = false; userCancelled = actResult.cancelledByUser; } // Check for cancellation
+                 if (!actResult.success) { allCostsMet = false; userCancelled = actResult.cancelledByUser; }
                  else { addChangesToMap(actResult.changes); pendingHeaders.push(...actResult.headers); }
              }
              if (allCostsMet) {
+                 // Note: IsOn check is now done in fExecuteNishSequence for Nish, or here for others
+                 // This check might become redundant if IsOn logic is fully moved? Revisit if needed.
                  const isOnResult = await fIsOn_VerifyAndProcessCost();
                  addChangesToMap(isOnResult.changes); pendingHeaders.push(...isOnResult.headers);
              }
              if (allCostsMet) {
                  const skMetaResult = await fSkMeta_VerifyAndProcessCost(gUI.pendingChangesMap);
-                 if (!skMetaResult.success) { allCostsMet = false; } // No cancellation possible here
+                 if (!skMetaResult.success) { allCostsMet = false; }
                  else { addChangesToMap(skMetaResult.changes); pendingHeaders.push(...skMetaResult.headers); }
              }
              if (allCostsMet) {
                  const focusMetaResult = await fFocus_VerifyAndProcessCost(gUI.pendingChangesMap);
-                 if (!focusMetaResult.success) { allCostsMet = false; } // No cancellation possible here
+                 if (!focusMetaResult.success) { allCostsMet = false; }
                  else { addChangesToMap(focusMetaResult.changes); pendingHeaders.push(...focusMetaResult.headers); }
              }
         }
@@ -164,21 +173,18 @@ async function fHandleRollDiceAction() {
             const reason = userCancelled ? "cost verification cancelled by user" : "insufficient resources";
             fMyConsoleLog(`🚦 Halting Roll Dice Action due to ${reason}. Costs NOT applied.`);
             gUI.pendingChangesMap = {}; // Clear map
-            fSetButtonOrMenuState(null); // <<< Reset button state before returning
+            fSetButtonOrMenuState(null); // Reset button state before returning
             return;
         }
         fMyConsoleLog("✅ All necessary costs verified successfully. Changes prepared in map.");
-
-    } else { // <<< Correctly runs if Free flag is set
+    } else { // Runs if Free flag is set
         fMyConsoleLog(`✅ Skipping ALL Cost Verification (Free Roll).`);
-        // Header already added in step 4
         gUI.pendingChangesMap = {}; // Ensure map is clear for free rolls too
     }
     // --- End Cost Verification Block ---
 
 
     // --- 6. Build Initial Log Header String ---
-    // (This part remains the same)
     let initialLogHtml = '';
     pendingHeaders.forEach(header => initialLogHtml += `${header}<br>`); // Apply collected headers
     let title = `<span class="sidebar-ability-name">${gUI.roll.skName || 'Unknown Ability'}</span>`;
@@ -186,61 +192,55 @@ async function fHandleRollDiceAction() {
     if (gUI.roll.resTyp && gUI.roll.resTyp !== gUI.roll.skTyp) title += ` (<span class="red-bold">now</span> ${gUI.roll.resTyp})`;
     initialLogHtml += title;
     const morph = (typeof gUI.roll.skMorph === 'string' && gUI.roll.skMorph !== ',') ? gUI.roll.skMorph.trim() : '';
-    // Show morph regardless of whether it was processed now, as it might contain info even if Free/Luck button used
     if (morph) initialLogHtml += `<br>morph: ${morph}`;
     initialLogHtml = initialLogHtml.trim();
 
 
     // --- 7. Branch Based on Roll Type and Difficulty Morph ---
-    // (This part remains the same - calls fPerformPlayerAttackRolls, etc.)
     let finalLogHtml = '';
     let helperSucceeded = false;
     let wasMonsterInteractionRoll = false;
     const resTypLower = resTyp.toLowerCase();
-    // ... (existing branching logic using Atk, Def, Dmg, AR, Standard) ...
+    // ... (existing branching logic calling fPerformPlayerAttackRolls, etc.) ...
     if (resTypLower === 'atk' && !hasDifficultyMorph) {
         fMyConsoleLog("⚔️ Performing Player Attack Rolls (Validation first)...");
         const monsterRollResult = await fPerformPlayerAttackRolls(initialLogHtml);
         if (monsterRollResult.success) {
-            finalLogHtml = monsterRollResult.logHtml;
-            helperSucceeded = true; wasMonsterInteractionRoll = true;
+            finalLogHtml = monsterRollResult.logHtml; helperSucceeded = true; wasMonsterInteractionRoll = true;
             fMyConsoleLog("   -> Player Attack roll sequence completed.");
         } else {
             fMyConsoleLog("   -> Player Attack sequence halted. Costs NOT applied.");
-            gUI.pendingChangesMap = {}; fSetButtonOrMenuState(null); return; // <<< Reset button state
+            gUI.pendingChangesMap = {}; fSetButtonOrMenuState(null); return; // Reset button state
         }
     } else if (resTypLower === 'def' && !hasDifficultyMorph) {
         fMyConsoleLog("🛡️ Performing Player Defense Rolls (Validation first)...");
         const monsterDefResult = await fPerformPlayerDefenseRolls(initialLogHtml);
         if (monsterDefResult.success) {
-            finalLogHtml = monsterDefResult.logHtml;
-            helperSucceeded = true; wasMonsterInteractionRoll = true;
+            finalLogHtml = monsterDefResult.logHtml; helperSucceeded = true; wasMonsterInteractionRoll = true;
             fMyConsoleLog("   -> Player Defense roll sequence completed.");
         } else {
             fMyConsoleLog("   -> Player Defense sequence halted. Costs NOT applied.");
-            gUI.pendingChangesMap = {}; fSetButtonOrMenuState(null); return; // <<< Reset button state
+            gUI.pendingChangesMap = {}; fSetButtonOrMenuState(null); return; // Reset button state
         }
     } else if (resTypLower === 'dmg' && !hasDifficultyMorph) {
         fMyConsoleLog("💥 Performing Player Damage Rolls (Validation first)...");
         const monsterDmgResult = await fPerformPlayerDamageRolls(initialLogHtml);
         if (monsterDmgResult.success) {
-            finalLogHtml = monsterDmgResult.logHtml;
-            helperSucceeded = true; wasMonsterInteractionRoll = true;
+            finalLogHtml = monsterDmgResult.logHtml; helperSucceeded = true; wasMonsterInteractionRoll = true;
             fMyConsoleLog("   -> Player Damage roll sequence completed.");
         } else {
             fMyConsoleLog("   -> Player Damage sequence halted. Costs NOT applied.");
-            gUI.pendingChangesMap = {}; fSetButtonOrMenuState(null); return; // <<< Reset button state
+            gUI.pendingChangesMap = {}; fSetButtonOrMenuState(null); return; // Reset button state
         }
     } else if (resTypLower === 'ar' && !hasDifficultyMorph) {
         fMyConsoleLog("🛡️ Performing Player Armor Rolls (Validation first)...");
         const monsterArmorResult = await fPerformPlayerArmorRolls(initialLogHtml);
         if (monsterArmorResult.success) {
-            finalLogHtml = monsterArmorResult.logHtml;
-            helperSucceeded = true; wasMonsterInteractionRoll = true;
+            finalLogHtml = monsterArmorResult.logHtml; helperSucceeded = true; wasMonsterInteractionRoll = true;
             fMyConsoleLog("   -> Player Armor roll sequence completed.");
         } else {
             fMyConsoleLog("   -> Player Armor sequence halted. Costs NOT applied.");
-            gUI.pendingChangesMap = {}; fSetButtonOrMenuState(null); return; // <<< Reset button state
+            gUI.pendingChangesMap = {}; fSetButtonOrMenuState(null); return; // Reset button state
         }
     } else {
         fMyConsoleLog("🎯 Performing Standard Roll(s)...");
@@ -253,7 +253,6 @@ async function fHandleRollDiceAction() {
 
 
     // --- 8. Apply ALL Pending Costs (IF helper succeeded AND map has changes) ---
-    // (This part remains the same)
     let applyErrors = false;
     if (helperSucceeded && Object.keys(gUI.pendingChangesMap).length > 0) {
         fMyConsoleLog("✅ Roll sequence successful. Applying Pending Cost Changes...");
@@ -282,10 +281,29 @@ async function fHandleRollDiceAction() {
     // --- End Cost Application Block ---
 
 
+    // --- <<< 8b. Update ('Nish', 'Nish') Cell if Nish Ability >>> ---
+    if (helperSucceeded && isNishAbilityRoll) {
+        const finalNishRoll = gUI.roll.resRoll; // Get the final roll result
+        if (typeof finalNishRoll === 'number' || finalNishRoll === '') { // Check if it's a number or intended empty string
+            fMyConsoleLog(`   -> Updating ('Nish', 'Nish') cell with final roll result: ${finalNishRoll}`);
+            if (!fSetGridValue('Nish', 'Nish', finalNishRoll)) {
+                fMyConsoleLog("      -> ⚠️ Failed to update ('Nish', 'Nish') cell.");
+                // Optional: Show user message?
+                // await fShowMessage("Warning: Failed to update the main Nish cell value.");
+            }
+        } else {
+            fMyConsoleLog(`   -> Skipping update to ('Nish', 'Nish') cell: Invalid final roll result type (${typeof finalNishRoll}).`);
+        }
+    }
+    // --- <<< End Nish Cell Update >>> ---
+
+
     // --- 9. Prepend Final Combined Log to Sidebar ---
-    // (This part remains the same)
     if (finalLogHtml) {
-        if (wasMonsterInteractionRoll) { fPrependToSidebar('&nbsp;'); } // Add space before monster rolls
+        // Add space before monster rolls OR before Nish roll if Nish sequence added divider
+        if (wasMonsterInteractionRoll || (isNishAbilityRoll && !gUI.buttonOrMenu.isNish)) {
+             // fPrependToSidebar('&nbsp;'); // Re-evaluate if extra space needed
+        }
         fPrependToSidebar(finalLogHtml);
         fShowSidebar();
     } else {
@@ -294,7 +312,7 @@ async function fHandleRollDiceAction() {
     gUI.roll.htmlHeader = ''; // Clear header buffer
 
 
-    // --- 10. Reset Button State --- <<< FINAL STEP
+    // --- 10. Reset Button State ---
     fSetButtonOrMenuState(null);
     fMyConsoleLog(`✅ Roll Dice Action Completed.`);
 
@@ -2318,7 +2336,115 @@ function fBuildRollLogHTML(rollNum, totalRolls, isFirstRoll) {
 
 
 // ==========================================================================
-// === Base Die Rolling          (End of Die Roll Button ) ===
+// === Nish         (End of Die Roll Button ) ===
+// ==========================================================================
+
+
+
+
+// fHandleNishButtonClick /////////////////////////////////////////////////////////////
+// Purpose -> Handles the click event specifically for the main 'Nish' button.
+//            Sets the Nish state, programmatically checks the Nish checkbox,
+//            executes the core Nish sequence, and then triggers the main roll action handler.
+// Inputs  -> None.
+// Outputs -> None (modifies state, DOM, triggers other async functions).
+async function fHandleNishButtonClick() {
+    fMyConsoleLog("🖱️ Nish Button Clicked...");
+    event.stopPropagation(); // Prevent potential bubbling issues
+    fCloseAllDropdowns();    // Close any open menus
+
+    // 1. Set Nish Button State
+    fSetButtonOrMenuState('Nish'); // Explicitly set 'isNish' to true
+
+    // 2. Programmatically Check Nish Checkbox
+    const nishRowTag = 'NishAtr_R';
+    const nishColTag = 'Sk1ChkBox';
+    const r = resolveRow(nishRowTag);
+    const c = resolveCol(nishColTag);
+
+    if (isNaN(r) || isNaN(c)) {
+        console.error(`fHandleNishButtonClick: Could not resolve Nish checkbox coordinates (${nishRowTag}, ${nishColTag}).`);
+        await fShowMessage(`❌ Error: Cannot find Nish checkbox definition.`);
+        fSetButtonOrMenuState(null); // Reset state on error
+        return;
+    }
+
+    const currentChecked = gUI.currentSkRadioChecked;
+    // Uncheck previous if different
+    if (currentChecked.r !== null && currentChecked.c !== null && (currentChecked.r !== r || currentChecked.c !== c)) {
+        fUncheckOldSkGroupBox(currentChecked.r, currentChecked.c); // Use existing helper
+    }
+
+    // Check the Nish box DOM element
+    const nishCellDiv = gUI.grid2D?.[r]?.[c];
+    const nishCheckbox = nishCellDiv?.querySelector('input[data-sk-group="true"]');
+    if (nishCheckbox) {
+        nishCheckbox.checked = true;
+        gUI.arr[r][c] = true; // Update data model
+        gUI.currentSkRadioChecked = { r, c }; // Update tracker
+        fMyConsoleLog(`   -> Programmatically checked Nish checkbox [${r}, ${c}].`);
+    } else {
+        console.error(`fHandleNishButtonClick: Could not find Nish checkbox DOM element at [${r}, ${c}].`);
+        await fShowMessage(`❌ Error: Cannot find Nish checkbox element.`);
+        fSetButtonOrMenuState(null); // Reset state on error
+        return;
+    }
+
+    // 3. Execute Core Nish Sequence (Divider, Meta, Act, IsOn)
+    await fExecuteNishSequence();
+
+    // 4. Trigger Main Roll Dice Action Handler
+    // This will now use the checked Nish checkbox and the 'isNish' state
+    fMyConsoleLog("   -> Triggering fHandleRollDiceAction for Nish ability...");
+    await fHandleRollDiceAction();
+
+    // 5. Reset Button State (Handled by fHandleRollDiceAction completion)
+    // No need to reset state here, fHandleRollDiceAction does it.
+
+} // END fHandleNishButtonClick
+
+
+
+// fExecuteNishSequence ///////////////////////////////////////////////////////////////
+// Purpose -> Executes the common sequence of actions required at the start of a Nish turn.
+//            Adds sidebar divider, runs Meta Channeling (unless Lucked), sets Max Action Points,
+//            and processes IsOn durations (unless Lucked).
+// Inputs  -> None.
+// Outputs -> None (modifies sidebar, calls other async functions).
+async function fExecuteNishSequence() {
+    fMyConsoleLog("🎬 Executing Nish Sequence...");
+
+    // 1. Add Sidebar Divider
+    fPrependToSidebar('<hr class="nish-divider"><br>');
+    fMyConsoleLog("   -> Sidebar divider added.");
+
+    // 2. Run Meta Channeling (Skip if Luck button triggered Nish)
+    if (!gUI.buttonOrMenu.isLuck) {
+        await fMetaChannel();
+        fMyConsoleLog("   -> fMetaChannel executed.");
+    } else {
+        fMyConsoleLog("   -> Skipping fMetaChannel (Luck trigger).");
+    }
+
+    // 3. Set Action Points to Max (Always runs)
+    await fAct_SetToMax(); // Await this as it might have async elements like fShowMessage
+    fMyConsoleLog("   -> fAct_SetToMax executed.");
+
+    // 4. Process 'Is On' / Duration Decrements (Skip if Luck button triggered Nish)
+    if (!gUI.buttonOrMenu.isLuck) {
+        await fIsOn_NewNishSet(); // Await this as it might have async elements like fShowMessage
+        fMyConsoleLog("   -> fIsOn_NewNishSet executed.");
+    } else {
+        fMyConsoleLog("   -> Skipping fIsOn_NewNishSet (Luck trigger).");
+    }
+
+    fMyConsoleLog("✅ Nish Sequence Execution Complete.");
+
+} // END fExecuteNishSequence
+
+
+// ==========================================================================
+// === Base Die Rolling          (End of Nish ) ===
 // ==========================================================================
 
 
