@@ -40,7 +40,6 @@ function doGet(e) {
 
     // Attempt to load and serve the main HTML template
     try {
-        // Logger.log('Attempting to create template for sheetId:', sheetId); // Debug log removed
         // Optional: Verify sheetId is valid before rendering (can be slow)
         // SpreadsheetApp.openById(sheetId);
 
@@ -55,7 +54,6 @@ function doGet(e) {
 
     } catch (error) {
         // Log detailed error and return user-friendly error message
-        // Logger.log('Error in doGet:', error); // Debug log removed
         console.error(`doGet Error for sheetId ${sheetId}: ${error} ${error.stack ? '\n' + error.stack : ''}`);
         return HtmlService.createHtmlOutput(`❌ Error loading app: ${error.message}. Is sheetId '${sheetId}' valid and accessible?`);
     }
@@ -78,7 +76,6 @@ function doGet(e) {
 // fCSGetGameSheet5 /////////////////////////////////////////////////////////////////////////////////
 // Loads full data, format, and notes from 'Game' sheet. Returns structured object.
 function fCSGetGameSheet5(targetSheetId) {
-    Logger.log('Ver 5');
     try {
         const sh = fOpenGameSheet(targetSheetId);
         return fExtractSheetData(sh);
@@ -88,7 +85,7 @@ function fCSGetGameSheet5(targetSheetId) {
         console.error(msg + "\nStack:\n" + e.stack);
         throw new Error(msg);
     }
-}
+} // END fCSGetGameSheet5
 
 
 // fOpenGameSheet ///////////////////////////////////////////////////////////////////////////////////
@@ -106,7 +103,7 @@ function fOpenGameSheet(targetSheetId) {
     }
 
     return sh;
-};
+} // END fOpenGameSheet
 
 
 
@@ -118,8 +115,7 @@ function fIsSheetTrulyEmpty(sh, arr) {
     const onlyEmpty = numRows === 1 && numCols === 1 && arr[0][0] === "";
     return (numRows === 0 || numCols === 0 || onlyEmpty) &&
            (sh.getLastRow() === 0 && sh.getLastColumn() === 0);
-};
-
+} // END fIsSheetTrulyEmpty
 
 
 
@@ -155,7 +151,7 @@ function fBuildFormatObject(sh, rngData, numCols) {
         colWidths: colWidths,
         borders: [] // client-side handles borders
     };
-};
+} // END fBuildFormatObject
 
 
 
@@ -168,7 +164,7 @@ function fBuildReturnObject(arr, format, notesArr) {
         format: format,
         notesArr: notesArr
     };
-};
+} // END fBuildReturnObject
 
 
 
@@ -196,7 +192,7 @@ function fExtractSheetData(sh) {
     const notesArr = rngData.getNotes();
 
     return fBuildReturnObject(arr, format, notesArr);
-};
+} // END fExtractSheetData
 
 
 
@@ -217,7 +213,7 @@ function fExtractSheetData(sh) {
 //         -> a1Notation (String): The standard A1 notation for the range (e.g., "C5:F10").
 // Outputs -> (Array[][]|Error): A 2D array of values from the specified range, or throws an error on failure.
 function fCSGetRangeData(targetSheetId, a1Notation) {
-    Logger.log(`fCSGetRangeData called for SheetID: ${targetSheetId}, Range: ${a1Notation}`);
+    Logger.log(`fCSGetRangeData called for SheetID: ${targetSheetId}, Range: ${a1Notation}`); // Removed debug
     try {
         // Validate inputs
         if (!targetSheetId || typeof targetSheetId !== 'string') {
@@ -239,7 +235,7 @@ function fCSGetRangeData(targetSheetId, a1Notation) {
         const range = sh.getRange(a1Notation);
         const values = range.getValues();
 
-        Logger.log(`fCSGetRangeData successfully retrieved ${values.length} rows.`);
+        Logger.log(`fCSGetRangeData successfully retrieved ${values.length} rows.`); // Removed debug
         return values; // Return the 2D array
 
     } catch (e) {
