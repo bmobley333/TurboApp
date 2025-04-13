@@ -2545,6 +2545,151 @@ async function fHandleChaosGemClick(r, c) { // Accepts r, c parameters
 
 
 
+
+// fHandleAdHocRoll ////////////////////////////////////////////////////////////////
+// Purpose -> Attempts to parse and roll dice based on the text content of a cell,
+//            if the click context meets specific criteria (not ability/chaos gem).
+//            Checks for exact matches first, then parses for the first occurrence.
+// Inputs  -> cellText (String): The text content of the clicked cell.
+// Outputs -> (Promise<Boolean>): Resolves true if a roll was successfully parsed and logged, false otherwise.
+// MODIFIED: Added parsing logic for first match if exact match fails.
+// MODIFIED: Adjusted sidebar header formatting to only bold/blue first two words.
+// MODIFIED: Added T/C roll result suffix ONLY for 'Custom Roll Sk' types.
+async function fHandleAdHocRoll(cellText) {
+    fMyConsoleLog(`🎲 Attempting Ad-Hoc Roll for text: "${cellText}"`);
+    if (typeof cellText !== 'string' || !cellText.trim()) {
+        fMyConsoleLog("   -> No valid text provided for ad-hoc roll.");
+        return false; // No text to parse
+    }
+
+    const text = cellText.trim();
+    let rollResult = null;
+    let logHeader = ''; // Will be 'Die Roll' or 'Custom Roll Sk'
+    let logDetails = '';
+    let patternMatched = false;
+    let matchedString = ''; // Store the string that matched
+
+    // --- Regex definitions ---
+    const skExactPattern = /^sk(\d+)$/i;
+    const dieStringExactPattern = /^((\d+)?d(\d+)\s*(?:([-+])\s*(\d+))?)$/i;
+    const numberExactPattern = /^\d+$/;
+    const parsePattern = /(sk(\d+))|((\d+)?d(\d+)\s*(?:([-+])\s*(\d+))?)/i;
+
+
+    // --- 1. Check Exact Match: Sk# ---
+    let match = text.match(skExactPattern);
+    if (match) {
+        const num = parseInt(match[1], 10);
+        if (!isNaN(num) && num > 0) {
+            rollResult = fCSD(num);
+            logHeader = 'Custom Roll Sk'; // Set full header text
+            matchedString = match[0];
+            logDetails = `Sk(${num}) ~${rollResult}`;
+            patternMatched = true;
+            fMyConsoleLog(`   -> Matched EXACT Sk pattern: ${matchedString}. Result: ${rollResult}`);
+        }
+    }
+
+    // --- 2. Check Exact Match: Die String ---
+    if (!patternMatched) {
+        match = text.match(dieStringExactPattern);
+        if (match) {
+            matchedString = match[0].trim();
+            rollResult = fRollDieString(matchedString);
+            if (rollResult !== null) {
+                logHeader = 'Die Roll'; // Set header text
+                logDetails = `Die(${matchedString}) ~${rollResult}`;
+                patternMatched = true;
+                fMyConsoleLog(`   -> Matched EXACT Die String pattern: ${matchedString}. Result: ${rollResult}`);
+            }
+        }
+    }
+
+    // --- 3. Check Exact Match: Number (Treat as d#) ---
+    if (!patternMatched && numberExactPattern.test(text)) {
+        const num = parseInt(text, 10);
+        if (!isNaN(num) && num > 0) {
+            matchedString = `d${num}`;
+            rollResult = fRollDieString(matchedString);
+            if (rollResult !== null) {
+                logHeader = 'Die Roll'; // Set header text
+                logDetails = `Die(${matchedString}) ~${rollResult}`; // Log as d#
+                patternMatched = true;
+                fMyConsoleLog(`   -> Matched EXACT Number pattern: ${num} (rolled as ${matchedString}). Result: ${rollResult}`);
+            }
+        }
+    }
+
+    // --- 4. Parse Text for First Match (if no exact match found) ---
+    if (!patternMatched) {
+        fMyConsoleLog(`   -> No exact match. Parsing text for first pattern...`);
+        match = text.match(parsePattern);
+        if (match) {
+            if (match[1]) { // Matched sk# pattern
+                matchedString = match[1];
+                const num = parseInt(match[2], 10);
+                if (!isNaN(num) && num > 0) {
+                    rollResult = fCSD(num);
+                    logHeader = 'Custom Roll Sk'; // Set full header text
+                    logDetails = `Sk(${num}) ~${rollResult}`;
+                    patternMatched = true;
+                    fMyConsoleLog(`   -> PARSED first Sk pattern: ${matchedString}. Result: ${rollResult}`);
+                }
+            } else if (match[3]) { // Matched die string pattern
+                matchedString = match[3].trim();
+                 rollResult = fRollDieString(matchedString);
+                 if (rollResult !== null) {
+                     logHeader = 'Die Roll'; // Set header text
+                     logDetails = `Die(${matchedString}) ~${rollResult}`;
+                     patternMatched = true;
+                     fMyConsoleLog(`   -> PARSED first Die String pattern: ${matchedString}. Result: ${rollResult}`);
+                 }
+            }
+        } else {
+             fMyConsoleLog(`   -> No parsable pattern found within text.`);
+        }
+    }
+
+    // --- 5. Log to Sidebar if Successful ---
+    if (patternMatched && rollResult !== null) {
+        // --- Format Header for Sidebar ---
+        let formattedHeader = '';
+        const headerSuffix = (text === matchedString) ? ':' : ` (from "${text}"):`;
+        if (logHeader === 'Custom Roll Sk') {
+            formattedHeader = `<span class="blue-bold">Custom Roll</span> Sk${headerSuffix}`;
+        } else if (logHeader === 'Die Roll') {
+            formattedHeader = `<span class="blue-bold">Die Roll</span>${headerSuffix}`;
+        } else {
+            formattedHeader = `<span class="blue-bold">${logHeader || 'Roll'}</span>${headerSuffix}`; // Fallback
+        }
+
+        // --- Add T/C Suffix ONLY for Custom Skill Rolls --- <<< MODIFIED HERE
+        let tcSuffix = '';
+        if (logHeader === 'Custom Roll Sk') {
+            const tcResult = fCStc();
+            if (tcResult) {
+                tcSuffix = `   ${tcResult}`; // Add spacing before T/C
+            }
+        }
+        // --- End T/C Suffix Logic ---
+
+        const finalLogHtml = `${formattedHeader}<br>${logDetails}${tcSuffix}`; // Append T/C suffix
+        fPrependToSidebar(finalLogHtml);
+        fShowSidebar();
+        fMyConsoleLog(`   -> Ad-Hoc Roll logged to sidebar.`);
+        return true; // Indicate roll was handled
+    }
+
+    // --- 6. No Match Found ---
+    if (!patternMatched) {
+       fMyConsoleLog("   -> No ad-hoc roll pattern matched (exact or parsed).");
+    }
+    return false; // Indicate no roll was handled
+
+} // END fHandleAdHocRoll
+
+
+
 // ==========================================================================
 // === Base Die Rolling          (End of Grid Roll (Chaos/d,D) ) ===
 // ==========================================================================
@@ -2743,6 +2888,69 @@ function fCSDArmor(pcAR) {
   const result = Math.trunc((skillRoll / 15) * 100) / 100;
   return Math.max(1, result); // Ensure minimum of 1
 } // END fCSDArmor
+
+
+
+
+// fRollDieString //////////////////////////////////////////////////////////////////
+// Purpose -> Parses a standard RPG die string (e.g., "d6", "2d8", "3d10+5", "1d12-2")
+//            and rolls the dice using fCSd, returning the total.
+// Inputs  -> dieString (String): The dice notation string.
+// Outputs -> (Number|null): The numerical result of the roll, or null if parsing fails.
+function fRollDieString(dieString) {
+    if (typeof dieString !== 'string' || !dieString.trim()) {
+        console.warn("fRollDieString: Invalid input - requires a non-empty string.");
+        return null;
+    }
+
+    // Regex to capture:
+    // Optional number of dice (X), defaults to 1 if omitted
+    // The 'd' separator (case-insensitive)
+    // The number of sides (Y)
+    // Optional modifier sign (+ or -)
+    // Optional modifier value (Z)
+    // Allows spaces around components
+    const dieStringRegex = /^\s*(\d+)?\s*d\s*(\d+)\s*(?:([-+])\s*(\d+))?\s*$/i;
+    const match = dieString.trim().match(dieStringRegex);
+
+    if (!match) {
+        // console.warn(`fRollDieString: Failed to parse die string: "${dieString}"`); // Can be noisy
+        return null; // String doesn't match the expected format
+    }
+
+    // Extract components
+    const numDice = match[1] ? parseInt(match[1], 10) : 1; // Default to 1 die if number omitted
+    const numSides = parseInt(match[2], 10);
+    const modifierSign = match[3]; // '+' or '-' or undefined
+    const modifierValue = match[4] ? parseInt(match[4], 10) : 0; // Default modifier to 0
+
+    // Validate components
+    if (isNaN(numDice) || numDice < 1 || isNaN(numSides) || numSides < 1 || isNaN(modifierValue)) {
+        console.warn(`fRollDieString: Invalid numeric components in parsed string "${dieString}"`);
+        return null;
+    }
+
+    // Roll the dice
+    let total = 0;
+    fMyConsoleLog(`   -> Rolling Die String: ${numDice}d${numSides}`);
+    for (let i = 0; i < numDice; i++) {
+        const roll = fCSd(numSides);
+        total += roll;
+        fMyConsoleLog(`      - Roll ${i+1}: ${roll}`);
+    }
+    fMyConsoleLog(`   -> Base Roll Total: ${total}`);
+
+    // Apply modifier
+    if (modifierSign === '+') {
+        total += modifierValue;
+        fMyConsoleLog(`   -> Applying Modifier: +${modifierValue} => ${total}`);
+    } else if (modifierSign === '-') {
+        total -= modifierValue;
+        fMyConsoleLog(`   -> Applying Modifier: -${modifierValue} => ${total}`);
+    }
+
+    return total;
+} // END fRollDieString
 
 
 

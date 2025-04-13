@@ -14,10 +14,10 @@ const gUI = {
   rowTag: {},     // Map of row tags to 0-based row indices
   colTag: {},     // Map of column tags to 0-based column indices
   format: {},     // Object containing formatting arrays (bg, fonts, borders, merges, etc.)
-  notes: [],      // <<< NEW: 2D array of cell notes (parallel to arr)
+  notes: [],      // 2D array of cell notes (parallel to arr)
   grid2D: [],     // 2D array holding references to the created cell DOM elements
   pendingChangesMap: {}, // Holds { 'r,c': newValue } during ability roll cost verification steps (or similar process)
-  cellClickInfo: { r: null, c: null, text: null }, // Info about the last clicked cell
+  cellClickInfo: { r: null, c: null, text: null, focusText: null }, // Info about the last clicked cell
 
 
   // Add the manual border definitions here:
@@ -45,12 +45,6 @@ const gUI = {
     { r1: 'PossAPTot', c1: 'CurrentEncHeader', r2: 'PossAPTot', c2: 'PossEncTotEndC', edges: 'br' },
     { r1: 'PossEncTot', c1: 'GearAPTotHeader', r2: 'PossEncTot', c2: 'LastC', edges: 'br' }
     // Add { style: '1px solid #888' } to specific objects if dark grey is desired
-  ],
-  sk1sk2CheckBoxes: [
-    { r1: 'NishAtr_R', c1: 'Sk1ChkBox', r2: 'AbilTblEnd_R', c2: 'Sk1ChkBox'},
-    { r1: 'NishAtr_R', c1: 'Sk2ChkBox', r2: 'AbilTblEnd_R', c2: 'Sk2ChkBox'},
-    { r1: 'GearTblStart_R', c1: 'Sk1ChkBox', r2: 'GearTblEnd_R', c2: 'Sk1ChkBox'},
-    { r1: 'GearTblStart_R', c1: 'Sk2ChkBox', r2: 'GearTblEnd_R', c2: 'Sk2ChkBox'}
   ],
   // Define initially hidden columns/rows using tags or indices
   initialHiddenCols: [
@@ -105,7 +99,7 @@ const gUI = {
     roll: '',            // Raw dice roll result based on resSk and resTyp (before roll morphs)
     resRoll: '',         // Final roll result after applying roll morphs (resMultMult, resPlusPlus, resdctMult) or override (resFlatResult)
 
-    // --- Flags & Multi-Roll 
+    // --- Flags & Multi-Roll
     isUnSk: false,       // Flag set to true if 'un' or 'unsk' morph was present
     isFreeRoll: false,   // Flag set to true if 'free' morph was present
     isLuckedRoll: false, // Flag set to true if 'luck' morph was present
@@ -144,11 +138,25 @@ const gUI = {
   ],
   range: {
     // Define ranges using objects with r1, c1, r2, c2 properties
-    morphs: [ 
+    entireAbiliyNGearTables: [ 
+      { r1: 'AbilTblStart_R', c1: 'PermMorph1', r2: 'AbilTblEnd_R', c2: 'Regain' },
+      { r1: 'GearTblStart_R', c1: 'PermMorph1', r2: 'GearTblEnd_R', c2: 'Regain' }
+    ],
+    morphs: [
       { r1: 'AbilTblStart_R', c1: 'Morph1', r2: 'AbilTblEnd_R', c2: 'Morph1' },
       { r1: 'GearTblStart_R', c1: 'Morph1', r2: 'GearTblEnd_R', c2: 'Morph1' },
       { r1: 'AbilTblStart_R', c1: 'Morph2', r2: 'AbilTblEnd_R', c2: 'Morph2' },
       { r1: 'GearTblStart_R', c1: 'Morph2', r2: 'GearTblEnd_R', c2: 'Morph2' }
+    ],
+    isONDur: [
+      { r1: 'NishAtr_R', c1: 'On', r2: 'AbilTblEnd_R', c2: 'On' },
+      { r1: 'GearTblStart_R', c1: 'On', r2: 'GearTblEnd_R', c2: 'On' }
+    ],
+    sk1sk2CheckBoxes: [
+      { r1: 'NishAtr_R', c1: 'Sk1ChkBox', r2: 'AbilTblEnd_R', c2: 'Sk1ChkBox'},
+      { r1: 'NishAtr_R', c1: 'Sk2ChkBox', r2: 'AbilTblEnd_R', c2: 'Sk2ChkBox'},
+      { r1: 'GearTblStart_R', c1: 'Sk1ChkBox', r2: 'GearTblEnd_R', c2: 'Sk1ChkBox'},
+      { r1: 'GearTblStart_R', c1: 'Sk2ChkBox', r2: 'GearTblEnd_R', c2: 'Sk2ChkBox'}
     ],
     monsters: { r1: 'CustMon', c1: 'NumMon', r2: 'LastMon_R', c2: 'MonSize' },
     currentNish: { r1: 'Nish', c1: 'Nish', r2: 'Nish', c2: 'Nish' },
@@ -166,13 +174,9 @@ const gUI = {
     vit3rdWnds: { r1: 'VitTbl', c1: 'vit3rd', r2: 'VitTbl', c2: 'vit3rd' },
     vitNow: { r1: 'VitTbl', c1: 'vitNow', r2: 'VitTbl', c2: 'vitNow' },
     vitNowPercent: { r1: 'VitTbl', c1: 'VitNowPercent', r2: 'VitTbl', c2: 'VitNowPercent' },
-    isONDur: [ 
-      { r1: 'NishAtr_R', c1: 'On', r2: 'AbilTblEnd_R', c2: 'On' },
-      { r1: 'GearTblStart_R', c1: 'On', r2: 'GearTblEnd_R', c2: 'On' }
-    ],
     chaosGems: { r1: 'Chaos1', c1: 'ChaosUses', r2: 'ChaosWrist', c2: 'ChaosAbility' }
   },
-    list: {
+   list: {
     // array lists
     skTyp: ['Atr','Sk','Atk','DMG','Def','AR','Str'], // Note free, luck, un, unSk are not skill Types and dealth with elsewhere
     metaColor: ['R','O','Y','G','B'],
@@ -196,8 +200,8 @@ const gUI = {
   messageModalOverlay: null, // Reference to #messageModal div
   messageModalText: null,    // Reference to #messageText p tag
   messageModalCloseButton: null, // Reference to #closeMessageModal button
-  messagePromiseResolve: null, // Function to resolve the message promise [cite: 1]
-  // Prompt Box Elements --- <<< NEW SECTION ADDED ---
+  messagePromiseResolve: null, // Function to resolve the message promise
+  // Prompt Box Elements ---
   promptModalOverlay: null,    // Reference to #promptModal div
   promptModalText: null,       // Reference to #promptText p tag
   promptYesButton: null,       // Reference to #promptYesButton button
@@ -368,6 +372,58 @@ function getBorderStyleCSS(borderSideData) {
 
 
 
+// fIsCellInRangeArray /////////////////////////////////////////////////////////////
+// Purpose -> Checks if given coordinates (r, c) fall within ANY of the range objects
+//            defined in the provided rangeArray.
+// Inputs  -> r (Number): 0-based row index.
+//         -> c (Number): 0-based column index.
+//         -> rangeArray (Array<Object>): An array containing range definition objects,
+//                                        e.g., gUI.range.chaosGems or gUI.range.entireAbiliyNGearTables.
+//                                        Handles cases where the array might contain a single range object directly.
+// Outputs -> (Boolean): True if (r, c) is inside any valid range in the array, false otherwise.
+function fIsCellInRangeArray(r, c, rangeArray) {
+    if (typeof r !== 'number' || typeof c !== 'number' || isNaN(r) || isNaN(c)) {
+        console.warn("fIsCellInRangeArray: Invalid input coordinates provided.");
+        return false; // Cannot check invalid coords
+    }
+
+    // Handle if rangeArray itself is a single range object OR an array of them
+    const rangesToCheck = Array.isArray(rangeArray) ? rangeArray : [rangeArray];
+
+    if (rangesToCheck.length === 0 || !rangesToCheck[0]) {
+        // console.warn("fIsCellInRangeArray: Provided range array is empty or invalid."); // Too noisy for frequent checks
+        return false; // No ranges to check
+    }
+
+    for (const rangeDef of rangesToCheck) {
+        if (!fIsValidRangeObject(rangeDef)) {
+             console.warn("fIsCellInRangeArray: Skipping invalid range definition object:", rangeDef);
+             continue; // Skip malformed range definitions
+        }
+
+        const resolved = fResolveRangeIndices(rangeDef);
+        if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
+             console.warn("fIsCellInRangeArray: Skipping range due to unresolved indices:", rangeDef);
+             continue; // Skip ranges with invalid tags/indices
+        }
+
+        const rMin = Math.min(resolved.r1, resolved.r2);
+        const rMax = Math.max(resolved.r1, resolved.r2);
+        const cMin = Math.min(resolved.c1, resolved.c2);
+        const cMax = Math.max(resolved.c1, resolved.c2);
+
+        // Check if the input (r, c) falls within this resolved range
+        if (r >= rMin && r <= rMax && c >= cMin && c <= cMax) {
+            return true; // Found a match, cell is within one of the ranges
+        }
+    }
+
+    // If no range contained the cell after checking all of them
+    return false;
+} // END fIsCellInRangeArray
+
+
+
 // ==========================================================================
 // === Core Cell Creation Helpers       (End of Low-Level Utilities) ===
 // ==========================================================================
@@ -377,14 +433,16 @@ function getBorderStyleCSS(borderSideData) {
 
 // fIsSkRadioGroupMember ////////////////////////////////////////////////////////////
 // Purpose -> Checks if a given cell coordinate (r, c) falls within any of the ranges
-//            defined in gUI.sk1sk2CheckBoxes, indicating it's part of the radio group.
+//            defined in gUI.range.sk1sk2CheckBoxes, indicating it's part of the radio group.
 // Inputs -> r (Number): The 0-based row index.
 //        -> c (Number): The 0-based column index.
 // Outputs -> (Boolean): True if the cell is part of the Sk1/Sk2 radio group ranges, false otherwise.
+// MODIFIED: Changed reference to gUI.range.sk1sk2CheckBoxes
 function fIsSkRadioGroupMember(r, c) {
-    const ranges = gUI.sk1sk2CheckBoxes; // Reads all defined ranges
+    const ranges = gUI.range.sk1sk2CheckBoxes; // <<< MODIFIED HERE
+    // Reads all defined ranges
     if (!Array.isArray(ranges)) {
-        console.warn("fIsSkRadioGroupMember: gUI.sk1sk2CheckBoxes is not a valid array.");
+        console.warn("fIsSkRadioGroupMember: gUI.range.sk1sk2CheckBoxes is not a valid array.");
         return false;
     }
     if (typeof r !== 'number' || typeof c !== 'number' || isNaN(r) || isNaN(c)) {
@@ -401,7 +459,8 @@ function fIsSkRadioGroupMember(r, c) {
         }
 
         // Resolve the tags/indices for the current range
-        const resolved = fResolveRangeIndices(range); // Use existing helper function
+        const resolved = fResolveRangeIndices(range);
+        // Use existing helper function
         if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
              console.warn("fIsSkRadioGroupMember: Skipping range due to unresolved indices", range);
             continue; // Skip ranges with invalid tags/indices
@@ -411,7 +470,6 @@ function fIsSkRadioGroupMember(r, c) {
         const rMax = Math.max(resolved.r1, resolved.r2);
         const cMin = Math.min(resolved.c1, resolved.c2);
         const cMax = Math.max(resolved.c1, resolved.c2);
-
         // Check if the input r, c falls within this range
         if (r >= rMin && r <= rMax && c >= cMin && c <= cMax) {
             return true; // Found a match, it's part of the group
@@ -2549,9 +2607,10 @@ function fSetRangeValues(r1Ref, c1Ref, r2Ref, c2Ref, valueOrArray) {
 // fPrependToSidebar /////////////////////////////////////////////////////////////////
 // Purpose -> Prepends a message string (which can contain HTML) as a new paragraph
 //            to the sidebar content area. Removes the initial placeholder message.
+//            Scrolls the sidebar content to the top after prepending.
 // Inputs -> message (String): The text or HTML content to prepend.
 // Outputs -> None (Modifies DOM).
-// MODIFIED: Uses prepend. Removed scroll-to-bottom. Uses innerHTML.
+// MODIFIED: Added scroll to top after prepending.
 function fPrependToSidebar(message) {
     const sidebarContent = document.getElementById('sidebar-content');
     if (!sidebarContent) {
@@ -2567,10 +2626,13 @@ function fPrependToSidebar(message) {
 
     // Create a new paragraph element
     const newEntry = document.createElement('p');
-    newEntry.innerHTML = message; // <<< Use innerHTML to render tags
+    newEntry.innerHTML = message; // Use innerHTML to render tags
 
     // Prepend the new entry to the sidebar content
     sidebarContent.prepend(newEntry);
+
+    // Scroll the sidebar content area to the top
+    sidebarContent.scrollTop = 0; // <<< ADDED THIS LINE
 
 }; // END fPrependToSidebar
 
@@ -2721,76 +2783,139 @@ function fSetupSidebarActionListeners() {
 
 // fSetupMenuButtonListeners ///////////////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Adds click listeners to the main menu bar buttons (Nish, Roll, Free, Luck, Game, Gear).
-// MODIFIED: Listener for 'Nish' button now calls fHandleNishButtonClick.
-// MODIFIED: Listeners for Roll, Free, Luck now call fSetButtonOrMenuState then fHandleRollDiceAction.
-// MODIFIED: Listener for 'Roll' button now checks context (last click) and calls appropriate handler directly.
+// MODIFIED: Listener for 'Roll' button checks context in order: Chaos Gem -> Ad-Hoc Roll -> Ability Checkbox.
+// MODIFIED: Ad-hoc roll logic now reads current cell text content directly from DOM and stores it in gUI.cellClickInfo.focusText.
 function fSetupMenuButtonListeners(btnNish, btnRoll, btnFree, btnLuck, btnGame, dropdownGame, btnGear, dropdownGear) {
 
-    // Listener for 'Nish' button <<< Calls dedicated handler
-    btnNish.addEventListener('click', fHandleNishButtonClick); //
+    // Listener for 'Nish' button
+    btnNish.addEventListener('click', fHandleNishButtonClick);
 
-    // Listener for 'Roll' button <<< MODIFIED: Checks context, calls handler >>>
-    btnRoll.addEventListener('click', async (event) => { // <<< Made async
+    // Listener for 'Roll' button <<< UPDATED: Reads current text for Ad-Hoc >>>
+    btnRoll.addEventListener('click', async (event) => {
         event.stopPropagation();
-        fCloseAllDropdowns(); //
-        fSetButtonOrMenuState('Roll'); // Set state
+        fCloseAllDropdowns();
+        fSetButtonOrMenuState('Roll'); // Set state initially
 
-        // --- Check Context and Decide Action ---
-        const { r: lastClickR, c: lastClickC } = gUI.cellClickInfo; // Get coords of last cell click
+        const { r: lastClickR, c: lastClickC } = gUI.cellClickInfo; // Get coords only initially
+        const { r: checked_r, c: checked_c } = gUI.currentSkRadioChecked;
+        let handled = false;
+        let currentCellTextForAdHoc = null; // Variable to store freshly read text if needed
 
-        // --- Attempt Chaos Gem First ---
-        let chaosGemHandled = false;
-        if (lastClickR !== null && lastClickC !== null) { // Only try if a cell was clicked previously
-             fMyConsoleLog(`   -> <Roll> Click: Checking Chaos Gem for last clicked cell [${lastClickR}, ${lastClickC}]...`);
-             chaosGemHandled = await fHandleChaosGemClick(lastClickR, lastClickC); // Pass coords
+        // --- 1. Attempt Chaos Gem First ---
+        if (lastClickR !== null && lastClickC !== null) {
+            fMyConsoleLog(`   -> <Roll> Click: Checking Chaos Gem for last clicked cell [${lastClickR}, ${lastClickC}]...`);
+            handled = await fHandleChaosGemClick(lastClickR, lastClickC);
+            if (handled) {
+                fMyConsoleLog("   -> <Roll> Click: Chaos Gem action completed.");
+            }
         } else {
-             fMyConsoleLog("   -> <Roll> Click: No previous cell click info for Chaos Gem check.");
+            fMyConsoleLog("   -> <Roll> Click: No previous cell click info for Chaos Gem check.");
         }
 
+        // --- 2. If Not Chaos Gem, Attempt Ad-Hoc Roll (IF cell is outside restricted areas) ---
+        if (!handled) {
+            fMyConsoleLog("   -> <Roll> Click: No Chaos Gem used. Checking for Ad-Hoc roll eligibility...");
+            if (lastClickR !== null && lastClickC !== null) { // Need valid last click coords
+                const chaosRangeArray = gUI.range?.chaosGems ? [gUI.range.chaosGems] : [];
+                const abilityRangeArray = gUI.range?.entireAbiliyNGearTables || [];
 
-        // --- If Chaos Gem Not Handled, Try Standard Roll ---
-        if (!chaosGemHandled) {
-             fMyConsoleLog("   -> <Roll> Click: Chaos Gem not used. Checking for active Sk checkbox...");
-             const { r: checked_r, c: checked_c } = gUI.currentSkRadioChecked;
-             if (checked_r !== null && checked_c !== null) {
-                 fMyConsoleLog(`   -> <Roll> Click: Active Sk checkbox [${checked_r}, ${checked_c}] found. Triggering standard roll...`);
-                 await fHandleRollDiceAction(); // Await standard roll
-                 // fHandleRollDiceAction resets state on completion/failure
-             } else {
-                 fMyConsoleLog("   -> <Roll> Click: No Chaos Gem used AND no active Sk checkbox. No action taken.");
-                 await fShowMessage("Click on an ability checkbox or a usable Chaos Crystal first!"); //
-                 fSetButtonOrMenuState(null); // Reset state if no action occurred
-             }
+                const isChaosCell = fIsCellInRangeArray(lastClickR, lastClickC, chaosRangeArray);
+                const isAbilityCell = fIsCellInRangeArray(lastClickR, lastClickC, abilityRangeArray);
+
+                // *** Ad-Hoc Check Precedence Condition ***
+                if (!isChaosCell && !isAbilityCell) {
+                    fMyConsoleLog(`   -> Click [${lastClickR}, ${lastClickC}] is outside Chaos/Ability tables. Attempting ad-hoc parse...`);
+
+                    // --- Read current text from DOM --- <<< MODIFIED HERE
+                    const cellElement = gUI.grid2D?.[lastClickR]?.[lastClickC];
+                    if (cellElement) {
+                        currentCellTextForAdHoc = cellElement.textContent?.trim() ?? '';
+                        // --- Store in gUI.cellClickInfo.focusText --- <<< ADDED HERE
+                        gUI.cellClickInfo.focusText = currentCellTextForAdHoc;
+                        fMyConsoleLog(`      -> Read current text: "${currentCellTextForAdHoc}", stored in focusText.`);
+
+                        handled = await fHandleAdHocRoll(currentCellTextForAdHoc); // Pass current text
+                    } else {
+                         fMyConsoleLog(`      -> Could not find cell element [${lastClickR}, ${lastClickC}] to read current text.`);
+                         gUI.cellClickInfo.focusText = null; // Clear if element not found
+                    }
+                    // --- End Reading/Storing Text ---
+
+                    if (handled) {
+                        fMyConsoleLog("   -> <Roll> Click: Ad-Hoc roll completed.");
+                    } else {
+                         fMyConsoleLog("   -> <Roll> Click: Ad-Hoc roll pattern not found in cell text.");
+                    }
+                } else {
+                    fMyConsoleLog(`   -> Click [${lastClickR}, ${lastClickC}] is inside restricted Chaos/Ability table. Skipping ad-hoc roll.`);
+                     gUI.cellClickInfo.focusText = null; // Clear if not applicable
+                }
+            } else {
+                fMyConsoleLog("   -> <Roll> Click: No last cell click info for ad-hoc roll check.");
+                 gUI.cellClickInfo.focusText = null; // Clear if no click info
+            }
         } else {
-            // Chaos Gem *was* handled by fHandleChaosGemClick
-             fMyConsoleLog("   -> <Roll> Click: Chaos Gem action completed.");
-             fSetButtonOrMenuState(null); // Reset state after successful gem use
+             gUI.cellClickInfo.focusText = null; // Clear if Chaos Gem handled it
         }
-        // --- End Context Check ---
-    }); // End Roll button listener
+
+        // --- 3. If Not Chaos OR Ad-Hoc, Attempt Standard Ability Roll (IF checkbox checked) ---
+        if (!handled && checked_r !== null) {
+            fMyConsoleLog(`   -> <Roll> Click: No Chaos/Ad-Hoc handled. Active Sk checkbox [${checked_r}, ${checked_c}] found. Triggering standard roll action...`);
+            await fHandleRollDiceAction();
+            handled = true;
+        } else if (!handled && checked_r === null) {
+             fMyConsoleLog("   -> <Roll> Click: No Chaos/Ad-Hoc handled and no Ability checkbox checked.");
+        }
+
+        // --- 4. If Nothing Was Handled, Show Message ---
+        if (!handled) {
+            fMyConsoleLog("   -> <Roll> Click: No Chaos Gem, Ad-Hoc Roll, or Ability Checkbox action taken.");
+            let adHocAttemptedButFailed = false;
+             if(checked_r === null && lastClickR !== null && lastClickC !== null) {
+                 const chaosRangeArray = gUI.range?.chaosGems ? [gUI.range.chaosGems] : [];
+                 const abilityRangeArray = gUI.range?.entireAbiliyNGearTables || [];
+                 if(!fIsCellInRangeArray(lastClickR, lastClickC, chaosRangeArray) && !fIsCellInRangeArray(lastClickR, lastClickC, abilityRangeArray)) {
+                      adHocAttemptedButFailed = true; // Conditions for ad-hoc met, implies fHandleAdHocRoll returned false
+                 }
+            }
+
+            if (adHocAttemptedButFailed) {
+                 // Use the text read from the DOM (now stored in focusText) for the message
+                 await fShowMessage(`Nothing rollable found in cell "${gUI.cellClickInfo.focusText || ''}"`); // <<< MODIFIED HERE
+            } else {
+                 await fShowMessage("Click an Ability checkbox, a usable Chaos Crystal, or a cell with dice notation (e.g., d6, sk20) first!");
+            }
+            fSetButtonOrMenuState(null);
+        } else {
+            const wasAbilityRoll = (checked_r !== null);
+            if (!wasAbilityRoll) {
+                fSetButtonOrMenuState(null);
+            }
+        }
+    }); // END Roll button listener
 
 
-    // Listener for 'Free' button (Sets state, then calls main handler)
+    // Listener for 'Free' button
     btnFree.addEventListener('click', (event) => {
         event.stopPropagation();
-        fCloseAllDropdowns(); //
-        fSetButtonOrMenuState('Free'); // Set state
-        fHandleRollDiceAction();       // Call main handler
+        fCloseAllDropdowns();
+        fSetButtonOrMenuState('Free');
+        fHandleRollDiceAction();
     });
 
-    // Listener for 'Luck' button (Sets state, then calls main handler)
+    // Listener for 'Luck' button
     btnLuck.addEventListener('click', (event) => {
         event.stopPropagation();
-        fCloseAllDropdowns(); //
-        fSetButtonOrMenuState('Luck'); // Set state
-        fHandleRollDiceAction();       // Call main handler
+        fCloseAllDropdowns();
+        fSetButtonOrMenuState('Luck');
+        fHandleRollDiceAction();
     });
 
     // Listener for 'Game' button (Toggle Dropdown)
     btnGame.addEventListener('click', (event) => {
         event.stopPropagation();
         const currentlyShown = dropdownGame.classList.contains('show');
-        fCloseAllDropdowns(); // Close others first
+        fCloseAllDropdowns();
         if (!currentlyShown) {
             dropdownGame.classList.add('show');
         }
@@ -2800,11 +2925,12 @@ function fSetupMenuButtonListeners(btnNish, btnRoll, btnFree, btnLuck, btnGame, 
     btnGear.addEventListener('click', (event) => {
         event.stopPropagation();
         const currentlyShown = dropdownGear.classList.contains('show');
-        fCloseAllDropdowns(); // Close others first
+        fCloseAllDropdowns();
         if (!currentlyShown) {
             dropdownGear.classList.add('show');
         }
     });
+
 }; // END fSetupMenuButtonListeners
 
 
@@ -3933,16 +4059,17 @@ function fClearChanneledMeta() {
 
 
 // fClearSk1Sk2Checkboxes ///////////////////////////////////////////////////////
-// Purpose -> Clears all checkboxes defined in gUI.sk1sk2CheckBoxes using fSetRangeValues.
+// Purpose -> Clears all checkboxes defined in gUI.range.sk1sk2CheckBoxes using fSetRangeValues.
 // Inputs  -> None
 // Outputs -> None (Calls fSetRangeValues which modifies grid data and DOM)
+// MODIFIED: Changed reference to gUI.range.sk1sk2CheckBoxes
 function fClearSk1Sk2Checkboxes() {
     fMyConsoleLog("⚙️ Menu Action: Clearing Sk1/Sk2 Checkboxes...");
     let allSucceeded = true;
-    const rangesToClear = gUI.sk1sk2CheckBoxes; // Get the predefined ranges
+    const rangesToClear = gUI.range.sk1sk2CheckBoxes; // <<< MODIFIED HERE
 
     if (!Array.isArray(rangesToClear) || rangesToClear.length === 0) {
-        fMyConsoleLog("ℹ️ No Sk1/Sk2 checkbox ranges defined in gUI.sk1sk2CheckBoxes.");
+        fMyConsoleLog("ℹ️ No Sk1/Sk2 checkbox ranges defined in gUI.range.sk1sk2CheckBoxes.");
         return;
     }
 
@@ -3967,13 +4094,12 @@ function fClearSk1Sk2Checkboxes() {
              allSucceeded = false; // Track if any call to fSetRangeValues fails
         }
     });
-
-     if (!allSucceeded) {
+    if (!allSucceeded) {
          fMyConsoleLog("⚠️ Failed to clear one or more Sk1/Sk2 Checkbox ranges.");
-         // Consider showing an error message: fShowMessage("Error clearing some checkboxes.");
+        // Consider showing an error message: fShowMessage("Error clearing some checkboxes.");
      } else {
         fMyConsoleLog("✅ Sk1/Sk2 Checkboxes Cleared.");
-     }
+    }
 
 } // END fClearSk1Sk2Checkboxes
 
