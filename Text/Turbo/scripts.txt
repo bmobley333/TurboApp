@@ -18,6 +18,7 @@ const gUI = {
   grid2D: [],     // 2D array holding references to the created cell DOM elements
   pendingChangesMap: {}, // Holds { 'r,c': newValue } during ability roll cost verification steps (or similar process)
   cellClickInfo: { r: null, c: null, text: null, focusText: null }, // Info about the last clicked cell
+  monsterRollResultsHistory: {}, // Stores { rollId: { results: [{mon_R, monName, numFailures}, ...], originalAbilityRow: r } }
 
 
   // Add the manual border definitions here:
@@ -68,7 +69,7 @@ const gUI = {
   },
   roll: {
     // --- Input values from Sheet (populated by fResetPopulateNCleanGUIRoll) ---
-    sk1CB: false,        // Flag: True if roll originated from Sk1 CheckBox column, false if Sk2
+    sk1CB: false,          // Flag: True if roll originated from Sk1 CheckBox column, false if Sk2
     ability_R: '',               // 0-based row index of the ability/gear being rolled
     skMorph: '',         // Raw morph string from sheet ('Morph1' or 'Morph2' col)
     skTyp: '',           // Base skill type string ('Sk', 'Atr', 'Atk', etc.) from sheet ('Sk1Typ' or 'Sk2Typ' col)
@@ -138,7 +139,7 @@ const gUI = {
   ],
   range: {
     // Define ranges using objects with r1, c1, r2, c2 properties
-    entireAbiliyNGearTables: [ 
+    entireAbiliyNGearTables: [
       { r1: 'AbilTblStart_R', c1: 'PermMorph1', r2: 'AbilTblEnd_R', c2: 'Regain' },
       { r1: 'GearTblStart_R', c1: 'PermMorph1', r2: 'GearTblEnd_R', c2: 'Regain' }
     ],
@@ -2752,6 +2753,8 @@ async function fHandleApplyWoundsClick(event) {
 
 // fSetupSidebarActionListeners ///////////////////////////////////////////////////
 // Purpose -> Sets up delegated event listeners for interactive elements within the sidebar.
+// MODIFIED: Added handling for clicks on '.prep-ar-btn'.
+// MODIFIED: Added handling for clicks on '.prep-dmg-btn'.
 // Inputs  -> None.
 // Outputs -> None.
 function fSetupSidebarActionListeners() {
@@ -2764,13 +2767,26 @@ function fSetupSidebarActionListeners() {
         return;
     }
 
-    // Delegated listener for Apply Wounds buttons
-    sidebarContent.addEventListener('click', fHandleApplyWoundsClick);
+    // Delegated listener for buttons within the sidebar content
+    sidebarContent.addEventListener('click', (event) => {
+        const target = event.target;
 
-    // Add other delegated listeners here if needed in the future
+        // Check if the click was on an "Apply Wounds" button
+        if (target.classList.contains('apply-wounds-btn')) {
+            fHandleApplyWoundsClick(event); // Call the wounds handler
+        }
+        // Check if the click was on a "Prep AR" button
+        else if (target.classList.contains('prep-ar-btn')) {
+            fHandlePrepARClick(event); // Call the Prep AR handler
+        }
+        // Check if the click was on a "Prep Dmg" button
+        else if (target.classList.contains('prep-dmg-btn')) { // <<< ADDED THIS BLOCK
+            fHandlePrepDmgClick(event); // Call the Prep Dmg handler
+        }
+        // Add other 'else if' blocks here for future interactive sidebar elements
+    });
 
     fMyConsoleLog("✅ Sidebar Action Listeners Attached.");
-
 } // END fSetupSidebarActionListeners
 
 

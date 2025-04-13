@@ -1346,16 +1346,21 @@ function fPerformStandardRolls(initialLogHtml) {
 
 // fPerformPlayerAttackRolls /////////////////////////////////////////////////////////
 // Purpose -> Handles 'Atk' rolls against monsters listed in the grid when no explicit
-//            difficulty morph ('^') is provided. Validates targets, performs rolls,
-//            builds log lines. If no valid targets, performs a standard roll instead.
-// Inputs  -> initialLogHtml (String): The pre-built log header string (costs, title, morph).
-// Outputs -> (Promise<Object>): Resolves with { logHtml: String, success: Boolean }.
-//                               logHtml contains the appropriate roll log lines.
-//                               success indicates if validation/rolls completed without halting errors.
+//            difficulty morph ('^') is provided. Uses MonDef column for difficulty.
+//            Validates targets, performs rolls, builds log lines.
+//            If no valid targets, performs a standard roll instead.
 // MODIFIED: Changed "Custom" monster name logic to include name from sheet cell.
 // MODIFIED: Changed separator between monsters from '|' to '↓'.
 // MODIFIED: Ensure separator always appears before the first monster.
 // MODIFIED: If no valid monsters found, clears difficulty and calls fPerformStandardRolls.
+// MODIFIED: Counts attack *successes* per monster and stores in gUI.monsterRollResultsHistory
+//           as { results: [{mon_R, monName, numSuccesses}, ...], originalAbilityRow: r, allTargetedRows_R: [...] } keyed by rollId. // <<< Updated Structure
+// MODIFIED: Adds "Prep Dmg" button with data-roll-id attribute to log output if successes occurred.
+// MODIFIED: Added diagnostic logging before storing results.
+// Inputs  -> initialLogHtml (String): The pre-built log header string (costs, title, morph).
+// Outputs -> (Promise<Object>): Resolves with { logHtml: String, success: Boolean }.
+//                               logHtml contains the appropriate roll log lines.
+//                               success indicates if validation/rolls completed without halting errors.
 async function fPerformPlayerAttackRolls(initialLogHtml) {
     fMyConsoleLog("   -> Entering Player Attack Logic...");
 
@@ -1391,13 +1396,12 @@ async function fPerformPlayerAttackRolls(initialLogHtml) {
      fMyConsoleLog(`      -> Monster Table Range: Rows ${rMin}-${rMax}, Cols Def:${cMonDef}, Num:${cNumMon}, Name:${cMonName}`);
 
     // --- 3. Identify & Validate Targets ---
-    const monsterTargets = [];
-    const firstMonsterRowIndex = rMin; // Index of the 'Custom' row
+    const monsterTargets = []; // Stores { mon_R, numRolls, monName, monDef, numSuccesses }
+    const allTargetedRows_R = []; // <<< Stores all valid monster row indices targeted
+    const firstMonsterRowIndex = rMin;
 
     for (let mon_R = rMin; mon_R <= rMax; mon_R++) {
         const isCustomRow = (mon_R === firstMonsterRowIndex);
-
-        // Get NumMon value
         const numMonRaw = gUI.arr?.[mon_R]?.[cNumMon];
         const numMon = parseInt(numMonRaw, 10);
 
@@ -1408,63 +1412,45 @@ async function fPerformPlayerAttackRolls(initialLogHtml) {
 
             if (isNaN(monDef) || String(monDefRaw).trim() === '') {
                  let errMsg = `❌ Invalid Monster Defense ('${monDefRaw}') found in row ${mon_R + 1}. Cannot complete attack.`;
-                 if (isCustomRow) {
-                     errMsg = `❌ Invalid Monster Defense ('${monDefRaw}') found for Custom Monster. Cannot complete attack.`;
-                 }
+                 if (isCustomRow) errMsg = `❌ Invalid Monster Defense ('${monDefRaw}') found for Custom Monster. Cannot complete attack.`;
                  fMyConsoleLog(`         -> Validation Failed: ${errMsg}`);
                  await fShowMessage(errMsg);
-                 return { logHtml: '', success: false }; // Halt
+                 return { logHtml: '', success: false };
             }
 
-            // --- Get Monster Name (MODIFIED for Custom row) ---
-            let originalMonName = String(gUI.arr?.[mon_R]?.[cMonName] || '').trim(); // Get original name, default to empty string
-            let monName = originalMonName || `Row ${mon_R + 1}`; // Use original name or fallback to Row X+1 for non-custom rows if name blank
-            if (isCustomRow) {
-                // Prepend "Custom " to the original name (which might be empty)
-                monName = `Custom ${originalMonName}`.trim(); // Use original name, trim potential trailing space if name was empty
-            }
-            // --- End Monster Name Modification ---
+            let originalMonName = String(gUI.arr?.[mon_R]?.[cMonName] || '').trim();
+            let monName = originalMonName || `Row ${mon_R + 1}`;
+            if (isCustomRow) monName = `Custom ${originalMonName}`.trim();
 
-            monsterTargets.push({
-                mon_R: mon_R, numRolls: numMon, monName: monName, monDef: monDef
-            });
-            fMyConsoleLog(`         -> Valid Target Added: Name='${monName}', Def=${monDef}, Rolls=${numMon}`);
+            monsterTargets.push({ mon_R, numRolls: numMon, monName, monDef, numSuccesses: 0 });
+            allTargetedRows_R.push(mon_R); // <<< Add row index to the list of all targets
+            fMyConsoleLog(`         -> Valid Target Added: Name='${monName}', Def=${monDef}, Rolls=${numMon} (Row index ${mon_R} added to allTargetedRows_R)`);
         } else {
-             if (numMonRaw !== '' && numMonRaw != null) {
-                 fMyConsoleLog(`      -> Row ${mon_R}: Skipping - Invalid NumMon value: '${numMonRaw}'`);
-             }
+             if (numMonRaw !== '' && numMonRaw != null) fMyConsoleLog(`      -> Row ${mon_R}: Skipping - Invalid NumMon value: '${numMonRaw}'`);
         }
     } // End loop through monster rows
 
     // --- 4. Check if any valid targets were found ---
     if (monsterTargets.length === 0) {
-        // --- No targets found, perform standard roll ---
-        fMyConsoleLog("      -> No valid monster targets found. Performing standard roll instead.");
-        await fShowMessage("ℹ️ No valid monsters found. Performing standard roll.");
-
+        fMyConsoleLog("      -> No valid monster targets found. Performing standard attack roll instead.");
+        await fShowMessage("ℹ️ No valid monsters found. Performing standard attack roll.");
         gUI.roll.resDif = '';
         fMyConsoleLog("         -> Cleared resDif for standard roll.");
-
         const standardRollHtml = fPerformStandardRolls(initialLogHtml);
         return { logHtml: standardRollHtml, success: true };
-        // --- End Fallback ---
     }
 
     // --- If targets *were* found, proceed with Player Attack logic (Steps 5 & 6) ---
     fMyConsoleLog(`      -> Found ${monsterTargets.length} valid monster target(s).`);
-
     // --- 5. Perform Rolls & Build Log (Player Attack Path) ---
     let isOverallFirstRoll = true;
     const monsterLogLines = [];
+    const currentAttackResults = []; // Stores only results for monsters with >0 successes
 
     for (const target of monsterTargets) {
         fMyConsoleLog(`   --- Attacking: ${target.monName} (Def: ${target.monDef}, Rolls: ${target.numRolls}) ---`);
-
-        // Always add separator before monster header
         monsterLogLines.push('↓');
-        // Monster name header now includes sheet name for Custom row
         monsterLogLines.push(`--- <span style="color: purple; font-weight: bold;">Mon: ${target.monName}</span> (Def: ${target.monDef}) ---`);
-
         gUI.roll.resDif = target.monDef;
 
         for (let rollNum = 1; rollNum <= target.numRolls; rollNum++) {
@@ -1473,22 +1459,63 @@ async function fPerformPlayerAttackRolls(initialLogHtml) {
             fCalcGUIRollRoll();
             fCalcGUIRollResRoll();
 
+            const rollResult = gUI.roll.resRoll;
+            const difficulty = gUI.roll.resDif;
+            if (typeof rollResult === 'number' && typeof difficulty === 'number' && rollResult >= difficulty) {
+                target.numSuccesses++;
+                fMyConsoleLog(`         -> Attack Succeeded! (Roll ${rollResult} >= Def ${difficulty}). Success count: ${target.numSuccesses}`);
+            } else {
+                 fMyConsoleLog(`         -> Attack Failed! (Roll ${rollResult} < Def ${difficulty})`);
+            }
+
             const rollLineHtml = fBuildRollLogHTML(rollNum, target.numRolls, isOverallFirstRoll);
             monsterLogLines.push(rollLineHtml);
+            if (isOverallFirstRoll) isOverallFirstRoll = false;
 
-            if (isOverallFirstRoll) {
-                isOverallFirstRoll = false;
-            }
         } // End inner roll loop
 
-        fMyConsoleLog(`   --- Finished Attacking: ${target.monName} ---`);
+        fMyConsoleLog(`   --- Finished Attacking: ${target.monName} (${target.numSuccesses} successes) ---`);
+
+        // <<< Add result to temporary success array IF successes occurred >>>
+        if (target.numSuccesses > 0) {
+            fMyConsoleLog(`      -> Preparing to store result for ${target.monName}: mon_R=${target.mon_R}, FINAL numSuccesses=${target.numSuccesses}`);
+            currentAttackResults.push({
+                mon_R: target.mon_R,
+                monName: target.monName,
+                numSuccesses: target.numSuccesses
+            });
+        }
+        // <<< End adding result >>>
+
     } // End monster target loop
 
     // --- 6. Return Result (Player Attack Path) ---
-    const finalLogHtml = initialLogHtml + '<br>' + monsterLogLines.join('<br>');
+    let finalLogHtml = initialLogHtml + '<br>' + monsterLogLines.join('<br>');
+    let rollId = null;
+
+    // <<< Conditionally add the "Prep Dmg" button AND store results >>>
+    // Store results ONLY IF there were any successes overall
+    if (currentAttackResults.length > 0) {
+        rollId = 'prep_' + Date.now();
+        // Store results array (only successes), original ability row, AND all targeted rows
+        gUI.monsterRollResultsHistory[rollId] = {
+             results: currentAttackResults,         // Contains only those with successes > 0
+             originalAbilityRow: gUI.roll.ability_R,
+             allTargetedRows_R: allTargetedRows_R   // <<< Store the list of all targeted rows
+        };
+        fMyConsoleLog(`   -> Stored attack results in gUI.monsterRollResultsHistory['${rollId}'] (Origin Row: ${gUI.roll.ability_R}, All Targets: [${allTargetedRows_R.join(', ')}])`);
+
+        // Add button with data attribute
+        finalLogHtml += ` <button class="prep-dmg-btn" data-roll-id="${rollId}">Prep Dmg</button>`;
+        fMyConsoleLog("   -> Added 'Prep Dmg' button to log output.");
+    } else {
+        fMyConsoleLog("   -> No successes recorded, 'Prep Dmg' button not added.");
+        // No need to store anything in history if no successes occurred
+    }
+    // <<< End button addition and data storage >>>
+
     fMyConsoleLog("   -> Player Attack Logic Complete.");
     return { logHtml: finalLogHtml, success: true };
-
 } // END fPerformPlayerAttackRolls
 
 
@@ -1680,16 +1707,21 @@ async function fPerformPlayerDamageRolls(initialLogHtml) {
 //            difficulty morph ('^') is provided. Uses MonAtk column for difficulty.
 //            Validates targets, performs rolls, builds log lines.
 //            If no valid targets, performs a standard roll instead.
-// Inputs  -> initialLogHtml (String): The pre-built log header string (costs, title, morph).
-// Outputs -> (Promise<Object>): Resolves with { logHtml: String, success: Boolean }.
-//                               logHtml contains the appropriate roll log lines.
-//                               success indicates if validation/rolls completed without halting errors.
 // MODIFIED: Changed "Custom" monster name logic to include name from sheet cell.
 // MODIFIED: Changed separator between monsters from '|' to '↓'.
 // MODIFIED: Ensure separator always appears before the first monster.
 // MODIFIED: If no valid monsters found, clears difficulty and calls fPerformStandardRolls.
+// MODIFIED: Counts defense failures per monster and stores results { results: [...], originalAbilityRow: r, allTargetedRows_R: [...] }
+//           in gUI.monsterRollResultsHistory keyed by a unique rollId.
+// MODIFIED: Adds "Prep AR" button with data-roll-id attribute to log output if failures occurred.
+// MODIFIED: Added diagnostic logging after storing results.
+// Inputs  -> initialLogHtml (String): The pre-built log header string (costs, title, morph).
+// Outputs -> (Promise<Object>): Resolves with { logHtml: String, success: Boolean }.
+//                               logHtml contains the appropriate roll log lines.
+//                               success indicates if validation/rolls completed without halting errors.
 async function fPerformPlayerDefenseRolls(initialLogHtml) {
     fMyConsoleLog("   -> Entering Player Defense Logic...");
+    // No longer initialize gUI.lastMonsterRollResults here
 
     // --- 1. Get Monster Table Range ---
     const monsterRangeDef = gUI.range?.monsters;
@@ -1711,7 +1743,7 @@ async function fPerformPlayerDefenseRolls(initialLogHtml) {
     const rMin = Math.min(resolved.r1, resolved.r2);
     const rMax = Math.max(resolved.r1, resolved.r2);
     const cNumMon = resolveCol('NumMon');
-    const cMonAtk = resolveCol('MonAtk'); // <<< USE MonAtk column
+    const cMonAtk = resolveCol('MonAtk');
     const cMonName = resolveCol('MonName');
 
     if ([cNumMon, cMonAtk, cMonName].some(isNaN)) {
@@ -1723,115 +1755,122 @@ async function fPerformPlayerDefenseRolls(initialLogHtml) {
      fMyConsoleLog(`      -> Monster Table Range: Rows ${rMin}-${rMax}, Cols Atk:${cMonAtk}, Num:${cNumMon}, Name:${cMonName}`);
 
     // --- 3. Identify & Validate Targets (Using MonAtk) ---
-    const monsterTargets = [];
-    const firstMonsterRowIndex = rMin; // Index of the 'Custom' row
+    const monsterTargets = []; // Stores { mon_R, numRolls, monName, monAtk, numFailures }
+    const allTargetedRows_R = []; // Stores all valid monster row indices targeted
+    const firstMonsterRowIndex = rMin;
 
     for (let mon_R = rMin; mon_R <= rMax; mon_R++) {
         const isCustomRow = (mon_R === firstMonsterRowIndex);
-
-        // Get NumMon value
         const numMonRaw = gUI.arr?.[mon_R]?.[cNumMon];
         const numMon = parseInt(numMonRaw, 10);
 
-        // Check if NumMon is valid
         if (!isNaN(numMon) && numMon >= 1 && numMon <= 30) {
             fMyConsoleLog(`      -> Row ${mon_R}: Found valid NumMon: ${numMon}`);
-            // Get MonAtk value (Difficulty for Defense roll)
-            const monAtkRaw = gUI.arr?.[mon_R]?.[cMonAtk]; // <<< Get MonAtk
-            const monAtk = Number(monAtkRaw); // Use Number()
+            const monAtkRaw = gUI.arr?.[mon_R]?.[cMonAtk];
+            const monAtk = Number(monAtkRaw);
 
-            // Validate MonAtk
             if (isNaN(monAtk) || String(monAtkRaw).trim() === '') {
-                 let errMsg = `❌ Invalid Monster Attack value ('${monAtkRaw}') found in row ${mon_R + 1}. Cannot complete defense roll.`; // Use mon_R + 1 for user
-                 if (isCustomRow) {
-                     errMsg = `❌ Invalid Monster Attack value ('${monAtkRaw}') found for Custom Monster. Cannot complete defense roll.`;
-                 }
+                 let errMsg = `❌ Invalid Monster Attack value ('${monAtkRaw}') found in row ${mon_R + 1}. Cannot complete defense roll.`;
+                 if (isCustomRow) errMsg = `❌ Invalid Monster Attack value ('${monAtkRaw}') found for Custom Monster. Cannot complete defense roll.`;
                  fMyConsoleLog(`         -> Validation Failed: ${errMsg}`);
                  await fShowMessage(errMsg);
-                 return { logHtml: '', success: false }; // Halt
+                 return { logHtml: '', success: false };
             }
 
-            // --- Get Monster Name (MODIFIED for Custom row) ---
-            let originalMonName = String(gUI.arr?.[mon_R]?.[cMonName] || '').trim(); // Get original name, default to empty string
-            let monName = originalMonName || `Row ${mon_R + 1}`; // Use original name or fallback for non-custom blank names
-            if (isCustomRow) {
-                // Prepend "Custom " to the original name (which might be empty)
-                monName = `Custom ${originalMonName}`.trim(); // Use original name, trim potential trailing space
-            }
-            // --- End Monster Name Modification ---
+            let originalMonName = String(gUI.arr?.[mon_R]?.[cMonName] || '').trim();
+            let monName = originalMonName || `Row ${mon_R + 1}`;
+            if (isCustomRow) monName = `Custom ${originalMonName}`.trim();
 
-            // Add valid target
-            monsterTargets.push({
-                mon_R: mon_R,
-                numRolls: numMon,
-                monName: monName, // Includes "Custom [NameFromSheet]" if applicable
-                monAtk: monAtk // <<< Store Monster Attack as difficulty
-            });
-            fMyConsoleLog(`         -> Valid Target Added: Name='${monName}', Atk=${monAtk}, Rolls=${numMon}`);
+            monsterTargets.push({ mon_R, numRolls: numMon, monName, monAtk, numFailures: 0 });
+            allTargetedRows_R.push(mon_R);
+            fMyConsoleLog(`         -> Valid Target Added: Name='${monName}', Atk=${monAtk}, Rolls=${numMon} (Row index ${mon_R} added to allTargetedRows_R)`);
         } else {
-             if (numMonRaw !== '' && numMonRaw != null) {
-                 fMyConsoleLog(`      -> Row ${mon_R}: Skipping - Invalid NumMon value: '${numMonRaw}'`);
-             }
+             if (numMonRaw !== '' && numMonRaw != null) fMyConsoleLog(`      -> Row ${mon_R}: Skipping - Invalid NumMon value: '${numMonRaw}'`);
         }
     } // End loop through monster rows
 
     // --- 4. Check if any valid targets were found ---
     if (monsterTargets.length === 0) {
-        // --- No targets found, perform standard roll ---
         fMyConsoleLog("      -> No valid monster targets found (with MonAtk). Performing standard defense roll instead.");
         await fShowMessage("ℹ️ No valid monsters found with Attack values. Performing standard defense roll.");
-
         gUI.roll.resDif = '';
         fMyConsoleLog("         -> Cleared resDif for standard roll.");
-
         const standardRollHtml = fPerformStandardRolls(initialLogHtml);
         return { logHtml: standardRollHtml, success: true };
-        // --- End Fallback ---
     }
 
     // --- If targets *were* found, proceed with Player Defense logic (Steps 5 & 6) ---
     fMyConsoleLog(`      -> Found ${monsterTargets.length} valid monster target(s) with Attack values.`);
-
     // --- 5. Perform Rolls & Build Log (Player Defense Path) ---
     let isOverallFirstRoll = true;
     const monsterLogLines = [];
+    const currentDefenseResults = []; // <<< Stores results for this specific Def action
 
     for (const target of monsterTargets) {
         fMyConsoleLog(`   --- Defending Against: ${target.monName} (Atk: ${target.monAtk}, Rolls: ${target.numRolls}) ---`);
-
-        // Always add separator before monster header
         monsterLogLines.push('↓');
-        // Monster name header now includes sheet name for Custom row
         monsterLogLines.push(`--- <span style="color: purple; font-weight: bold;">Mon: ${target.monName}</span> (Atk: ${target.monAtk}) ---`);
+        gUI.roll.resDif = target.monAtk;
 
-        // Set difficulty for this defense roll
-        gUI.roll.resDif = target.monAtk; // <<< Use Monster Attack as Difficulty
-
-        // Loop for the number of defenses against this specific monster
         for (let rollNum = 1; rollNum <= target.numRolls; rollNum++) {
             fMyConsoleLog(`      -> Defense Roll ${rollNum} of ${target.numRolls} against ${target.monName}...`);
-            // Recalculate player roll values
             fCalcGUIRollResSk();
             fCalcGUIRollRoll();
             fCalcGUIRollResRoll();
 
-            // Build the roll line HTML for this single roll
+            const rollResult = gUI.roll.resRoll;
+            const difficulty = gUI.roll.resDif;
+            if (typeof rollResult === 'number' && typeof difficulty === 'number' && rollResult < difficulty) {
+                target.numFailures++;
+                fMyConsoleLog(`         -> Defense Failed! (Roll ${rollResult} < Atk ${difficulty}). Failure count: ${target.numFailures}`);
+            } else {
+                 fMyConsoleLog(`         -> Defense Succeeded! (Roll ${rollResult} >= Atk ${difficulty})`);
+            }
+
             const rollLineHtml = fBuildRollLogHTML(rollNum, target.numRolls, isOverallFirstRoll);
             monsterLogLines.push(rollLineHtml);
+            if (isOverallFirstRoll) isOverallFirstRoll = false;
 
-            if (isOverallFirstRoll) {
-                isOverallFirstRoll = false;
-            }
         } // End inner roll loop
 
-        fMyConsoleLog(`   --- Finished Defending Against: ${target.monName} ---`);
+        fMyConsoleLog(`   --- Finished Defending Against: ${target.monName} (${target.numFailures} failures) ---`);
+
+        // <<< Add result to temporary failure array IF failures occurred >>>
+        if (target.numFailures > 0) {
+            currentDefenseResults.push({
+                mon_R: target.mon_R,
+                monName: target.monName,
+                numFailures: target.numFailures // <<< Store failure count
+            });
+        }
+        // <<< End adding result >>>
+
     } // End monster target loop
 
     // --- 6. Return Result (Player Defense Path) ---
-    const finalLogHtml = initialLogHtml + '<br>' + monsterLogLines.join('<br>');
+    let finalLogHtml = initialLogHtml + '<br>' + monsterLogLines.join('<br>');
+    let rollId = null;
+
+    // <<< Conditionally add the "Prep AR" button AND store results >>>
+    if (currentDefenseResults.length > 0) {
+        rollId = 'prep_' + Date.now();
+        gUI.monsterRollResultsHistory[rollId] = {
+             results: currentDefenseResults, // Contains only those with failures > 0
+             originalAbilityRow: gUI.roll.ability_R,
+             allTargetedRows_R: allTargetedRows_R
+        };
+        // <<< ADDED DIAGNOSTIC LOGGING HERE >>>
+        fMyConsoleLog(`   -> Data stored for rollId '${rollId}'. Current history keys: ${Object.keys(gUI.monsterRollResultsHistory).join(', ')}`);
+
+        finalLogHtml += ` <button class="prep-ar-btn" data-roll-id="${rollId}">Prep AR</button>`;
+        fMyConsoleLog("   -> Added 'Prep AR' button to log output.");
+    } else {
+        fMyConsoleLog("   -> No failures recorded, 'Prep AR' button not added.");
+    }
+    // <<< End button addition and data storage >>>
+
     fMyConsoleLog("   -> Player Defense Logic Complete.");
     return { logHtml: finalLogHtml, success: true };
-
 } // END fPerformPlayerDefenseRolls
 
 
@@ -2336,7 +2375,338 @@ function fBuildRollLogHTML(rollNum, totalRolls, isFirstRoll) {
 
 
 // ==========================================================================
-// === Nish         (End of Die Roll Button ) ===
+// === Post Combat Buttons         (End of Die Roll Button ) ===
+// ==========================================================================
+
+
+
+// fHandlePrepARClick /////////////////////////////////////////////////////////////
+// Purpose -> Handles clicks on the dynamically added "Prep AR" button in the sidebar log.
+//            Reads failure data associated with the button's rollId from gUI.monsterRollResultsHistory,
+//            updates NumMon grid values for ALL targeted monsters (setting to failure count or '' if 0 failures),
+//            switches the active checkbox from Sk1 to Sk2 on the original ability row, and disables the button.
+// MODIFIED: Reads rollId from button, retrieves data from gUI.monsterRollResultsHistory.
+// MODIFIED: Uses originalAbilityRow from stored data for checkbox switching.
+// MODIFIED: (Optional) Removes used entry from history.
+// MODIFIED: Iterates through ALL targeted monsters, setting NumMon to failure count or '' (empty string) if zero failures.
+// Inputs  -> event (MouseEvent): The click event object.
+// Outputs -> None (Modifies grid data/DOM via helpers, updates gUI.currentSkRadioChecked).
+async function fHandlePrepARClick(event) {
+    const button = event.target;
+
+    // --- Validate: Ensure it's the correct button ---
+    if (!button || !button.classList.contains('prep-ar-btn')) { // Check for 'prep-ar-btn'
+        return;
+    }
+    fMyConsoleLog(`🖱️ Sidebar 'Prep AR' Button Clicked...`);
+
+    // --- Prevent accidental double-clicks ---
+    if (button.disabled) {
+        fMyConsoleLog("   -> Button already disabled. Ignoring click.");
+        return;
+    }
+    button.disabled = true; // Disable immediately
+
+    // --- Get Roll ID and Results Data ---
+    const rollId = button.dataset.rollId;
+    if (!rollId) {
+        console.error("fHandlePrepARClick: Button is missing 'data-roll-id' attribute.");
+        fMyConsoleLog("❌ Error preparing AR: Button lacks roll ID.");
+        await fShowMessage("Error: Cannot identify which roll results to use.");
+        button.textContent = 'Error (No ID)';
+        return;
+    }
+
+    const rollData = gUI.monsterRollResultsHistory?.[rollId];
+    // Check structure, expecting 'results' array, 'originalAbilityRow' number, 'allTargetedRows_R' array
+    if (!rollData || !Array.isArray(rollData.results) || typeof rollData.originalAbilityRow !== 'number' || !Array.isArray(rollData.allTargetedRows_R) ) {
+        console.error(`fHandlePrepARClick: No valid data found in gUI.monsterRollResultsHistory for rollId '${rollId}'.`, rollData);
+        fMyConsoleLog(`❌ Error preparing AR: Data for roll ID '${rollId}' not found or invalid.`);
+        await fShowMessage("Error: Could not find the data associated with this defense roll.");
+        button.textContent = 'Error (No Data)';
+        return;
+    }
+
+    const failureResults = rollData.results; // Array of { mon_R, monName, numFailures } (only includes those with >0 failures)
+    const originalAbilityRow = rollData.originalAbilityRow;
+    const allTargetedRows_R = rollData.allTargetedRows_R; // Array of all monster row indices targeted
+
+    // --- Process All Targeted Monsters and Update NumMon ---
+    const cNumMon = resolveCol('NumMon');
+    let updateErrors = false;
+
+    if (isNaN(cNumMon)) {
+        console.error("fHandlePrepARClick: Could not resolve 'NumMon' column tag.");
+        fMyConsoleLog("❌ Error preparing AR: Could not find 'NumMon' column.");
+        await fShowMessage("Error: Could not find the 'NumMon' column in the grid.");
+        button.textContent = 'Error';
+        return;
+    }
+
+    // Create a map for quick lookup of failures
+    const failureMap = new Map();
+    failureResults.forEach(res => failureMap.set(res.mon_R, res.numFailures));
+
+    fMyConsoleLog(`   -> Processing ${allTargetedRows_R.length} targeted monster rows for Row ${originalAbilityRow}...`);
+
+    // Iterate through ALL originally targeted rows
+    allTargetedRows_R.forEach(target_mon_R => {
+        // Determine the value to set: failure count if found in map, otherwise ''
+        const numFailures = failureMap.get(target_mon_R); // Will be undefined if not in map (0 failures)
+        const valueToSet = (numFailures !== undefined && numFailures > 0) ? numFailures : ''; // <<< Use '' for 0/undefined failures
+
+        fMyConsoleLog(`      -> Setting NumMon for row ${target_mon_R} to '${valueToSet}'`);
+        if (!fSetGridValue(target_mon_R, cNumMon, valueToSet)) {
+            fMyConsoleLog(`         -> ⚠️ Failed to set NumMon for row ${target_mon_R}`);
+            updateErrors = true;
+        }
+    });
+
+
+    if (updateErrors) {
+        await fShowMessage("Warning: Some 'NumMon' values may not have updated correctly.");
+    }
+
+    // --- Switch Active Checkbox from Sk1 to Sk2 ---
+    const originalSk1ColTag = 'Sk1ChkBox'; // Assume Def is always Sk1
+    const targetSk2ColTag = 'Sk2ChkBox';   // Assume AR is always Sk2
+
+    const originalSk1Col = resolveCol(originalSk1ColTag);
+    const targetSk2Col = resolveCol(targetSk2ColTag);
+
+    if (isNaN(originalSk1Col) || isNaN(targetSk2Col)) {
+        const missingTag = isNaN(originalSk1Col) ? originalSk1ColTag : targetSk2ColTag;
+        fMyConsoleLog(`   -> Cannot switch checkbox: Could not resolve column tag '${missingTag}'.`);
+        await fShowMessage(`Error: Could not find the ${isNaN(originalSk1Col)? 'Defense (Sk1)' : 'Armor (Sk2)'} column.`);
+        button.textContent = 'Done (CB Fail)';
+        return;
+    }
+
+    // --- Perform the Switch ---
+    // 1. Uncheck old Sk1 box
+    const oldCellDiv = gUI.grid2D?.[originalAbilityRow]?.[originalSk1Col];
+    const oldCheckbox = oldCellDiv?.querySelector('input[type="checkbox"]');
+    if (oldCheckbox && oldCheckbox.checked) {
+        oldCheckbox.checked = false;
+        gUI.arr[originalAbilityRow][originalSk1Col] = false;
+        fMyConsoleLog(`   -> Unchecked original Sk1 checkbox [${originalAbilityRow}, ${originalSk1Col}]`);
+        if (gUI.currentSkRadioChecked.r === originalAbilityRow && gUI.currentSkRadioChecked.c === originalSk1Col) {
+            gUI.currentSkRadioChecked = { r: null, c: null };
+        }
+    } else {
+         fMyConsoleLog(`   -> Original Sk1 checkbox [${originalAbilityRow}, ${originalSk1Col}] not found or already unchecked.`);
+    }
+
+    // 2. Check new Sk2 box
+    const targetCellDiv = gUI.grid2D?.[originalAbilityRow]?.[targetSk2Col];
+    const targetCheckbox = targetCellDiv?.querySelector('input[type="checkbox"]');
+
+    if (targetCheckbox) {
+        targetCheckbox.checked = true;
+        gUI.arr[originalAbilityRow][targetSk2Col] = true;
+
+        // 3. Update tracker
+        const { r: currentlyCheckedR, c: currentlyCheckedC } = gUI.currentSkRadioChecked;
+        if (currentlyCheckedR !== null && currentlyCheckedC !== null && (currentlyCheckedR !== originalAbilityRow || currentlyCheckedC !== targetSk2Col) ) {
+             fUncheckOldSkGroupBox(currentlyCheckedR, currentlyCheckedC);
+        }
+        gUI.currentSkRadioChecked = { r: originalAbilityRow, c: targetSk2Col };
+        fMyConsoleLog(`   -> Switched active checkbox to Sk2 at [${originalAbilityRow}, ${targetSk2Col}].`);
+        button.textContent = 'AR Prep Done';
+    } else {
+        console.error(`fHandlePrepARClick: Could not find Sk2 checkbox element at [${originalAbilityRow}, ${targetSk2Col}].`);
+        fMyConsoleLog(`   -> ❌ Failed to find Sk2 checkbox element at [${originalAbilityRow}, ${targetSk2Col}].`);
+        await fShowMessage(`Error: Could not find the target Armor checkbox element.`);
+        gUI.currentSkRadioChecked = { r: null, c: null };
+        button.textContent = 'Done (CB Fail)';
+        return;
+    }
+
+    // --- Clean up History ---
+    try {
+        delete gUI.monsterRollResultsHistory[rollId];
+        fMyConsoleLog(`   -> Removed entry for rollId '${rollId}' from history.`);
+    } catch (e) {
+        console.warn(`fHandlePrepARClick: Failed to remove entry for rollId '${rollId}' from history:`, e);
+    }
+    // --- End Cleanup ---
+
+    fMyConsoleLog("✅ Prep AR action completed.");
+
+} // END fHandlePrepARClick
+
+
+
+
+// fHandlePrepDmgClick ////////////////////////////////////////////////////////////
+// Purpose -> Handles clicks on the dynamically added "Prep Dmg" button in the sidebar log.
+//            Reads success data and all targeted rows associated with the button's rollId from gUI.monsterRollResultsHistory,
+//            updates NumMon grid values for ALL targeted monsters (setting to success count or '' if 0 successes),
+//            switches the active checkbox from Sk1 (Atk) to Sk2 (Dmg) on the original ability row, and disables the button.
+// MODIFIED: Reads rollId from button, retrieves data from gUI.monsterRollResultsHistory.
+// MODIFIED: Uses originalAbilityRow from stored data for checkbox switching.
+// MODIFIED: (Optional) Removes used entry from history.
+// MODIFIED: Iterates through ALL targeted monsters, setting NumMon to success count or '' (empty string) if zero successes.
+// MODIFIED: Added diagnostic logging for rollId, history keys, retrieved data, and NumMon setting.
+// Inputs  -> event (MouseEvent): The click event object.
+// Outputs -> None (Modifies grid data/DOM via helpers, updates gUI.currentSkRadioChecked).
+async function fHandlePrepDmgClick(event) {
+    const button = event.target;
+
+    // --- Validate: Ensure it's the correct button ---
+    if (!button || !button.classList.contains('prep-dmg-btn')) {
+        return;
+    }
+    fMyConsoleLog(`🖱️ Sidebar 'Prep Dmg' Button Clicked...`);
+
+    // --- Prevent accidental double-clicks ---
+    if (button.disabled) {
+        fMyConsoleLog("   -> Button already disabled. Ignoring click.");
+        return;
+    }
+    button.disabled = true; // Disable immediately
+
+    // --- Get Roll ID and Results Data ---
+    const rollId = button.dataset.rollId;
+    if (!rollId) {
+        console.error("fHandlePrepDmgClick: Button is missing 'data-roll-id' attribute.");
+        fMyConsoleLog("❌ Error preparing Dmg: Button lacks roll ID.");
+        await fShowMessage("Error: Cannot identify which roll results to use.");
+        button.textContent = 'Error (No ID)';
+        return;
+    }
+
+    // <<< ADDED DIAGNOSTIC LOGGING HERE (BEFORE RETRIEVAL) >>>
+    fMyConsoleLog(`   -> Handling click for rollId '${rollId}'. Available history keys: ${Object.keys(gUI.monsterRollResultsHistory || {}).join(', ')}`);
+
+    const rollData = gUI.monsterRollResultsHistory?.[rollId];
+
+    // <<< ADDED DIAGNOSTIC LOGGING HERE (AFTER RETRIEVAL) >>>
+    fMyConsoleLog(`   -> Retrieved rollData for ID '${rollId}': ${JSON.stringify(rollData)}`);
+
+    // Check structure, expecting 'results' array, 'originalAbilityRow' number, 'allTargetedRows_R' array
+    if (!rollData || !Array.isArray(rollData.results) || typeof rollData.originalAbilityRow !== 'number' || !Array.isArray(rollData.allTargetedRows_R)) {
+        console.error(`fHandlePrepDmgClick: No valid data found in gUI.monsterRollResultsHistory for rollId '${rollId}'.`, rollData);
+        fMyConsoleLog(`❌ Error preparing Dmg: Data for roll ID '${rollId}' not found or invalid.`);
+        await fShowMessage("Error: Could not find the data associated with this attack roll.");
+        button.textContent = 'Error (No Data)';
+        return;
+    }
+
+    const successResults = rollData.results; // Array of { mon_R, monName, numSuccesses } (only includes those with >0 successes)
+    const originalAbilityRow = rollData.originalAbilityRow;
+    const allTargetedRows_R = rollData.allTargetedRows_R; // Array of all monster row indices targeted
+
+    // --- Process All Targeted Monsters and Update NumMon ---
+    const cNumMon = resolveCol('NumMon');
+    let updateErrors = false;
+
+    if (isNaN(cNumMon)) {
+        console.error("fHandlePrepDmgClick: Could not resolve 'NumMon' column tag.");
+        fMyConsoleLog("❌ Error preparing Dmg: Could not find 'NumMon' column.");
+        await fShowMessage("Error: Could not find the 'NumMon' column in the grid.");
+        button.textContent = 'Error';
+        return;
+    }
+
+    // Create a map for quick lookup of successes
+    const successMap = new Map();
+    successResults.forEach(res => successMap.set(res.mon_R, res.numSuccesses));
+
+    fMyConsoleLog(`   -> Processing ${allTargetedRows_R.length} targeted monster rows for Row ${originalAbilityRow}...`);
+
+    // Iterate through ALL originally targeted rows
+    allTargetedRows_R.forEach(target_mon_R => {
+        // Determine the value to set: success count if found in map, otherwise ''
+        const numSuccesses = successMap.get(target_mon_R);
+        const valueToSet = (numSuccesses !== undefined && numSuccesses > 0) ? numSuccesses : ''; // <<< Use '' for 0/undefined successes
+
+        // <<< ADDED DIAGNOSTIC LOGGING HERE (BEFORE SETTING NumMon) >>>
+        fMyConsoleLog(`      -> Processing target row ${target_mon_R}. Successes from map: ${numSuccesses}. Value to set: '${valueToSet}'`);
+
+        if (!fSetGridValue(target_mon_R, cNumMon, valueToSet)) {
+            fMyConsoleLog(`         -> ⚠️ Failed to set NumMon for row ${target_mon_R}`);
+            updateErrors = true;
+        }
+    });
+
+
+    if (updateErrors) {
+        await fShowMessage("Warning: Some 'NumMon' values may not have updated correctly.");
+    }
+
+    // --- Switch Active Checkbox from Sk1 (Atk) to Sk2 (Dmg) ---
+    const originalSk1ColTag = 'Sk1ChkBox';
+    const targetSk2ColTag = 'Sk2ChkBox';
+
+    const originalSk1Col = resolveCol(originalSk1ColTag);
+    const targetSk2Col = resolveCol(targetSk2ColTag);
+
+    if (isNaN(originalSk1Col) || isNaN(targetSk2Col)) {
+        const missingTag = isNaN(originalSk1Col) ? originalSk1ColTag : targetSk2ColTag;
+        fMyConsoleLog(`   -> Cannot switch checkbox: Could not resolve column tag '${missingTag}'.`);
+        await fShowMessage(`Error: Could not find the ${isNaN(originalSk1Col)? 'Attack (Sk1)' : 'Damage (Sk2)'} column.`);
+        button.textContent = 'Done (CB Fail)';
+        return;
+    }
+
+    // --- Perform the Switch ---
+    // 1. Uncheck old Sk1 box
+    const oldCellDiv = gUI.grid2D?.[originalAbilityRow]?.[originalSk1Col];
+    const oldCheckbox = oldCellDiv?.querySelector('input[type="checkbox"]');
+    if (oldCheckbox && oldCheckbox.checked) {
+        oldCheckbox.checked = false;
+        gUI.arr[originalAbilityRow][originalSk1Col] = false;
+        fMyConsoleLog(`   -> Unchecked original Sk1 checkbox [${originalAbilityRow}, ${originalSk1Col}]`);
+        if (gUI.currentSkRadioChecked.r === originalAbilityRow && gUI.currentSkRadioChecked.c === originalSk1Col) {
+            gUI.currentSkRadioChecked = { r: null, c: null };
+        }
+    } else {
+         fMyConsoleLog(`   -> Original Sk1 checkbox [${originalAbilityRow}, ${originalSk1Col}] not found or already unchecked.`);
+    }
+
+    // 2. Check new Sk2 box
+    const targetCellDiv = gUI.grid2D?.[originalAbilityRow]?.[targetSk2Col];
+    const targetCheckbox = targetCellDiv?.querySelector('input[type="checkbox"]');
+
+    if (targetCheckbox) {
+        targetCheckbox.checked = true;
+        gUI.arr[originalAbilityRow][targetSk2Col] = true;
+
+        // 3. Update tracker
+        const { r: currentlyCheckedR, c: currentlyCheckedC } = gUI.currentSkRadioChecked;
+        if (currentlyCheckedR !== null && currentlyCheckedC !== null && (currentlyCheckedR !== originalAbilityRow || currentlyCheckedC !== targetSk2Col) ) {
+             fUncheckOldSkGroupBox(currentlyCheckedR, currentlyCheckedC);
+        }
+        gUI.currentSkRadioChecked = { r: originalAbilityRow, c: targetSk2Col };
+        fMyConsoleLog(`   -> Switched active checkbox to Sk2 at [${originalAbilityRow}, ${targetSk2Col}].`);
+        button.textContent = 'Dmg Prep Done';
+    } else {
+        console.error(`fHandlePrepDmgClick: Could not find Sk2 checkbox element at [${originalAbilityRow}, ${targetSk2Col}].`);
+        fMyConsoleLog(`   -> ❌ Failed to find Sk2 checkbox element at [${originalAbilityRow}, ${targetSk2Col}].`);
+        await fShowMessage(`Error: Could not find the target Damage checkbox element.`);
+        gUI.currentSkRadioChecked = { r: null, c: null };
+        button.textContent = 'Done (CB Fail)';
+        return;
+    }
+
+    // --- Clean up History ---
+    try {
+        delete gUI.monsterRollResultsHistory[rollId];
+        fMyConsoleLog(`   -> Removed entry for rollId '${rollId}' from history.`);
+    } catch (e) {
+        console.warn(`fHandlePrepDmgClick: Failed to remove entry for rollId '${rollId}' from history:`, e);
+    }
+    // --- End Cleanup ---
+
+    fMyConsoleLog("✅ Prep Dmg action completed.");
+
+} // END fHandlePrepDmgClick
+
+
+
+// ==========================================================================
+// === Nish         (End of Post Combat Buttons ) ===
 // ==========================================================================
 
 
