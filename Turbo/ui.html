@@ -1,7 +1,7 @@
 <!-- ui.html -->
 
 <!-- ========================================================================== -->
-<!-- === Menu Bar === -->
+<!-- === Button Bar === -->
 <!-- ========================================================================== -->
 
 <div id="menu-bar">
@@ -10,6 +10,13 @@
   <button id="btn-roll"><span class="button-icon">🎲</span> Roll</button>
   <button id="btn-free"><span class="button-icon">🆓</span> Free</button>
   <button id="btn-luck"><span class="button-icon">🍀</span> Luck</button>
+
+
+<!-- ========================================================================== -->
+<!-- === Game Menu === -->
+<!-- ========================================================================== -->
+
+
   <div id="game-menu-item" class="menu-item">
     <button id="btn-game-menu"><span class="button-icon">🎮</span> Game</button>
     <div id="dropdown-game" class="dropdown-content">
@@ -18,15 +25,6 @@
       <a href="#" data-action="game-toggleSidebar">Sidebar (Show/Hide)</a>
       <a href="#" data-action="game-gmAward">GM Award</a>
 
-      <div class="sub-menu-item">
-        <a href="#">Jump</a>
-        <div class="dropdown-content sub-menu">
-          <a href="#" data-action="game-jumpTop">to Top (Nish)</a>
-          <a href="#" data-action="game-jumpBottom">to Bottom (Gear)</a>
-        </div>
-      </div>
-
-      
       <div class="sub-menu-item">
         <a href="#">Meta</a>
         <div class="dropdown-content sub-menu">
@@ -51,7 +49,6 @@
         </div>
       </div>
 
-      
       <div class="sub-menu-item">
         <a href="#">Clear</a>
         <div class="dropdown-content sub-menu">
@@ -65,14 +62,6 @@
       </div>
 
       <div class="sub-menu-item">
-        <a href="#">Refresh</a>
-        <div class="dropdown-content sub-menu">
-          <a href="#" data-action="game-refreshAbilGear">Abilities & Gear</a>
-          <a href="#" data-action="game-clearMonsters">Monsters</a>
-          </div>
-      </div>
-
-      <div class="sub-menu-item">
         <a href="#">Set to Max</a>
         <div class="dropdown-content sub-menu">
           <a href="#" data-action="game-setMaxLuck">Luck</a>
@@ -82,6 +71,11 @@
       </div>
     </div>
   </div>
+
+
+<!-- ========================================================================== -->
+<!-- === Gear Menu === -->
+<!-- ========================================================================== -->
 
   <div id="gear-menu-item" class="menu-item">
     <button id="btn-gear-menu"><span class="button-icon">⚙️</span> Gear</button>

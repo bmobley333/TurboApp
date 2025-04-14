@@ -3644,27 +3644,38 @@ function fSetupDelegatedMenuActionClick(menuBar) {
 
              // === Action Dispatcher ===
              // Route the action to the corresponding function
+             // Use an IIFE (Immediately Invoked Function Expression) for async cases within switch
              switch (action) {
                  // --- Game Menu Actions ---
-                 case 'game-toggleSidebar':    fToggleSidebar();         break;
-                 case 'game-metaFlood':        fMetaFlood();             break;
-                 // Healing
-                 case 'game-healingNatural':   fCalc_NaturalHealing();   break;
-                 case 'game-healingAll':       fHealAllWounds();         break;
-                 // Set to Max
-                 case 'game-setMaxMeta':       fMeta_SetToMax();         break;
-                 case 'game-setMaxLuck':       fLuck_SetToMax();         break;
-                 case 'game-setMaxVit':        fCalc_VitMaxNowPerc();    break;
-                 // Clear Ranges
-                 case 'game-clearChanneled':   fClearChanneledMeta();    break;
-                 case 'game-clearCheckboxes':  fClearSk1Sk2Checkboxes(); break;
-                 case 'game-clearMonsters':    fClearMonsters();         break;
-                 case 'game-clearMorphs':      fClearMorphs();           break;
-                 case 'game-clearNish':        fClearCurrentNish();      break;
-                 case 'game-clearRollLog':     fClearRollLog();          break;
+                 case 'game-nishStartEnd':    (async () => await fHandleNishStartOrEnd())(); break;
+                 case 'game-toggleSidebar':   fToggleSidebar();           break;
+                 // case 'game-gmAward':        // Handler TBD             break;
+                 case 'game-metaFlood':       (async () => await fMetaFlood())();            break;
+                 case 'game-healingNatural':  (async () => await fCalc_NaturalHealing())();  break;
+                 case 'game-healingAll':      (async () => await fHealAllWounds())();        break;
+                 case 'game-setMaxMeta':      fMeta_SetToMax();           break;
+                 case 'game-setMaxLuck':      (async () => await fLuck_SetToMax())();        break;
+                 case 'game-setMaxVit':       (async () => await fCalc_VitMaxNowPerc())();   break;
+                 case 'game-setMaxAll':       (async () => await fHandleResetAllToMax())(); break; 
+                 case 'game-clearChanneled':  fClearChanneledMeta();      break;
+                 case 'game-clearCheckboxes': fClearSk1Sk2Checkboxes();   break;
+                 case 'game-clearMonsters':   fClearMonsters();           break;
+                 case 'game-clearMorphs':     fClearMorphs();             break;
+                 case 'game-clearNish':       fClearCurrentNish();        break;
+                 case 'game-clearRollLog':    fClearRollLog();            break;
+                 case 'game-restTimeRest':    (async () => await fHandleRestTimeRest())(); break;
+                 case 'game-restTimeSleep':   (async () => await fHandleRestTimeSleep())(); break;
+                 case 'game-restTimeNewSession': (async () => await fHandleRestTimeNewSession())(); break;
 
                  // --- Gear Menu Actions ---
-                 case 'gear-toggleGear':       fToggleGearColumns();     break;
+                 case 'gear-toggleGear':      fToggleGearColumns();       break;
+                 // case 'gear-loot':            // Handler TBD             break;
+                 // case 'gear-lootArtifact':    // Handler TBD             break;
+                 // case 'gear-lootChaosCrystal': // Handler TBD          break;
+                 // case 'gear-lootGear':        // Handler TBD             break;
+                 // case 'gear-lootGem':         // Handler TBD             break;
+                 // case 'gear-lootSocketed':    // Handler TBD             break;
+                 // case 'gear-lootValuables':   // Handler TBD             break;
 
                  // --- Default (Unhandled Actions) ---
                  default:
@@ -3687,6 +3698,90 @@ function fSetupDelegatedMenuActionClick(menuBar) {
 
 } // END fSetupDelegatedMenuActionClick
 
+
+
+// fHandleNishStartOrEnd ///////////////////////////////////////////////////////////
+// Purpose -> Handles the <Game><Nish Start or End> menu action. Executes a sequence
+//            of actions typical for starting/ending a Nish phase: Meta Flood,
+//            clearing channeled meta and durations, setting max AP, and logging.
+// Inputs  -> None.
+// Outputs -> (Promise<void>): Resolves after completing actions.
+async function fHandleNishStartOrEnd() {
+    fMyConsoleLog("⚙️ Menu Action: Nish Start or End Triggered...");
+
+    // Run the sequence of Nish-related actions
+    await fMetaFlood();             // Run Meta Flood calculation/update
+    fClearChanneledMeta();      // Clear the 'chnl' meta row
+    await fAct_SetToMax();          // Set Action Points to calculated maximum
+    fClearIsOnDurationRange();  // Clear the 'Is On/Duration' columns
+
+    // Log completion to sidebar
+    const sidebarMsg = `🚩<span class="blue-bold">Nish Start or End</span>`;
+    fPrependToSidebar(sidebarMsg);
+    fShowSidebar();
+
+    fMyConsoleLog("✅ Nish Start or End Action Completed.");
+
+} // END fHandleNishStartOrEnd
+
+
+
+// fClearIsOnDurationRange /////////////////////////////////////////////////////////
+// Purpose -> Clears all cells within the 'Is On / Duration' ranges defined in
+//            gUI.range.isONDur by setting their values to empty strings.
+// Inputs  -> None.
+// Outputs -> None (Modifies grid data/DOM).
+function fClearIsOnDurationRange() {
+    fMyConsoleLog("⚙️ Clearing 'Is On/Duration' Range...");
+    let allSucceeded = true;
+    const rangesToClear = gUI.range?.isONDur; // Get the array of ranges
+
+    // === Validate Configuration ===
+    if (!Array.isArray(rangesToClear) || rangesToClear.length === 0) {
+        console.warn("fClearIsOnDurationRange: No 'Is On/Duration' ranges defined in gUI.range.isONDur.");
+        fMyConsoleLog("⚠️ Cannot clear 'Is On/Duration': Ranges not defined.");
+        // Optional: fShowMessage("Error: 'Is On/Duration' ranges not defined.");
+        return;
+    }
+
+    // === Clear Cells in Each Range ===
+    rangesToClear.forEach(range => {
+        // Validate the range object structure
+        if (!fIsValidRangeObject(range)) {
+            console.warn("fClearIsOnDurationRange: Skipping invalid range object within gUI.range.isONDur:", range);
+            allSucceeded = false;
+            return; // Skip this invalid range
+        }
+
+        // Resolve range tags/indices
+        const r1 = resolveRow(range.r1);
+        const c1 = resolveCol(range.c1);
+        const r2 = resolveRow(range.r2);
+        const c2 = resolveCol(range.c2);
+
+        // Validate resolved indices
+        if ([r1, c1, r2, c2].some(isNaN)) {
+            console.warn(`fClearIsOnDurationRange: Skipping invalid range definition:`, range);
+            allSucceeded = false; // Mark failure
+            return; // Skip this range
+        }
+
+        // Call fSetRangeValues to set all cells in the range to empty string
+        const success = fSetRangeValues(r1, c1, r2, c2, ''); // Set value to empty string
+        if (!success) {
+            allSucceeded = false; // Track if any update fails
+        }
+    });
+
+    // === Log Result ===
+    if (!allSucceeded) {
+        fMyConsoleLog("⚠️ Failed to clear one or more 'Is On/Duration' ranges.");
+        // Optional: fShowMessage("Error clearing some 'Is On/Duration' cells.");
+    } else {
+        fMyConsoleLog("✅ 'Is On/Duration' Ranges Cleared.");
+    }
+
+} // END fClearIsOnDurationRange
 
 
 // fToggleSidebar //////////////////////////////////////////////////////////////////
@@ -4205,6 +4300,72 @@ async function fHealAllWounds() {
 
 
 
+// fHandleRestTimeRest /////////////////////////////////////////////////////////////
+// Purpose -> Handles the <Game><Rest or Time><Rest> menu action. Runs Meta Flood
+//            and logs the action to the sidebar.
+// Inputs  -> None.
+// Outputs -> (Promise<void>): Resolves after completing actions.
+async function fHandleRestTimeRest() {
+    fMyConsoleLog("⚙️ Menu Action: Rest Triggered...");
+
+    // Run Meta Flood calculation/update
+    await fMetaFlood();
+
+    // Log action to sidebar
+    const sidebarMsg = `🕒 <span class="blue-bold">Character Rested</span>`;
+    fPrependToSidebar(sidebarMsg);
+    fShowSidebar();
+
+    fMyConsoleLog("✅ Rest Action Completed.");
+
+} // END fHandleRestTimeRest
+
+
+
+
+// fHandleRestTimeNewSession ///////////////////////////////////////////////////////
+// Purpose -> Handles the <Game><Rest or Time><New Game Session> menu action. Sets
+//            Luck to Max and logs the action to the sidebar.
+// Inputs  -> None.
+// Outputs -> (Promise<void>): Resolves after completing actions.
+async function fHandleRestTimeNewSession() {
+    fMyConsoleLog("⚙️ Menu Action: New Game Session Triggered...");
+
+    // Set Luck to Max
+    await fLuck_SetToMax(); // This is async
+
+    // Log action to sidebar
+    const sidebarMsg = `⚡ <span class="blue-bold">New Game Session</span>`;
+    fPrependToSidebar(sidebarMsg);
+    fShowSidebar();
+
+    fMyConsoleLog("✅ New Game Session Action Completed.");
+
+} // END fHandleRestTimeNewSession
+
+
+
+// fHandleRestTimeSleep ////////////////////////////////////////////////////////////
+// Purpose -> Handles the <Game><Rest or Time><Sleep> menu action. Sets Meta to Max,
+//            runs Natural Healing, and logs the action to the sidebar.
+// Inputs  -> None.
+// Outputs -> (Promise<void>): Resolves after completing actions.
+async function fHandleRestTimeSleep() {
+    fMyConsoleLog("⚙️ Menu Action: Sleep Triggered...");
+
+    // Run sequence: Set Meta to Max, then perform Natural Healing
+    fMeta_SetToMax(); // This is synchronous based on current code
+    await fCalc_NaturalHealing(); // This is async
+
+    // Log action to sidebar
+    const sidebarMsg = `🕒 <span class="blue-bold">Character Slept</span>`;
+    fPrependToSidebar(sidebarMsg);
+    fShowSidebar();
+
+    fMyConsoleLog("✅ Sleep Action Completed.");
+
+} // END fHandleRestTimeSleep
+
 
 // fMeta_SetToMax //////////////////////////////////////////////////////////////////
 // Purpose -> Handles the <Game><Set to Max><Meta> menu action. Sets the values in
@@ -4554,6 +4715,74 @@ async function fVitNowNPercent_Calc() {
 
 
 
+// fHandleResetAllToMax ////////////////////////////////////////////////////////////
+// Purpose -> Handles the <Game><Set to Max><Reset All to Max> menu action. Prompts
+//            the user for confirmation, listing all effects. If confirmed, runs a
+//            series of functions to reset various character/game states to their
+//            maximum or default values and logs completion to the sidebar.
+// Inputs  -> None.
+// Outputs -> (Promise<void>): Resolves after completing actions or if cancelled.
+async function fHandleResetAllToMax() {
+    fMyConsoleLog("⚙️ Menu Action: Reset All to Max Triggered...");
+
+    // === 1. Construct Confirmation Message using HTML list ===
+    // Removed inline style from UL tag. Styling handled in style.html.
+    const promptMessage = `<b>Reset All to Max?</b>
+<br><br>This will:
+  <br>-- Clear Roll Log
+  <br>-- Clear current Nish roll
+  <br>-- Flood Meta
+  <br>-- Clear Channeled Meta
+  <br>-- Set Luck to Max
+  <br>-- Set Action Points to Max
+  <br>-- Heal All Wounds
+  <br>-- Clear Morphs
+  <br>-- Clear 'Is On' Column
+  <br>-- Clear Monsters
+<b><br>Are you sure?</b>`;
+
+    // === 2. Show Prompt and Await Response ===
+    fMyConsoleLog("   -> Displaying confirmation prompt...");
+    const userConfirmed = await fShowPrompt(promptMessage);
+
+    // === 3. Execute Actions if Confirmed ===
+    if (userConfirmed) {
+        fMyConsoleLog("   -> User confirmed Reset All. Executing actions...");
+
+        // --- Execute Sequence ---
+        // Note: Await async functions
+        fClearRollLog();             // Sync
+        fClearCurrentNish();         // Sync
+        await fMetaFlood();             // Async
+        fClearChanneledMeta();       // Sync
+        await fLuck_SetToMax();         // Async
+        await fAct_SetToMax();          // Async
+        await fHealAllWounds();         // Async
+        fClearMorphs();              // Sync
+        fClearIsOnDurationRange();   // Sync (contains SetRangeValues, technically sync but might be slow)
+        fClearMonsters();            // Sync (contains SetRangeValues)
+        // ----------------------
+
+        // Log completion to sidebar
+        const sidebarMsg = `⚡ <span class="red-bold">RESET ALL TO MAX!</span> ⚡`;
+        fPrependToSidebar(sidebarMsg);
+        fShowSidebar();
+
+        fMyConsoleLog("✅ Reset All to Max Action Completed.");
+
+    } else {
+        // --- User Cancelled ---
+        fMyConsoleLog("   -> User cancelled Reset All action.");
+        // Optional: Show a cancellation message?
+        // fPrependToSidebar("ℹ️ Reset All action cancelled.");
+        // fShowSidebar();
+    }
+
+} // END fHandleResetAllToMax
+
+
+
+
 // fClearChanneledMeta /////////////////////////////////////////////////////////////
 // Purpose -> Handles the <Game><Clear><Channeled Meta> menu action. Clears the
 //            values in the Channeled Meta range (defined by gUI.range.metaChannel)
@@ -4869,7 +5098,126 @@ function fToggleGearColumns() {
 
 
 // ==========================================================================
-// === Header Button Click     (End of Menu Bar Click) ===
+// === MENU BAR "LIKE"     (End of Menu Bar Click) ===
+// ==========================================================================
+
+
+
+// fCalculateMovementAndEncumbrance ///////////////////////////////////////////////////
+// Purpose -> Calculates Movement Rate (MR) tiers and Carry Capacity tiers based on Agility,
+//            Strength, and bonuses. Determines the character's current MR by comparing
+//            current encumbrance to carry capacity tiers. Updates the MR/Carry table,
+//            checkboxes, and the main MR display cell.
+// Inputs  -> None (Reads values directly from gUI.arr using tags).
+// Outputs -> (Promise<void>): Resolves when calculations and updates are complete. May show
+//                              an alert message if over-encumbered.
+async function fCalculateMovementAndEncumbrance() {
+    fMyConsoleLog("⚙️ Calculating Movement Rate and Encumbrance...");
+
+    // === 1. Define Constants ===
+    const movementMultipliers = [1, 0.9, 0.8, 0.65, 0.5, 0.25];
+    const carryMultipliers = [1, 2, 4, 8, 12, 16];
+    const mrColumnTags = ['GearMRCol1', 'GearMRCol2', 'GearMRCol3', 'GearMRCol4', 'GearMRCol5', 'GearMRCol6'];
+    const MR_TABLE_ROW = 'GearMRTbl';
+    const CARRY_TABLE_ROW = 'GearCarryTbl';
+    const CHECKBOX_ROW = 'GearMRCheckBox_R';
+
+    // === 2. Get Input Values ===
+    let errorMsg = '';
+    const agilityValue = fGetGridValue('Agi', 'Sk1', true);
+    const strengthValue = fGetGridValue('Str', 'Sk1', true);
+    const plusMRValue = fGetGridValue('GearPlusMR', 'GearPlusMR', true) || 0; // Default 0 if NaN/empty
+    const plusCarryValue = fGetGridValue('GearPlusCarry', 'GearPlusCarry', true) || 0; // Default 0 if NaN/empty
+    const currentEncumbrance = fGetGridValue('PossEncTot', 'PossEncTot', true) || 0; // Default 0 if NaN/empty
+
+    // Validate essential inputs
+    if (isNaN(agilityValue)) errorMsg += "Agility ('Agi', 'Sk1') is not a valid number. ";
+    if (isNaN(strengthValue)) errorMsg += "Strength ('Str', 'Sk1') is not a valid number. ";
+    if (isNaN(currentEncumbrance)) errorMsg += "Current Encumbrance ('PossEncTot', 'PossEncTot') is not a valid number.";
+
+    if (errorMsg) {
+        console.error(`fCalculateMovementAndEncumbrance: Input validation failed: ${errorMsg}`);
+        fMyConsoleLog(`❌ MR/Enc Calc Failed: ${errorMsg}`);
+        await fShowMessage(`Error calculating MR/Enc: ${errorMsg}`);
+        return;
+    }
+
+    fMyConsoleLog(`   -> Inputs: Agi=${agilityValue}, Str=${strengthValue}, +MR=${plusMRValue}, +Carry=${plusCarryValue}, CurrentEnc=${currentEncumbrance}`);
+
+    // === 3. Update Gear Table Overview ===
+    let updateSuccess = true;
+    updateSuccess &&= fSetGridValue('GearSpe', 'GearSpeAndStr', agilityValue);
+    updateSuccess &&= fSetGridValue('GearStr', 'GearSpeAndStr', strengthValue);
+
+    if (!updateSuccess) {
+        fMyConsoleLog("   -> ⚠️ Warning: Failed to update GearSpe/GearStr overview cells.");
+        // Continue calculation even if these fail? For now, yes.
+    }
+
+    // === 4. Calculate and Update MR & Carry Tables & Checkboxes ===
+    let foundActiveMRLevel = false;
+    let finalMovementRate = 0;
+    let calculationErrors = false;
+
+    for (let i = 0; i < mrColumnTags.length; i++) {
+        const colTag = mrColumnTags[i];
+
+        // Calculate MR and Carry for this column
+        const movementRate = Math.round((6 + agilityValue / 5 + plusMRValue) * movementMultipliers[i]);
+        const carryCapacity = Math.round((50 + strengthValue + plusCarryValue) * carryMultipliers[i]);
+
+        // Update Grid Cells for this column
+        let mrSet = fSetGridValue(MR_TABLE_ROW, colTag, movementRate);
+        let carrySet = fSetGridValue(CARRY_TABLE_ROW, colTag, carryCapacity);
+        let cbSetInitial = fSetGridValue(CHECKBOX_ROW, colTag, false); // Set to false initially
+
+        if (!mrSet || !carrySet || !cbSetInitial) {
+            fMyConsoleLog(`   -> ⚠️ Error setting MR/Carry/Checkbox values for column ${colTag}.`);
+            calculationErrors = true;
+            // Continue processing other columns despite error? For now, yes.
+        } else {
+            // fMyConsoleLog(`   -> Col '${colTag}': MR=${movementRate}, Carry=${carryCapacity}`);
+        }
+
+        // Check if this is the active MR level
+        if (!foundActiveMRLevel && currentEncumbrance <= carryCapacity) {
+            fMyConsoleLog(`   -> Active MR Level Found: Col '${colTag}' (Enc ${currentEncumbrance} <= Carry ${carryCapacity})`);
+            if (!fSetGridValue(CHECKBOX_ROW, colTag, true)) { // Try to check the box
+                fMyConsoleLog(`   -> ⚠️ Error setting Checkbox to TRUE for column ${colTag}.`);
+                calculationErrors = true;
+            } else {
+                foundActiveMRLevel = true;
+                finalMovementRate = movementRate;
+                fMyConsoleLog(`   -> Final MR set to: ${finalMovementRate}`);
+            }
+        }
+    } // End loop
+
+    // === 5. Update Final MR Cell ===
+    if (!fSetGridValue('MR', 'MR', finalMovementRate)) {
+        fMyConsoleLog("   -> ⚠️ Error setting final MR value in ('MR', 'MR').");
+        calculationErrors = true;
+    }
+
+    // === 6. Show Over-Encumbered Alert ===
+    if (!foundActiveMRLevel || finalMovementRate === 0) { // Check if no level was found OR MR ended up 0
+        fMyConsoleLog("   -> 🚨 Character is over-encumbered!");
+        await fShowMessage("You are over encumbered, MR is 0.");
+    }
+
+    // === 7. Log Completion Status ===
+    if (calculationErrors) {
+        fMyConsoleLog("❌ MR/Enc Calc Completed with errors.");
+    } else {
+        fMyConsoleLog("✅ MR/Enc Calc Completed successfully.");
+    }
+
+} // END fCalculateMovementAndEncumbrance
+
+
+
+// ==========================================================================
+// === Header Button Click     (End of MENU BAR "LIKE") ===
 // ==========================================================================
 
 

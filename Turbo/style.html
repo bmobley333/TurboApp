@@ -1,53 +1,71 @@
 /* === style.html === */
 
 
-/* ========================================================================== */
-/* === Common inline styles === */
-/* ========================================================================== */
+ /* ========================================================================== */
+ /* === Common inline styles === */
+ /* ========================================================================== */
 
 
-/* === Common inline styles === */
-/* Example: <span class="green-bold">${text}</span> */
-.green-bold { color: green; font-weight: bold; }
+ /* === Common inline styles === */
+ /* Example: <span class="green-bold">${text}</span> */
+ .green-bold {
+  color: green;
+  font-weight: bold;
+ }
 
-/* Example: <span class="red-italic">${text}</span> */
-.red-italic { color: red; font-style: italic; }
+ /* Example: <span class="red-italic">${text}</span> */
+ .red-italic {
+  color: red;
+  font-style: italic;
+ }
 
-/* Example: <span class="red-bold">${text}</span> */
-.red-bold { color: red; font-weight: bold; }
+ /* Example: <span class="red-bold">${text}</span> */
+ .red-bold {
+  color: red;
+  font-weight: bold;
+ }
 
-/* Example: <span class="blue-bold">${text}</span> */
-.blue-bold { color: blue; font-weight: bold; }
+ /* Example: <span class="blue-bold">${text}</span> */
+ .blue-bold {
+  color: blue;
+  font-weight: bold;
+ }
 
-/* Example: <span class="tremendous">${text}</span> */
-.tremendous { background-color: yellow; color: green; font-weight: bold; }
+ /* Example: <span class="tremendous">${text}</span> */
+ .tremendous {
+  background-color: yellow;
+  color: green;
+  font-weight: bold;
+ }
 
 
 
 
 
-/* ========================================================================== */
-/* === Base Page Styling === */
-/* ========================================================================== */
+ /* ========================================================================== */
+ /* === Base Page Styling === */
+ /* ========================================================================== */
 
-body {
+ body {
   font-family: monospace;
   background: white;
   color: #000;
   margin: 0;
   padding: 0;
   box-sizing: border-box;
-}
+ }
 
-*, *:before, *:after {
+ *,
+ *:before,
+ *:after {
   box-sizing: inherit;
-}
+ }
 
-/* ========================================================================== */
-/* === Grid Container === */
-/* ========================================================================== */
+ /* ========================================================================== */
+ /* === Grid Container === */
+ /* ========================================================================== */
 
-#grid {
+ #grid {
   display: grid;
   grid-auto-rows: 20px;
   gap: 0;
@@ -57,13 +75,13 @@ body {
   overflow: auto;
   max-height: calc(100vh - 40px);
   position: relative;
-}
+ }
 
-/* ========================================================================== */
-/* === Grid Cells === */
-/* ========================================================================== */
+ /* ========================================================================== */
+ /* === Grid Cells === */
+ /* ========================================================================== */
 
-.cell {
+ .cell {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -76,76 +94,76 @@ body {
   border: 1px solid transparent;
   white-space: pre-wrap;
   text-overflow: ellipsis;
-}
+ }
 
-.cell.overflow-left {
+ .cell.overflow-left {
   justify-content: flex-start;
   text-align: left;
-}
+ }
 
-.cell.wrap {
+ .cell.wrap {
   white-space: normal;
   word-wrap: break-word;
-}
+ }
 
-.cell-header {
+ .cell-header {
   background-color: #f2f2f2;
   font-weight: bold;
   color: #333;
-}
+ }
 
-.cell input[type="checkbox"]:not(:disabled) {
+ .cell input[type="checkbox"]:not(:disabled) {
   cursor: pointer;
-}
+ }
 
-.cell input[type="checkbox"]:disabled {
+ .cell input[type="checkbox"]:disabled {
   cursor: not-allowed;
   opacity: 0.6;
-}
+ }
 
-.cell input[type="checkbox"]:checked {
+ .cell input[type="checkbox"]:checked {
   accent-color: #000;
   transform: scale(1.2);
   filter: brightness(0.5);
-}
+ }
 
-.cell[contenteditable="true"] {
+ .cell[contenteditable="true"] {
   cursor: text;
   justify-content: flex-start;
   text-align: left;
-}
+ }
 
-.cell[contenteditable="true"]:hover {
+ .cell[contenteditable="true"]:hover {
   background-color: #f0f8ff;
-}
+ }
 
-.cell[contenteditable="true"]:focus {
+ .cell[contenteditable="true"]:focus {
   background-color: #e6f3ff;
   outline: 1px solid #7cccff;
   box-shadow: inset 0 0 0 1px #7cccff;
-}
+ }
 
-.cell.url-link {
+ .cell.url-link {
   cursor: pointer;
   color: #0000EE;
   text-decoration: underline;
-}
+ }
 
-.cell.url-link:hover {
+ .cell.url-link:hover {
   color: #DD00DD;
-}
+ }
 
-/* ========================================================================== */
-/* === Menu Bar === */
-/* ========================================================================== */
+ /* ========================================================================== */
+ /* === Menu Bar === */
+ /* ========================================================================== */
 
-#menu-bar {
+ #menu-bar {
   /* Menu Button Spacing */
   --menu-indent: 60px;
   --gap-nish-roll: 100px;
-  --gap-roll-free: 30px;     
-  --gap-free-luck: 10px;     
-  --gap-luck-game: 125px;    
+  --gap-roll-free: 30px;
+  --gap-free-luck: 10px;
+  --gap-luck-game: 125px;
   --gap-game-gear: 185px;
 
   /* Other Menu Bar Styles */
@@ -157,100 +175,115 @@ body {
   border-bottom: 1px solid #ccc;
   min-height: 35px;
   flex-wrap: wrap;
-}
+ }
 
-#menu-bar button {
-  /* padding: 5px 12px; */ /* REMOVED fixed padding */
+ #menu-bar button {
+  /* padding: 5px 12px; */
+  /* REMOVED fixed padding */
   cursor: pointer;
   font-family: monospace;
   font-size: 0.9em;
   border: 1px solid #bbb;
-  background-color: #d67ec8; /* Default button color */
+  background-color: #d67ec8;
+  /* Default button color */
   border-radius: 3px;
   flex-shrink: 0;
-  margin-right: 5px; /* Add small right margin to all buttons */
+  margin-right: 5px;
+  /* Add small right margin to all buttons */
 
   /* === ADDED/MODIFIED for Icon Alignment === */
-  display: inline-flex;   /* Use flexbox for alignment */
-  align-items: center;    /* Vertically center icon and text */
-  justify-content: center;/* Horizontally center content */
-  padding: 5px 8px 5px 7px; /* Adjust padding: T R B L - slightly less left for icon */
-  line-height: normal;    /* Use normal line height */
-  /* vertical-align: middle; */ /* Removed, handled by flex align-items */
-}
+  display: inline-flex;
+  /* Use flexbox for alignment */
+  align-items: center;
+  /* Vertically center icon and text */
+  justify-content: center;
+  /* Horizontally center content */
+  padding: 5px 8px 5px 7px;
+  /* Adjust padding: T R B L - slightly less left for icon */
+  line-height: normal;
+  /* Use normal line height */
+  /* vertical-align: middle; */
+  /* Removed, handled by flex align-items */
+ }
 
 
-.button-icon {
-  font-size: 1.4em; /* Roughly 1.5x the button's 0.9em base font */
-  margin-right: 5px; /* Add space between icon and text */
+ .button-icon {
+  font-size: 1.4em;
+  /* Roughly 1.5x the button's 0.9em base font */
+  margin-right: 5px;
+  /* Add space between icon and text */
   /* Vertical alignment handled by button's flex settings */
-  display: inline-block; /* Ensure span behaves correctly */
-  line-height: 1; /* Prevent extra line height from affecting alignment */
-}
+  display: inline-block;
+  /* Ensure span behaves correctly */
+  line-height: 1;
+  /* Prevent extra line height from affecting alignment */
+ }
 
-#menu-bar button:hover {
+ #menu-bar button:hover {
   background-color: #ddd;
   border-color: #aaa;
-}
+ }
 
-#btn-roll { 
+ #btn-roll {
   margin-left: var(--gap-nish-roll);
-}
+ }
 
-#btn-free { 
+ #btn-free {
   margin-left: var(--gap-roll-free);
-  background-color: #87CEEB; /* Light blue for distinction */
-}
+  background-color: #87CEEB;
+  /* Light blue for distinction */
+ }
 
-#btn-luck { 
+ #btn-luck {
   margin-left: var(--gap-free-luck);
-  background-color: #FFD700; /* Gold for distinction */
-}
+  background-color: #FFD700;
+  /* Gold for distinction */
+ }
 
-#game-menu-item { 
+ #game-menu-item {
   margin-left: var(--gap-luck-game);
-}
+ }
 
-#gear-menu-item { 
+ #gear-menu-item {
   margin-left: var(--gap-game-gear);
-}
+ }
 
 
-.menu-item {
+ .menu-item {
   position: relative;
   display: inline-block;
   flex-shrink: 0;
-}
+ }
 
-.dropdown-content {
+ .dropdown-content {
   display: none;
   position: absolute;
   background-color: #f9f9f9;
   min-width: 150px;
-  box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+  box-shadow: 0px 8px 16px 0px rgba(0, 0, 0, 0.2);
   z-index: 100;
   border: 1px solid #ccc;
   padding: 5px 0;
   max-height: 70vh;
   overflow-y: auto;
   overflow-x: visible;
-}
+ }
 
-.dropdown-content.sub-menu {
+ .dropdown-content.sub-menu {
   position: absolute;
   top: 0;
   left: 100%;
   margin-top: 0px;
   min-width: 180px;
   z-index: 101;
-}
+ }
 
-.dropdown-content.show {
+ .dropdown-content.show {
   display: flex;
   flex-direction: column;
-}
+ }
 
-.dropdown-content a {
+ .dropdown-content a {
   color: black;
   padding: 8px 16px;
   text-decoration: none;
@@ -258,29 +291,29 @@ body {
   white-space: nowrap;
   font-family: monospace;
   font-size: 0.9em;
-}
+ }
 
-.dropdown-content a:hover {
+ .dropdown-content a:hover {
   background-color: #ddd;
-}
+ }
 
-.sub-menu-item {
+ .sub-menu-item {
   position: relative;
   display: block;
   transform: translateZ(0);
-}
+ }
 
-.sub-menu-item > a::after {
+ .sub-menu-item>a::after {
   content: ' ▶';
   font-size: 0.8em;
   color: #555;
-}
+ }
 
-/* ========================================================================== */
-/* === Sidebar for Roll Log  === */
-/* ========================================================================== */
+ /* ========================================================================== */
+ /* === Sidebar for Roll Log  === */
+ /* ========================================================================== */
 
-#roll-log-sidebar {
+ #roll-log-sidebar {
   position: fixed;
   top: 0;
   right: 0;
@@ -297,28 +330,28 @@ body {
   flex-direction: column;
   padding: 10px;
   font-family: monospace;
-}
+ }
 
-#roll-log-sidebar.show {
+ #roll-log-sidebar.show {
   display: flex;
-}
+ }
 
-.sidebar-header {
+ .sidebar-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 10px;
   padding-bottom: 8px;
   border-bottom: 1px solid #ddd;
-}
+ }
 
-.sidebar-title {
+ .sidebar-title {
   margin: 0;
   font-size: 1.1em;
   font-weight: bold;
-}
+ }
 
-#sidebar-close-btn {
+ #sidebar-close-btn {
   background: none;
   border: none;
   font-size: 1.5em;
@@ -326,13 +359,13 @@ body {
   padding: 0 5px;
   cursor: pointer;
   color: #666;
-}
+ }
 
-#sidebar-close-btn:hover {
+ #sidebar-close-btn:hover {
   color: #000;
-}
+ }
 
-#sidebar-content {
+ #sidebar-content {
   flex-grow: 1;
   overflow-y: auto;
   background-color: #ffffff;
@@ -341,69 +374,56 @@ body {
   border-radius: 3px;
   font-size: 0.9em;
   line-height: 1.4;
-}
+ }
 
-#sidebar-content p {
+ #sidebar-content p {
   margin-top: 0;
-}
+ }
 
 
-.sidebar-ability-name {
+ .sidebar-ability-name {
   font-weight: bold;
-  color: blue; /* Or specify a hex code like #0000EE */
-}
+  color: blue;
+  /* Or specify a hex code like #0000EE */
+ }
 
-#sidebar-content p {
+ #sidebar-content p {
   margin-top: 0;
   /* Increase margin-bottom for more space between entries */
-  margin-bottom: 2.5em; /* Adjust value as needed (e.g., 1em, 1.5em) */
+  margin-bottom: 2.5em;
+  /* Adjust value as needed (e.g., 1em, 1.5em) */
   line-height: 1.3;
-}
+ }
 
-/* Style a multi-rolls '1> ', '2> ', etc. */
-.roll-prefix {
-  display: inline-block; /* Keep inline-block for consistent spacing behavior */
-  padding-left: .5em;   /* <<< ADDED: Indent the prefix */
-  font-weight: bold;   /* Keep bold weight as it was optional but present */
-}
-
-
-
-/* ========================================================================== */
-/* === Sidebar Buttons & Graphics === */
-/* ========================================================================== */
-
-.nish-divider {
-  border: none;             /* Remove default border */
-  border-top: 2px solid blue; /* Blue top border */
-  margin: 10px 0 5px 0;     /* Adjust top/bottom margin as needed */
-  opacity: 0.7;             /* Slightly transparent */
-}
-
-/* Style for the apply wounds button in the sidebar */
-.apply-wounds-btn {
-  padding: 2px 6px;      /* Smaller padding */
-  margin-left: 8px;    /* Space before button */
-  font-size: 0.8em;    /* Smaller font */
-  cursor: pointer;
-  border: 1px solid #ccc;
-  background-color: #e7e7e7;
-  border-radius: 3px;
-}
-
-.apply-wounds-btn:hover {
-  background-color: #ddd;
-}
-
-.apply-wounds-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-  background-color: #f0f0f0;
-}
+ /* Style a multi-rolls '1> ', '2> ', etc. */
+ .roll-prefix {
+  display: inline-block;
+  /* Keep inline-block for consistent spacing behavior */
+  padding-left: .5em;
+  /* <<< ADDED: Indent the prefix */
+  font-weight: bold;
+  /* Keep bold weight as it was optional but present */
+ }
 
 
-/* Style for the prep AR button in the sidebar */
-.prep-ar-btn {
+
+ /* ========================================================================== */
+ /* === Sidebar Buttons & Graphics === */
+ /* ========================================================================== */
+
+ .nish-divider {
+  border: none;
+  /* Remove default border */
+  border-top: 2px solid blue;
+  /* Blue top border */
+  margin: 10px 0 5px 0;
+  /* Adjust top/bottom margin as needed */
+  opacity: 0.7;
+  /* Slightly transparent */
+ }
+
+ /* Style for the apply wounds button in the sidebar */
+ .apply-wounds-btn {
   padding: 2px 6px;
   /* Smaller padding */
   margin-left: 8px;
@@ -414,21 +434,21 @@ body {
   border: 1px solid #ccc;
   background-color: #e7e7e7;
   border-radius: 3px;
-}
+ }
 
-.prep-ar-btn:hover {
+ .apply-wounds-btn:hover {
   background-color: #ddd;
-}
+ }
 
-.prep-ar-btn:disabled {
+ .apply-wounds-btn:disabled {
   cursor: not-allowed;
   opacity: 0.6;
   background-color: #f0f0f0;
-}
+ }
 
 
-/* Style for the prep Dmg button in the sidebar */
-.prep-dmg-btn {
+ /* Style for the prep AR button in the sidebar */
+ .prep-ar-btn {
   padding: 2px 6px;
   /* Smaller padding */
   margin-left: 8px;
@@ -439,66 +459,107 @@ body {
   border: 1px solid #ccc;
   background-color: #e7e7e7;
   border-radius: 3px;
-}
+ }
 
-.prep-dmg-btn:hover {
+ .prep-ar-btn:hover {
   background-color: #ddd;
-}
+ }
 
-.prep-dmg-btn:disabled {
+ .prep-ar-btn:disabled {
   cursor: not-allowed;
   opacity: 0.6;
   background-color: #f0f0f0;
-}
+ }
+
+
+ /* Style for the prep Dmg button in the sidebar */
+ .prep-dmg-btn {
+  padding: 2px 6px;
+  /* Smaller padding */
+  margin-left: 8px;
+  /* Space before button */
+  font-size: 0.8em;
+  /* Smaller font */
+  cursor: pointer;
+  border: 1px solid #ccc;
+  background-color: #e7e7e7;
+  border-radius: 3px;
+ }
+
+ .prep-dmg-btn:hover {
+  background-color: #ddd;
+ }
+
+ .prep-dmg-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+  background-color: #f0f0f0;
+ }
 
 
 
 
-/* ========================================================================== */
-/* === Grid Dropdowns === */
-/* ========================================================================== */
+ /* ========================================================================== */
+ /* === Grid Dropdowns === */
+ /* ========================================================================== */
 
-.cell select.grid-dropdown {
-  width: 100%; /* Make dropdown fill cell width */
-  height: 100%; /* Make dropdown fill cell height */
-  border: none; /* Remove default select border */
-  /* background-color: transparent; */ /* Let cell background show */
-  font-family: inherit; /* Use cell font */
-  font-size: inherit; /* Use cell font size */
-  color: inherit; /* Use cell font color */
-  padding: 0 15px 0 2px; /* <<< MODIFIED: Added right padding (e.g., 15px) for indicator */
+ .cell select.grid-dropdown {
+  width: 100%;
+  /* Make dropdown fill cell width */
+  height: 100%;
+  /* Make dropdown fill cell height */
+  border: none;
+  /* Remove default select border */
+  /* background-color: transparent; */
+  /* Let cell background show */
+  font-family: inherit;
+  /* Use cell font */
+  font-size: inherit;
+  /* Use cell font size */
+  color: inherit;
+  /* Use cell font color */
+  padding: 0 15px 0 2px;
+  /* <<< MODIFIED: Added right padding (e.g., 15px) for indicator */
   margin: 0;
   cursor: pointer;
-  -webkit-appearance: none; /* Remove default OS styling */
-  -moz-appearance: none;    /* Remove default OS styling */
-  appearance: none;         /* Remove default OS styling */
+  -webkit-appearance: none;
+  /* Remove default OS styling */
+  -moz-appearance: none;
+  /* Remove default OS styling */
+  appearance: none;
+  /* Remove default OS styling */
   /* Remove the background-image properties if you added them previously */
-  background: transparent; /* Ensure background is transparent */
-  position: relative; /* Needed if ::after is positioned relative to this */
-  z-index: 1; /* Ensure select is interactive */
-}
+  background: transparent;
+  /* Ensure background is transparent */
+  position: relative;
+  /* Needed if ::after is positioned relative to this */
+  z-index: 1;
+  /* Ensure select is interactive */
+ }
 
-/* Style focus state if desired */
-.cell select.grid-dropdown:focus {
+ /* Style focus state if desired */
+ .cell select.grid-dropdown:focus {
   outline: 1px solid #7cccff;
   box-shadow: inset 0 0 0 1px #7cccff;
-}
+ }
 
-/* Ensure cell allows overflow */
-.cell:has(select.grid-dropdown) {
-    overflow: visible;
-    padding: 0; /* Ensure no padding interferes */
-}
+ /* Ensure cell allows overflow */
+ .cell:has(select.grid-dropdown) {
+  overflow: visible;
+  padding: 0;
+  /* Ensure no padding interferes */
+ }
 
-.cell:has(select.grid-dropdown) {
-    overflow: visible;
-    padding: 0;
-    position: relative; /* <<< ADDED: Ensure cell is positioning context for ::after */
-}
+ .cell:has(select.grid-dropdown) {
+  overflow: visible;
+  padding: 0;
+  position: relative;
+  /* <<< ADDED: Ensure cell is positioning context for ::after */
+ }
 
 
-/* NEW RULE for the dropdown indicator */
-.cell:has(select.grid-dropdown)::after {
+ /* NEW RULE for the dropdown indicator */
+ .cell:has(select.grid-dropdown)::after {
   content: '';
   position: absolute;
   top: 50%;
@@ -511,17 +572,18 @@ body {
   border-top: 5px solid #555;
   pointer-events: none;
   z-index: 2;
-}
+ }
 
-/* Style focus state if desired */
-.cell select.grid-dropdown:focus {
+ /* Style focus state if desired */
+ .cell select.grid-dropdown:focus {
   outline: 1px solid #7cccff;
   box-shadow: inset 0 0 0 1px #7cccff;
-}
+ }
 
 
-.dropdown-cell {
-  appearance: auto; /* - force browser default */
+ .dropdown-cell {
+  appearance: auto;
+  /* - force browser default */
   -webkit-appearance: auto;
   background-color: white;
   color: black;
@@ -531,14 +593,14 @@ body {
   height: 100%;
   border: none;
   padding: 0 4px;
-}
+ }
 
 
-/* ========================================================================== */
-/* === Note Indicator (Triangle) === */
-/* ========================================================================== */
+ /* ========================================================================== */
+ /* === Note Indicator (Triangle) === */
+ /* ========================================================================== */
 
-.cell.has-note::after {
+ .cell.has-note::after {
   content: '';
   position: absolute;
   top: 0;
@@ -548,17 +610,17 @@ body {
   border-top: 5px solid #333;
   border-left: 5px solid transparent;
   z-index: 1;
-}
+ }
 
-.cell.has-note:not(.sticky-header) {
+ .cell.has-note:not(.sticky-header) {
   position: relative;
-}
+ }
 
-/* ========================================================================== */
-/* === Cell Hover Tooltip === */
-/* ========================================================================== */
+ /* ========================================================================== */
+ /* === Cell Hover Tooltip === */
+ /* ========================================================================== */
 
-#cell-tooltip {
+ #cell-tooltip {
   display: none;
   position: absolute;
   background-color: #ffffe0;
@@ -572,62 +634,71 @@ body {
   pointer-events: none;
   white-space: pre-wrap;
   word-wrap: break-word;
-  box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
-}
+  box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);
+ }
 
-/* ========================================================================== */
-/* === Styling for Sticky Header Rows === */
-/* ========================================================================== */
+ /* ========================================================================== */
+ /* === Styling for Sticky Header Rows === */
+ /* ========================================================================== */
 
-#grid .cell.sticky-header {
+ #grid .cell.sticky-header {
   position: sticky;
   z-index: 10;
   background: white;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.2);
-}
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+ }
 
-#grid .cell.below-sticky {
-  box-shadow: inset 0 2px 2px -1px rgba(0,0,0,0.1);
-}
+ #grid .cell.below-sticky {
+  box-shadow: inset 0 2px 2px -1px rgba(0, 0, 0, 0.1);
+ }
 
 
-/* ========================================================================== */
-/* === Header Image Buttons === */
-/* ========================================================================== */
+ /* ========================================================================== */
+ /* === Header Image Buttons === */
+ /* ========================================================================== */
 
-.header-button-img {
-  max-width: 90%;      /* Prevent image exceeding cell bounds (adjust %) */
-  max-height: 90%;     /* Respects merged cell height (adjust %) */
-  object-fit: contain; /* Scale image down, preserving aspect ratio */
+ .header-button-img {
+  max-width: 90%;
+  /* Prevent image exceeding cell bounds (adjust %) */
+  max-height: 90%;
+  /* Respects merged cell height (adjust %) */
+  object-fit: contain;
+  /* Scale image down, preserving aspect ratio */
   cursor: pointer;
-  user-select: none;   /* Prevent selecting the image itself */
-  display: block;      /* Ensure image behaves predictably as a block */
-  margin: auto;        /* Helps centering in some contexts */
-}
+  user-select: none;
+  /* Prevent selecting the image itself */
+  display: block;
+  /* Ensure image behaves predictably as a block */
+  margin: auto;
+  /* Helps centering in some contexts */
+ }
 
-/* Style the host cell containing the button */
-.cell:has(.header-button-img) {
-     justify-content: center; /* Ensure flex alignment is center */
-     align-items: center;   /* Ensure flex alignment is center */
-     padding: 0;            /* Remove cell padding to allow more image space */
-     /* Optional: Remove border if desired for button cells */
-     /* border: none; */
-}
+ /* Style the host cell containing the button */
+ .cell:has(.header-button-img) {
+  justify-content: center;
+  /* Ensure flex alignment is center */
+  align-items: center;
+  /* Ensure flex alignment is center */
+  padding: 0;
+  /* Remove cell padding to allow more image space */
+  /* Optional: Remove border if desired for button cells */
+  /* border: none; */
+ }
 
-/* Optional: Hover effect for the image button */
-.header-button-img:hover {
+ /* Optional: Hover effect for the image button */
+ .header-button-img:hover {
   opacity: 0.8;
   /* Or add a border, scale, etc. */
   /* transform: scale(1.1); */
-}
+ }
 
 
 
-/* ========================================================================== */
-/* === Image Tab === */
-/* ========================================================================== */
+ /* ========================================================================== */
+ /* === Image Tab === */
+ /* ========================================================================== */
 
-#image-modal {
+ #image-modal {
   display: none;
   position: fixed;
   left: 0;
@@ -638,18 +709,18 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-}
+ }
 
-#modal-backdrop {
+ #modal-backdrop {
   position: absolute;
   left: 0;
   top: 0;
   width: 100%;
   height: 100%;
   background-color: rgba(0, 0, 0, 0.7);
-}
+ }
 
-#modal-content {
+ #modal-content {
   position: relative;
   background-color: #fefefe;
   padding: 20px;
@@ -659,16 +730,16 @@ body {
   max-height: 85vh;
   z-index: 1;
   overflow: auto;
-  box-shadow: 0 4px 8px 0 rgba(0,0,0,0.2), 0 6px 20px 0 rgba(0,0,0,0.19);
-}
+  box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.2), 0 6px 20px 0 rgba(0, 0, 0, 0.19);
+ }
 
-#modal-image {
+ #modal-image {
   display: block;
   max-width: 100%;
   max-height: 100%;
-}
+ }
 
-#modal-close-btn {
+ #modal-close-btn {
   position: absolute;
   top: -5px;
   right: 2px;
@@ -679,102 +750,137 @@ body {
   padding: 0 5px;
   cursor: pointer;
   z-index: 2;
-}
+ }
 
-#modal-close-btn:hover,
-#modal-close-btn:focus {
+ #modal-close-btn:hover,
+ #modal-close-btn:focus {
   color: black;
   text-decoration: none;
-}
+ }
 
 
 
-/* ========================================================================== */
-/* === Message Box === */
-/* ========================================================================== */
+ /* ========================================================================== */
+ /* === Modal Overlays (Shared styles for Message & Prompt) === */
+ /* ========================================================================== */
 
-.modal-overlay {
+ .modal-overlay {
   position: fixed;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: rgba(0, 0, 0, 0.6); /* Semi-transparent black background */
-  display: none; /* Initially hidden - JS will change this to 'flex' */
-  justify-content: center; /* Center content horizontally */
-  align-items: center; /* Center content vertically */
-  z-index: 1000; /* Ensure it appears above other content */
-  padding: 20px; /* Padding around the content box */
-  box-sizing: border-box; /* Include padding in width/height calculation */
-}
+  background-color: rgba(0, 0, 0, 0.6);
+  /* Semi-transparent black background */
+  display: none;
+  /* Initially hidden - JS will change this to 'flex' */
+  justify-content: center;
+  /* Center content horizontally */
+  align-items: center;
+  /* Center content vertically */
+  z-index: 1000;
+  /* Ensure it appears above other content */
+  padding: 20px;
+  /* Padding around the content box */
+  box-sizing: border-box;
+  /* Include padding in width/height calculation */
+ }
 
-/* Shared style with image modal's content, could be refactored later */
-.modal-content {
-  background-color: #ffffff; /* White background for the box */
-  padding: 25px 30px; /* Padding inside the box */
-  border-radius: 8px; /* Rounded corners */
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3); /* Drop shadow for depth */
-  position: relative; /* For potential absolute positioning of children */
-  max-width: 33vw; /* Maximum width of the modal */
-  width: auto; /* Allow shrinking */
-  min-width: 10vw; /* Minimum width */
-  text-align: center; /* Center text inside */
-  color: #333333; /* Dark grey text color */
-  z-index: 1001; /* Ensure content is above overlay */
-}
+ /* Shared style for modal content boxes */
+ .modal-content {
+  background-color: #ffffff;
+  /* White background for the box */
+  padding: 25px 30px;
+  /* Padding inside the box */
+  border-radius: 8px;
+  /* Rounded corners */
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+  /* Drop shadow for depth */
+  position: relative;
+  /* For potential absolute positioning of children */
+  max-width: 33vw;
+  /* Maximum width of the modal */
+  width: auto;
+  /* Allow shrinking */
+  min-width: 10vw;
+  /* Minimum width */
+  text-align: center;
+  /* Center text inside */
+  color: #333333;
+  /* Dark grey text color */
+  z-index: 1001;
+  /* Ensure content is above overlay */
+ }
 
-#messageText {
-  margin: 0 0 20px 0; /* Space below the text, before the button */
-  font-size: 1.1em; /* Slightly larger font */
-  line-height: 1.6; /* Improve readability */
-  white-space: pre-wrap; /* Preserve line breaks in the message */
-}
 
-#closeMessageModal {
-  padding: 10px 25px; /* Button padding */
-  border: none; /* No border */
-  border-radius: 5px; /* Rounded button corners */
-  background-color: #4CAF50; /* Example green color */
-  color: white; /* White text */
+ /* ========================================================================== */
+ /* === Message Box Specifics === */
+ /* ========================================================================== */
+
+ #messageText {
+  margin: 0 0 20px 0;
+  /* Space below the text, before the button */
+  font-size: 1.1em;
+  /* Slightly larger font */
+  line-height: 1.6;
+  /* Improve readability */
+  white-space: pre-wrap;
+  /* Preserve line breaks in the message */
+ }
+
+ #closeMessageModal {
+  padding: 10px 25px;
+  /* Button padding */
+  border: none;
+  /* No border */
+  border-radius: 5px;
+  /* Rounded button corners */
+  background-color: #4CAF50;
+  /* Example green color */
+  color: white;
+  /* White text */
   font-size: 1em;
   font-weight: bold;
-  cursor: pointer; /* Pointer cursor on hover */
-  transition: background-color 0.2s ease-in-out; /* Smooth transition */
-}
+  cursor: pointer;
+  /* Pointer cursor on hover */
+  transition: background-color 0.2s ease-in-out;
+  /* Smooth transition */
+ }
 
-#closeMessageModal:hover {
-   background-color: #45a049; /* Darker green on hover */
-}
+ #closeMessageModal:hover {
+  background-color: #45a049;
+  /* Darker green on hover */
+ }
 
-#closeMessageModal:active {
-   background-color: #3e8e41; /* Even darker when clicked */
-}
+ #closeMessageModal:active {
+  background-color: #3e8e41;
+  /* Even darker when clicked */
+ }
 
 
-
-
-/* ========================================================================== */
-/* === Prompt Box === */
-/* ========================================================================== */
-
-/* Use existing .modal-overlay styles [cite: 906] */
-/* Use existing .modal-content styles [cite: 912] */
+ /* ========================================================================== */
+ /* === Prompt Box Specifics === */
+ /* ========================================================================== */
 
 #promptText {
-  margin: 0 0 20px 0; /* Space below text */
-  font-size: 1.1em;
-  line-height: 1.6;
-  white-space: pre-wrap; /* Preserve line breaks */
-}
+  margin: 0 0 0 0;
+  /* Space below text */
+  font-size: 1em;
+  line-height: 1em;
+  white-space: pre-wrap;
+  /* Preserve line breaks */
+ }
 
-.prompt-buttons {
+ .prompt-buttons {
   display: flex;
-  justify-content: space-around; /* Space out buttons */
-  margin-top: 20px; /* Space above buttons */
-}
+  justify-content: space-around;
+  /* Space out buttons */
+  margin-top: 20px;
+  /* Space above buttons */
+ }
 
-#promptYesButton,
-#promptNoButton {
+ #promptYesButton,
+ #promptNoButton {
   padding: 10px 25px;
   border: none;
   border-radius: 5px;
@@ -782,38 +888,35 @@ body {
   font-size: 1em;
   font-weight: bold;
   cursor: pointer;
-  min-width: 80px; /* Ensure buttons have a minimum width */
+  min-width: 80px;
+  /* Ensure buttons have a minimum width */
   transition: background-color 0.2s ease-in-out;
-}
+ }
 
-#promptYesButton {
-  background-color: #4CAF50; /* Green */
-}
+ #promptYesButton {
+  background-color: #4CAF50;
+  /* Green */
+ }
 
-#promptNoButton {
-  background-color: #f44336; /* Red */
-}
+ #promptNoButton {
+  background-color: #f44336;
+  /* Red */
+ }
 
-#promptYesButton:hover {
-  background-color: #45a049; /* Darker green */
-}
+ #promptYesButton:hover {
+  background-color: #45a049;
+  /* Darker green */
+ }
 
-#promptNoButton:hover {
-  background-color: #da190b; /* Darker red */
-}
+ #promptNoButton:hover {
+  background-color: #da190b;
+  /* Darker red */
+ }
 
-#promptYesButton:active {
+ #promptYesButton:active {
   background-color: #3e8e41;
-}
+ }
 
-#promptNoButton:active {
+ #promptNoButton:active {
   background-color: #b3140a;
-}
-
-
-
-
-
-
-
-
+ }
