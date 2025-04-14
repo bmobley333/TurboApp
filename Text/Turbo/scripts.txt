@@ -189,7 +189,10 @@ const gUI = {
     vit3rdWnds: { r1: 'VitTbl', c1: 'vit3rd', r2: 'VitTbl', c2: 'vit3rd' },
     vitNow: { r1: 'VitTbl', c1: 'vitNow', r2: 'VitTbl', c2: 'vitNow' },
     vitNowPercent: { r1: 'VitTbl', c1: 'VitNowPercent', r2: 'VitTbl', c2: 'VitNowPercent' },
-    chaosGems: { r1: 'Chaos1', c1: 'ChaosUses', r2: 'ChaosWrist', c2: 'ChaosAbility' }
+    chaosGems: { r1: 'Chaos1', c1: 'ChaosUses', r2: 'ChaosWrist', c2: 'ChaosAbility' },
+    socketedGear: { r1: 'SocketTblStart', c1: 'SocketedGear', r2: 'SocketTblEnd', c2: 'SocketedGems' },
+    currentEnc: { r1: 'PossEncTot', c1: 'PossEncTot', r2: 'PossEncTot', c2: 'PossEncTot' },
+    gearAPTotal: { r1: 'PossAPTot', c1: 'PossGrandAPTot', r2: 'PossAPTot', c2: 'PossGrandAPTot' }
   },
   list: { // Static lists and values
     skTyp: ['Atr','Sk','Atk','DMG','Def','AR','Str'], // Note free, luck, un, unSk are not skill Types and dealth with elsewhere
