@@ -1330,7 +1330,6 @@ async function fPerformPlayerAttackRolls(initialLogHtml, initialLogText) {
         await fShowMessage("ℹ️ No valid monsters found. Performing standard attack roll.");
         gUI.roll.resDif = ''; // Ensure difficulty is cleared
         fMyConsoleLog("         -> Cleared resDif for standard roll.");
-        // Call standard roll, passing both HTML and Text headers
         const { finalLogHtml, finalLogText } = fPerformStandardRolls(initialLogHtml, initialLogText);
         return { logHtml: finalLogHtml, logText: finalLogText, success: true };
     }
@@ -1338,14 +1337,14 @@ async function fPerformPlayerAttackRolls(initialLogHtml, initialLogText) {
     // === 5. Perform Rolls Against Valid Targets ===
     fMyConsoleLog(`      -> Found ${monsterTargets.length} valid monster target(s).`);
     let isOverallFirstRoll = true;
-    const monsterLogLinesHtml = []; // HTML lines for each monster/roll
-    const monsterLogLinesText = []; // Plain text lines
+    const monsterLogLinesHtml = [];
+    const monsterLogLinesText = [];
     const currentAttackResults = [];
 
     for (const target of monsterTargets) {
         fMyConsoleLog(`   --- Attacking: ${target.monName} (Def: ${target.monDef}, Rolls: ${target.numRolls}) ---`);
         monsterLogLinesHtml.push('↓'); // HTML Separator
-        monsterLogLinesText.push('---'); // Text Separator (adjust as needed)
+        monsterLogLinesText.push('↓'); // <<< USE '↓' for Plain Text Separator >>>
         monsterLogLinesHtml.push(`--- <span style="color: purple; font-weight: bold;">Mon: ${target.monName}</span> (Def: ${target.monDef}) ---`);
         monsterLogLinesText.push(`--- Mon: ${target.monName} (Def: ${target.monDef}) ---`);
         gUI.roll.resDif = target.monDef; // Set difficulty
@@ -1365,7 +1364,6 @@ async function fPerformPlayerAttackRolls(initialLogHtml, initialLogText) {
                  fMyConsoleLog(`         -> Attack Failed! (Roll ${rollResult} < Def ${difficulty})`);
             }
 
-            // Build HTML & Text lines for this roll
             const { html: rollLineHtml, plainText: rollLineText } = fBuildRollLogHTML(rollNum, target.numRolls, isOverallFirstRoll);
             monsterLogLinesHtml.push(rollLineHtml);
             monsterLogLinesText.push(rollLineText);
@@ -1385,8 +1383,8 @@ async function fPerformPlayerAttackRolls(initialLogHtml, initialLogText) {
     } // End monster target loop
 
     // === 6. Finalize Log, Store Results, Add Button ===
-    let finalLogHtml = initialLogHtml + '<br>' + monsterLogLinesHtml.join('<br>'); // Combine HTML
-    let finalLogText = initialLogText + '\n' + monsterLogLinesText.join('\n'); // Combine Text
+    let finalLogHtml = initialLogHtml + '<br>' + monsterLogLinesHtml.join('<br>');
+    let finalLogText = initialLogText + '\n' + monsterLogLinesText.join('\n');
     let rollId = null;
 
     if (currentAttackResults.length > 0) {
@@ -1397,9 +1395,7 @@ async function fPerformPlayerAttackRolls(initialLogHtml, initialLogText) {
              allTargetedRows_R: allTargetedRows_R
         };
         fMyConsoleLog(`   -> Stored attack results in gUI.monsterRollResultsHistory['${rollId}']`);
-        // Append button to HTML log ONLY
         finalLogHtml += ` <button class="prep-dmg-btn" data-roll-id="${rollId}">Prep Dmg</button>`;
-        // Add placeholder text to plain text log (optional)
         finalLogText += ` [Prep Dmg Available]`;
         fMyConsoleLog("   -> Added 'Prep Dmg' button to HTML log output.");
     } else {
@@ -1407,7 +1403,7 @@ async function fPerformPlayerAttackRolls(initialLogHtml, initialLogText) {
     }
 
     fMyConsoleLog("   -> Player Attack Logic Complete.");
-    return { logHtml: finalLogHtml, logText: finalLogText, success: true }; // Return both log versions
+    return { logHtml: finalLogHtml, logText: finalLogText, success: true };
 } // END fPerformPlayerAttackRolls
 
 
@@ -1496,15 +1492,15 @@ async function fPerformPlayerDamageRolls(initialLogHtml, initialLogText) {
     // === 5. Perform Rolls & Build Log ===
     fMyConsoleLog(`      -> Found ${monsterTargets.length} valid monster target(s) with Armor values.`);
     let isOverallFirstRoll = true;
-    const monsterLogLinesHtml = []; // HTML lines
-    const monsterLogLinesText = []; // Plain text lines
+    const monsterLogLinesHtml = [];
+    const monsterLogLinesText = [];
 
     for (const target of monsterTargets) {
         fMyConsoleLog(`   --- Damaging: ${target.monName} (Calc AR: ${target.calculatedArmor}, Rolls: ${target.numRolls}) ---`);
         let totalWoundsPerMonster = 0;
 
         monsterLogLinesHtml.push('↓'); // HTML separator
-        monsterLogLinesText.push('---'); // Text separator
+        monsterLogLinesText.push('↓'); // <<< USE '↓' for Plain Text Separator >>>
         monsterLogLinesHtml.push(`--- <span style="color: purple; font-weight: bold;">Mon: ${target.monName}</span> (AR: ${target.calculatedArmor}) ---`);
         monsterLogLinesText.push(`--- Mon: ${target.monName} (AR: ${target.calculatedArmor}) ---`);
         gUI.roll.resDif = target.calculatedArmor; // Set difficulty
@@ -1524,7 +1520,6 @@ async function fPerformPlayerDamageRolls(initialLogHtml, initialLogText) {
             fMyConsoleLog(`         -> Wound Calc: Dmg Roll=${rollResult}, calcAR=${armorDifficulty} => Wounds = max(0, round(${rollResult}/${armorDifficulty})) = ${woundsDealt}`);
             totalWoundsPerMonster += woundsDealt;
 
-            // Build HTML & Text lines for this roll
             const { html: rollLineHtml, plainText: rollLineText } = fBuildRollLogHTML(rollNum, target.numRolls, isOverallFirstRoll);
             monsterLogLinesHtml.push(rollLineHtml);
             monsterLogLinesText.push(rollLineText);
@@ -1532,17 +1527,16 @@ async function fPerformPlayerDamageRolls(initialLogHtml, initialLogText) {
 
         } // End inner roll loop
 
-        // Add Wound Summation Line for this monster (HTML & Text)
         monsterLogLinesHtml.push(`<span style="font-weight:bold;">${target.monName} Total Wounds = +${totalWoundsPerMonster}</span>`);
         monsterLogLinesText.push(`${target.monName} Total Wounds = +${totalWoundsPerMonster}`);
         fMyConsoleLog(`   --- Finished Damaging: ${target.monName} (Total Wounds: ${totalWoundsPerMonster}) ---`);
     } // End monster target loop
 
     // === 6. Return Result ===
-    const finalLogHtml = initialLogHtml + '<br>' + monsterLogLinesHtml.join('<br>'); // Combine HTML
-    const finalLogText = initialLogText + '\n' + monsterLogLinesText.join('\n'); // Combine Text
+    const finalLogHtml = initialLogHtml + '<br>' + monsterLogLinesHtml.join('<br>');
+    const finalLogText = initialLogText + '\n' + monsterLogLinesText.join('\n');
     fMyConsoleLog("   -> Player Damage Logic Complete.");
-    return { logHtml: finalLogHtml, logText: finalLogText, success: true }; // Return final log and success status
+    return { logHtml: finalLogHtml, logText: finalLogText, success: true };
 
 } // END fPerformPlayerDamageRolls
 
@@ -1634,14 +1628,14 @@ async function fPerformPlayerDefenseRolls(initialLogHtml, initialLogText) {
     // === 5. Perform Rolls & Build Log ===
     fMyConsoleLog(`      -> Found ${monsterTargets.length} valid monster target(s) with Attack values.`);
     let isOverallFirstRoll = true;
-    const monsterLogLinesHtml = []; // HTML lines
-    const monsterLogLinesText = []; // Plain text lines
+    const monsterLogLinesHtml = [];
+    const monsterLogLinesText = [];
     const currentDefenseResults = [];
 
     for (const target of monsterTargets) {
         fMyConsoleLog(`   --- Defending Against: ${target.monName} (Atk: ${target.monAtk}, Rolls: ${target.numRolls}) ---`);
         monsterLogLinesHtml.push('↓'); // HTML separator
-        monsterLogLinesText.push('---'); // Text separator
+        monsterLogLinesText.push('↓'); // <<< USE '↓' for Plain Text Separator >>>
         monsterLogLinesHtml.push(`--- <span style="color: purple; font-weight: bold;">Mon: ${target.monName}</span> (Atk: ${target.monAtk}) ---`);
         monsterLogLinesText.push(`--- Mon: ${target.monName} (Atk: ${target.monAtk}) ---`);
         gUI.roll.resDif = target.monAtk; // Set difficulty
@@ -1662,7 +1656,6 @@ async function fPerformPlayerDefenseRolls(initialLogHtml, initialLogText) {
                  fMyConsoleLog(`         -> Defense Succeeded! (Roll ${rollResult} >= Atk ${difficulty})`);
             }
 
-            // Build HTML & Text lines for this roll
             const { html: rollLineHtml, plainText: rollLineText } = fBuildRollLogHTML(rollNum, target.numRolls, isOverallFirstRoll);
             monsterLogLinesHtml.push(rollLineHtml);
             monsterLogLinesText.push(rollLineText);
@@ -1681,8 +1674,8 @@ async function fPerformPlayerDefenseRolls(initialLogHtml, initialLogText) {
     } // End monster target loop
 
     // === 6. Finalize Log, Store Results, Add Button ===
-    let finalLogHtml = initialLogHtml + '<br>' + monsterLogLinesHtml.join('<br>'); // Combine HTML
-    let finalLogText = initialLogText + '\n' + monsterLogLinesText.join('\n'); // Combine Text
+    let finalLogHtml = initialLogHtml + '<br>' + monsterLogLinesHtml.join('<br>');
+    let finalLogText = initialLogText + '\n' + monsterLogLinesText.join('\n');
     let rollId = null;
 
     if (currentDefenseResults.length > 0) {
@@ -1693,9 +1686,7 @@ async function fPerformPlayerDefenseRolls(initialLogHtml, initialLogText) {
              allTargetedRows_R: allTargetedRows_R
         };
         fMyConsoleLog(`   -> Data stored for rollId '${rollId}'. History keys: ${Object.keys(gUI.monsterRollResultsHistory).join(', ')}`);
-        // Append button to HTML log ONLY
         finalLogHtml += ` <button class="prep-ar-btn" data-roll-id="${rollId}">Prep AR</button>`;
-        // Add placeholder text to plain text log (optional)
         finalLogText += ` [Prep AR Available]`;
         fMyConsoleLog("   -> Added 'Prep AR' button to log output.");
     } else {
@@ -1703,7 +1694,7 @@ async function fPerformPlayerDefenseRolls(initialLogHtml, initialLogText) {
     }
 
     fMyConsoleLog("   -> Player Defense Logic Complete.");
-    return { logHtml: finalLogHtml, logText: finalLogText, success: true }; // Return both log versions
+    return { logHtml: finalLogHtml, logText: finalLogText, success: true };
 } // END fPerformPlayerDefenseRolls
 
 
@@ -1791,8 +1782,8 @@ async function fPerformPlayerArmorRolls(initialLogHtml, initialLogText) {
     // === 5. Perform Rolls & Build Log ===
     fMyConsoleLog(`      -> Found ${monsterTargets.length} valid monster target(s) with Damage values.`);
     let isOverallFirstRoll = true;
-    const monsterLogLinesHtml = []; // HTML lines
-    const monsterLogLinesText = []; // Plain text lines
+    const monsterLogLinesHtml = [];
+    const monsterLogLinesText = [];
     let totalWoundsOverall = 0;
 
     for (const target of monsterTargets) {
@@ -1800,7 +1791,7 @@ async function fPerformPlayerArmorRolls(initialLogHtml, initialLogText) {
         let totalWoundsPerMonster = 0;
 
         monsterLogLinesHtml.push('↓'); // HTML separator
-        monsterLogLinesText.push('---'); // Text separator
+        monsterLogLinesText.push('↓'); // <<< USE '↓' for Plain Text Separator >>>
         monsterLogLinesHtml.push(`--- <span style="color: purple; font-weight: bold;">Mon: ${target.monName}</span> (Dmg: ${target.monDmg}) ---`);
         monsterLogLinesText.push(`--- Mon: ${target.monName} (Dmg: ${target.monDmg}) ---`);
         gUI.roll.resDif = target.monDmg; // Set difficulty
@@ -1823,7 +1814,6 @@ async function fPerformPlayerArmorRolls(initialLogHtml, initialLogText) {
             totalWoundsPerMonster += woundsDealt;
             totalWoundsOverall += woundsDealt;
 
-            // Build HTML & Text lines for this roll
             const { html: rollLineHtml, plainText: rollLineText } = fBuildRollLogHTML(rollNum, target.numRolls, isOverallFirstRoll);
             monsterLogLinesHtml.push(rollLineHtml);
             monsterLogLinesText.push(rollLineText);
@@ -1831,7 +1821,6 @@ async function fPerformPlayerArmorRolls(initialLogHtml, initialLogText) {
 
         } // End inner roll loop
 
-        // Add Wound Summation Line for this specific monster (HTML & Text)
         monsterLogLinesHtml.push(`<span style="font-weight:bold;">${target.monName} Wounds to PC = ${totalWoundsPerMonster}</span>`);
         monsterLogLinesText.push(`${target.monName} Wounds to PC = ${totalWoundsPerMonster}`);
         fMyConsoleLog(`   --- Finished Rolling vs: ${target.monName} (Wounds This Monster: ${totalWoundsPerMonster}) ---`);
@@ -1839,19 +1828,17 @@ async function fPerformPlayerArmorRolls(initialLogHtml, initialLogText) {
 
     // === 6. Add Overall Wound Summation & Button ===
     monsterLogLinesHtml.push('↓'); // HTML separator
-    monsterLogLinesText.push('\n↓'); // Text separator
+    monsterLogLinesText.push('↓'); // <<< USE '↓' for Plain Text Separator >>>
     const positiveWoundAmount = Math.abs(totalWoundsOverall);
-    // Add total wounds line with "Apply" button to HTML
     monsterLogLinesHtml.push(`<span class="red-bold">Total Wounds to PC = ${totalWoundsOverall}</span> <button class="apply-wounds-btn" data-wound-amount="${positiveWoundAmount}">Apply</button>`);
-    // Add plain text version
-    monsterLogLinesText.push(`Total Wounds to PC = ${totalWoundsOverall}`);
+    monsterLogLinesText.push(`Total Wounds to PC = ${totalWoundsOverall}`); // Plain text version
     fMyConsoleLog(`      -> Overall Wounds Inflicted on PC: ${totalWoundsOverall} (Button amount: ${positiveWoundAmount})`);
 
     // === 7. Return Result ===
-    const finalLogHtml = initialLogHtml + '<br>' + monsterLogLinesHtml.join('<br>'); // Combine HTML
-    const finalLogText = initialLogText + '\n' + monsterLogLinesText.join('\n'); // Combine Text
+    const finalLogHtml = initialLogHtml + '<br>' + monsterLogLinesHtml.join('<br>');
+    const finalLogText = initialLogText + '\n' + monsterLogLinesText.join('\n');
     fMyConsoleLog("   -> Player Armor Logic Complete.");
-    return { logHtml: finalLogHtml, logText: finalLogText, success: true }; // Return both log versions
+    return { logHtml: finalLogHtml, logText: finalLogText, success: true };
 
 } // END fPerformPlayerArmorRolls
 
@@ -2122,7 +2109,7 @@ function fBuildRollLogHTML(rollNum, totalRolls, isFirstRoll) {
     // 2. Roll Result String: ~Roll->ResRoll (unless AR vs Dmg)
     let htmlRollResult = '';
     let textRollResult = '';
-    if (!(resTypLower === 'ar' && hasDifficulty)) { // AR vs Dmg difficulty shown differently
+    if (!(resTypLower === 'ar' && hasDifficulty)) {
         const rollStr = (typeof roll === 'number' || (typeof roll === 'string' && roll !== '')) && roll != null ? String(roll) : '';
         const resRollStr = (typeof resRoll === 'number' || (typeof resRoll === 'string' && resRoll !== '')) && resRoll != null ? String(resRoll) : '';
         const showFinal = resRollStr !== '' && resRollStr !== rollStr;
@@ -2142,13 +2129,13 @@ function fBuildRollLogHTML(rollNum, totalRolls, isFirstRoll) {
     if (hasDifficulty) {
         const difStr = String(dif);
         const resRollStr = typeof resRoll === 'number' ? String(resRoll) : '?';
-        if (resTypLower === 'ar') { // Format: Dmg/~PlayerARRoll
+        if (resTypLower === 'ar') {
             htmlDifIndicator = ` ${difStr}/~${resRollStr}`;
             textDifIndicator = ` ${difStr}/~${resRollStr}`;
-        } else if (resTypLower === 'dmg') { // Format: /ArmorDifficulty
+        } else if (resTypLower === 'dmg') {
             htmlDifIndicator = `/${difStr}`;
             textDifIndicator = `/${difStr}`;
-        } else { // Standard Format: ^Difficulty
+        } else {
             htmlDifIndicator = ` ^${difStr}`;
             textDifIndicator = ` ^${difStr}`;
         }
@@ -2171,10 +2158,10 @@ function fBuildRollLogHTML(rollNum, totalRolls, isFirstRoll) {
             const delta = resRoll - dif;
             if (delta >= 0) {
                 htmlSuccessDelta = ` =+${delta} ✅`;
-                textSuccessDelta = ` =+${delta} Success`;
+                textSuccessDelta = ` =+${delta} ✅`; // <<< USE SYMBOL >>>
             } else {
                 htmlSuccessDelta = ` =${delta} ❌`;
-                textSuccessDelta = ` =${delta} Failure`;
+                textSuccessDelta = ` =${delta} ❌`; // <<< USE SYMBOL >>>
             }
         }
     }
@@ -2184,11 +2171,11 @@ function fBuildRollLogHTML(rollNum, totalRolls, isFirstRoll) {
     textLine = `${textBase}${textRollResult}${textDifIndicator}${textSuccessDelta}`.trim();
 
     // === Add T/C Result (First Roll Only) ===
-    const tc = isFirstRoll ? fCStc() : ""; // Returns HTML span or ""
-    const tcText = tc ? (tc.includes('red-bold') ? ' C' : ' T') : ""; // Map HTML to T/C text
+    const tc = isFirstRoll ? fCStc() : "";
+    const tcText = tc ? (tc.includes('red-bold') ? ' C' : ' T') : "";
     if (tc) {
         htmlLine += `   ${tc}`;
-        textLine += ` ${tcText}`; // Add space before T/C text
+        textLine += ` ${tcText}`;
     }
 
     // === Add Multi-Roll Prefix ===
@@ -2615,7 +2602,8 @@ async function fHandleNishButtonClick(event) { // Added event parameter to use s
 async function fExecuteNishSequence() {
     fMyConsoleLog("🎬 Executing Nish Sequence...");
     // 1. Add Sidebar Divider (HTML and Plain Text)
-    fPrependToSidebar('<hr class="nish-divider"><br>', '\n---\n'); // Added plain text version
+    // Use '======================' for the plain text version <<< MODIFIED >>>
+    fPrependToSidebar('<hr class="nish-divider"><br>', '\n======================\n');
     fMyConsoleLog("   -> Sidebar divider added.");
 
     // 2. Run Meta Channeling (Skip if Luck button initiated the action)
@@ -2861,7 +2849,7 @@ async function fUpdateTurboMonsterTable(gmDataArray, gmColTags, gmRowTags) {
 
 
 // fHandleChaosGemClick ////////////////////////////////////////////////////////////
-// Purpose -> Handles Chaos Gem clicks. Decrements uses, logs ability text to sidebar.
+// Purpose -> Handles Chaos Gem clicks. Decrements uses, logs ability text (with icon) to sidebar.
 // Inputs  -> r (Number), c (Number).
 // Outputs -> (Promise<Boolean>): True if Chaos Gem processed, false otherwise.
 async function fHandleChaosGemClick(r, c) {
@@ -2900,8 +2888,9 @@ async function fHandleChaosGemClick(r, c) {
 
     // Build Sidebar Message (HTML and Plain Text)
     const trimmedAbilityText = String(abilityText).trim();
-    const sidebarMsgHtml = `<span class="blue-bold">Chaos Crystal</span> (${newUses} Uses Left):<br>${trimmedAbilityText}`;
-    const sidebarMsgText = `Chaos Crystal (${newUses} Uses Left):\n${trimmedAbilityText}`;
+    // <<< ADD ICON TO BOTH HTML AND TEXT >>>
+    const sidebarMsgHtml = `💎 <span class="blue-bold">Chaos Crystal</span> (${newUses} Uses Left):<br>${trimmedAbilityText}`;
+    const sidebarMsgText = `💎 Chaos Crystal (${newUses} Uses Left):\n${trimmedAbilityText}`;
 
     // Update Sidebar
     fPrependToSidebar(sidebarMsgHtml, sidebarMsgText);
@@ -2910,7 +2899,7 @@ async function fHandleChaosGemClick(r, c) {
     fMyConsoleLog("✅ Chaos Gem Used Successfully.");
 
     // Send log update to GMScreen (with slight delay)
-    setTimeout(() => fSendLogToGMScreen(), 0); // <<< MODIFIED >>>
+    setTimeout(() => fSendLogToGMScreen(), 0);
 
     return true; // Signal that the gem click was fully processed
 
@@ -2921,7 +2910,7 @@ async function fHandleChaosGemClick(r, c) {
 
 // fHandleAdHocRoll ////////////////////////////////////////////////////////////////
 // Purpose -> Parses and rolls dice based on cell text content (sk#, XdY+/-Z, #).
-//            Logs result (HTML & plain text) to sidebar.
+//            Logs result (HTML & plain text) to sidebar, including die icon.
 // Inputs  -> cellText (String): The text content of the clicked cell.
 // Outputs -> (Promise<Boolean>): True if roll was parsed and logged, false otherwise.
 async function fHandleAdHocRoll(cellText) {
@@ -2944,14 +2933,16 @@ async function fHandleAdHocRoll(cellText) {
         const num = parseInt(match[1], 10);
         if (!isNaN(num) && num > 0) {
             rollResult = fCSD(num); matchedString = match[0];
-            logHeaderHtml = '<span class="blue-bold">Custom Roll</span> Sk'; logHeaderText = 'Custom Roll Sk';
+            // <<< ADD ICON TO BOTH HTML AND TEXT >>>
+            logHeaderHtml = '🎲 <span class="blue-bold">Custom Roll</span> Sk'; logHeaderText = '🎲 Custom Roll Sk';
             logDetailsHtml = `Sk(${num}) ~${rollResult}`; logDetailsText = `Sk(${num}) ~${rollResult}`;
             patternMatched = true; fMyConsoleLog(`   -> Matched EXACT Sk pattern: ${matchedString}. Result: ${rollResult}`);
         }
     } else if ((match = text.match(dieStringExactPattern))) {
         matchedString = match[0].trim(); rollResult = fRollDieString(matchedString);
         if (rollResult !== null) {
-            logHeaderHtml = '<span class="blue-bold">Die Roll</span>'; logHeaderText = 'Die Roll';
+             // <<< ADD ICON TO BOTH HTML AND TEXT >>>
+            logHeaderHtml = '🎲 <span class="blue-bold">Die Roll</span>'; logHeaderText = '🎲 Die Roll';
             logDetailsHtml = `Die(${matchedString}) ~${rollResult}`; logDetailsText = `Die(${matchedString}) ~${rollResult}`;
             patternMatched = true; fMyConsoleLog(`   -> Matched EXACT Die String pattern: ${matchedString}. Result: ${rollResult}`);
         }
@@ -2960,7 +2951,8 @@ async function fHandleAdHocRoll(cellText) {
         if (!isNaN(num) && num > 0) {
             matchedString = `d${num}`; rollResult = fRollDieString(matchedString);
             if (rollResult !== null) {
-                logHeaderHtml = '<span class="blue-bold">Die Roll</span>'; logHeaderText = 'Die Roll';
+                 // <<< ADD ICON TO BOTH HTML AND TEXT >>>
+                logHeaderHtml = '🎲 <span class="blue-bold">Die Roll</span>'; logHeaderText = '🎲 Die Roll';
                 logDetailsHtml = `Die(${matchedString}) ~${rollResult}`; logDetailsText = `Die(${matchedString}) ~${rollResult}`;
                 patternMatched = true; fMyConsoleLog(`   -> Matched EXACT Number pattern: ${num} (rolled as ${matchedString}). Result: ${rollResult}`);
             }
@@ -2976,14 +2968,16 @@ async function fHandleAdHocRoll(cellText) {
                 matchedString = match[1]; const num = parseInt(match[2], 10);
                 if (!isNaN(num) && num > 0) {
                     rollResult = fCSD(num);
-                    logHeaderHtml = '<span class="blue-bold">Custom Roll</span> Sk'; logHeaderText = 'Custom Roll Sk';
+                     // <<< ADD ICON TO BOTH HTML AND TEXT >>>
+                    logHeaderHtml = '🎲 <span class="blue-bold">Custom Roll</span> Sk'; logHeaderText = '🎲 Custom Roll Sk';
                     logDetailsHtml = `Sk(${num}) ~${rollResult}`; logDetailsText = `Sk(${num}) ~${rollResult}`;
                     patternMatched = true; fMyConsoleLog(`   -> PARSED first Sk pattern: ${matchedString}. Result: ${rollResult}`);
                 }
             } else if (match[3]) { // Matched die string
                 matchedString = match[3].trim(); rollResult = fRollDieString(matchedString);
                  if (rollResult !== null) {
-                     logHeaderHtml = '<span class="blue-bold">Die Roll</span>'; logHeaderText = 'Die Roll';
+                      // <<< ADD ICON TO BOTH HTML AND TEXT >>>
+                     logHeaderHtml = '🎲 <span class="blue-bold">Die Roll</span>'; logHeaderText = '🎲 Die Roll';
                      logDetailsHtml = `Die(${matchedString}) ~${rollResult}`; logDetailsText = `Die(${matchedString}) ~${rollResult}`;
                      patternMatched = true; fMyConsoleLog(`   -> PARSED first Die String pattern: ${matchedString}. Result: ${rollResult}`);
                  }
@@ -2998,10 +2992,10 @@ async function fHandleAdHocRoll(cellText) {
         const headerSuffixHtml = (text === matchedString) ? ':' : ` (from "${text}"):`;
         const headerSuffixText = (text === matchedString) ? ':' : ` (from "${text}"):`;
         const formattedHeaderHtml = `${logHeaderHtml}${headerSuffixHtml}`;
-        const formattedHeaderText = `${logHeaderText}${headerSuffixText}`;
+        const formattedHeaderText = `${logHeaderText}${headerSuffixText}`; // Icon is already in logHeaderText
 
         let tcSuffixHtml = ''; let tcSuffixText = '';
-        if (logHeaderText === 'Custom Roll Sk') {
+        if (logHeaderText.startsWith('🎲 Custom Roll Sk')) { // Check text version for Sk roll
             const tcResult = fCStc();
             if (tcResult) {
                 tcSuffixHtml = `   ${tcResult}`;
@@ -3016,7 +3010,7 @@ async function fHandleAdHocRoll(cellText) {
         fMyConsoleLog(`   -> Ad-Hoc Roll logged to sidebar.`);
 
         // Send log update to GMScreen (with slight delay)
-        setTimeout(() => fSendLogToGMScreen(), 0); // <<< MODIFIED >>>
+        setTimeout(() => fSendLogToGMScreen(), 0);
 
         return true; // Indicate roll was handled
     }

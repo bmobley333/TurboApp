@@ -3668,17 +3668,16 @@ function fSetupSingleSubMenuItem(item, index) {
 
 
 // fSendLogToGMScreen ////////////////////////////////////////////////////////////
-// Purpose -> Sends the accumulated plain text log entries (newest first) to the
-//            GMScreen sheet via the server-side fSetServerSheetData function.
-//            Uses a lock (gUI.isSendingLog) and takes a snapshot of the log array
-//            to prevent concurrent sends and capture consistent state.
+// Purpose -> Sends the accumulated plain text log entries (newest first, with blank
+//            lines between entries) to the GMScreen sheet via the server-side
+//            fSetServerSheetData function. Uses a lock and snapshots the array.
 // Inputs  -> None (Uses gUI.plainTextLogEntries, gUI.GMSCREEN_LOG_MAX_CHARS, gUI.isSendingLog).
 // Outputs -> None (Calls google.script.run if not already sending).
 function fSendLogToGMScreen() {
     // === Check Lock ===
     if (gUI.isSendingLog) {
         fMyConsoleLog("📤 Log send already in progress, skipping.");
-        return; // Exit if a send operation is currently running
+        return;
     }
 
     // === Set Lock ===
@@ -3686,11 +3685,12 @@ function fSendLogToGMScreen() {
     fMyConsoleLog("📤 Preparing to send log to GMScreen (Lock Acquired)...");
 
     // === 1. Take Snapshot of Log Array State IMMEDIATELY ===
-    const logEntriesSnapshot = [...gUI.plainTextLogEntries]; // <<< SNAPSHOT >>>
+    const logEntriesSnapshot = [...gUI.plainTextLogEntries];
 
     // === 2. Prepare Log Content from Snapshot ===
-    const reversedLogEntries = logEntriesSnapshot.reverse(); // Reverse the snapshot
-    const combinedLog = reversedLogEntries.join('\n');
+    const reversedLogEntries = logEntriesSnapshot.reverse();
+    // Join the *reversed* log entries with THREE newline characters for TWO blank lines <<< MODIFIED >>>
+    const combinedLog = reversedLogEntries.join('\n\n\n');
     const truncatedLog = combinedLog.substring(0, gUI.GMSCREEN_LOG_MAX_CHARS);
     const originalLength = combinedLog.length;
     const truncatedLength = truncatedLog.length;
@@ -4921,12 +4921,10 @@ function fClearCurrentNish() {
 
 
 // fClearRollLog /////////////////////////////////////////////////////////////////
-// Purpose -> Handles the <Game><Clear><Roll Log> menu action. Clears the content
-//            of the Roll Log sidebar (#sidebar-content), clears the plain text log
-//            array (gUI.plainTextLogEntries), displays a confirmation message,
-//            and triggers an update to the GMScreen log showing it was cleared.
+// Purpose -> Handles the <Game><Clear><Roll Log> menu action. Clears the sidebar,
+//            plain text log array, displays confirmation, shows sidebar, and sends update.
 // Inputs  -> None.
-// Outputs -> None (Modifies sidebar DOM content, gUI.plainTextLogEntries, calls fSendLogToGMScreen).
+// Outputs -> None (Modifies sidebar DOM, gUI.plainTextLogEntries, calls fShowSidebar, fSendLogToGMScreen).
 function fClearRollLog() {
     fMyConsoleLog("⚙️ Menu Action: Clearing Roll Log...");
     const sidebarContent = document.getElementById('sidebar-content');
@@ -4945,8 +4943,11 @@ function fClearRollLog() {
     gUI.plainTextLogEntries = [clearedMsgText];
     fMyConsoleLog("✅ Roll Log Cleared (HTML and plain text array).");
 
+    // Ensure sidebar is visible after clearing <<< ADDED >>>
+    fShowSidebar();
+
     // Send the cleared state (with the confirmation message) to the GMScreen (with slight delay)
-    setTimeout(() => fSendLogToGMScreen(), 0); // <<< MODIFIED >>>
+    setTimeout(() => fSendLogToGMScreen(), 0);
 
 } // END fClearRollLog
 
