@@ -2835,80 +2835,113 @@ function fGetGridValue(rowRef, colRef, asNumber = false) {
 // fSetGridValue ///////////////////////////////////////////////////////////////////
 // Purpose -> Updates a value in the data model (gUI.arr) and the corresponding
 //            cell display in the DOM (gUI.grid2D). Handles special formatting for
-//            Meta/Channel Meta cells (values < 1 become '').
+//            Meta/Channel Meta cells, and dynamically applies/removes URL styling
+//            and attributes based on the new value.
 // Inputs  -> rowRef (String|Number): Row tag or 0-based index.
 //         -> colRef (String|Number): Column tag or 0-based index.
 //         -> newValue (Any): The new value to set.
 // Outputs -> (Boolean): True if the update was successful (data and optionally DOM),
-//                       false if resolution failed or row doesn't exist.
+//                       false if resolution failed or row/cell doesn't exist.
 function fSetGridValue(rowRef, colRef, newValue) {
-    // === Resolve Coordinates ===
+    // === 1. Resolve Coordinates ===
     const r = resolveRow(rowRef);
     const c = resolveCol(colRef);
-    let valueToSet = newValue; // Use a temporary variable for potential modification
+    let valueToSet = newValue; // Use a temporary variable
 
     // Validate resolved indices
     if (isNaN(r) || isNaN(c)) {
-        console.warn(`fSetGridValue: Could not resolve (${rowRef}, ${colRef}) to valid indices.`);
+        console.warn(`fSetGridValue: Could not resolve (${rowRef}, ${colRef}) to valid indices [${r}, ${c}].`);
         return false;
     }
 
-    // Validate row exists in data model
+    // === 2. Validate Row Existence in Data Model ===
     if (!gUI.arr?.[r]) {
         console.warn(`fSetGridValue: Row ${r} does not exist in gUI.arr.`);
         return false;
     }
 
-    // === Handle Special Meta Cell Formatting ===
-    // Check if this is a Meta or Channel Meta cell based on tags
+    // === 3. Handle Special Meta Cell Formatting ===
     const metaRowTags = ['meta', 'chnl'];
-    const metaColTags = gUI.list?.metaColor || ['R', 'O', 'Y', 'G', 'B']; // Use list or fallback
+    const metaColTags = gUI.list?.metaColor || ['R', 'O', 'Y', 'G', 'B'];
     const isMetaCell = metaRowTags.includes(rowRef) && metaColTags.includes(colRef);
-
     if (isMetaCell) {
-        // Convert input to number for checking
         const numericValue = Number(valueToSet);
-        // Force value to empty string if it's null, undefined, or a number < 1
         if (valueToSet === null || typeof valueToSet === 'undefined' || (!isNaN(numericValue) && numericValue < 1)) {
             valueToSet = '';
-            // Optional log: fMyConsoleLog(`   -> Adjusted Meta cell [${r}, ${c}] value to ''`);
         }
     }
 
-    // === Update Data Model ===
+    // === 4. Update Data Model ===
+    // Store the potentially modified value (e.g., '' for meta < 1)
     gUI.arr[r][c] = valueToSet;
 
-    // === Update DOM ===
+    // === 5. Update DOM ===
     const cell = gUI.grid2D?.[r]?.[c];
-    if (cell) {
-        // Handle different cell content types
-        const checkbox = cell.querySelector('input[type="checkbox"]');
-        const dropdown = cell.querySelector('select.grid-dropdown');
-
-        if (checkbox) {
-             // Update checkbox state
-             const valStr = String(valueToSet).toUpperCase();
-             checkbox.checked = valueToSet === true || valStr === "TRUE";
-        } else if (dropdown) {
-            // Update dropdown selection
-            dropdown.value = String(valueToSet ?? '');
-        } else {
-            // Update text content (stripping ID if present)
-            const idPattern = /\s{2,}_\w{6}$/;
-            const text = (typeof valueToSet === 'string' && idPattern.test(valueToSet))
-                         ? valueToSet.replace(idPattern, '')
-                         : valueToSet;
-            cell.textContent = text ?? ''; // Use empty string for null/undefined
-        }
-        // Optional log: fMyConsoleLog(`DOM updated for [${r}, ${c}]`);
-    } else {
-        // Log warning if DOM element wasn't found (should be rare if grid rendered correctly)
+    if (!cell) {
+        // Log warning if DOM element wasn't found
         console.warn(`fSetGridValue: Cell element not found in gUI.grid2D at [${r}, ${c}]. Data model updated, DOM not.`);
-        // Consider if this should return false depending on requirements
+        // Depending on requirements, you might return false here if DOM update is critical
+        return true; // For now, return true as data model was updated
     }
 
-    // Optional log: fMyConsoleLog(`Grid set [${r}, ${c}] = ${valueToSet} (Input: ${newValue})`);
-    return true; // Indicate success
+    // === 6. Handle Dynamic URL Styling & Attributes ===
+    const valueStr = String(valueToSet ?? '').trim(); // Use string version for checks
+    const isUrl = valueStr.startsWith('http://') || valueStr.startsWith('https://');
+
+    if (isUrl) {
+        cell.classList.add('url-link');
+        cell.dataset.url = valueStr;
+
+        // Check for specific URL types (Drive image or standard image extension)
+        const driveMatch = valueStr.match(/drive\.google\.com\/file\/d\/([-\w]+)/);
+        const imgExts = /\.(png|jpg|jpeg|gif|webp|svg)$/i;
+
+        if (driveMatch && driveMatch[1]) {
+            // Handle Google Drive image link
+            const fileId = driveMatch[1];
+            const imageUrl = 'https://drive.google.com/uc?export=view&id=' + fileId;
+            cell.classList.add('image-link');
+            cell.dataset.imageSrc = imageUrl;
+        } else if (imgExts.test(valueStr)) {
+            // Handle standard image link (by extension)
+            cell.classList.add('image-link');
+            cell.dataset.imageSrc = valueStr;
+        } else {
+            // It's a URL, but not identified as an image link - remove image attributes
+            cell.classList.remove('image-link');
+            delete cell.dataset.imageSrc; // Use delete operator for dataset properties
+        }
+    } else {
+        // Not a URL - remove all link-related classes and attributes
+        cell.classList.remove('url-link', 'image-link');
+        delete cell.dataset.url;
+        delete cell.dataset.imageSrc;
+    }
+
+    // === 7. Update Cell Visual Content ===
+    const checkbox = cell.querySelector('input[type="checkbox"]');
+    const dropdown = cell.querySelector('select.grid-dropdown');
+
+    if (checkbox) {
+        // Update checkbox state
+        const valUpper = String(valueToSet).toUpperCase();
+        checkbox.checked = valueToSet === true || valUpper === "TRUE";
+    } else if (dropdown) {
+        // Update dropdown selection
+        dropdown.value = String(valueToSet ?? '');
+    } else {
+        // Update text content (stripping ID if present)
+        // Ensure the correct value (valueToSet) is used here
+        const idPattern = /\s{2,}_\w{6}$/;
+        const text = (typeof valueToSet === 'string' && idPattern.test(valueToSet))
+                     ? valueToSet.replace(idPattern, '')
+                     : valueToSet;
+        cell.textContent = text ?? ''; // Use empty string for null/undefined
+    }
+
+    // Optional log: fMyConsoleLog(`Grid updated [${r}, ${c}] = ${valueToSet}`);
+    return true; // Indicate success (data and DOM updated)
+
 } // END fSetGridValue
 
 
