@@ -194,6 +194,9 @@ const gUI = {
     currentEnc: { r1: 'PossEncTot', c1: 'PossEncTot', r2: 'PossEncTot', c2: 'PossEncTot' },
     gearAPTotal: { r1: 'PossAPTot', c1: 'PossGrandAPTot', r2: 'PossAPTot', c2: 'PossGrandAPTot' }
   },
+  rangeDB: {
+    monstersDB: { r1: 'MonTblFirst_R', c1: 'ActiveMonTF', r2: 'MonTblLast_R', c2: 'Notes' }
+  },
   list: { // Static lists and values
     skTyp: ['Atr','Sk','Atk','DMG','Def','AR','Str'], // Note free, luck, un, unSk are not skill Types and dealth with elsewhere
     metaColor: ['R','O','Y','G','B'],
@@ -5339,99 +5342,82 @@ function fScrollGridToBottom(grid) {
 
 
 // fRefreshMonsterData /////////////////////////////////////////////////////////////
-// Purpose -> Handles the 'Show Monsters' header button action. Clears the first row
-//            (custom monster row) locally, then fetches fresh data for the
-//            *entire* monster table from the 'Game' sheet via the server function
-//            fGetServerSheetData (passing the current gIndexCSID) and updates the grid.
+// Purpose -> Handles the 'Show Monsters' header button action. Clears the Turbo
+//            monster table locally, fetches fresh monster data from the GM Screen DB
+//            via the server, and then populates the Turbo table using the returned data.
 // Inputs  -> None.
 // Outputs -> None (Modifies grid data/DOM, calls server function).
 async function fRefreshMonsterData() {
-    fMyConsoleLog("⚙️ Refreshing Monster Data...");
-    // === 1. Get and Validate Monster Range Definition ===
-    const monsterRangeDef = gUI.range?.monsters;
-    if (!monsterRangeDef || !fIsValidRangeObject(monsterRangeDef)) {
-        const msg = "Monster range definition (gUI.range.monsters) is missing or invalid.";
+    fMyConsoleLog("⚙️ Refreshing Monster Data from GM Screen DB...");
+
+    // === 1. Get and Validate Turbo Monster Range Definition ===
+    // This is the range on the *client-side* Turbo grid we will populate
+    const turboMonsterRangeDef = gUI.range?.monsters;
+    if (!turboMonsterRangeDef || !fIsValidRangeObject(turboMonsterRangeDef)) {
+        const msg = "Turbo Monster range definition (gUI.range.monsters) is missing or invalid.";
+        console.error(`fRefreshMonsterData: ${msg}`);
+        fMyConsoleLog(`❌ Monster Refresh Failed: ${msg}`);
+        await fShowMessage(`Error: ${msg}`);
+        return;
+    }
+    // We don't resolve indices here, fUpdateTurboMonsterTable will handle it.
+
+    // === 2. Get GM Screen DB Range Definition ===
+    // This is the range we request from the server's 'GMScreen' sheet in the 'db' file
+    const gmMonsterRangeDef = gUI.rangeDB?.monstersDB;
+     if (!gmMonsterRangeDef || !fIsValidRangeObject(gmMonsterRangeDef)) {
+        const msg = "GM Screen DB Monster range definition (gUI.rangeDB.monstersDB) is missing or invalid.";
         console.error(`fRefreshMonsterData: ${msg}`);
         fMyConsoleLog(`❌ Monster Refresh Failed: ${msg}`);
         await fShowMessage(`Error: ${msg}`);
         return;
     }
 
-    // === 2. Resolve Indices ===
-    const resolved = fResolveRangeIndices(monsterRangeDef);
-    if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
-        const msg = `Could not resolve monster range tags: ${JSON.stringify(monsterRangeDef)}`;
-        console.error(`fRefreshMonsterData: ${msg}`);
-        fMyConsoleLog(`❌ Monster Refresh Failed: ${msg}`);
-        await fShowMessage(`Error: ${msg}`);
-        return;
-    }
-    const { r1, c1, r2, c2 } = resolved; // Use resolved 0-based indices (r1 is first monster row)
 
-    // === 3. Clear First Monster Row Locally ===
-    fMyConsoleLog(`   -> Clearing first monster row (${r1}) locally...`);
-    if (!fSetRangeValues(r1, c1, r1, c2, '')) { // Set to empty string
-        const msg = `Failed to clear the first row (Custom Monster) of the monster range locally.`;
-        console.warn(`fRefreshMonsterData: ${msg}`);
-        fMyConsoleLog(`   -> ⚠️ Warning: ${msg}`);
-        // Continue even if local clear fails
-    }
+    // === 3. Clear Local Turbo Monster Table ===
+    fMyConsoleLog(`   -> Clearing local Turbo monster table...`);
+    fClearMonsters(); // Clears based on gUI.range.monsters definition
 
-    // === 4. Call Server Function (Using New Signature - Passing ID as first param) ===
-    fMyConsoleLog(`   -> Fetching full monster data using ID and range object: ${JSON.stringify(monsterRangeDef)}`);
+    // === 4. Call Server Function ===
+    fMyConsoleLog(`   -> Fetching GM monster data using key 'db', sheet 'GMScreen', range: ${JSON.stringify(gmMonsterRangeDef)}`);
     // Consider adding a visual loading indicator here
 
     google.script.run
-        .withSuccessHandler((dataArray) => {
+        // --- Success Handler ---
+        .withSuccessHandler((response) => {
             // Remove loading indicator here
-            fMyConsoleLog(`   -> Received monster data from server (Type: ${typeof dataArray}, Length: ${Array.isArray(dataArray) ? dataArray.length : 'N/A'}).`);
+            fMyConsoleLog(`   -> Received response from server.`);
 
-            // Validate response format - expecting an array
-            if (!Array.isArray(dataArray)) {
-                 const errMsg = "Received non-array data format from server for monsters.";
-                 console.error(`fRefreshMonsterData Success Handler: ${errMsg}`, dataArray);
-                 fMyConsoleLog(`   -> ❌ Error: ${errMsg}`);
-                 fShowMessage(`Error: ${errMsg}`);
-                 return;
-            }
-
-            // Handle potential empty array response
-            if (dataArray.length === 0) {
-                fMyConsoleLog("   -> Received empty data array from server. Monster table might be empty on sheet.");
-                fMyConsoleLog("✅ Monster Refresh Complete (Server returned empty data).");
+            // === Validate Response Structure ===
+            if (!response || typeof response !== 'object' || response.error ||
+                !response.hasOwnProperty('data') || !response.hasOwnProperty('colTags') || !response.hasOwnProperty('rowTags') ) {
+                const errMsg = "Received invalid data structure from server for monsters.";
+                console.error(`fRefreshMonsterData Success Handler: ${errMsg}`, response);
+                fMyConsoleLog(`   -> ❌ Error: ${errMsg}`);
+                fShowMessage(`Error: ${errMsg}`);
                 return;
             }
 
-            // Handle 1D vs 2D array response
-            let dataToWrite = dataArray;
-            if (!Array.isArray(dataArray[0]) && (r2 - r1 + 1 > 1)) {
-                console.warn("fRefreshMonsterData: Received 1D array from server for multi-row range. Wrapping in another array.");
-                dataToWrite = [dataArray];
-            } else if (!Array.isArray(dataArray[0])) {
-                 fMyConsoleLog("   -> Received 1D array for single-row range.");
-            }
+            const { data: gmDataArray, colTags: gmColTags, rowTags: gmRowTags } = response;
+            fMyConsoleLog(`   -> Server returned Data (${Array.isArray(gmDataArray) ? gmDataArray.length : 'N/A'}), ColTags (${Object.keys(gmColTags).length}), RowTags (${Object.keys(gmRowTags).length}).`);
 
-            // Update the local grid with fetched data for the *entire* monster range
-            fMyConsoleLog(`   -> Updating local grid rows ${r1}-${r2} with received data...`);
-            if (!fSetRangeValues(r1, c1, r2, c2, dataToWrite)) {
-                 const errMsg = "Failed to update the grid with fetched monster data.";
-                 fMyConsoleLog(`   -> ⚠️ Warning: ${errMsg}`);
-                 fShowMessage(`Warning: ${errMsg}`);
-            } else {
-                fMyConsoleLog("✅ Monster Refresh Complete.");
-            }
+            // === Process Received Data ===
+            // Call the new helper function to populate the Turbo grid
+            fUpdateTurboMonsterTable(gmDataArray, gmColTags, gmRowTags);
+
         })
+        // --- Failure Handler ---
         .withFailureHandler((error) => {
             // Remove loading indicator here
             const errorMsgFromServer = error.message || "Unknown server error";
-            // **The server error message might still say "invalid sheetKey" if gIndexCSID somehow became invalid, but the structure is now correct**
             const finalErrorMsg = `Failed to fetch monster data from server: ${errorMsgFromServer}`;
             console.error(`fRefreshMonsterData Failure Handler:`, error);
             fMyConsoleLog(`❌ Monster Refresh Failed: ${finalErrorMsg}`);
             fShowMessage(`Error: ${finalErrorMsg}`);
         })
-        // Pass the direct gIndexCSID, Sheet Name, and Range Object
-        .fGetServerSheetData(gIndexCSID, 'Game', gUI.range.monsters);
+        // === Server Function Call ===
+        // Pass the DB key, Sheet Name, and the GM Screen Range Object
+        .fGetServerSheetData('db', 'GMScreen', gmMonsterRangeDef);
 
 } // END fRefreshMonsterData
 

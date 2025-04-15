@@ -18,8 +18,8 @@ const gSrv = { // Using gSrv prefix for server-side globals
       ps: '1cu4tsBeQg4l2czraYDjdVpn1zsIKPhYi5czbGf9ZeZg',
       sg: '190vk3Dcqdux_pFjuryvmMx2dWTnJyl23cZvTGhM3kgU',
       // Player-specific cs/kl will be handled dynamically via functions below
-      cs: '',  
-      kl: ''  // this is equal to the old myKL and is the ID from the player's KL
+      cs: '',  // this is equal to the old myCS and is the ID from the player's CS (loaded via doGet)
+      kl: ''  // this is equal to the old myKL and is the ID from the player's KL (loaded via doGet's call to fGetMyKlId)
     },
     docs: {
       cm: '1UuS-329gRi012k5nVtpmDltvrCO0yP04hjDIVoyoFwo',
@@ -133,8 +133,7 @@ function fGetMyKlId(myCsId) {
        throw new Error(`Could not retrieve a valid MyKL ID from cell ${gSrv.MYKL_ID_CELL_A1} in sheet "${gSrv.DATA_TAB_NAME}". Value was: "${myKlId}"`);
     }
 
-    Logger.log(`fGetMyKlId: Successfully retrieved MyKL ID: ${gSrv.ids.kl}`);
-    console.log("🧪 KLID param:", gSrv.ids.kl);
+    Logger.log(`fGetMyKlId: Successfully retrieved MyKL ID: ${myKlId}`);
     return myKlId.trim(); // Return the trimmed ID
 
   } catch (e) {
@@ -452,36 +451,39 @@ function fExtractSheetData(sh) {
 // fGetServerSheetData /////////////////////////////////////////////////////////
 // Purpose -> Reads data from a specified range in a given Google Sheet,
 //            accepting a sheet key OR a direct fileId, and a rangeObject.
-//            Reads the full sheet once for tag mapping and data extraction.
+//            Reads the full sheet once for tag mapping. Extracts the requested
+//            data slice. Builds row/column tag maps with indices *relative*
+//            to the extracted slice.
+//            Returns an object containing the data array and the relative tag maps.
 // Inputs  -> sheetKeyOrId (String): Key from gSrv.ids.sheets OR a direct Sheet fileId.
 //         -> sheetName (String): The name of the specific sheet (tab) to read from.
 //         -> rangeObject (Object): {r1, c1, r2, c2} using tags or 0-based indices.
-// Outputs -> (Array[][]|Array[]|Any|null): Values from the range, formatted correctly.
-//            Returns null on critical errors.
+// Outputs -> (Object): { data: Array[][]|Array[]|Any|null, colTags: Object, rowTags: Object }
+//            'data' contains values from the range, formatted correctly (single, 1D, or 2D).
+//            colTags/rowTags contain mappings with indices relative to the 'data' array structure.
+//            Returns null for 'data' on critical errors.
 // Throws  -> (Error): If inputs are invalid, sheet/range access fails, etc.
 function fGetServerSheetData(sheetKeyOrId, sheetName, rangeObject) {
     Logger.log(`fGetServerSheetData: Request received. Key/ID: "${sheetKeyOrId}", Sheet: "${sheetName}", Range: ${JSON.stringify(rangeObject)}`);
-
-    // === 1. Determine File ID ===
     let fileId = null;
-    let identifiedBy = ''; // For logging
+    let identifiedBy = '';
+    let absoluteRowTagMap = {}; // Holds tags with absolute sheet indices initially
+    let absoluteColTagMap = {}; // Holds tags with absolute sheet indices initially
+    let relativeRowTagMap = {}; // Holds tags with indices relative to extracted data
+    let relativeColTagMap = {}; // Holds tags with indices relative to extracted data
 
-    // Basic validation of the first argument
+    // --- 1. Resolve File ID ---
     if (!sheetKeyOrId || typeof sheetKeyOrId !== 'string') {
         const errorMsg = `Invalid or missing sheetKeyOrId parameter.`;
         console.error(`fGetServerSheetData Error: ${errorMsg}`);
         throw new Error(`getServerSheetData: ${errorMsg}`);
     }
-
-    // Check if sheetKeyOrId looks like a Sheet ID (heuristic: length > 30 and alphanumeric/_)
     const isLikelySheetId = sheetKeyOrId.length > 30 && /^[a-z0-9_-]+$/i.test(sheetKeyOrId);
-
     if (isLikelySheetId) {
         fileId = sheetKeyOrId;
         identifiedBy = `Direct ID: ${fileId}`;
         Logger.log(`   -> Interpreted first argument as Direct File ID: ${fileId}`);
     } else {
-        // Treat as a sheetKey, look up in gSrv
         const keyLower = sheetKeyOrId.toLowerCase();
         if (!gSrv.ids.sheets[keyLower]) {
             const errorMsg = `Invalid sheetKey: "${sheetKeyOrId}". Not found in gSrv.ids.sheets.`;
@@ -493,87 +495,109 @@ function fGetServerSheetData(sheetKeyOrId, sheetName, rangeObject) {
         Logger.log(`   -> Interpreted first argument as Key: "${sheetKeyOrId}", resolved to ID: ${fileId}`);
     }
 
-    // === 2. Validate Other Inputs ===
-    if (!fileId) { // Should be caught above, but double-check
-         const errorMsg = `Could not determine File ID from input: "${sheetKeyOrId}".`;
-         console.error(`fGetServerSheetData Error: ${errorMsg}`);
-         throw new Error(`getServerSheetData: ${errorMsg}`);
-    }
-    if (!sheetName || typeof sheetName !== 'string') {
-        const errorMsg = `Invalid or missing sheetName: "${sheetName}".`;
-        console.error(`fGetServerSheetData Error: ${errorMsg}`);
-        throw new Error(`getServerSheetData: ${errorMsg}`);
-    }
-    if (!rangeObject || typeof rangeObject !== 'object' ||
-        rangeObject.r1 === undefined || rangeObject.c1 === undefined ||
-        rangeObject.r2 === undefined || rangeObject.c2 === undefined) {
-        const errorMsg = `Invalid or incomplete rangeObject: ${JSON.stringify(rangeObject)}.`;
-        console.error(`fGetServerSheetData Error: ${errorMsg}`);
-        throw new Error(`getServerSheetData: ${errorMsg}`);
+    // --- 2. Validate Other Inputs ---
+     if (!fileId) { throw new Error(`getServerSheetData: Could not determine File ID.`); }
+    if (!sheetName || typeof sheetName !== 'string') { throw new Error(`getServerSheetData: Invalid or missing sheetName.`); }
+    if (!rangeObject || typeof rangeObject !== 'object' || rangeObject.r1 === undefined || rangeObject.c1 === undefined || rangeObject.r2 === undefined || rangeObject.c2 === undefined) {
+        throw new Error(`getServerSheetData: Invalid or incomplete rangeObject: ${JSON.stringify(rangeObject)}.`);
     }
 
     try {
-        // === 3. Open Sheet & Read Full Data ===
+        // --- 3. Open Sheet & Read Full Data ---
         const ss = SpreadsheetApp.openById(fileId);
         const sh = ss.getSheetByName(sheetName);
-        if (!sh) {
-            throw new Error(`Sheet named "${sheetName}" not found in Sheet (${identifiedBy}).`);
-        }
+        if (!sh) { throw new Error(`Sheet named "${sheetName}" not found in Sheet (${identifiedBy}).`); }
         const fullData = sh.getDataRange().getValues();
         Logger.log(`fGetServerSheetData: Read ${fullData.length}x${fullData[0]?.length || 0} cells from "${sheetName}".`);
 
+        // --- 4. Build *Absolute* Tag Maps ---
+        const absoluteTagMaps = fServerBuildTagMaps(fullData); // Gets maps with absolute indices
+        absoluteRowTagMap = absoluteTagMaps.rowTag;
+        absoluteColTagMap = absoluteTagMaps.colTag;
+        // Logger.log(`fGetServerSheetData: Built absolute tag maps. Rows: ${Object.keys(absoluteRowTagMap).length}, Cols: ${Object.keys(absoluteColTagMap).length}`);
+
+        // --- Handle Empty Sheet Case ---
         if (fullData.length === 0 || fullData[0]?.length === 0) {
             console.warn(`fGetServerSheetData: Sheet "${sheetName}" (${identifiedBy}) appears empty.`);
-            return [[]];
+            // Return empty data and empty relative maps
+            return { data: [[]], colTags: {}, rowTags: {} };
         }
 
-        // === 4. Build Tag Maps ===
-        const { rowTag, colTag } = fServerBuildTagMaps(fullData);
-
-        // === 5. Resolve Input Range Object Tags ===
-        const r1 = fServerResolveTag(rangeObject.r1, rowTag, 'row');
-        const c1 = fServerResolveTag(rangeObject.c1, colTag, 'col');
-        const r2 = fServerResolveTag(rangeObject.r2, rowTag, 'row');
-        const c2 = fServerResolveTag(rangeObject.c2, colTag, 'col');
-
-        if ([r1, c1, r2, c2].some(isNaN)) {
-            throw new Error(`Could not resolve one or more tags/indices in rangeObject: ${JSON.stringify(rangeObject)}`);
+        // --- 5. Resolve Input Range Object Tags to *Absolute* Indices ---
+        const r1_abs = fServerResolveTag(rangeObject.r1, absoluteRowTagMap, 'row');
+        const c1_abs = fServerResolveTag(rangeObject.c1, absoluteColTagMap, 'col');
+        const r2_abs = fServerResolveTag(rangeObject.r2, absoluteRowTagMap, 'row');
+        const c2_abs = fServerResolveTag(rangeObject.c2, absoluteColTagMap, 'col');
+        if ([r1_abs, c1_abs, r2_abs, c2_abs].some(isNaN)) {
+            let failedTags = [];
+            if (isNaN(r1_abs)) failedTags.push(`r1: ${rangeObject.r1}`);
+            if (isNaN(c1_abs)) failedTags.push(`c1: ${rangeObject.c1}`);
+            if (isNaN(r2_abs)) failedTags.push(`r2: ${rangeObject.r2}`);
+            if (isNaN(c2_abs)) failedTags.push(`c2: ${rangeObject.c2}`);
+            throw new Error(`Could not resolve absolute tags/indices in rangeObject: ${JSON.stringify(rangeObject)}. Failed Tags: ${failedTags.join(', ')}`);
         }
-        Logger.log(`fGetServerSheetData: Resolved range to indices: r1=${r1}, c1=${c1}, r2=${r2}, c2=${c2}`);
+        Logger.log(`fGetServerSheetData: Resolved range to absolute indices: r1=${r1_abs}, c1=${c1_abs}, r2=${r2_abs}, c2=${c2_abs}`);
 
-        // === 6. Extract Data from In-Memory Array ===
-        const rStart = Math.min(r1, r2);
-        const rEnd = Math.max(r1, r2);
-        const cStart = Math.min(c1, c2);
-        const cEnd = Math.max(c1, c2);
+        // --- 6. Define Extraction Boundaries ---
+        const rStart = Math.min(r1_abs, r2_abs);
+        const rEnd = Math.max(r1_abs, r2_abs);
+        const cStart = Math.min(c1_abs, c2_abs);
+        const cEnd = Math.max(c1_abs, c2_abs);
 
+        // --- 7. Extract Data Slice ---
         if (rStart >= fullData.length || cStart >= (fullData[0]?.length || 0)) {
-             console.warn(`fGetServerSheetData: Resolved range start [${rStart}, ${cStart}] is outside the bounds of the sheet data [${fullData.length}, ${fullData[0]?.length||0}]. Returning empty.`);
-             return [[]];
+             console.warn(`fGetServerSheetData: Resolved range start [${rStart}, ${cStart}] is outside the bounds of the sheet data [${fullData.length}, ${fullData[0]?.length||0}]. Returning empty data.`);
+             return { data: [[]], colTags: {}, rowTags: {} }; // Return empty maps too
         }
-
         const extractedData = fullData
             .slice(rStart, rEnd + 1)
             .map(row => row.slice(cStart, cEnd + 1));
+        const extractedRows = extractedData.length;
+        const extractedCols = extractedData[0]?.length || 0;
 
-        // === 7. Format Return Value ===
-        if (extractedData.length === 1 && extractedData[0].length === 1) {
-            Logger.log(`fGetServerSheetData: Returning single value.`);
-            return extractedData[0][0];
-        } else if (extractedData.length === 1) {
-            Logger.log(`fGetServerSheetData: Returning 1D array (single row).`);
-            return extractedData[0];
-        } else if (extractedData[0].length === 1) {
-             Logger.log(`fGetServerSheetData: Returning 1D array (single column).`);
-             return extractedData.map(row => row[0]);
-        } else {
-            Logger.log(`fGetServerSheetData: Returning 2D array (${extractedData.length}x${extractedData[0]?.length}).`);
-            return extractedData;
+        // --- 8. Build *Relative* Tag Maps ---
+        // Adjust Column Tags
+        for (const tag in absoluteColTagMap) {
+            const absoluteIndex = absoluteColTagMap[tag];
+            // Check if the absolute index falls within the columns of the extracted slice
+            if (absoluteIndex >= cStart && absoluteIndex <= cEnd) {
+                const relativeIndex = absoluteIndex - cStart; // Calculate relative index
+                relativeColTagMap[tag] = relativeIndex;
+            }
         }
+        // Adjust Row Tags
+        for (const tag in absoluteRowTagMap) {
+            const absoluteIndex = absoluteRowTagMap[tag];
+            // Check if the absolute index falls within the rows of the extracted slice
+            if (absoluteIndex >= rStart && absoluteIndex <= rEnd) {
+                const relativeIndex = absoluteIndex - rStart; // Calculate relative index
+                relativeRowTagMap[tag] = relativeIndex;
+            }
+        }
+        Logger.log(`fGetServerSheetData: Built relative tag maps. Rel Rows: ${Object.keys(relativeRowTagMap).length}, Rel Cols: ${Object.keys(relativeColTagMap).length}`);
+
+        // --- 9. Format Return Data ---
+        let returnData;
+        if (extractedRows === 1 && extractedCols === 1) {
+            Logger.log(`fGetServerSheetData: Formatting data as single value.`);
+            returnData = extractedData[0][0];
+        } else if (extractedRows === 1) {
+            Logger.log(`fGetServerSheetData: Formatting data as 1D array (single row).`);
+            returnData = extractedData[0];
+        } else if (extractedCols === 1 && extractedData.every(row => row.length === 1)) {
+             Logger.log(`fGetServerSheetData: Formatting data as 1D array (single column).`);
+             returnData = extractedData.map(row => row[0]);
+        } else {
+            Logger.log(`fGetServerSheetData: Formatting data as 2D array (${extractedRows}x${extractedCols}).`);
+            returnData = extractedData;
+        }
+
+        // --- 10. Return Final Object ---
+        return { data: returnData, colTags: relativeColTagMap, rowTags: relativeRowTagMap };
 
     } catch (e) {
         console.error(`Error in fGetServerSheetData for Input "${sheetKeyOrId}", Sheet "${sheetName}", Range ${JSON.stringify(rangeObject)}: ${e.message}\nStack: ${e.stack}`);
-        throw new Error(`Server error reading sheet data: ${e.message || e}`);
+        throw new Error(`Server error processing sheet data: ${e.message || e}`);
     }
 
 } // END fGetServerSheetData
