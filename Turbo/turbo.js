@@ -608,25 +608,24 @@ function fGetServerSheetData(sheetKeyOrId, sheetName, rangeObject) {
 // fSetServerSheetData /////////////////////////////////////////////////////////
 // Purpose -> Writes data to a specified range in a given Google Sheet,
 //            accepting a sheet key, sheet name, a rangeObject with tags/indices,
-//            and a 2D array of values to write.
+//            and a value (single or 1D/2D array).
 // Inputs  -> sheetKey (String): Key corresponding to a Sheet ID in gSrv.ids.sheets.
 //         -> sheetName (String): The name of the specific sheet (tab) to write to.
 //         -> rangeObject (Object): {r1, c1, r2, c2} using tags or 0-based indices.
-//         -> values (Array[][]): The 2D array of values to write.
+//         -> valueOrValues (Any | Array[] | Array[][]): The single value or array to write.
 // Outputs -> (Boolean): True on success.
 // Throws  -> (Error): If inputs are invalid, sheet/range access fails, or
-//                     value dimensions don't match range dimensions.
-function fSetServerSheetData(sheetKey, sheetName, rangeObject, values) {
-    Logger.log(`fSetServerSheetData: Requesting write to key "${sheetKey}", sheet "${sheetName}", range: ${JSON.stringify(rangeObject)}, data: ${values?.length}x${values?.[0]?.length}`);
+//                     value dimensions don't match range dimensions (for arrays).
+function fSetServerSheetData(sheetKey, sheetName, rangeObject, valueOrValues) {
+    Logger.log(`fSetServerSheetData: Requesting write to key "${sheetKey}", sheet "${sheetName}", range: ${JSON.stringify(rangeObject)}, type: ${Array.isArray(valueOrValues) ? (Array.isArray(valueOrValues[0]) ? '2D Array' : '1D Array') : typeof valueOrValues}`);
 
-    // === 1. Validate Inputs ===
+    // === 1. Validate Inputs (Sheet Key, Name, Range Object) ===
     if (!sheetKey || typeof sheetKey !== 'string' || !gSrv.ids.sheets[sheetKey.toLowerCase()]) {
         const errorMsg = `Invalid or missing sheetKey: "${sheetKey}". Not found in gSrv.ids.sheets.`;
         console.error(`fSetServerSheetData Error: ${errorMsg}`);
         throw new Error(`setServerSheetData: ${errorMsg}`);
     }
     const fileId = gSrv.ids.sheets[sheetKey.toLowerCase()];
-
     if (!sheetName || typeof sheetName !== 'string') {
         const errorMsg = `Invalid or missing sheetName: "${sheetName}".`;
         console.error(`fSetServerSheetData Error: ${errorMsg}`);
@@ -639,12 +638,6 @@ function fSetServerSheetData(sheetKey, sheetName, rangeObject, values) {
         console.error(`fSetServerSheetData Error: ${errorMsg}`);
         throw new Error(`setServerSheetData: ${errorMsg}`);
     }
-    // Validate 'values' is a non-empty 2D array
-    if (!Array.isArray(values) || values.length === 0 || !Array.isArray(values[0])) {
-        const errorMsg = `Invalid 'values' format. Expected non-empty 2D array. Received: ${JSON.stringify(values).substring(0,100)}...`;
-        console.error(`fSetServerSheetData Error: ${errorMsg}`);
-        throw new Error(`setServerSheetData: ${errorMsg}`);
-    }
 
     try {
         // === 2. Open Sheet & Read Full Data (for Tag Mapping) ===
@@ -653,11 +646,9 @@ function fSetServerSheetData(sheetKey, sheetName, rangeObject, values) {
         if (!sh) {
             throw new Error(`Sheet named "${sheetName}" not found in Sheet ID: ${fileId} (Key: ${sheetKey}).`);
         }
-        // Read data primarily to get headers for tag mapping
         const fullData = sh.getDataRange().getValues();
         if (fullData.length === 0 || fullData[0]?.length === 0) {
-           // Allow writing to an empty sheet, but tag resolution might fail if headers are needed
-           console.warn(`fSetServerSheetData: Sheet "${sheetName}" appears empty. Tag resolution might fail if tags are used in rangeObject.`);
+           console.warn(`fSetServerSheetData: Sheet "${sheetName}" appears empty. Tag resolution might fail if tags are used.`);
         }
 
         // === 3. Build Tag Maps (from in-memory data) ===
@@ -668,36 +659,71 @@ function fSetServerSheetData(sheetKey, sheetName, rangeObject, values) {
         const c1 = fServerResolveTag(rangeObject.c1, colTag, 'col');
         const r2 = fServerResolveTag(rangeObject.r2, rowTag, 'row');
         const c2 = fServerResolveTag(rangeObject.c2, colTag, 'col');
-
         if ([r1, c1, r2, c2].some(isNaN)) {
             throw new Error(`Could not resolve one or more tags/indices in rangeObject: ${JSON.stringify(rangeObject)}`);
         }
         Logger.log(`fSetServerSheetData: Resolved range to indices: r1=${r1}, c1=${c1}, r2=${r2}, c2=${c2}`);
 
-        // === 5. Get Target Range & Validate Dimensions ===
+        // === 5. Get Target Range & Dimensions ===
         const rangeNumRows = Math.abs(r1 - r2) + 1;
         const rangeNumCols = Math.abs(c1 - c2) + 1;
-        const valuesNumRows = values.length;
-        const valuesNumCols = values[0].length;
-
-        if (rangeNumRows !== valuesNumRows || rangeNumCols !== valuesNumCols) {
-            throw new Error(`Dimension mismatch: Resolved range is ${rangeNumRows}x${rangeNumCols}, but provided data is ${valuesNumRows}x${valuesNumCols}.`);
-        }
-
-        // Get A1 notation for the resolved range
         const a1Notation = fServerIndicesToA1(r1, c1, r2, c2);
-        if (!a1Notation) { // Should be rare if indices are valid
+        if (!a1Notation) {
              throw new Error(`Could not convert resolved indices [${r1},${c1},${r2},${c2}] to A1 notation.`);
         }
-        Logger.log(`fSetServerSheetData: Target A1 notation: ${a1Notation}`);
-
         const targetRange = sh.getRange(a1Notation);
-        if (!targetRange) { // Should be rare if A1 is valid
+        if (!targetRange) {
              throw new Error(`Could not get target range "${a1Notation}" in sheet "${sheetName}".`);
         }
+        Logger.log(`fSetServerSheetData: Target A1 notation: ${a1Notation} (${rangeNumRows}x${rangeNumCols})`);
 
-        // === 6. Write Values ===
-        targetRange.setValues(values);
+        // === 6. Write Value(s) based on Type and Range Size ===
+        if (rangeNumRows === 1 && rangeNumCols === 1 && !Array.isArray(valueOrValues)) {
+            // --- Single Cell, Single Value ---
+            Logger.log(`   -> Using setValue for single cell with value: ${String(valueOrValues).substring(0,100)}...`);
+            targetRange.setValue(valueOrValues);
+        } else {
+            // --- Range or Array Input ---
+            let finalValuesArray; // This must be a 2D array for setValues
+
+            if (!Array.isArray(valueOrValues)) {
+                // --- Fill Range with Single Value ---
+                Logger.log(`   -> Filling ${rangeNumRows}x${rangeNumCols} range with single value: ${valueOrValues}`);
+                finalValuesArray = Array(rangeNumRows).fill(null).map(() => Array(rangeNumCols).fill(valueOrValues));
+            } else if (Array.isArray(valueOrValues) && !Array.isArray(valueOrValues[0])) {
+                // --- Handle 1D Array Input ---
+                Logger.log(`   -> Handling 1D array input (length ${valueOrValues.length}) for ${rangeNumRows}x${rangeNumCols} range.`);
+                if (rangeNumRows === 1 && rangeNumCols === valueOrValues.length) {
+                    // Match: Single row range, array length matches column count
+                    finalValuesArray = [valueOrValues]; // Wrap 1D array in another array
+                } else if (rangeNumCols === 1 && rangeNumRows === valueOrValues.length) {
+                    // Match: Single column range, array length matches row count
+                    finalValuesArray = valueOrValues.map(v => [v]); // Convert each value to a single-element array
+                } else {
+                    // Mismatch
+                    throw new Error(`Dimension mismatch: Target range is ${rangeNumRows}x${rangeNumCols}, but provided 1D array has length ${valueOrValues.length}.`);
+                }
+            } else {
+                // --- Handle 2D Array Input ---
+                Logger.log(`   -> Handling 2D array input (${valueOrValues.length}x${valueOrValues[0]?.length || 0}) for ${rangeNumRows}x${rangeNumCols} range.`);
+                const valuesNumRows = valueOrValues.length;
+                const valuesNumCols = valueOrValues[0]?.length || 0;
+                // Check for consistent column lengths
+                if (!valueOrValues.every(row => Array.isArray(row) && row.length === valuesNumCols)) {
+                    throw new Error(`Input 2D array has inconsistent column lengths.`);
+                }
+                // Validate dimensions
+                if (rangeNumRows !== valuesNumRows || rangeNumCols !== valuesNumCols) {
+                    throw new Error(`Dimension mismatch: Resolved range is ${rangeNumRows}x${rangeNumCols}, but provided 2D array is ${valuesNumRows}x${valuesNumCols}.`);
+                }
+                finalValuesArray = valueOrValues; // Use the validated 2D array directly
+            }
+
+            // Use setValues for arrays or fill operations
+            Logger.log(`   -> Using setValues for ${finalValuesArray.length}x${finalValuesArray[0]?.length || 0} array.`);
+            targetRange.setValues(finalValuesArray);
+        }
+
         Logger.log(`fSetServerSheetData: Successfully wrote data to range ${a1Notation}.`);
         return true; // Indicate success
 

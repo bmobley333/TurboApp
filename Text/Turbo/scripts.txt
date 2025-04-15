@@ -25,7 +25,7 @@ const gUI = {
   rowTag: {},     // Map of row tags to 0-based row indices
   colTag: {},     // Map of column tags to 0-based column indices
   format: {},     // Object containing formatting arrays (bg, fonts, borders, merges, etc.)
-  notes: [],      // 2D array of cell notes (parallel to arr)
+  notes: [],
   grid2D: [],     // 2D array holding references to the created cell DOM elements
 
   // === State Management ===
@@ -41,6 +41,8 @@ const gUI = {
   },
   hiddenColumns: new Set(), // Stores indices of currently hidden columns
   hiddenRows: new Set(),    // Stores indices of currently hidden rows
+  plainTextLogEntries: [],  // Array to store plain text log entries for GMScreen update
+  isSendingLog: false,      // <<< NEW: Flag/Lock to prevent concurrent log sends
 
   // === Roll Object State ===
   roll: {
@@ -52,7 +54,7 @@ const gUI = {
     skSk: '',              // Base skill value (numeric >= 1 or '') from sheet ('Sk1' or 'Sk2' col)
     skIsOn: '',            // Raw 'Is On' status from sheet
     skNameID: '',          // Raw ability/gear name from sheet, may include ID ('Ability' col)
-    skName: '',            // Cleaned ability/gear name (ID stripped)
+    skName: '',
     skAct: '',             // Action Point cost
     skDur: '',             // Raw duration value from sheet
     skMeta: '',            // Raw Meta cost value from sheet
@@ -67,7 +69,7 @@ const gUI = {
     resFocus: '',          // Raw Focus Meta color tag ('R'...'B')
     resPlus: '',           // Sum of '+/-[num]' morphs (additive modifier to resSk)
     resPlusPlus: '',       // Sum of '++/--[num]' morphs (additive modifier to final roll)
-    resdctMult: '',        // Cumulative multiplier from '+/-[num]dct' morphs
+    resdctMult: '',
     resMult: '',           // Cumulative multiplier from '* / /[num]' morphs (applies to resSk)
     resMultMult: '',       // Cumulative multiplier from '** // //[num]' morphs (applies to final roll)
     resCombine: '',        // Combined skill value calculated from numeric morphs + skSk
@@ -232,7 +234,8 @@ const gUI = {
   TOOLTIP_OFFSET_Y: 15,      // Tooltip vertical offset from cursor (px)
   TOOLTIP_OFFSET_X: 10,      // Tooltip horizontal offset from cursor (px)
   ROW_HEIGHT_PX: 20,         // Matches grid-auto-rows in style.html, used for sticky offset calculation
-  isDebugMode: true          // Turns console logging on (true) or off (false)
+  isDebugMode: true,         // Turns console logging on (true) or off (false)
+  GMSCREEN_LOG_MAX_CHARS: 40000 // Max characters for GMScreen log cell
 };
 
 
@@ -3089,33 +3092,46 @@ function fSetRangeValues(r1Ref, c1Ref, r2Ref, c2Ref, valueOrArray) {
 
 
 // fPrependToSidebar ///////////////////////////////////////////////////////////////
-// Purpose -> Prepends a message string (can contain HTML) as a new paragraph (<p>)
-//            to the sidebar content area (#sidebar-content). Removes the initial
-//            placeholder message first, and scrolls the sidebar content to the top.
-// Inputs  -> message (String): The text or HTML content to prepend.
-// Outputs -> None (Modifies DOM).
-function fPrependToSidebar(message) {
+// Purpose -> Prepends a message (HTML) as a new paragraph (<p>) to the sidebar
+//            content area (#sidebar-content). Also adds a plain text version to
+//            gUI.plainTextLogEntries for GMScreen updates.
+// Inputs  -> htmlMessage (String): The HTML content to prepend to the sidebar display.
+//         -> plainTextMessage (String): The plain text version to add to the log array.
+// Outputs -> None (Modifies DOM and gUI.plainTextLogEntries).
+function fPrependToSidebar(htmlMessage, plainTextMessage = null) {
     const sidebarContent = document.getElementById('sidebar-content');
-
     // Validate sidebar element
     if (!sidebarContent) {
         console.error("fPrependToSidebar: Cannot find sidebar content element (#sidebar-content).");
         return;
     }
 
+    // --- Handle DOM Update ---
     // Remove initial placeholder paragraph if it exists
     const placeholder = sidebarContent.querySelector('p');
     if (placeholder && placeholder.textContent === 'Roll log entries will appear here...') {
         placeholder.remove();
     }
 
-    // Create and prepend the new entry
+    // Create and prepend the new HTML entry
     const newEntry = document.createElement('p');
-    newEntry.innerHTML = message; // Use innerHTML to render any HTML tags in the message
+    newEntry.innerHTML = htmlMessage; // Use innerHTML to render HTML tags
     sidebarContent.prepend(newEntry);
-
     // Scroll the sidebar content area to the top to show the latest entry
     sidebarContent.scrollTop = 0;
+
+    // --- Handle Plain Text Log Array Update ---
+    // If plainTextMessage wasn't provided, attempt to derive it from htmlMessage
+    // This is a basic fallback - ideally plain text should always be generated alongside HTML
+    const textToLog = (plainTextMessage !== null)
+                      ? plainTextMessage
+                      : htmlMessage.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '').trim(); // Basic strip tags and convert <br>
+
+    // Push the plain text version to the log array
+    gUI.plainTextLogEntries.push(textToLog);
+
+    // --- Optional: Immediate GMScreen Update (Consider using throttle/debounce if called too often) ---
+    // fSendLogToGMScreen(); // Direct call - we'll add calls at end-of-action instead
 
 } // END fPrependToSidebar
 
@@ -3650,6 +3666,60 @@ function fSetupSingleSubMenuItem(item, index) {
 
 
 
+
+// fSendLogToGMScreen ////////////////////////////////////////////////////////////
+// Purpose -> Sends the accumulated plain text log entries (newest first) to the
+//            GMScreen sheet via the server-side fSetServerSheetData function.
+//            Uses a lock (gUI.isSendingLog) and takes a snapshot of the log array
+//            to prevent concurrent sends and capture consistent state.
+// Inputs  -> None (Uses gUI.plainTextLogEntries, gUI.GMSCREEN_LOG_MAX_CHARS, gUI.isSendingLog).
+// Outputs -> None (Calls google.script.run if not already sending).
+function fSendLogToGMScreen() {
+    // === Check Lock ===
+    if (gUI.isSendingLog) {
+        fMyConsoleLog("📤 Log send already in progress, skipping.");
+        return; // Exit if a send operation is currently running
+    }
+
+    // === Set Lock ===
+    gUI.isSendingLog = true;
+    fMyConsoleLog("📤 Preparing to send log to GMScreen (Lock Acquired)...");
+
+    // === 1. Take Snapshot of Log Array State IMMEDIATELY ===
+    const logEntriesSnapshot = [...gUI.plainTextLogEntries]; // <<< SNAPSHOT >>>
+
+    // === 2. Prepare Log Content from Snapshot ===
+    const reversedLogEntries = logEntriesSnapshot.reverse(); // Reverse the snapshot
+    const combinedLog = reversedLogEntries.join('\n');
+    const truncatedLog = combinedLog.substring(0, gUI.GMSCREEN_LOG_MAX_CHARS);
+    const originalLength = combinedLog.length;
+    const truncatedLength = truncatedLog.length;
+
+    fMyConsoleLog(`   -> Log Entries Snapshotted: ${logEntriesSnapshot.length}, Combined Chars: ${originalLength}, Truncated Chars Sent: ${truncatedLength}`);
+
+    // === 3. Define Target Range ===
+    const targetRange = { r1: 'Log', c1: 'Slot1', r2: 'Log', c2: 'Slot1' };
+
+    // === 4. Call Server Function ===
+    fMyConsoleLog(`   -> Calling fSetServerSheetData for sheetKey 'db', sheet 'GMScreen', range ${JSON.stringify(targetRange)}...`);
+    google.script.run
+        .withSuccessHandler(() => {
+            fMyConsoleLog("   -> ✅ GMScreen log updated successfully.");
+            gUI.isSendingLog = false; // Release Lock
+        })
+        .withFailureHandler((error) => {
+            const errorMsg = error?.message || "Unknown server error";
+            console.error(`fSendLogToGMScreen Failure: ${errorMsg}`, error);
+            fMyConsoleLog(`   -> ❌ Error updating GMScreen log: ${errorMsg}`);
+            gUI.isSendingLog = false; // Release Lock
+            // fShowMessage(`Warning: Could not update GM Screen log: ${errorMsg}`).catch(e => console.error("Error showing message:", e));
+        })
+        .fSetServerSheetData('db', 'GMScreen', targetRange, truncatedLog);
+
+} // END fSendLogToGMScreen
+
+
+
 // ==========================================================================
 // === Menu Bar Click     (End of Menu Bar Setup)) ===
 // ==========================================================================
@@ -3740,26 +3810,27 @@ function fSetupDelegatedMenuActionClick(menuBar) {
 
 
 // fHandleNishStartOrEnd ///////////////////////////////////////////////////////////
-// Purpose -> Handles the <Game><Nish Start or End> menu action. Executes a sequence
-//            of actions typical for starting/ending a Nish phase: Meta Flood,
-//            clearing channeled meta and durations, setting max AP, and logging.
+// Purpose -> Handles <Game><Nish Start or End> menu action. Runs Meta Flood,
+//            clears channeled meta/durations, sets max AP, logs action, and sends update.
 // Inputs  -> None.
 // Outputs -> (Promise<void>): Resolves after completing actions.
 async function fHandleNishStartOrEnd() {
     fMyConsoleLog("⚙️ Menu Action: Nish Start or End Triggered...");
+    await fMetaFlood();          // Async - Logs own message
+    fClearChanneledMeta();       // Sync
+    await fAct_SetToMax();       // Async - No sidebar log
+    fClearIsOnDurationRange();   // Sync
 
-    // Run the sequence of Nish-related actions
-    await fMetaFlood();             // Run Meta Flood calculation/update
-    fClearChanneledMeta();      // Clear the 'chnl' meta row
-    await fAct_SetToMax();          // Set Action Points to calculated maximum
-    fClearIsOnDurationRange();  // Clear the 'Is On/Duration' columns
-
-    // Log completion to sidebar
-    const sidebarMsg = `🚩<span class="blue-bold">Nish Start or End</span>`;
-    fPrependToSidebar(sidebarMsg);
+    // Log completion to sidebar (HTML and Plain Text)
+    const sidebarMsgHtml = `🚩<span class="blue-bold">Nish Start or End</span>`;
+    const sidebarMsgText = `🚩 Nish Start or End`;
+    fPrependToSidebar(sidebarMsgHtml, sidebarMsgText);
     fShowSidebar();
 
     fMyConsoleLog("✅ Nish Start or End Action Completed.");
+
+    // Send log update to GMScreen (with slight delay)
+    setTimeout(() => fSendLogToGMScreen(), 0); // <<< MODIFIED >>>
 
 } // END fHandleNishStartOrEnd
 
@@ -3852,195 +3923,97 @@ function fToggleSidebar() {
 
 
 // fMetaFlood //////////////////////////////////////////////////////////////////////
-// Purpose -> Handles the <Game><Meta><Flood> menu action. Randomly selects a Meta
-//            column ('R' through 'B'), increases its value and preceding columns'
-//            values by increasing amounts (1 for selected, 2 for previous, etc.),
-//            capping results based on gUI.list.metaFull. Updates grid data and DOM,
-//            displaying values < 1 as empty strings. Logs action to sidebar.
+// Purpose -> Handles <Game><Meta><Flood>. Selects Meta col, increases values, caps,
+//            updates grid, logs action to sidebar, and triggers GMScreen update.
 // Inputs  -> None.
-// Outputs -> None (Modifies grid data/DOM, calls fShowMessage, logs to sidebar).
+// Outputs -> None (Modifies grid data/DOM, calls fShowMessage, logs to sidebar/GMScreen).
 async function fMetaFlood() {
     fMyConsoleLog("⚙️ Menu Action: Meta Flood...");
-
-    // === 1. Get Definitions & Validate ===
-    const metaRangeDef = gUI.range?.meta;
-    const metaCaps = gUI.list?.metaFull;
-    const metaColorTags = gUI.list?.metaColor; // Used for indexing and logging
-
+    const metaRangeDef = gUI.range?.meta; const metaCaps = gUI.list?.metaFull; const metaColorTags = gUI.list?.metaColor;
     let errorMsg = '';
     if (!metaRangeDef || !fIsValidRangeObject(metaRangeDef)) errorMsg = "Meta range definition missing or invalid.";
     else if (!Array.isArray(metaCaps) || metaCaps.length === 0) errorMsg = "Meta caps list (gUI.list.metaFull) missing or invalid.";
-    else if (!Array.isArray(metaColorTags) || metaColorTags.length === 0) errorMsg = "Meta color tags list (gUI.list.metaColor) missing or invalid.";
-    // Note: Allowing flood even if color tags are missing, logging just uses index
+    // Allow missing metaColorTags for now
+    if (errorMsg) { console.warn(`fMetaFlood: ${errorMsg}`); fMyConsoleLog(`⚠️ Meta Flood failed: ${errorMsg}`); await fShowMessage(`Error: ${errorMsg}`); return; }
 
-    if (errorMsg && errorMsg !== "Meta color tags list (gUI.list.metaColor) missing or invalid.") { // Only block if critical info missing
-        console.warn(`fMetaFlood: ${errorMsg}`);
-        fMyConsoleLog(`⚠️ Meta Flood failed: ${errorMsg}`);
-        await fShowMessage(`Error: ${errorMsg}`);
-        return;
-    } else if (errorMsg) {
-        // Log warning but proceed if only color tags are missing
-         console.warn(`fMetaFlood: ${errorMsg}`);
-         fMyConsoleLog(`⚠️ Meta Flood warning: ${errorMsg}. Proceeding without color tags.`);
-    }
-
-    // === 2. Resolve Range & Validate Dimensions ===
-    const metaRowTag = metaRangeDef.r1;
-    const startCol = resolveCol(metaRangeDef.c1);
-    const endCol = resolveCol(metaRangeDef.c2);
-
-    if ([startCol, endCol].some(isNaN)) {
-        errorMsg = `Could not resolve Meta column tags: ${metaRangeDef.c1}, ${metaRangeDef.c2}.`;
-        console.warn(`fMetaFlood: ${errorMsg}`);
-        fMyConsoleLog(`⚠️ Meta Flood failed: ${errorMsg}`);
-        await fShowMessage(`Error: ${errorMsg}`);
-        return;
-    }
-
+    const metaRowTag = metaRangeDef.r1; const startCol = resolveCol(metaRangeDef.c1); const endCol = resolveCol(metaRangeDef.c2);
+    if ([startCol, endCol].some(isNaN)) { errorMsg = `Could not resolve Meta column tags: ${metaRangeDef.c1}, ${metaRangeDef.c2}.`; console.warn(`fMetaFlood: ${errorMsg}`); fMyConsoleLog(`⚠️ Meta Flood failed: ${errorMsg}`); await fShowMessage(`Error: ${errorMsg}`); return; }
     const numMetaCols = Math.abs(endCol - startCol) + 1;
-    // Validate number of columns matches number of cap values
-    if (numMetaCols !== metaCaps.length) {
-        errorMsg = `Mismatch between number of Meta columns (${numMetaCols}) and Meta caps (${metaCaps.length}).`;
-        console.warn(`fMetaFlood: ${errorMsg}`);
-        fMyConsoleLog(`⚠️ Meta Flood failed: ${errorMsg}`);
-        await fShowMessage(`Error: ${errorMsg}`);
-        return;
-    }
+    if (metaCaps.length > 0 && numMetaCols !== metaCaps.length) { errorMsg = `Mismatch between number of Meta columns (${numMetaCols}) and Meta caps (${metaCaps.length}).`; console.warn(`fMetaFlood: ${errorMsg}`); fMyConsoleLog(`⚠️ Meta Flood failed: ${errorMsg}`); await fShowMessage(`Error: ${errorMsg}`); return; }
 
-    // === 3. Randomly Select Target Column ===
-    const selectedIndex = Math.floor(Math.random() * numMetaCols); // 0 to numMetaCols-1
-    const selectedColIndex = startCol + selectedIndex; // Actual grid column index
-    const selectedColTag = metaColorTags?.[selectedIndex] ?? `Index ${selectedIndex}`; // Get tag or use index for log
+    const selectedIndex = Math.floor(Math.random() * numMetaCols); const selectedColIndex = startCol + selectedIndex; const selectedColTag = metaColorTags?.[selectedIndex] ?? `Index ${selectedIndex}`;
     fMyConsoleLog(`   -> Selected Meta Index: ${selectedIndex} (Column ${selectedColIndex} - Tag: ${selectedColTag})`);
 
-    // === 4. Calculate Flood Values ===
-    const finalValues = []; // Stores final capped values for the affected range
-    let amountToAdd = 1; // Starts at 1 for the selected column
-
-    // Iterate backwards from selected column to the start column
+    const finalValues = []; let amountToAdd = 1;
     for (let i = selectedIndex; i >= 0; i--) {
-        const currentColIndex = startCol + i;
-        const currentColTag = metaColorTags?.[i] ?? `Index ${i}`;
-        // Get current value (or pending value if modified earlier), default 0 if invalid
+        const currentColIndex = startCol + i; const currentColTag = metaColorTags?.[i] ?? `Index ${i}`;
         const currentVal = fGetGridValue(metaRowTag, currentColIndex, true) || 0;
-        const newValRaw = currentVal + amountToAdd; // Add flood amount
-        const cap = metaCaps[i]; // Get max value for this column
-        const finalVal = Math.min(newValRaw, cap); // Apply cap
-
-        fMyConsoleLog(`      -> Index ${i} (${currentColTag}): Current=${currentVal}, Add=${amountToAdd}, Raw=${newValRaw}, Cap=${cap} => Final=${finalVal}`);
-        // Add final value to the beginning of the results array
+        const newValRaw = currentVal + amountToAdd;
+        const cap = (metaCaps && metaCaps[i] !== undefined) ? metaCaps[i] : Infinity;
+        const finalVal = Math.min(newValRaw, cap);
+        fMyConsoleLog(`      -> Index ${i} (${currentColTag}): Current=${currentVal}, Add=${amountToAdd}, Raw=${newValRaw}, Cap=${cap === Infinity ? 'N/A' : cap} => Final=${finalVal}`);
         finalValues.unshift(finalVal);
-
-        amountToAdd++; // Increment amount for the next column (to the left)
+        amountToAdd++;
     }
 
-    // === 5. Update Grid ===
-    // Use fSetRangeValues to update the affected columns (from startCol up to selectedColIndex)
     fMyConsoleLog(`   -> Updating Meta columns ${startCol} to ${selectedColIndex} with final values: [${finalValues.join(', ')}]`);
-    const success = fSetRangeValues(
-        metaRowTag,           // Row tag ('meta')
-        startCol,             // Starting column index
-        metaRowTag,           // Ending row tag (same row)
-        selectedColIndex,     // Ending column index (the randomly selected one)
-        finalValues           // 1D array of final values
-    );
+    const success = fSetRangeValues(metaRowTag, startCol, metaRowTag, selectedColIndex, finalValues);
 
-    // === 6. Log Result ===
     if (!success) {
         errorMsg = `fSetRangeValues failed to update Meta grid.`;
-        fMyConsoleLog(`   -> ⚠️ Meta Flood Error: ${errorMsg}`);
-        await fShowMessage(`Error: ${errorMsg}`);
+        fMyConsoleLog(`   -> ⚠️ Meta Flood Error: ${errorMsg}`); await fShowMessage(`Error: ${errorMsg}`);
     } else {
         fMyConsoleLog("✅ Meta Flood Update Complete.");
-        // Build and Display Sidebar Message
-        const sidebarMsg = `<span class="blue-bold">ℹ️ Meta Flood (Rolled ${selectedColTag}):</span>`;
-        fPrependToSidebar(sidebarMsg);
+        const sidebarMsgHtml = `<span class="blue-bold">ℹ️ Meta Flood (Rolled ${selectedColTag}):</span>`;
+        const sidebarMsgText = `ℹ️ Meta Flood (Rolled ${selectedColTag}):`;
+        fPrependToSidebar(sidebarMsgHtml, sidebarMsgText);
         fShowSidebar();
-    }
 
+        // Send log update to GMScreen (with slight delay) <<< ADDED CALL >>>
+        setTimeout(() => fSendLogToGMScreen(), 0);
+    }
 } // END fMetaFlood
 
 
 
 // fMetaChannel ////////////////////////////////////////////////////////////////////
-// Purpose -> Handles Meta Channeling calculation (typically run during Nish).
-//            Randomly selects a Meta Channel column index ('R' through 'B', rolling
-//            twice and taking the lowest index), then increments the value in the
-//            corresponding ('chnl', Color) cell by 1. Displays 0 as ''. No upper cap.
+// Purpose -> Handles Meta Channeling calculation. Selects Meta Channel column,
+//            increments value, updates grid, logs to sidebar. (No GMScreen call needed here,
+//            as called by fHandleNishStartOrEnd which sends the final log state).
 // Inputs  -> None.
-// Outputs -> None (Modifies grid data/DOM, logs to sidebar).
+// Outputs -> None (Modifies grid data/DOM, calls fShowMessage, logs to sidebar).
 async function fMetaChannel() {
     fMyConsoleLog("⚙️ Calculating Meta Channel...");
-
-    // === 1. Get Definitions & Validate ===
-    const channelRangeDef = gUI.range?.metaChannel;
-    const metaColorTags = gUI.list?.metaColor; // Used for indexing and logging
-
+    const channelRangeDef = gUI.range?.metaChannel; const metaColorTags = gUI.list?.metaColor;
     let errorMsg = '';
     if (!channelRangeDef || !fIsValidRangeObject(channelRangeDef)) errorMsg = "Meta Channel range definition missing or invalid.";
-    else if (!Array.isArray(metaColorTags) || metaColorTags.length === 0) errorMsg = "Meta color tags list (gUI.list.metaColor) missing or invalid.";
-    // Note: Allowing channel even if color tags are missing, logging just uses index
+    // Allow missing metaColorTags
+    if (errorMsg) { console.warn(`fMetaChannel: ${errorMsg}`); fMyConsoleLog(`⚠️ Meta Channel failed: ${errorMsg}`); await fShowMessage(`Error: ${errorMsg}`); return; }
 
-    if (errorMsg && errorMsg !== "Meta color tags list (gUI.list.metaColor) missing or invalid.") { // Only block if critical info missing
-        console.warn(`fMetaChannel: ${errorMsg}`);
-        fMyConsoleLog(`⚠️ Meta Channel failed: ${errorMsg}`);
-        await fShowMessage(`Error: ${errorMsg}`);
-        return;
-    } else if (errorMsg) {
-         console.warn(`fMetaChannel: ${errorMsg}`);
-         fMyConsoleLog(`⚠️ Meta Channel warning: ${errorMsg}. Proceeding without color tags.`);
-    }
-
-    // === 2. Resolve Range & Get Dimensions ===
-    const channelRowTag = channelRangeDef.r1; // e.g., 'chnl'
-    const startCol = resolveCol(channelRangeDef.c1);
-    const endCol = resolveCol(channelRangeDef.c2);
-
-    if ([startCol, endCol].some(isNaN)) {
-        errorMsg = `Could not resolve Meta Channel column tags: ${channelRangeDef.c1}, ${channelRangeDef.c2}.`;
-        console.warn(`fMetaChannel: ${errorMsg}`);
-        fMyConsoleLog(`⚠️ Meta Channel failed: ${errorMsg}`);
-        await fShowMessage(`Error: ${errorMsg}`);
-        return;
-    }
+    const channelRowTag = channelRangeDef.r1; const startCol = resolveCol(channelRangeDef.c1); const endCol = resolveCol(channelRangeDef.c2);
+    if ([startCol, endCol].some(isNaN)) { errorMsg = `Could not resolve Meta Channel column tags: ${channelRangeDef.c1}, ${channelRangeDef.c2}.`; console.warn(`fMetaChannel: ${errorMsg}`); fMyConsoleLog(`⚠️ Meta Channel failed: ${errorMsg}`); await fShowMessage(`Error: ${errorMsg}`); return; }
 
     const numMetaCols = Math.abs(endCol - startCol) + 1;
-
-    // === 3. Random Selection (Roll 2, Take Lowest Index) ===
-    const roll1 = Math.floor(Math.random() * numMetaCols); // 0 to numMetaCols-1
-    const roll2 = Math.floor(Math.random() * numMetaCols); // 0 to numMetaCols-1
-    const lowestSelectedIndex = Math.min(roll1, roll2);
-    const finalColIndex = startCol + lowestSelectedIndex; // Actual grid column index
+    const roll1 = Math.floor(Math.random() * numMetaCols); const roll2 = Math.floor(Math.random() * numMetaCols);
+    const lowestSelectedIndex = Math.min(roll1, roll2); const finalColIndex = startCol + lowestSelectedIndex;
     const selectedColTag = metaColorTags?.[lowestSelectedIndex] ?? `Index ${lowestSelectedIndex}`;
     fMyConsoleLog(`   -> Meta Channel Rolls: ${roll1}, ${roll2}. Lowest Index: ${lowestSelectedIndex} (Column ${finalColIndex} - Tag: ${selectedColTag})`);
 
-    // === 4. Calculate New Value ===
-    const currentVal = fGetGridValue(channelRowTag, finalColIndex, true) || 0; // Get current value as number, default 0
-    const newValue = currentVal + 1; // Always increment by 1
+    const currentVal = fGetGridValue(channelRowTag, finalColIndex, true) || 0; const newValue = currentVal + 1;
     fMyConsoleLog(`      -> Index ${lowestSelectedIndex} (${selectedColTag}): Current=${currentVal}, Add=1 => New=${newValue}`);
 
-    // === 5. Update Grid (Single Cell) ===
-    // fSetGridValue handles converting potential 0 back to '' for meta cells
-    fMyConsoleLog(`   -> Updating Meta Channel cell [${channelRowTag}, ${finalColIndex}] to ${newValue}`);
-    const success = fSetGridValue(
-        channelRowTag,    // Row ('chnl')
-        finalColIndex,    // Target column index
-        newValue          // New value
-    );
-
-    // === 6. Log Result ===
+    const success = fSetGridValue(channelRowTag, finalColIndex, newValue);
     if (!success) {
         errorMsg = `fSetGridValue failed to update Meta Channel grid cell [${channelRowTag}, ${finalColIndex}].`;
-        fMyConsoleLog(`   -> ⚠️ Meta Channel Error: ${msg}`);
-        await fShowMessage(`Error: ${msg}`);
+        fMyConsoleLog(`   -> ⚠️ Meta Channel Error: ${errorMsg}`); await fShowMessage(`Error: ${errorMsg}`);
     } else {
         fMyConsoleLog("✅ Meta Channel Update Complete.");
-        // Build and Display Sidebar Message
-        const sidebarMsg = `<span class="blue-bold">ℹ️ Meta Channeled (${selectedColTag}):</span> ${currentVal} &rarr; ${newValue}`;
-        fPrependToSidebar(sidebarMsg);
-        fShowSidebar();
+        // Build and Display Sidebar Message (HTML and Plain Text)
+        const sidebarMsgHtml = `<span class="blue-bold">ℹ️ Meta Channeled (${selectedColTag}):</span> ${currentVal} &rarr; ${newValue}`;
+        const sidebarMsgText = `ℹ️ Meta Channeled (${selectedColTag}): ${currentVal} -> ${newValue}`;
+        fPrependToSidebar(sidebarMsgHtml, sidebarMsgText); // Update sidebar and plain text log
+        // No GMScreen update here - handled by calling function
     }
-
 } // END fMetaChannel
 
 
@@ -4148,77 +4121,46 @@ async function fIsOn_NewNishSet() {
 
 
 // fCalc_NaturalHealing ////////////////////////////////////////////////////////////
-// Purpose -> Handles the <Game><Healing><Natural Healing> menu action. Calculates
-//            healing for 1st, 2nd, and 3rd degree wounds based on Vit Max rolls,
-//            updates the wound cells in the grid, recalculates Vit Now/Percent,
-//            and logs the results to the sidebar.
+// Purpose -> Handles <Game><Healing><Natural Healing>. Calculates healing, updates
+//            wound cells, recalculates Vit Now/Percent, logs results, and sends update.
 // Inputs  -> None.
-// Outputs -> None (Modifies grid data/DOM, calls sidebar functions).
+// Outputs -> None (Modifies grid data/DOM, calls sidebar/GMScreen functions).
 async function fCalc_NaturalHealing() {
     fMyConsoleLog("⚙️ Menu Action: Natural Healing...");
-
     // === 1. Get Vit Max ===
-    const vitMaxRange = gUI.range?.vitMax;
-    let errorMsg = '';
-    if (!vitMaxRange || !vitMaxRange.r1 || !vitMaxRange.c1) {
-        errorMsg = "Vit Max range definition missing.";
-    }
-    if (errorMsg) {
-        console.warn(`fCalc_NaturalHealing: ${errorMsg}`);
-        fMyConsoleLog(`⚠️ Natural Healing failed: ${errorMsg}`);
-        await fShowMessage(`Error: ${errorMsg}`);
-        return;
-    }
-    const vitMax = fGetGridValue(vitMaxRange.r1, vitMaxRange.c1, true); // Get as number
-
-    // Validate Vit Max value
-    if (isNaN(vitMax) || vitMax < 1) {
-        errorMsg = `Vit Max value ('${vitMax}') is invalid or zero. Cannot calculate healing.`;
-        console.warn(`fCalc_NaturalHealing: ${errorMsg}`);
-        fMyConsoleLog(`⚠️ Natural Healing failed: ${errorMsg}`);
-        await fShowMessage(`Error: ${errorMsg}`);
-        return;
-    }
+    const vitMaxRange = gUI.range?.vitMax; let errorMsg = '';
+    if (!vitMaxRange || !vitMaxRange.r1 || !vitMaxRange.c1) errorMsg = "Vit Max range definition missing.";
+    if (errorMsg) { console.warn(`fCalc_NaturalHealing: ${errorMsg}`); fMyConsoleLog(`⚠️ Natural Healing failed: ${errorMsg}`); await fShowMessage(`Error: ${errorMsg}`); return; }
+    const vitMax = fGetGridValue(vitMaxRange.r1, vitMaxRange.c1, true);
+    if (isNaN(vitMax) || vitMax < 1) { errorMsg = `Vit Max value ('${vitMax}') is invalid or zero. Cannot calculate healing.`; console.warn(`fCalc_NaturalHealing: ${errorMsg}`); fMyConsoleLog(`⚠️ Natural Healing failed: ${errorMsg}`); await fShowMessage(`Error: ${errorMsg}`); return; }
     fMyConsoleLog(`   -> Vit Max for healing calc: ${vitMax}`);
 
     // === 2. Process Healing for Each Wound Type ===
     let errorsOccurred = false;
-    const healingResults = {}; // Store results { degree: amountHealed | null }
-
-    // Process 1st degree wounds (divisor 4)
-    healingResults['1st'] = await fProcessWoundHealing('vit1stWnds', vitMax, 4, '1st');
-    if (healingResults['1st'] === null) errorsOccurred = true;
-
-    // Process 2nd degree wounds (divisor 8)
-    healingResults['2nd'] = await fProcessWoundHealing('vit2ndWnds', vitMax, 8, '2nd');
-    if (healingResults['2nd'] === null) errorsOccurred = true;
-
-    // Process 3rd degree wounds (divisor 16)
-    healingResults['3rd'] = await fProcessWoundHealing('vit3rdWnds', vitMax, 16, '3rd');
-    if (healingResults['3rd'] === null) errorsOccurred = true;
+    const healingResults = {};
+    healingResults['1st'] = await fProcessWoundHealing('vit1stWnds', vitMax, 4, '1st'); if (healingResults['1st'] === null) errorsOccurred = true;
+    healingResults['2nd'] = await fProcessWoundHealing('vit2ndWnds', vitMax, 8, '2nd'); if (healingResults['2nd'] === null) errorsOccurred = true;
+    healingResults['3rd'] = await fProcessWoundHealing('vit3rdWnds', vitMax, 16, '3rd'); if (healingResults['3rd'] === null) errorsOccurred = true;
 
     // === 3. Update Vit Now & Percent ===
-    // Only update if no errors occurred during wound processing
-    if (!errorsOccurred) {
-        await fVitNowNPercent_Calc(); // Update dependent Vit fields
-    } else {
-        fMyConsoleLog("   -> Skipping Vit Now/Percent update due to healing errors.");
-    }
+    if (!errorsOccurred) { await fVitNowNPercent_Calc(); }
+    else { fMyConsoleLog("   -> Skipping Vit Now/Percent update due to healing errors."); }
 
     // === 4. Log Results to Sidebar ===
-    let sidebarMsg = `<span class="blue-bold">ℹ️ Natural Healing:</span>`;
-    // Append results for each degree if healing was successful
-    if (healingResults['1st'] !== null) sidebarMsg += `<br>${healingResults['1st']} -> 1st Deg Wnds`;
-    if (healingResults['2nd'] !== null) sidebarMsg += `<br>${healingResults['2nd']} -> 2nd Deg Wnds`;
-    if (healingResults['3rd'] !== null) sidebarMsg += `<br>${healingResults['3rd']} -> 3rd Deg Wnds`;
+    let sidebarMsgHtml = `<span class="blue-bold">ℹ️ Natural Healing:</span>`;
+    let sidebarMsgText = `ℹ️ Natural Healing:`;
+    if (healingResults['1st'] !== null) { sidebarMsgHtml += `<br>${healingResults['1st']} -> 1st Deg Wnds`; sidebarMsgText += `\n${healingResults['1st']} -> 1st Deg Wnds`; }
+    if (healingResults['2nd'] !== null) { sidebarMsgHtml += `<br>${healingResults['2nd']} -> 2nd Deg Wnds`; sidebarMsgText += `\n${healingResults['2nd']} -> 2nd Deg Wnds`; }
+    if (healingResults['3rd'] !== null) { sidebarMsgHtml += `<br>${healingResults['3rd']} -> 3rd Deg Wnds`; sidebarMsgText += `\n${healingResults['3rd']} -> 3rd Deg Wnds`; }
 
-    fPrependToSidebar(sidebarMsg);
+    fPrependToSidebar(sidebarMsgHtml, sidebarMsgText);
     fShowSidebar();
-
     fMyConsoleLog(`✅ Natural Healing Process Complete ${errorsOccurred ? '(with errors)' : ''}.`);
 
-} // END fCalc_NaturalHealing
+    // === 5. Send Log Update (with slight delay) ===
+    setTimeout(() => fSendLogToGMScreen(), 0); // <<< MODIFIED >>>
 
+} // END fCalc_NaturalHealing
 
 
 
@@ -4281,11 +4223,10 @@ async function fProcessWoundHealing(woundRangeTag, vitMax, divisor, degreeLabel)
 
 
 // fHealAllWounds //////////////////////////////////////////////////////////////////
-// Purpose -> Handles the <Game><Healing><All wounds> menu action. Sets 1st, 2nd,
-//            and 3rd degree wound cells to 0, updates Vit Now/Percent, and logs
-//            the action to the sidebar.
+// Purpose -> Handles <Game><Healing><All wounds>. Sets wound cells to 0, updates
+//            Vit Now/Percent, logs action, and sends update.
 // Inputs  -> None.
-// Outputs -> None (Modifies grid data/DOM, calls sidebar functions).
+// Outputs -> None (Modifies grid data/DOM, calls sidebar/GMScreen functions).
 async function fHealAllWounds() {
     fMyConsoleLog("⚙️ Menu Action: Clearing All Wounds...");
     const woundTags = ['vit1stWnds', 'vit2ndWnds', 'vit3rdWnds'];
@@ -4294,68 +4235,55 @@ async function fHealAllWounds() {
     // === Clear Each Wound Type ===
     for (const tag of woundTags) {
         const woundRange = gUI.range?.[tag];
-
-        // Validate range definition exists
         if (!woundRange || !woundRange.r1 || !woundRange.c1) {
             const msg = `Wound range definition missing for tag: ${tag}.`;
-            console.warn(`fHealAllWounds: ${msg}`);
-            fMyConsoleLog(`   -> ⚠️ Error: ${msg}`);
-            await fShowMessage(`Error clearing wounds: ${msg}`);
-            errorsOccurred = true;
-            continue; // Skip to next tag
+            console.warn(`fHealAllWounds: ${msg}`); fMyConsoleLog(`   -> ⚠️ Error: ${msg}`);
+            await fShowMessage(`Error clearing wounds: ${msg}`); errorsOccurred = true; continue;
         }
-
-        // Set the wound value to 0
         if (!fSetGridValue(woundRange.r1, woundRange.c1, 0)) {
-            // fSetGridValue logs specific errors
             const msg = `Failed to update grid for tag: ${tag}.`;
-            // Log context here
-            fMyConsoleLog(`   -> ⚠️ Error: ${msg}`);
-            // Show user message
-            await fShowMessage(`Error clearing wounds: ${msg}`);
-            errorsOccurred = true; // Continue trying other wound types
-        } else {
-             fMyConsoleLog(`   -> Cleared wounds for tag: ${tag}`);
-        }
+            fMyConsoleLog(`   -> ⚠️ Error: ${msg}`); await fShowMessage(`Error clearing wounds: ${msg}`);
+            errorsOccurred = true;
+        } else { fMyConsoleLog(`   -> Cleared wounds for tag: ${tag}`); }
     }
 
     // === Update Dependent Cells ===
-    // Update Vit Now & Percent only if clearing was fully successful
-    if (!errorsOccurred) {
-        await fVitNowNPercent_Calc();
-    } else {
-        fMyConsoleLog("   -> Skipping Vit Now/Percent update due to errors clearing wounds.");
-    }
+    if (!errorsOccurred) { await fVitNowNPercent_Calc(); }
+    else { fMyConsoleLog("   -> Skipping Vit Now/Percent update due to errors clearing wounds."); }
 
     // === Log to Sidebar ===
-    // Always show message, even if errors occurred during setting values
-    const sidebarMsg = `<span class="blue-bold">ℹ️ All Wounds Healed</span>`;
-    fPrependToSidebar(sidebarMsg);
+    const sidebarMsgHtml = `<span class="blue-bold">ℹ️ All Wounds Healed</span>`;
+    const sidebarMsgText = `ℹ️ All Wounds Healed`;
+    fPrependToSidebar(sidebarMsgHtml, sidebarMsgText);
     fShowSidebar();
 
     fMyConsoleLog(`✅ Clear All Wounds Process Complete ${errorsOccurred ? '(with errors)' : ''}.`);
+
+    // Send log update to GMScreen (with slight delay) <<< MODIFIED >>>
+    setTimeout(() => fSendLogToGMScreen(), 0);
 
 } // END fHealAllWounds
 
 
 
 // fHandleRestTimeRest /////////////////////////////////////////////////////////////
-// Purpose -> Handles the <Game><Rest or Time><Rest> menu action. Runs Meta Flood
-//            and logs the action to the sidebar.
+// Purpose -> Handles <Game><Rest or Time><Rest>. Runs Meta Flood, logs action,
+//            and sends update.
 // Inputs  -> None.
 // Outputs -> (Promise<void>): Resolves after completing actions.
 async function fHandleRestTimeRest() {
     fMyConsoleLog("⚙️ Menu Action: Rest Triggered...");
+    await fMetaFlood(); // This logs its own message to sidebar
 
-    // Run Meta Flood calculation/update
-    await fMetaFlood();
-
-    // Log action to sidebar
-    const sidebarMsg = `🕒 <span class="blue-bold">Character Rested</span>`;
-    fPrependToSidebar(sidebarMsg);
+    // Log action to sidebar (HTML and Plain Text)
+    const sidebarMsgHtml = `🕒 <span class="blue-bold">Character Rested</span>`;
+    const sidebarMsgText = `🕒 Character Rested`;
+    fPrependToSidebar(sidebarMsgHtml, sidebarMsgText);
     fShowSidebar();
-
     fMyConsoleLog("✅ Rest Action Completed.");
+
+    // Send log update to GMScreen (with slight delay) <<< MODIFIED >>>
+    setTimeout(() => fSendLogToGMScreen(), 0);
 
 } // END fHandleRestTimeRest
 
@@ -4363,165 +4291,123 @@ async function fHandleRestTimeRest() {
 
 
 // fHandleRestTimeNewSession ///////////////////////////////////////////////////////
-// Purpose -> Handles the <Game><Rest or Time><New Game Session> menu action. Sets
-//            Luck to Max and logs the action to the sidebar.
+// Purpose -> Handles <Game><Rest or Time><New Game Session>. Sets Luck to Max,
+//            logs action, and sends update.
 // Inputs  -> None.
 // Outputs -> (Promise<void>): Resolves after completing actions.
 async function fHandleRestTimeNewSession() {
     fMyConsoleLog("⚙️ Menu Action: New Game Session Triggered...");
+    await fLuck_SetToMax(); // This logs its own message and triggers its own send now
 
-    // Set Luck to Max
-    await fLuck_SetToMax(); // This is async
-
-    // Log action to sidebar
-    const sidebarMsg = `⚡ <span class="blue-bold">New Game Session</span>`;
-    fPrependToSidebar(sidebarMsg);
+    // Log action to sidebar (HTML and Plain Text)
+    const sidebarMsgHtml = `⚡ <span class="blue-bold">New Game Session</span>`;
+    const sidebarMsgText = `⚡ New Game Session`;
+    fPrependToSidebar(sidebarMsgHtml, sidebarMsgText);
     fShowSidebar();
 
     fMyConsoleLog("✅ New Game Session Action Completed.");
+
+    // Send log update to GMScreen (with slight delay) <<< MODIFIED >>>
+    // This ensures this *final* message is also included if fLuck_SetToMax finished quickly
+    setTimeout(() => fSendLogToGMScreen(), 0);
 
 } // END fHandleRestTimeNewSession
 
 
 
 // fHandleRestTimeSleep ////////////////////////////////////////////////////////////
-// Purpose -> Handles the <Game><Rest or Time><Sleep> menu action. Sets Meta to Max,
-//            runs Natural Healing, and logs the action to the sidebar.
+// Purpose -> Handles <Game><Rest or Time><Sleep>. Sets Meta to Max, runs Natural
+//            Healing, logs action, and sends update.
 // Inputs  -> None.
 // Outputs -> (Promise<void>): Resolves after completing actions.
 async function fHandleRestTimeSleep() {
     fMyConsoleLog("⚙️ Menu Action: Sleep Triggered...");
+    fMeta_SetToMax();           // Sync - Logs its own message and triggers send
+    await fCalc_NaturalHealing(); // Async - Logs its own message and triggers send
 
-    // Run sequence: Set Meta to Max, then perform Natural Healing
-    fMeta_SetToMax(); // This is synchronous based on current code
-    await fCalc_NaturalHealing(); // This is async
-
-    // Log action to sidebar
-    const sidebarMsg = `🕒 <span class="blue-bold">Character Slept</span>`;
-    fPrependToSidebar(sidebarMsg);
+    // Log action to sidebar (HTML and Plain Text)
+    const sidebarMsgHtml = `🕒 <span class="blue-bold">Character Slept</span>`;
+    const sidebarMsgText = `🕒 Character Slept`;
+    fPrependToSidebar(sidebarMsgHtml, sidebarMsgText);
     fShowSidebar();
 
     fMyConsoleLog("✅ Sleep Action Completed.");
 
+    // Send log update to GMScreen (with slight delay) <<< MODIFIED >>>
+    // This ensures this *final* message is included if helpers finished quickly
+    setTimeout(() => fSendLogToGMScreen(), 0);
+
 } // END fHandleRestTimeSleep
 
 
+
+
+
 // fMeta_SetToMax //////////////////////////////////////////////////////////////////
-// Purpose -> Handles the <Game><Set to Max><Meta> menu action. Sets the values in
-//            the 'meta' row ('R' to 'B' columns) to their maximums as defined in
-//            gUI.list.metaFull. Logs action to sidebar.
+// Purpose -> Handles <Game><Set to Max><Meta>. Sets 'meta' row to max values,
+//            logs action, and sends update.
 // Inputs  -> None.
-// Outputs -> None (Calls fSetRangeValues, potentially fShowMessage, logs to sidebar).
+// Outputs -> None (Calls fSetRangeValues, potentially fShowMessage, logs to sidebar/GMScreen).
 function fMeta_SetToMax() {
     fMyConsoleLog("⚙️ Menu Action: Setting Meta to Max...");
-
-    // === 1. Get Config Data ===
-    const metaRange = gUI.range?.meta;         // Range definition {r1:'meta', c1:'R', ...}
-    const maxMetaValues = gUI.list?.metaFull; // Array of max values [5, 4, 3, 2, 1]
-
-    // === 2. Validate Config Data ===
+    const metaRange = gUI.range?.meta; const maxMetaValues = gUI.list?.metaFull;
     let errorMsg = '';
     if (!metaRange || !fIsValidRangeObject(metaRange)) errorMsg = "Meta range definition is missing or invalid.";
     else if (!Array.isArray(maxMetaValues) || maxMetaValues.length === 0) errorMsg = "Max Meta values list (gUI.list.metaFull) is missing or empty.";
+    if (errorMsg) { console.warn(`fMeta_SetToMax: ${errorMsg}`); fMyConsoleLog(`⚠️ Cannot set Meta to max: ${errorMsg}`); fShowMessage(`Error: ${errorMsg}`); return; }
 
-    if (errorMsg) {
-        console.warn(`fMeta_SetToMax: ${errorMsg}`);
-        fMyConsoleLog(`⚠️ Cannot set Meta to max: ${errorMsg}`);
-        fShowMessage(`Error: ${errorMsg}`); // Show user feedback
-        return;
-    }
-
-    // === 3. Update Grid Range ===
-    // fSetRangeValues handles mapping the 1D maxMetaValues array across the columns of the single meta row.
-    const success = fSetRangeValues(
-        metaRange.r1, // 'meta'
-        metaRange.c1, // 'R'
-        metaRange.r2, // 'meta'
-        metaRange.c2, // 'B'
-        maxMetaValues // [5, 4, 3, 2, 1]
-    );
-
-    // === 4. Log Result ===
+    const success = fSetRangeValues(metaRange.r1, metaRange.c1, metaRange.r2, metaRange.c2, maxMetaValues);
     if (!success) {
-        // fSetRangeValues logs specific errors
         fMyConsoleLog(`⚠️ Failed to set Meta to max using fSetRangeValues.`);
-        // Optional: fShowMessage("Error setting Meta values.");
     } else {
         fMyConsoleLog("✅ Meta Set to Max.");
-        // Log action to sidebar
-        const sidebarMsg = `<span class="blue-bold">ℹ️ Meta Set to Max</span>`;
-        fPrependToSidebar(sidebarMsg);
+        const sidebarMsgHtml = `<span class="blue-bold">ℹ️ Meta Set to Max</span>`;
+        const sidebarMsgText = `ℹ️ Meta Set to Max`;
+        fPrependToSidebar(sidebarMsgHtml, sidebarMsgText);
         fShowSidebar();
-    }
 
+        // Send log update to GMScreen (with slight delay) <<< MODIFIED >>>
+        setTimeout(() => fSendLogToGMScreen(), 0);
+    }
 } // END fMeta_SetToMax
 
 
 
 
 // fLuck_SetToMax //////////////////////////////////////////////////////////////////
-// Purpose -> Handles the <Game><Set to Max><Luck> menu action. Sets the current
-//            Luck value (in cell defined by gUI.range.luckBox) to its maximum,
-//            calculated as gUI.list.luckBoxMax + the integer value of the cell
-//            defined by gUI.range.luckBoxPlus. Logs action to sidebar.
+// Purpose -> Handles <Game><Set to Max><Luck>. Calculates max luck, updates cell,
+//            logs action, and sends update.
 // Inputs  -> None.
-// Outputs -> None (Calls fGetGridValue, fSetGridValue, potentially fShowMessage, logs to sidebar).
+// Outputs -> None (Calls helpers, potentially fShowMessage, logs to sidebar/GMScreen).
 async function fLuck_SetToMax() {
     fMyConsoleLog("⚙️ Menu Action: Setting Luck to Max...");
-
-    // === 1. Get Config Data & Ranges ===
-    const baseLuck = gUI.list?.luckBoxMax;
-    const luckBoxRange = gUI.range?.luckBox;
-    const luckBoxPlusRange = gUI.range?.luckBoxPlus;
-
-    // === 2. Validate Config Data & Ranges ===
+    const baseLuck = gUI.list?.luckBoxMax; const luckBoxRange = gUI.range?.luckBox; const luckBoxPlusRange = gUI.range?.luckBoxPlus;
     let errorMsg = '';
     if (typeof baseLuck !== 'number' || isNaN(baseLuck)) errorMsg = "Base Luck value (gUI.list.luckBoxMax) missing or invalid.";
     else if (!luckBoxRange || !luckBoxRange.r1 || !luckBoxRange.c1) errorMsg = "LuckBox range definition missing or incomplete.";
     else if (!luckBoxPlusRange || !luckBoxPlusRange.r1 || !luckBoxPlusRange.c1) errorMsg = "LuckBoxPlus range definition missing or incomplete.";
+    if (errorMsg) { console.warn(`fLuck_SetToMax: ${errorMsg}`); fMyConsoleLog(`⚠️ Cannot set Luck to max: ${errorMsg}`); await fShowMessage(`Error: ${errorMsg}`); return; }
 
-    if (errorMsg) {
-        console.warn(`fLuck_SetToMax: ${errorMsg}`);
-        fMyConsoleLog(`⚠️ Cannot set Luck to max: ${errorMsg}`);
-        await fShowMessage(`Error: ${errorMsg}`);
-        return;
-    }
+    const luckPlusValueRaw = fGetGridValue(luckBoxPlusRange.r1, luckBoxPlusRange.c1); let luckPlusBonus = 0;
+    if (luckPlusValueRaw !== null && luckPlusValueRaw !== '' && !isNaN(Number(luckPlusValueRaw))) { luckPlusBonus = Math.round(Number(luckPlusValueRaw)); fMyConsoleLog(`   -> Luck Plus Bonus found: ${luckPlusValueRaw} -> Rounded: ${luckPlusBonus}`); }
+    else { fMyConsoleLog(`   -> No valid Luck Plus Bonus found. Using 0.`); }
 
-    // === 3. Get Luck Plus Bonus ===
-    const luckPlusValueRaw = fGetGridValue(luckBoxPlusRange.r1, luckBoxPlusRange.c1);
-    let luckPlusBonus = 0; // Default bonus to 0
-
-    // Convert bonus to integer if it's a valid number
-    if (luckPlusValueRaw !== null && luckPlusValueRaw !== '' && !isNaN(Number(luckPlusValueRaw))) {
-        luckPlusBonus = Math.round(Number(luckPlusValueRaw));
-        fMyConsoleLog(`   -> Luck Plus Bonus found: ${luckPlusValueRaw} -> Rounded: ${luckPlusBonus}`);
-    } else {
-        fMyConsoleLog(`   -> No valid Luck Plus Bonus found in cell (${luckBoxPlusRange.r1}, ${luckBoxPlusRange.c1}). Using 0.`);
-        // Optional Warning:
-        // if (luckPlusValueRaw !== null && luckPlusValueRaw !== '') {
-        //    await fShowMessage(`Warning: Value "${luckPlusValueRaw}" in Luck Plus cell is not valid number. Using 0 bonus.`);
-        // }
-    }
-
-    // === 4. Calculate and Set New Luck Value ===
     const newLuckValue = baseLuck + luckPlusBonus;
     fMyConsoleLog(`   -> Calculated Max Luck: ${baseLuck} (Base) + ${luckPlusBonus} (Bonus) = ${newLuckValue}`);
-
     const success = fSetGridValue(luckBoxRange.r1, luckBoxRange.c1, newLuckValue);
 
-    // === 5. Log Result ===
     if (!success) {
-        // fSetGridValue logs specific errors
-        fMyConsoleLog(`⚠️ Failed to set Luck to max value (${newLuckValue}) in cell (${luckBoxRange.r1}, ${luckBoxRange.c1}).`);
-        await fShowMessage(`Error: Failed to update the Luck value in the grid.`);
+        fMyConsoleLog(`⚠️ Failed to set Luck to max value (${newLuckValue}).`); await fShowMessage(`Error: Failed to update the Luck value in the grid.`);
     } else {
         fMyConsoleLog(`✅ Luck Set to Max (${newLuckValue}).`);
-        // Log action to sidebar
-        const sidebarMsg = `<span class="blue-bold">ℹ️ Luck Set to Max</span>`;
-        fPrependToSidebar(sidebarMsg);
+        const sidebarMsgHtml = `<span class="blue-bold">ℹ️ Luck Set to Max</span>`;
+        const sidebarMsgText = `ℹ️ Luck Set to Max`;
+        fPrependToSidebar(sidebarMsgHtml, sidebarMsgText);
         fShowSidebar();
-    }
 
+        // Send log update to GMScreen (with slight delay) <<< MODIFIED >>>
+        setTimeout(() => fSendLogToGMScreen(), 0);
+    }
 } // END fLuck_SetToMax
 
 
@@ -4755,68 +4641,52 @@ async function fVitNowNPercent_Calc() {
 
 
 // fHandleResetAllToMax ////////////////////////////////////////////////////////////
-// Purpose -> Handles the <Game><Set to Max><Reset All to Max> menu action. Prompts
-//            the user for confirmation, listing all effects. If confirmed, runs a
-//            series of functions to reset various character/game states to their
-//            maximum or default values and logs completion to the sidebar.
+// Purpose -> Handles <Game><Set to Max><Reset All to Max>. Prompts user, runs reset
+//            functions, logs completion, and sends ONE final update.
 // Inputs  -> None.
 // Outputs -> (Promise<void>): Resolves after completing actions or if cancelled.
 async function fHandleResetAllToMax() {
     fMyConsoleLog("⚙️ Menu Action: Reset All to Max Triggered...");
-
-    // === 1. Construct Confirmation Message using HTML list ===
-    // Removed inline style from UL tag. Styling handled in style.html.
-    const promptMessage = `<b>Reset All to Max?</b>
-<br><br>This will:
-  <br>-- Clear Roll Log
-  <br>-- Clear current Nish roll
-  <br>-- Flood Meta
-  <br>-- Clear Channeled Meta
-  <br>-- Set Luck to Max
-  <br>-- Set Action Points to Max
-  <br>-- Heal All Wounds
-  <br>-- Clear Morphs
-  <br>-- Clear 'Is On' Column
-  <br>-- Clear Monsters
-<b><br>Are you sure?</b>`;
-
-    // === 2. Show Prompt and Await Response ===
+    const promptMessage = `<b>Reset All to Max?</b><br><br>This will:<br>-- Clear Roll Log<br>-- Clear current Nish roll<br>-- Flood Meta<br>-- Clear Channeled Meta<br>-- Set Luck to Max<br>-- Set Action Points to Max<br>-- Heal All Wounds<br>-- Clear Morphs<br>-- Clear 'Is On' Column<br>-- Clear Monsters<b><br>Are you sure?</b>`;
     fMyConsoleLog("   -> Displaying confirmation prompt...");
     const userConfirmed = await fShowPrompt(promptMessage);
 
-    // === 3. Execute Actions if Confirmed ===
     if (userConfirmed) {
         fMyConsoleLog("   -> User confirmed Reset All. Executing actions...");
 
-        // --- Execute Sequence ---
-        // Note: Await async functions
-        fClearRollLog();             // Sync
+        // --- Clear Logs Locally (Before other actions add new logs) ---
+        const sidebarContent = document.getElementById('sidebar-content');
+        if (sidebarContent) sidebarContent.innerHTML = ''; // Clear HTML display
+        gUI.plainTextLogEntries = []; // Clear the plain text array directly
+        fMyConsoleLog("   -> Cleared local logs (HTML & array).");
+
+        // --- Execute Reset Sequence ---
+        // NOTE: These functions log AND call fSendLogToGMScreen (delayed)
         fClearCurrentNish();         // Sync
-        await fMetaFlood();             // Async
+        await fMetaFlood();          // Async (Logs only)
         fClearChanneledMeta();       // Sync
-        await fLuck_SetToMax();         // Async
-        await fAct_SetToMax();          // Async
-        await fHealAllWounds();         // Async
+        await fLuck_SetToMax();      // Async (Logs + Delayed Send)
+        await fAct_SetToMax();       // Async (No sidebar log)
+        await fHealAllWounds();      // Async (Logs + Delayed Send)
         fClearMorphs();              // Sync
-        fClearIsOnDurationRange();   // Sync (contains SetRangeValues, technically sync but might be slow)
-        fClearMonsters();            // Sync (contains SetRangeValues)
+        fClearIsOnDurationRange();   // Sync
+        fClearMonsters();            // Sync
         // ----------------------
 
-        // Log completion to sidebar
-        const sidebarMsg = `⚡ <span class="red-bold">RESET ALL TO MAX!</span> ⚡`;
-        fPrependToSidebar(sidebarMsg);
+        // Log final completion message to sidebar (HTML and Plain Text)
+        const sidebarMsgHtml = `⚡ <span class="red-bold">RESET ALL TO MAX!</span> ⚡`;
+        const sidebarMsgText = `⚡ RESET ALL TO MAX! ⚡`;
+        fPrependToSidebar(sidebarMsgHtml, sidebarMsgText); // Add final message
         fShowSidebar();
 
         fMyConsoleLog("✅ Reset All to Max Action Completed.");
 
-    } else {
-        // --- User Cancelled ---
-        fMyConsoleLog("   -> User cancelled Reset All action.");
-        // Optional: Show a cancellation message?
-        // fPrependToSidebar("ℹ️ Reset All action cancelled.");
-        // fShowSidebar();
-    }
+        // Send final log state AFTER all actions AND the final message are logged (with slight delay)
+        setTimeout(() => fSendLogToGMScreen(), 0); // <<< MODIFIED >>>
 
+    } else {
+        fMyConsoleLog("   -> User cancelled Reset All action.");
+    }
 } // END fHandleResetAllToMax
 
 
@@ -5052,24 +4922,32 @@ function fClearCurrentNish() {
 
 // fClearRollLog /////////////////////////////////////////////////////////////////
 // Purpose -> Handles the <Game><Clear><Roll Log> menu action. Clears the content
-//            of the Roll Log sidebar (#sidebar-content) and displays a confirmation message.
+//            of the Roll Log sidebar (#sidebar-content), clears the plain text log
+//            array (gUI.plainTextLogEntries), displays a confirmation message,
+//            and triggers an update to the GMScreen log showing it was cleared.
 // Inputs  -> None.
-// Outputs -> None (Modifies sidebar DOM content).
+// Outputs -> None (Modifies sidebar DOM content, gUI.plainTextLogEntries, calls fSendLogToGMScreen).
 function fClearRollLog() {
     fMyConsoleLog("⚙️ Menu Action: Clearing Roll Log...");
     const sidebarContent = document.getElementById('sidebar-content');
-
-    // Validate sidebar content element exists
     if (!sidebarContent) {
         console.error("fClearRollLog: Could not find sidebar content element (#sidebar-content).");
         fMyConsoleLog("⚠️ Cannot clear Roll Log: Sidebar content element not found.");
         return;
     }
 
-    // Clear existing content and add the styled "Cleared" message
-    sidebarContent.innerHTML = '<p><span class="blue-bold">Roll Log Cleared</span></p>';
+    // Clear the HTML display and add confirmation message
+    const clearedMsgHtml = '<p><span class="blue-bold">Roll Log Cleared</span></p>';
+    sidebarContent.innerHTML = clearedMsgHtml;
 
-    fMyConsoleLog("✅ Roll Log Cleared.");
+    // Clear the plain text log array and add the cleared message
+    const clearedMsgText = 'Roll Log Cleared';
+    gUI.plainTextLogEntries = [clearedMsgText];
+    fMyConsoleLog("✅ Roll Log Cleared (HTML and plain text array).");
+
+    // Send the cleared state (with the confirmation message) to the GMScreen (with slight delay)
+    setTimeout(() => fSendLogToGMScreen(), 0); // <<< MODIFIED >>>
+
 } // END fClearRollLog
 
 
