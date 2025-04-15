@@ -6,10 +6,10 @@
     <base target="_top">
 
     <script>
-      // Inject the sheetId from server-side doGet into global client-side scope
-      const SHEET_ID = "<?= sheetId ?>";
+      // Inject the csID from server-side doGet into global client-side scope
+      const gIndexCSID = "<?= csID ?>"; // csID is passed in the calling URL due to fOpenTurbo in the Character Sheet and gIndexCSID is a global variable to all Turbo .html (BUT NOT .gs)
       console.log("✅ INDEX LOADED: " + new Date().toLocaleTimeString());
-      console.log("🧪 SHEET_ID param:", SHEET_ID);
+      console.log("🧪 gIndexCSID param:", gIndexCSID);
     </script>
 
     <style>

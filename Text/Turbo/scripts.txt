@@ -5340,14 +5340,13 @@ function fScrollGridToBottom(grid) {
 
 // fRefreshMonsterData /////////////////////////////////////////////////////////////
 // Purpose -> Handles the 'Show Monsters' header button action. Clears the first row
-//            (custom monster row) of the monster table locally, then fetches fresh
-//            data for the remaining rows from the 'Game' sheet via a server call
-//            (fGetServerSheetData) and updates the grid.
+//            (custom monster row) locally, then fetches fresh data for the
+//            *entire* monster table from the 'Game' sheet via the server function
+//            fGetServerSheetData (passing the current gIndexCSID) and updates the grid.
 // Inputs  -> None.
 // Outputs -> None (Modifies grid data/DOM, calls server function).
 async function fRefreshMonsterData() {
     fMyConsoleLog("⚙️ Refreshing Monster Data...");
-
     // === 1. Get and Validate Monster Range Definition ===
     const monsterRangeDef = gUI.range?.monsters;
     if (!monsterRangeDef || !fIsValidRangeObject(monsterRangeDef)) {
@@ -5375,68 +5374,64 @@ async function fRefreshMonsterData() {
         const msg = `Failed to clear the first row (Custom Monster) of the monster range locally.`;
         console.warn(`fRefreshMonsterData: ${msg}`);
         fMyConsoleLog(`   -> ⚠️ Warning: ${msg}`);
-        // Continue even if local clear fails, as server fetch might overwrite anyway
-        // await fShowMessage(`Warning: ${msg}`); // Optional user feedback
+        // Continue even if local clear fails
     }
 
-    // === 4. Determine Range to Fetch from Server ===
-    const fetchStartRow = r1 + 1; // Start fetching from the row below the first one
-    // Check if there are any rows left to fetch
-    if (fetchStartRow > r2) {
-        fMyConsoleLog("   -> No remaining monster rows to fetch from server (range was only 1 row).");
-        fMyConsoleLog("✅ Monster Refresh Complete (only local clear).");
-        // Optional: await fShowMessage("Custom Monster row cleared.");
-        return; // Nothing more to fetch
-    }
-
-    // Convert the remaining range to A1 notation for the server call
-    const a1Notation = fIndicesToA1(fetchStartRow, c1, r2, c2);
-    if (!a1Notation) {
-        const msg = "Failed to generate A1 notation for fetching monster data.";
-        console.error(`fRefreshMonsterData: ${msg}`);
-        fMyConsoleLog(`❌ Monster Refresh Failed: ${msg}`);
-        await fShowMessage(`Error: ${msg}`);
-        return;
-    }
-
-    // === 5. Call Server Function ===
-    fMyConsoleLog(`   -> Fetching monster data from Sheet range: ${a1Notation}`);
+    // === 4. Call Server Function (Using New Signature - Passing ID as first param) ===
+    fMyConsoleLog(`   -> Fetching full monster data using ID and range object: ${JSON.stringify(monsterRangeDef)}`);
     // Consider adding a visual loading indicator here
 
     google.script.run
         .withSuccessHandler((dataArray) => {
             // Remove loading indicator here
-            fMyConsoleLog(`   -> Received ${dataArray?.length || 0} rows of monster data from server.`);
+            fMyConsoleLog(`   -> Received monster data from server (Type: ${typeof dataArray}, Length: ${Array.isArray(dataArray) ? dataArray.length : 'N/A'}).`);
 
-            // Validate response format
+            // Validate response format - expecting an array
             if (!Array.isArray(dataArray)) {
-                 const errMsg = "Received invalid data format from server for monsters.";
+                 const errMsg = "Received non-array data format from server for monsters.";
                  console.error(`fRefreshMonsterData Success Handler: ${errMsg}`, dataArray);
                  fMyConsoleLog(`   -> ❌ Error: ${errMsg}`);
                  fShowMessage(`Error: ${errMsg}`);
                  return;
-             }
+            }
 
-            // Update the local grid with fetched data
-            fMyConsoleLog(`   -> Updating local grid rows ${fetchStartRow}-${r2}...`);
-            if (!fSetRangeValues(fetchStartRow, c1, r2, c2, dataArray)) {
-                 // fSetRangeValues logs specific errors
+            // Handle potential empty array response
+            if (dataArray.length === 0) {
+                fMyConsoleLog("   -> Received empty data array from server. Monster table might be empty on sheet.");
+                fMyConsoleLog("✅ Monster Refresh Complete (Server returned empty data).");
+                return;
+            }
+
+            // Handle 1D vs 2D array response
+            let dataToWrite = dataArray;
+            if (!Array.isArray(dataArray[0]) && (r2 - r1 + 1 > 1)) {
+                console.warn("fRefreshMonsterData: Received 1D array from server for multi-row range. Wrapping in another array.");
+                dataToWrite = [dataArray];
+            } else if (!Array.isArray(dataArray[0])) {
+                 fMyConsoleLog("   -> Received 1D array for single-row range.");
+            }
+
+            // Update the local grid with fetched data for the *entire* monster range
+            fMyConsoleLog(`   -> Updating local grid rows ${r1}-${r2} with received data...`);
+            if (!fSetRangeValues(r1, c1, r2, c2, dataToWrite)) {
                  const errMsg = "Failed to update the grid with fetched monster data.";
                  fMyConsoleLog(`   -> ⚠️ Warning: ${errMsg}`);
                  fShowMessage(`Warning: ${errMsg}`);
             } else {
                 fMyConsoleLog("✅ Monster Refresh Complete.");
-                // Optional: fShowMessage("Monster data refreshed successfully.");
             }
         })
         .withFailureHandler((error) => {
             // Remove loading indicator here
-            const errorMsg = `Failed to fetch monster data from server: ${error.message}`;
+            const errorMsgFromServer = error.message || "Unknown server error";
+            // **The server error message might still say "invalid sheetKey" if gIndexCSID somehow became invalid, but the structure is now correct**
+            const finalErrorMsg = `Failed to fetch monster data from server: ${errorMsgFromServer}`;
             console.error(`fRefreshMonsterData Failure Handler:`, error);
-            fMyConsoleLog(`❌ Monster Refresh Failed: ${errorMsg}`);
-            fShowMessage(`Error: ${errorMsg}`);
+            fMyConsoleLog(`❌ Monster Refresh Failed: ${finalErrorMsg}`);
+            fShowMessage(`Error: ${finalErrorMsg}`);
         })
-        .fGetServerSheetData(SHEET_ID, a1Notation, "Game"); // Call server function in turbo.gs
+        // Pass the direct gIndexCSID, Sheet Name, and Range Object
+        .fGetServerSheetData(gIndexCSID, 'Game', gUI.range.monsters);
 
 } // END fRefreshMonsterData
 
@@ -5825,19 +5820,19 @@ function fRunPostRenderFormatting() {
 
 // fLoadGameSheet //////////////////////////////////////////////////////////////////
 // Purpose -> Initiates the process of loading and displaying the game sheet data.
-//            Sets up timing, validates SHEET_ID, and calls the server-side
+//            Sets up timing, validates gIndexCSID, and calls the server-side
 //            function (fCSGetGameSheet5) to retrieve data, handling success and failure cases.
-// Inputs  -> None (Uses global SHEET_ID).
+// Inputs  -> None (Uses global gIndexCSID).
 // Outputs -> None (Initiates server call).
 function fLoadGameSheet() {
     // === Initialize Timers ===
     gUI.startTime = performance.now(); // Record start time for performance logging
     gUI.lastLogTime = gUI.startTime;   // Initialize last log time
     fMyConsoleLog("🚀 Requesting GSheet Data...");
-    console.log("Sheet ID:", SHEET_ID); // Log the sheet ID being used
+    console.log("Sheet ID:", gIndexCSID); // Log the sheet ID being used
 
     // === Validate Sheet ID ===
-    if (!SHEET_ID) {
+    if (!gIndexCSID) {
         const errorMsg = "❌ No Sheet ID found. Cannot load data.";
         console.error(errorMsg);
         fMyConsoleLog(errorMsg);
@@ -5859,7 +5854,7 @@ function fLoadGameSheet() {
             const gridDiv = document.getElementById('grid');
             if(gridDiv) gridDiv.innerHTML = `<p style="color:red;">${errorMsg}</p>`;
         })
-        .fCSGetGameSheet5(SHEET_ID); // The server-side function to call in Turbo.gs
+        .fCSGetGameSheet5(gIndexCSID); // The server-side function to call in Turbo.gs
 
 } // END fLoadGameSheet
 
