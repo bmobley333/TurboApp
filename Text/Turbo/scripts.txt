@@ -5342,7 +5342,7 @@ function fScrollGridToBottom(grid) {
 // Purpose -> Handles the 'Show Monsters' header button action. Clears the first row
 //            (custom monster row) of the monster table locally, then fetches fresh
 //            data for the remaining rows from the 'Game' sheet via a server call
-//            (fCSGetRangeData) and updates the grid.
+//            (fGetServerSheetData) and updates the grid.
 // Inputs  -> None.
 // Outputs -> None (Modifies grid data/DOM, calls server function).
 async function fRefreshMonsterData() {
@@ -5436,7 +5436,7 @@ async function fRefreshMonsterData() {
             fMyConsoleLog(`❌ Monster Refresh Failed: ${errorMsg}`);
             fShowMessage(`Error: ${errorMsg}`);
         })
-        .fCSGetRangeData(SHEET_ID, a1Notation); // Call server function in turbo.gs
+        .fGetServerSheetData(SHEET_ID, a1Notation, "Game"); // Call server function in turbo.gs
 
 } // END fRefreshMonsterData
 
