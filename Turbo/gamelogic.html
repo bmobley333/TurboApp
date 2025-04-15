@@ -2738,7 +2738,8 @@ async function fExecuteNishSequence() {
 // Purpose -> Processes monster data received from the GM Screen DB and populates
 //            the client-side Turbo monster table (gUI.range.monsters), *skipping the
 //            first row (CustMon)*. Handles active monster filtering, custom monster
-//            naming/skipping, data mapping, SIZE parsing, and overflow warnings.
+//            naming/skipping (trims "Mon: " prefix), data mapping, SIZE parsing,
+//            and overflow warnings.
 // Inputs  -> gmDataArray (Array[][]): 2D array of monster data from the GM Screen.
 //         -> gmColTags (Object): Map of GM Screen column tags to indices { tagName: index }.
 //         -> gmRowTags (Object): Map of GM Screen row tags to indices { tagName: index }.
@@ -2780,9 +2781,7 @@ async function fUpdateTurboMonsterTable(gmDataArray, gmColTags, gmRowTags) {
         await fShowMessage("Error: Could not resolve Turbo monster table boundaries.");
         return;
     }
-    // ** CHANGE: Calculate capacity excluding the first row **
     const turboTableAvailableRows = turboMon_R_end - (turboMon_R_start + 1) + 1;
-    // ** CHANGE: Start filling from the row AFTER CustMon **
     const turboFill_R_start = turboMon_R_start + 1;
     fMyConsoleLog(`   -> Turbo Table: CustMon Row=${turboMon_R_start}, LastMon Row=${turboMon_R_end}.`);
     fMyConsoleLog(`   -> Filling starts at row ${turboFill_R_start}. Available Rows for DB monsters: ${turboTableAvailableRows}.`);
@@ -2823,7 +2822,6 @@ async function fUpdateTurboMonsterTable(gmDataArray, gmColTags, gmRowTags) {
     }
 
     // === 4. Iterate and Populate Turbo Table ===
-    // ** CHANGE: Initialize turboMon_R to the *first row after* CustMon **
     let turboMon_R = turboFill_R_start;
     let isOverflowing = false;
     let monstersAdded = 0;
@@ -2835,40 +2833,45 @@ async function fUpdateTurboMonsterTable(gmDataArray, gmColTags, gmRowTags) {
 
         // --- Log the value being checked for isActive ---
         const isActiveVal = dbMon_R?.[activeColIdx];
-        if (db_idx < 5) { // Log only for the first few rows
-             fMyConsoleLog(`      -> Checking GM row ${db_idx}: ActiveMonTF col (${activeColIdx}) raw value = '${isActiveVal}' (Type: ${typeof isActiveVal})`);
-        }
+        // if (db_idx < 5) { // Keep logging limited if needed
+        //      fMyConsoleLog(`      -> Checking GM row ${db_idx}: ActiveMonTF col (${activeColIdx}) raw value = '${isActiveVal}' (Type: ${typeof isActiveVal})`);
+        // }
 
         // --- Check if Active (More Robust Check) ---
         const isActive = (isActiveVal === true || String(isActiveVal).toUpperCase() === 'TRUE');
         if (!isActive) {
             continue;
         }
-        fMyConsoleLog(`      -> GM row ${db_idx} IS Active. Processing...`);
+        // fMyConsoleLog(`      -> GM row ${db_idx} IS Active. Processing...`); // Can be verbose
 
         // --- Determine if Custom Monster Row ---
         const isCustomMonsterRow = hasCustomBounds && db_idx >= custMonFirst_R_idx_raw && db_idx <= monTblLast_R_idx_raw;
-        if(isCustomMonsterRow && db_idx < 5){
-            fMyConsoleLog(`         -> Identified GM row ${db_idx} as Custom Monster Row.`);
-        }
+        // if(isCustomMonsterRow && db_idx < 5){ // Log if it thinks one of the first few is custom
+        //     fMyConsoleLog(`         -> Identified GM row ${db_idx} as Custom Monster Row.`);
+        // }
 
         // --- Get Names & Apply Custom Skip Logic ---
         const monCustName = String(dbMon_R[resolvedGmColIndices['MonCustName']] ?? '').trim();
         const monName = String(dbMon_R[resolvedGmColIndices['MonName']] ?? '').trim();
         if (isCustomMonsterRow && !monCustName) {
-            fMyConsoleLog(`      -> Skipping GM row ${db_idx}: Is custom monster row but has no 'MonCustName'.`);
+            // fMyConsoleLog(`      -> Skipping GM row ${db_idx}: Is custom monster row but has no 'MonCustName'.`); // Verbose
             continue;
         }
-        const finalMonsterName = monCustName || monName || `Unnamed Monster ${db_idx + 1}`;
+        let finalMonsterName = monCustName || monName || `Unnamed Monster ${db_idx + 1}`; // Use custom, fallback to standard, then generic
+
+        // ** NEW: Trim "Mon: " prefix **
+        const prefix = "Mon: ";
+        if (finalMonsterName.startsWith(prefix)) {
+            finalMonsterName = finalMonsterName.substring(prefix.length);
+        }
 
         // --- Check Turbo Table Capacity ---
-        // ** CHANGE: Compare against the end boundary **
         if (turboMon_R > turboMon_R_end) {
             isOverflowing = true;
             fMyConsoleLog(`   -> Turbo table overflow detected at GM row index ${db_idx}. Attempting to write to row ${turboMon_R}, but last available is ${turboMon_R_end}.`);
             break; // Stop processing rows
         }
-        fMyConsoleLog(`         -> Mapping to Turbo Row ${turboMon_R} (Name: ${finalMonsterName})`);
+        // fMyConsoleLog(`         -> Mapping to Turbo Row ${turboMon_R} (Name: ${finalMonsterName})`); // Verbose
 
         // --- Extract & Map Data ---
         const vit = dbMon_R[resolvedGmColIndices['Vit']];
@@ -2919,9 +2922,8 @@ async function fUpdateTurboMonsterTable(gmDataArray, gmColTags, gmRowTags) {
 
     // === 5. Show Overflow Message if Needed ===
     if (isOverflowing) {
-        // ** CHANGE: Use adjusted capacity in message **
         const message = `⚠️ Too many active monsters on GM Screen!
-                       <br>Only the first ${turboTableAvailableRows} could be loaded (after reserving the first row). Please ask GM to reduce active monsters.`;
+                       <br>Only the first ${turboTableAvailableRows} could be loaded. Please ask the GM to reduce active monsters.`;
         fMyConsoleLog(`   -> ${message.replace('<br>', ' ')}`);
         await fShowMessage(message);
     }
