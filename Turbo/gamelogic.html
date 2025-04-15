@@ -258,7 +258,7 @@ async function fHandleRollDiceAction() {
         await fShowMessage(`❌ Critical Error during roll: ${err.message}. Please check console.`);
         fSetButtonOrMenuState(null);
         // Attempt to send log even after critical error, slightly delayed
-        setTimeout(() => fSendLogToGMScreen(), 0); // <<< MODIFIED >>>
+        setTimeout(() => fSendLogToGMScreenNPS(), 0); // <<< MODIFIED >>>
         return; // Exit after critical error
     }
 
@@ -267,7 +267,7 @@ async function fHandleRollDiceAction() {
     fMyConsoleLog(`✅ Roll Dice Action Completed.`);
 
     // Send the final log state to the GMScreen (with slight delay)
-    setTimeout(() => fSendLogToGMScreen(), 0); // <<< MODIFIED >>>
+    setTimeout(() => fSendLogToGMScreenNPS(), 0); // <<< MODIFIED >>>
 
 } // END fHandleRollDiceAction
 
@@ -2627,7 +2627,7 @@ async function fExecuteNishSequence() {
     }
 
     fMyConsoleLog("✅ Nish Sequence Execution Complete.");
-    // Note: No fSendLogToGMScreen here, as it's often called by another function (fHandleNishButtonClick or fHandleRollDiceAction)
+    // Note: No fSendLogToGMScreenNPS here, as it's often called by another function (fHandleNishButtonClick or fHandleRollDiceAction)
     // which will handle the final send.
 
 } // END fExecuteNishSequence
@@ -2899,7 +2899,7 @@ async function fHandleChaosGemClick(r, c) {
     fMyConsoleLog("✅ Chaos Gem Used Successfully.");
 
     // Send log update to GMScreen (with slight delay)
-    setTimeout(() => fSendLogToGMScreen(), 0);
+    setTimeout(() => fSendLogToGMScreenNPS(), 0);
 
     return true; // Signal that the gem click was fully processed
 
@@ -3010,7 +3010,7 @@ async function fHandleAdHocRoll(cellText) {
         fMyConsoleLog(`   -> Ad-Hoc Roll logged to sidebar.`);
 
         // Send log update to GMScreen (with slight delay)
-        setTimeout(() => fSendLogToGMScreen(), 0);
+        setTimeout(() => fSendLogToGMScreenNPS(), 0);
 
         return true; // Indicate roll was handled
     }

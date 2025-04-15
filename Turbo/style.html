@@ -408,93 +408,124 @@
 
 
  /* ========================================================================== */
- /* === Sidebar Buttons & Graphics === */
- /* ========================================================================== */
+/* === Sidebar Buttons & Graphics === */
+/* ========================================================================== */
 
- .nish-divider {
-  border: none;
-  /* Remove default border */
-  border-top: 2px solid blue;
-  /* Blue top border */
-  margin: 10px 0 5px 0;
-  /* Adjust top/bottom margin as needed */
-  opacity: 0.7;
-  /* Slightly transparent */
- }
+/* Add these new rules */
+#sidebar-roll-btn,
+#sidebar-refresh-log-btn {
+ background: none;
+ border: 1px solid #ccc;
+ border-radius: 3px;
+ font-size: 1.2em;
+ /* Adjust size as needed */
+ line-height: 1;
+ padding: 2px 5px;
+ cursor: pointer;
+ color: #666;
+ margin-left: 8px;
+ /* Space between buttons/title */
+ vertical-align: middle;
+ /* Align with title/close button */
+}
 
- /* Style for the apply wounds button in the sidebar */
- .apply-wounds-btn {
-  padding: 2px 6px;
-  /* Smaller padding */
-  margin-left: 8px;
-  /* Space before button */
-  font-size: 0.8em;
-  /* Smaller font */
-  cursor: pointer;
-  border: 1px solid #ccc;
-  background-color: #e7e7e7;
-  border-radius: 3px;
- }
+#sidebar-roll-btn:hover,
+#sidebar-refresh-log-btn:hover {
+ background-color: #eee;
+ color: #000;
+}
 
- .apply-wounds-btn:hover {
-  background-color: #ddd;
- }
+/* Existing .nish-divider rule... */
+.nish-divider {
+ border: none;
+ /* Remove default border */
+ border-top: 2px solid blue;
+ /* Blue top border */
+ margin: 10px 0 5px 0;
+ /* Adjust top/bottom margin as needed */
+ opacity: 0.7;
+ /* Slightly transparent */
+}
 
- .apply-wounds-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-  background-color: #f0f0f0;
- }
+/* Existing .apply-wounds-btn rule... */
+.apply-wounds-btn {
+ padding: 2px 6px;
+ /* Smaller padding */
+ margin-left: 8px;
+ /* Space before button */
+ font-size: 0.8em;
+ /* Smaller font */
+ cursor: pointer;
+ border: 1px solid #ccc;
+ background-color: #e7e7e7;
+ border-radius: 3px;
+}
 
+/* Existing .apply-wounds-btn:hover rule... */
+.apply-wounds-btn:hover {
+ background-color: #ddd;
+}
 
- /* Style for the prep AR button in the sidebar */
- .prep-ar-btn {
-  padding: 2px 6px;
-  /* Smaller padding */
-  margin-left: 8px;
-  /* Space before button */
-  font-size: 0.8em;
-  /* Smaller font */
-  cursor: pointer;
-  border: 1px solid #ccc;
-  background-color: #e7e7e7;
-  border-radius: 3px;
- }
-
- .prep-ar-btn:hover {
-  background-color: #ddd;
- }
-
- .prep-ar-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-  background-color: #f0f0f0;
- }
+/* Existing .apply-wounds-btn:disabled rule... */
+.apply-wounds-btn:disabled {
+ cursor: not-allowed;
+ opacity: 0.6;
+ background-color: #f0f0f0;
+}
 
 
- /* Style for the prep Dmg button in the sidebar */
- .prep-dmg-btn {
-  padding: 2px 6px;
-  /* Smaller padding */
-  margin-left: 8px;
-  /* Space before button */
-  font-size: 0.8em;
-  /* Smaller font */
-  cursor: pointer;
-  border: 1px solid #ccc;
-  background-color: #e7e7e7;
-  border-radius: 3px;
- }
+/* Existing .prep-ar-btn rule... */
+.prep-ar-btn {
+ padding: 2px 6px;
+ /* Smaller padding */
+ margin-left: 8px;
+ /* Space before button */
+ font-size: 0.8em;
+ /* Smaller font */
+ cursor: pointer;
+ border: 1px solid #ccc;
+ background-color: #e7e7e7;
+ border-radius: 3px;
+}
 
- .prep-dmg-btn:hover {
-  background-color: #ddd;
- }
+/* Existing .prep-ar-btn:hover rule... */
+.prep-ar-btn:hover {
+ background-color: #ddd;
+}
 
- .prep-dmg-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-  background-color: #f0f0f0;
- }
+/* Existing .prep-ar-btn:disabled rule... */
+.prep-ar-btn:disabled {
+ cursor: not-allowed;
+ opacity: 0.6;
+ background-color: #f0f0f0;
+}
+
+
+/* Existing .prep-dmg-btn rule... */
+.prep-dmg-btn {
+ padding: 2px 6px;
+ /* Smaller padding */
+ margin-left: 8px;
+ /* Space before button */
+ font-size: 0.8em;
+ /* Smaller font */
+ cursor: pointer;
+ border: 1px solid #ccc;
+ background-color: #e7e7e7;
+ border-radius: 3px;
+}
+
+/* Existing .prep-dmg-btn:hover rule... */
+.prep-dmg-btn:hover {
+ background-color: #ddd;
+}
+
+/* Existing .prep-dmg-btn:disabled rule... */
+.prep-dmg-btn:disabled {
+ cursor: not-allowed;
+ opacity: 0.6;
+ background-color: #f0f0f0;
+}
 
 
 

@@ -3131,7 +3131,7 @@ function fPrependToSidebar(htmlMessage, plainTextMessage = null) {
     gUI.plainTextLogEntries.push(textToLog);
 
     // --- Optional: Immediate GMScreen Update (Consider using throttle/debounce if called too often) ---
-    // fSendLogToGMScreen(); // Direct call - we'll add calls at end-of-action instead
+    // fSendLogToGMScreenNPS(); // Direct call - we'll add calls at end-of-action instead
 
 } // END fPrependToSidebar
 
@@ -3667,13 +3667,14 @@ function fSetupSingleSubMenuItem(item, index) {
 
 
 
-// fSendLogToGMScreen ////////////////////////////////////////////////////////////
+// fSendLogToGMScreenNPS ////////////////////////////////////////////////////////////
 // Purpose -> Sends the accumulated plain text log entries (newest first, with blank
-//            lines between entries) to the GMScreen sheet via the server-side
-//            fSetServerSheetData function. Uses a lock and snapshots the array.
+//            lines between entries) sequentially to the GMScreen sheet ('db') and
+//            the PartyLog sheet ('ps') via fSetServerSheetData.
+//            Uses a lock and snapshots the array. Releases lock after both attempts.
 // Inputs  -> None (Uses gUI.plainTextLogEntries, gUI.GMSCREEN_LOG_MAX_CHARS, gUI.isSendingLog).
-// Outputs -> None (Calls google.script.run if not already sending).
-function fSendLogToGMScreen() {
+// Outputs -> None (Calls google.script.run for both targets).
+function fSendLogToGMScreenNPS() {
     // === Check Lock ===
     if (gUI.isSendingLog) {
         fMyConsoleLog("📤 Log send already in progress, skipping.");
@@ -3682,41 +3683,68 @@ function fSendLogToGMScreen() {
 
     // === Set Lock ===
     gUI.isSendingLog = true;
-    fMyConsoleLog("📤 Preparing to send log to GMScreen (Lock Acquired)...");
+    fMyConsoleLog("📤 Preparing to send log to GMScreen & PartyLog (Lock Acquired)...");
 
-    // === 1. Take Snapshot of Log Array State IMMEDIATELY ===
+    // === 1. Take Snapshot & Prepare Log Content ===
+    // Snapshot prevents race conditions if new logs are added while sending
     const logEntriesSnapshot = [...gUI.plainTextLogEntries];
-
-    // === 2. Prepare Log Content from Snapshot ===
     const reversedLogEntries = logEntriesSnapshot.reverse();
-    // Join the *reversed* log entries with THREE newline characters for TWO blank lines <<< MODIFIED >>>
+    // Join with THREE newlines for TWO blank lines between entries
     const combinedLog = reversedLogEntries.join('\n\n\n');
     const truncatedLog = combinedLog.substring(0, gUI.GMSCREEN_LOG_MAX_CHARS);
     const originalLength = combinedLog.length;
     const truncatedLength = truncatedLog.length;
-
     fMyConsoleLog(`   -> Log Entries Snapshotted: ${logEntriesSnapshot.length}, Combined Chars: ${originalLength}, Truncated Chars Sent: ${truncatedLength}`);
 
-    // === 3. Define Target Range ===
-    const targetRange = { r1: 'Log', c1: 'Slot1', r2: 'Log', c2: 'Slot1' };
+    // === 2. Define Targets ===
+    const targetGMScreen = {
+        key: 'db',
+        sheet: 'GMScreen',
+        range: { r1: 'Log', c1: 'Slot1', r2: 'Log', c2: 'Slot1' },
+        desc: 'GMScreen' // Description for logging
+    };
+    const targetPartyLog = {
+        key: 'ps',
+        sheet: 'PartyLog',
+        range: { r1: 'Log', c1: 'Slot1', r2: 'Log', c2: 'Slot1' },
+        desc: 'PartyLog' // Description for logging
+    };
 
-    // === 4. Call Server Function ===
-    fMyConsoleLog(`   -> Calling fSetServerSheetData for sheetKey 'db', sheet 'GMScreen', range ${JSON.stringify(targetRange)}...`);
-    google.script.run
-        .withSuccessHandler(() => {
-            fMyConsoleLog("   -> ✅ GMScreen log updated successfully.");
-            gUI.isSendingLog = false; // Release Lock
-        })
-        .withFailureHandler((error) => {
-            const errorMsg = error?.message || "Unknown server error";
-            console.error(`fSendLogToGMScreen Failure: ${errorMsg}`, error);
-            fMyConsoleLog(`   -> ❌ Error updating GMScreen log: ${errorMsg}`);
-            gUI.isSendingLog = false; // Release Lock
-            // fShowMessage(`Warning: Could not update GM Screen log: ${errorMsg}`).catch(e => console.error("Error showing message:", e));
-        })
-        .fSetServerSheetData('db', 'GMScreen', targetRange, truncatedLog);
+    // === 3. Function to Call Server (to avoid repetition) ===
+    const callServer = (target, isSecondCall = false) => {
+        fMyConsoleLog(`   -> Calling fSetServerSheetData for ${target.desc}...`);
+        google.script.run
+            .withSuccessHandler(() => {
+                fMyConsoleLog(`   -> ✅ ${target.desc} log updated successfully.`);
+                // If this was the FIRST call (GMScreen), now make the second call (PartyLog)
+                if (!isSecondCall) {
+                    callServer(targetPartyLog, true); // Make the second call
+                } else {
+                    // If this was the SECOND call, release the lock
+                    gUI.isSendingLog = false;
+                    fMyConsoleLog("   -> ✅ Both logs updated. Lock Released.");
+                }
+            })
+            .withFailureHandler((error) => {
+                const errorMsg = error?.message || "Unknown server error";
+                console.error(`fSendLogToGMScreenNPS Failure for ${target.desc}: ${errorMsg}`, error);
+                fMyConsoleLog(`   -> ❌ Error updating ${target.desc} log: ${errorMsg}`);
+                // --- Failure Handling ---
+                // Release lock immediately on any failure
+                gUI.isSendingLog = false;
+                fMyConsoleLog("   -> ❌ Lock Released due to error.");
+                // Show message only if the critical GMScreen update failed
+                if (target.key === 'db') {
+                   fShowMessage(`Warning: Could not update main GM Screen log: ${errorMsg}`).catch(e => console.error("Error showing message:", e));
+                }
+            })
+            .fSetServerSheetData(target.key, target.sheet, target.range, truncatedLog);
+    };
 
-} // END fSendLogToGMScreen
+    // === 4. Initiate the First Call (GMScreen) ===
+    callServer(targetGMScreen, false);
+
+} // END fSendLogToGMScreenNPS
 
 
 
@@ -3830,7 +3858,7 @@ async function fHandleNishStartOrEnd() {
     fMyConsoleLog("✅ Nish Start or End Action Completed.");
 
     // Send log update to GMScreen (with slight delay)
-    setTimeout(() => fSendLogToGMScreen(), 0); // <<< MODIFIED >>>
+    setTimeout(() => fSendLogToGMScreenNPS(), 0); // <<< MODIFIED >>>
 
 } // END fHandleNishStartOrEnd
 
@@ -3970,7 +3998,7 @@ async function fMetaFlood() {
         fShowSidebar();
 
         // Send log update to GMScreen (with slight delay) <<< ADDED CALL >>>
-        setTimeout(() => fSendLogToGMScreen(), 0);
+        setTimeout(() => fSendLogToGMScreenNPS(), 0);
     }
 } // END fMetaFlood
 
@@ -4158,7 +4186,7 @@ async function fCalc_NaturalHealing() {
     fMyConsoleLog(`✅ Natural Healing Process Complete ${errorsOccurred ? '(with errors)' : ''}.`);
 
     // === 5. Send Log Update (with slight delay) ===
-    setTimeout(() => fSendLogToGMScreen(), 0); // <<< MODIFIED >>>
+    setTimeout(() => fSendLogToGMScreenNPS(), 0); // <<< MODIFIED >>>
 
 } // END fCalc_NaturalHealing
 
@@ -4260,7 +4288,7 @@ async function fHealAllWounds() {
     fMyConsoleLog(`✅ Clear All Wounds Process Complete ${errorsOccurred ? '(with errors)' : ''}.`);
 
     // Send log update to GMScreen (with slight delay) <<< MODIFIED >>>
-    setTimeout(() => fSendLogToGMScreen(), 0);
+    setTimeout(() => fSendLogToGMScreenNPS(), 0);
 
 } // END fHealAllWounds
 
@@ -4283,7 +4311,7 @@ async function fHandleRestTimeRest() {
     fMyConsoleLog("✅ Rest Action Completed.");
 
     // Send log update to GMScreen (with slight delay) <<< MODIFIED >>>
-    setTimeout(() => fSendLogToGMScreen(), 0);
+    setTimeout(() => fSendLogToGMScreenNPS(), 0);
 
 } // END fHandleRestTimeRest
 
@@ -4309,7 +4337,7 @@ async function fHandleRestTimeNewSession() {
 
     // Send log update to GMScreen (with slight delay) <<< MODIFIED >>>
     // This ensures this *final* message is also included if fLuck_SetToMax finished quickly
-    setTimeout(() => fSendLogToGMScreen(), 0);
+    setTimeout(() => fSendLogToGMScreenNPS(), 0);
 
 } // END fHandleRestTimeNewSession
 
@@ -4335,7 +4363,7 @@ async function fHandleRestTimeSleep() {
 
     // Send log update to GMScreen (with slight delay) <<< MODIFIED >>>
     // This ensures this *final* message is included if helpers finished quickly
-    setTimeout(() => fSendLogToGMScreen(), 0);
+    setTimeout(() => fSendLogToGMScreenNPS(), 0);
 
 } // END fHandleRestTimeSleep
 
@@ -4367,7 +4395,7 @@ function fMeta_SetToMax() {
         fShowSidebar();
 
         // Send log update to GMScreen (with slight delay) <<< MODIFIED >>>
-        setTimeout(() => fSendLogToGMScreen(), 0);
+        setTimeout(() => fSendLogToGMScreenNPS(), 0);
     }
 } // END fMeta_SetToMax
 
@@ -4406,7 +4434,7 @@ async function fLuck_SetToMax() {
         fShowSidebar();
 
         // Send log update to GMScreen (with slight delay) <<< MODIFIED >>>
-        setTimeout(() => fSendLogToGMScreen(), 0);
+        setTimeout(() => fSendLogToGMScreenNPS(), 0);
     }
 } // END fLuck_SetToMax
 
@@ -4661,7 +4689,7 @@ async function fHandleResetAllToMax() {
         fMyConsoleLog("   -> Cleared local logs (HTML & array).");
 
         // --- Execute Reset Sequence ---
-        // NOTE: These functions log AND call fSendLogToGMScreen (delayed)
+        // NOTE: These functions log AND call fSendLogToGMScreenNPS (delayed)
         fClearCurrentNish();         // Sync
         await fMetaFlood();          // Async (Logs only)
         fClearChanneledMeta();       // Sync
@@ -4682,7 +4710,7 @@ async function fHandleResetAllToMax() {
         fMyConsoleLog("✅ Reset All to Max Action Completed.");
 
         // Send final log state AFTER all actions AND the final message are logged (with slight delay)
-        setTimeout(() => fSendLogToGMScreen(), 0); // <<< MODIFIED >>>
+        setTimeout(() => fSendLogToGMScreenNPS(), 0); // <<< MODIFIED >>>
 
     } else {
         fMyConsoleLog("   -> User cancelled Reset All action.");
@@ -4924,7 +4952,7 @@ function fClearCurrentNish() {
 // Purpose -> Handles the <Game><Clear><Roll Log> menu action. Clears the sidebar,
 //            plain text log array, displays confirmation, shows sidebar, and sends update.
 // Inputs  -> None.
-// Outputs -> None (Modifies sidebar DOM, gUI.plainTextLogEntries, calls fShowSidebar, fSendLogToGMScreen).
+// Outputs -> None (Modifies sidebar DOM, gUI.plainTextLogEntries, calls fShowSidebar, fSendLogToGMScreenNPS).
 function fClearRollLog() {
     fMyConsoleLog("⚙️ Menu Action: Clearing Roll Log...");
     const sidebarContent = document.getElementById('sidebar-content');
@@ -4947,7 +4975,7 @@ function fClearRollLog() {
     fShowSidebar();
 
     // Send the cleared state (with the confirmation message) to the GMScreen (with slight delay)
-    setTimeout(() => fSendLogToGMScreen(), 0);
+    setTimeout(() => fSendLogToGMScreenNPS(), 0);
 
 } // END fClearRollLog
 
@@ -5448,16 +5476,16 @@ function fSetupModalListeners() {
 // fSetupMenuInteractivity /////////////////////////////////////////////////////////
 // Purpose -> Orchestrates the setup of all menu bar and sidebar interactivity,
 //            including button clicks, dropdown toggles, submenu hover behavior,
-//            and delegated menu action clicks.
+//            delegated menu action clicks, and sidebar header/close buttons.
 // Inputs  -> None (Gets elements by ID).
 // Outputs -> None (Attaches various event listeners).
 function fSetupMenuInteractivity() {
-    fMyConsoleLog("⚙️ Setting up Menu Interactivity...");
+    fMyConsoleLog("⚙️ Setting up Menu & Sidebar Interactivity...");
 
     // === Get Element References ===
     const menuBar = document.getElementById('menu-bar');
     const btnNish = document.getElementById('btn-nish');
-    const btnRoll = document.getElementById('btn-roll');
+    const btnRoll = document.getElementById('btn-roll'); // Keep reference for sidebar button
     const btnFree = document.getElementById('btn-free');
     const btnLuck = document.getElementById('btn-luck');
     const btnGame = document.getElementById('btn-game-menu');
@@ -5465,10 +5493,13 @@ function fSetupMenuInteractivity() {
     const btnGear = document.getElementById('btn-gear-menu');
     const dropdownGear = document.getElementById('dropdown-gear');
     const sidebarCloseBtn = document.getElementById('sidebar-close-btn');
+    const sidebarRollBtn = document.getElementById('sidebar-roll-btn'); // <<< NEW
+    const sidebarRefreshLogBtn = document.getElementById('sidebar-refresh-log-btn'); // <<< NEW
 
     // === Validate Elements ===
     // Check if all required elements were found
-    if (!menuBar || !btnNish || !btnRoll || !btnFree || !btnLuck || !btnGame || !dropdownGame || !btnGear || !dropdownGear || !sidebarCloseBtn) {
+    // <<< Added sidebarRollBtn, sidebarRefreshLogBtn to validation >>>
+    if (!menuBar || !btnNish || !btnRoll || !btnFree || !btnLuck || !btnGame || !dropdownGame || !btnGear || !dropdownGear || !sidebarCloseBtn || !sidebarRollBtn || !sidebarRefreshLogBtn) {
         console.error("❌ Could not find all required menu/sidebar elements for interactivity setup.");
         // Log specific missing elements for easier debugging
         if(!btnNish) console.error("     -> Missing: #btn-nish");
@@ -5480,22 +5511,42 @@ function fSetupMenuInteractivity() {
         if(!btnGear) console.error("     -> Missing: #btn-gear-menu");
         if(!dropdownGear) console.error("     -> Missing: #dropdown-gear");
         if(!sidebarCloseBtn) console.error("     -> Missing: #sidebar-close-btn");
+        if(!sidebarRollBtn) console.error("     -> Missing: #sidebar-roll-btn"); // <<< NEW Check
+        if(!sidebarRefreshLogBtn) console.error("     -> Missing: #sidebar-refresh-log-btn"); // <<< NEW Check
         return; // Stop setup if essential elements are missing
     }
 
     // === Attach Listeners ===
-    // Main menu button click handlers (Nish, Roll, Free, Luck, Game, Gear)
+    // Main menu bar button click handlers (Nish, Roll, Free, Luck, Game, Gear)
     fSetupMenuButtonListeners(btnNish, btnRoll, btnFree, btnLuck, btnGame, dropdownGame, btnGear, dropdownGear);
+
     // Window listener to close dropdowns on outside click
     fSetupWindowClickListener();
+
     // Delegated listener for actions within dropdown menus
     fSetupDelegatedMenuActionClick(menuBar);
+
     // Listeners for submenu hover behavior
     fSetupSubMenuHover(menuBar);
+
     // Listener for the sidebar close button
     sidebarCloseBtn.addEventListener('click', fHideSidebar);
 
-    fMyConsoleLog("✅ Menu Interactivity Setup Done");
+    // --- NEW: Sidebar Header Button Listeners ---
+    // Sidebar Roll Button (simulates click on main Roll button)
+    sidebarRollBtn.addEventListener('click', () => {
+        fMyConsoleLog("🖱️ Sidebar Roll Button Clicked -> Simulating Main Roll Button Click...");
+        btnRoll.click(); // Trigger the click handler of the main #btn-roll
+    });
+
+    // Sidebar Refresh Log Button (calls function to resend log)
+    sidebarRefreshLogBtn.addEventListener('click', () => {
+        fMyConsoleLog("🖱️ Sidebar Refresh Log Button Clicked -> Calling fSendLogToGMScreenNPS...");
+        fSendLogToGMScreenNPS(); // Call the function to resend logs
+    });
+    // --- End NEW Listeners ---
+
+    fMyConsoleLog("✅ Menu & Sidebar Interactivity Setup Done");
 
 } // END fSetupMenuInteractivity
 
