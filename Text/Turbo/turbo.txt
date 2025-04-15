@@ -772,3 +772,201 @@ function fGetDocumentText(docId) {
 } // END fGetDocumentText
 
 
+
+
+// fGetCharacterHeaderData /////////////////////////////////////////////////////
+// Purpose -> Reads specific static data (Race/Class, Level, Player/Char Names)
+//            from the player's Character Sheet ('RaceClass' tab).
+// Inputs  -> csId (String): The ID of the player's Character Sheet. // <<< MODIFIED
+// Outputs -> (Object): { raceClass, level, playerName, charName } on success.
+// Throws  -> (Error): If sheet/tab/tags not found or values are missing.
+function fGetCharacterHeaderData(csId) { // <<< MODIFIED: Added csId parameter
+    const funcName = "fGetCharacterHeaderData";
+    // Logger.log(`${funcName}: Fetching static header data from CS ID: ${csId}`); // <<< MODIFIED: Log received csId
+
+    try {
+        // --- 1. Validate CS ID ---
+        // const csId = gSrv.ids.sheets.cs; // <<< REMOVED: csId is now passed as argument
+        if (!csId) { // <<< Keep validation for the passed argument
+            throw new Error("Character Sheet ID argument was not provided or is empty.");
+        }
+
+        // --- 2. Open Sheet & Tab ---
+        const ss = SpreadsheetApp.openById(csId);
+        const raceClassSheet = ss.getSheetByName('RaceClass');
+        if (!raceClassSheet) {
+            throw new Error(`Sheet named 'RaceClass' not found in CS ID: ${csId}.`);
+        }
+
+        // ... (rest of the function remains the same) ...
+        // --- 3. Read Full Data & Build Tags ---
+        const fullData = raceClassSheet.getDataRange().getValues();
+        if (fullData.length === 0 || fullData[0]?.length === 0) {
+            throw new Error(`Sheet 'RaceClass' in CS ID: ${csId} appears empty.`);
+        }
+        const { rowTag, colTag } = fServerBuildTagMaps(fullData);
+
+        // --- 4. Resolve Target Cell Indices ---
+        const colValIndex = fServerResolveTag('Val', colTag, 'col');
+        const rowRaceClassIndex = fServerResolveTag('RC', rowTag, 'row');
+        const rowLevelIndex = fServerResolveTag('level', rowTag, 'row');
+        const rowPlayerNameIndex = fServerResolveTag('playerName', rowTag, 'row');
+        const rowCharNameIndex = fServerResolveTag('charName', rowTag, 'row');
+
+        // Validate all tags resolved
+        if ([colValIndex, rowRaceClassIndex, rowLevelIndex, rowPlayerNameIndex, rowCharNameIndex].some(isNaN)) {
+            let missing = [];
+            if (isNaN(colValIndex)) missing.push("Column 'Val'");
+            if (isNaN(rowRaceClassIndex)) missing.push("Row 'RC'");
+            if (isNaN(rowLevelIndex)) missing.push("Row 'level'");
+            if (isNaN(rowPlayerNameIndex)) missing.push("Row 'playerName'");
+            if (isNaN(rowCharNameIndex)) missing.push("Row 'charName'");
+            throw new Error(`Could not resolve required tags in 'RaceClass' sheet: ${missing.join(', ')}.`);
+        }
+
+        // --- 5. Extract Values ---
+        const raceClass = fullData[rowRaceClassIndex]?.[colValIndex] ?? '';
+        const level = fullData[rowLevelIndex]?.[colValIndex] ?? '';
+        const playerNameRaw = fullData[rowPlayerNameIndex]?.[colValIndex] ?? '';
+        const charNameRaw = fullData[rowCharNameIndex]?.[colValIndex] ?? '';
+
+        // --- 6. Process Player/Char Names (Get first word) ---
+        const playerName = String(playerNameRaw).trim().split(' ')[0] || '';
+        const charName = String(charNameRaw).trim().split(' ')[0] || '';
+
+        // --- 7. Log and Return ---
+        const result = {
+            raceClass: String(raceClass),
+            level: String(level),
+            playerName: playerName,
+            charName: charName
+        };
+        Logger.log(`${funcName}: Success. Returning: ${JSON.stringify(result)}`);
+        return result;
+
+    } catch (e) {
+        // Log detailed error and re-throw
+        console.error(`Error in ${funcName} for CS ID ${csId}: ${e.message}\nStack: ${e.stack}`); // Added csId to log
+        throw new Error(`Server error getting character header data: ${e.message || e}`);
+    }
+
+} // END fGetCharacterHeaderData
+
+
+
+// fSetLogAndHeaderData ////////////////////////////////////////////////////////
+// Purpose -> Writes bundled log and header data to target sheets (DB/GMScreen
+//            and PS/PartyLog) using relative offsets from a base cell.
+// Inputs  -> dataBundle (Object): { log, vit, nish, url, raceClass, level, playerChar }
+// Outputs -> (Boolean): True if both writes succeeded, false otherwise.
+// Throws  -> (Error): If critical errors occur (e.g., opening sheets, resolving base cell).
+function fSetLogAndHeaderData(dataBundle) {
+    const funcName = "fSetLogAndHeaderData";
+    Logger.log(`${funcName}: Received data bundle. Preparing to write to DB and PS.`);
+
+    // --- 1. Validate Input Bundle ---
+    const requiredKeys = ['log', 'vit', 'nish', 'url', 'raceClass', 'level', 'playerChar'];
+    if (!dataBundle || typeof dataBundle !== 'object' || !requiredKeys.every(key => dataBundle.hasOwnProperty(key))) {
+        const missing = requiredKeys.filter(key => !dataBundle?.hasOwnProperty(key));
+        const errorMsg = `Invalid or incomplete dataBundle received. Missing keys: ${missing.join(', ')}`;
+        console.error(`${funcName} Error: ${errorMsg}`);
+        throw new Error(`${funcName}: ${errorMsg}`);
+    }
+
+    // --- 2. Define Targets and Base Cell ---
+    const targets = [
+        { key: 'db', sheetName: 'GMScreen' },
+        { key: 'ps', sheetName: 'PartyLog' }
+    ];
+    const baseCellTagR = 'Log';
+    const baseCellTagC = 'Slot1';
+    const numHeaderRows = 6; // Number of rows above the log row (URL, Race, Level, Vit, Nish, Player)
+
+    // --- 3. Prepare Data Array (in correct vertical order) ---
+    const dataToWrite = [
+        [dataBundle.url],        // Log - 6
+        [dataBundle.raceClass],  // Log - 5
+        [dataBundle.level],      // Log - 4
+        [dataBundle.vit],        // Log - 3
+        [dataBundle.nish],       // Log - 2
+        [dataBundle.playerChar], // Log - 1
+        [dataBundle.log]         // Log Row
+    ];
+
+    let overallSuccess = true;
+
+    // --- 4. Loop Through Targets and Write Data ---
+    for (const target of targets) {
+        Logger.log(`${funcName}: Processing target: Key='${target.key}', Sheet='${target.sheetName}'`);
+        let success = false;
+        try {
+            const fileId = gSrv.ids.sheets[target.key.toLowerCase()];
+            if (!fileId) { throw new Error(`Could not find File ID for key '${target.key}'`); }
+
+            const ss = SpreadsheetApp.openById(fileId);
+            const sh = ss.getSheetByName(target.sheetName);
+            if (!sh) { throw new Error(`Sheet named "${target.sheetName}" not found in Sheet ID: ${fileId} (Key: ${target.key}).`); }
+
+            // Read full data *for this sheet* to build tag maps
+            const fullData = sh.getDataRange().getValues();
+            if (fullData.length === 0 || fullData[0]?.length === 0) {
+                console.warn(`${funcName}: Target sheet "${target.sheetName}" appears empty. Cannot resolve base cell.`);
+                throw new Error(`Target sheet "${target.sheetName}" is empty.`);
+            }
+            const { rowTag, colTag } = fServerBuildTagMaps(fullData);
+
+            // Resolve the *base cell* ('Log', 'Slot1') to absolute indices
+            const baseRowIndex = fServerResolveTag(baseCellTagR, rowTag, 'row');
+            const baseColIndex = fServerResolveTag(baseCellTagC, colTag, 'col');
+            if (isNaN(baseRowIndex) || isNaN(baseColIndex)) {
+                throw new Error(`Could not resolve base cell tags ('${baseCellTagR}', '${baseCellTagC}') in sheet "${target.sheetName}".`);
+            }
+            Logger.log(`   -> Resolved Base Cell ('${baseCellTagR}', '${baseCellTagC}') to [${baseRowIndex}, ${baseColIndex}] in "${target.sheetName}".`);
+
+            // Calculate the top-left cell of the 7-row range
+            const startRowIndex = baseRowIndex - numHeaderRows;
+            const startColIndex = baseColIndex; // Only writing to one column
+            const numRowsToWrite = dataToWrite.length; // Should be 7
+            const numColsToWrite = 1;
+
+            // Validate start row index
+            if (startRowIndex < 0) {
+                throw new Error(`Calculated start row index (${startRowIndex}) is invalid (must be >= 0). Base cell ('${baseCellTagR}') might be too high.`);
+            }
+
+            // Get the target range using row/column indices (1-based for getRange)
+            const targetRange = sh.getRange(startRowIndex + 1, startColIndex + 1, numRowsToWrite, numColsToWrite);
+            const targetA1 = targetRange.getA1Notation();
+            Logger.log(`   -> Target range calculated: ${targetA1} (${numRowsToWrite}x${numColsToWrite})`);
+
+            // Write the prepared 2D array
+            targetRange.setValues(dataToWrite);
+            Logger.log(`   -> Successfully wrote data to ${targetA1} in sheet "${target.sheetName}".`);
+            success = true;
+
+        } catch (e) {
+            // Log error for this specific target but continue to the next target
+            console.error(`Error writing to target ${target.key}/${target.sheetName}: ${e.message}\nStack: ${e.stack}`);
+            overallSuccess = false; // Mark that at least one target failed
+        }
+    } // End loop through targets
+
+    // --- 5. Return Overall Success Status ---
+    Logger.log(`${funcName}: Finished processing all targets. Overall Success: ${overallSuccess}`);
+    // Note: This function returns true even if only *one* target succeeded,
+    //       but logs errors for failures. Adjust if stricter all-or-nothing needed.
+    //       Returning overallSuccess requires BOTH to succeed.
+    if (!overallSuccess) {
+       // Optionally throw an error here if partial success is unacceptable
+       // throw new Error("Failed to write update to one or more target sheets.");
+       Logger.log(`${funcName}: Write failed for at least one target.`);
+    }
+
+    return overallSuccess; // Return true only if BOTH writes succeeded
+
+} // END fSetLogAndHeaderData
+
+
+
+
+

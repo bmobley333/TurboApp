@@ -44,6 +44,14 @@ const gUI = {
   plainTextLogEntries: [],  // Array to store plain text log entries for GMScreen update
   isSendingLog: false,      // <<< NEW: Flag/Lock to prevent concurrent log sends
 
+  // === Character RaceClass Info ===
+  characterInfo: { 
+    raceClass: '',
+    level: '',
+    playerName: '',
+    charName: ''
+  },
+  
   // === Roll Object State ===
   roll: {
     // --- Input values from Sheet (populated by fResetPopulateNCleanGUIRoll) ---
@@ -3668,81 +3676,86 @@ function fSetupSingleSubMenuItem(item, index) {
 
 
 // fSendLogToGMScreenNPS ////////////////////////////////////////////////////////////
-// Purpose -> Sends the accumulated plain text log entries (newest first, with blank
-//            lines between entries) sequentially to the GMScreen sheet ('db') and
-//            the PartyLog sheet ('ps') via fSetServerSheetData.
-//            Uses a lock and snapshots the array. Releases lock after both attempts.
-// Inputs  -> None (Uses gUI.plainTextLogEntries, gUI.GMSCREEN_LOG_MAX_CHARS, gUI.isSendingLog).
-// Outputs -> None (Calls google.script.run for both targets).
+// Purpose -> Sends bundled log and header data (dynamic + static) sequentially to
+//            the GMScreen sheet ('db') and the PartyLog sheet ('ps') via the
+//            server-side fSetLogAndHeaderData function. Uses a lock.
+// Inputs  -> None (Uses gUI state: plainTextLogEntries, arr, characterInfo, isSendingLog).
+// Outputs -> None (Calls google.script.run if not already sending).
 function fSendLogToGMScreenNPS() {
-    // === Check Lock ===
+    // === 1. Check Lock ===
     if (gUI.isSendingLog) {
-        fMyConsoleLog("📤 Log send already in progress, skipping.");
+        fMyConsoleLog("📤 Log & Header send already in progress, skipping.");
         return;
     }
 
-    // === Set Lock ===
+    // === 2. Set Lock ===
     gUI.isSendingLog = true;
-    fMyConsoleLog("📤 Preparing to send log to GMScreen & PartyLog (Lock Acquired)...");
+    fMyConsoleLog("📤 Preparing to send Log & Header data (Lock Acquired)...");
 
-    // === 1. Take Snapshot & Prepare Log Content ===
-    // Snapshot prevents race conditions if new logs are added while sending
+    // === 3. Prepare Log Content ===
     const logEntriesSnapshot = [...gUI.plainTextLogEntries];
     const reversedLogEntries = logEntriesSnapshot.reverse();
-    // Join with THREE newlines for TWO blank lines between entries
     const combinedLog = reversedLogEntries.join('\n\n\n');
     const truncatedLog = combinedLog.substring(0, gUI.GMSCREEN_LOG_MAX_CHARS);
-    const originalLength = combinedLog.length;
-    const truncatedLength = truncatedLog.length;
-    fMyConsoleLog(`   -> Log Entries Snapshotted: ${logEntriesSnapshot.length}, Combined Chars: ${originalLength}, Truncated Chars Sent: ${truncatedLength}`);
+    fMyConsoleLog(`   -> Log Content Prepared (Entries: ${logEntriesSnapshot.length}, Length: ${truncatedLog.length})`);
 
-    // === 2. Define Targets ===
-    const targetGMScreen = {
-        key: 'db',
-        sheet: 'GMScreen',
-        range: { r1: 'Log', c1: 'Slot1', r2: 'Log', c2: 'Slot1' },
-        desc: 'GMScreen' // Description for logging
-    };
-    const targetPartyLog = {
-        key: 'ps',
-        sheet: 'PartyLog',
-        range: { r1: 'Log', c1: 'Slot1', r2: 'Log', c2: 'Slot1' },
-        desc: 'PartyLog' // Description for logging
-    };
+    // === 4. Prepare Header Data ===
+    // --- Dynamic Data (from gUI.arr) ---
+    const vitMax = fGetGridValue('VitTbl', 'vitMax') ?? '?';
+    const vitNow = fGetGridValue('VitTbl', 'vitNow') ?? '?';
+    const vitPercent = fGetGridValue('VitTbl', 'VitNowPercent') ?? '?%';
+    const vitString = `${vitNow} of ${vitMax} (${vitPercent})`;
+    const nishValue = fGetGridValue('Nish', 'Nish') ?? '';
+    fMyConsoleLog(`   -> Dynamic Header Data: Vit='${vitString}', Nish='${nishValue}'`);
 
-    // === 3. Function to Call Server (to avoid repetition) ===
-    const callServer = (target, isSecondCall = false) => {
-        fMyConsoleLog(`   -> Calling fSetServerSheetData for ${target.desc}...`);
-        google.script.run
-            .withSuccessHandler(() => {
-                fMyConsoleLog(`   -> ✅ ${target.desc} log updated successfully.`);
-                // If this was the FIRST call (GMScreen), now make the second call (PartyLog)
-                if (!isSecondCall) {
-                    callServer(targetPartyLog, true); // Make the second call
-                } else {
-                    // If this was the SECOND call, release the lock
-                    gUI.isSendingLog = false;
-                    fMyConsoleLog("   -> ✅ Both logs updated. Lock Released.");
-                }
-            })
-            .withFailureHandler((error) => {
-                const errorMsg = error?.message || "Unknown server error";
-                console.error(`fSendLogToGMScreenNPS Failure for ${target.desc}: ${errorMsg}`, error);
-                fMyConsoleLog(`   -> ❌ Error updating ${target.desc} log: ${errorMsg}`);
-                // --- Failure Handling ---
-                // Release lock immediately on any failure
-                gUI.isSendingLog = false;
-                fMyConsoleLog("   -> ❌ Lock Released due to error.");
-                // Show message only if the critical GMScreen update failed
-                if (target.key === 'db') {
-                   fShowMessage(`Warning: Could not update main GM Screen log: ${errorMsg}`).catch(e => console.error("Error showing message:", e));
-                }
-            })
-            .fSetServerSheetData(target.key, target.sheet, target.range, truncatedLog);
+    // --- Static/Constructed Data (from gUI.characterInfo / gIndexCSID) ---
+    // Use || {} as fallback in case characterInfo hasn't loaded yet
+    const { raceClass, level, playerName, charName } = gUI.characterInfo || {};
+    const playerCharString = `${playerName || '?'} (${charName || '?'})`;
+
+    // let urlStr = "https://docs.google.com/spreadsheets/d/";
+    // urlStr += String(gIndexCSID);
+    // const characterUrl = urlStr;
+    const characterUrl = "https://docs.google.com/spreadsheets/d/" + gIndexCSID + "/";
+
+    fMyConsoleLog(`   -> Static Header Data: URL='${characterUrl}', RaceClass='${raceClass}', Level='${level}', PlayerChar='${playerCharString}'`);
+
+    // === 5. Create Data Bundle ===
+    const dataBundle = {
+        log: truncatedLog,
+        vit: vitString,
+        nish: nishValue,
+        url: characterUrl,
+        raceClass: raceClass || '', // Ensure strings
+        level: level || '',
+        playerChar: playerCharString
     };
 
-    // === 4. Initiate the First Call (GMScreen) ===
-    callServer(targetGMScreen, false);
+    // === 6. Call Server Function ===
+    fMyConsoleLog(`   -> Calling fSetLogAndHeaderData with bundled data...`);
+    google.script.run
+        .withSuccessHandler((success) => {
+            if (success) {
+                fMyConsoleLog("   -> ✅ Log & Headers updated successfully on server targets.");
+            } else {
+                // Server function returned false, indicating one or both writes failed (error logged server-side)
+                fMyConsoleLog("   -> ⚠️ Log & Headers update partially failed on server. Check server logs.");
+                // Optionally show a less severe message than full failure
+                fShowMessage("Warning: Update failed for one or more target sheets.").catch(e => console.error("Error showing message:", e));
+            }
+            gUI.isSendingLog = false; // Release Lock
+            fMyConsoleLog("   -> Lock Released.");
+        })
+        .withFailureHandler((error) => {
+            // Handle transport errors or server-side exceptions
+            const errorMsg = error?.message || "Unknown server error";
+            console.error(`fSendLogToGMScreenNPS Failure: ${errorMsg}`, error);
+            fMyConsoleLog(`   -> ❌ Error sending Log & Headers: ${errorMsg}`);
+            gUI.isSendingLog = false; // Release Lock
+            fMyConsoleLog("   -> Lock Released due to error.");
+            fShowMessage(`Error: Could not send updates: ${errorMsg}`).catch(e => console.error("Error showing message:", e));
+        })
+        .fSetLogAndHeaderData(dataBundle); // Call the new server function
 
 } // END fSendLogToGMScreenNPS
 
@@ -5565,35 +5578,75 @@ function fSetupMenuInteractivity() {
 
 
 
+// scripts.html
+
 // fOnDataLoaded ///////////////////////////////////////////////////////////////////
 // Purpose -> Callback function executed upon successful data retrieval from the
 //            server (fCSGetGameSheet5). Validates data, stores it in gUI, sets up
-//            UI elements (tooltip, modal), and initiates the grid rendering process
-//            with fRunPostRenderFormatting as the final callback.
-// Inputs  -> data (Object): The structured data object from the server, containing
-//                           { arr, format, notesArr }.
+//            UI elements, fetches static header data, and initiates grid rendering.
+// Inputs  -> data (Object): The structured data object from the server { arr, format, notesArr }.
 // Outputs -> None (Initiates UI rendering and setup).
 function fOnDataLoaded(data) {
-    fMyConsoleLog("✅ Data received from server");
+    fMyConsoleLog("✅ Main Sheet Data received from server");
 
-    // === Validate and Store Data ===
+    // === 1. Validate and Store Main Data ===
     const isValid = fStoreAndValidateData(data);
-    if (!isValid) {
-        // Error handled within fStoreAndValidateData
-        return;
-    }
+    if (!isValid) { return; } // Stop if main data invalid
 
-    // === Initial UI Setup (Before Render) ===
-    // Cache references to tooltip/modal elements
-    fSetupTooltipAndModal();
+    // === 2. Initial UI Setup (Before Render) ===
+    fSetupTooltipAndModal(); // Cache tooltip/modal elements
 
-    // === Render Grid and Apply Post-Processing ===
-    // Start the main grid rendering process
-    fRenderFullGrid(() => {
-        // This callback executes *after* the grid structure is rendered
-        fRunPostRenderFormatting(); // Apply merges, borders, listeners, etc.
-    });
+    // === 3. Fetch Static Header Data (Race/Class, Level, Names) ===
+    fMyConsoleLog("⚙️ Requesting Static Character Header Data...");
+    // <<< Pass gIndexCSID to the server function >>>
+    google.script.run
+        .withSuccessHandler((headerData) => {
+            fMyConsoleLog("✅ Static Character Header Data received.");
+            if (headerData && typeof headerData === 'object' && !headerData.error) {
+                // Store the received data
+                gUI.characterInfo = {
+                    raceClass: headerData.raceClass ?? '',
+                    level: headerData.level ?? '',
+                    playerName: headerData.playerName ?? '',
+                    charName: headerData.charName ?? ''
+                };
+                fMyConsoleLog(`   -> Stored Header Data: ${JSON.stringify(gUI.characterInfo)}`);
+
+                // === 4. Render Grid & Apply Post-Processing ===
+                // Now that both main data AND header data are loaded, render the grid.
+                fRenderFullGrid(() => {
+                    fRunPostRenderFormatting(); // Apply merges, borders, listeners, etc.
+                });
+
+            } else {
+                // Handle error case from server function
+                const errMsg = headerData?.message || "Invalid header data structure received.";
+                console.error("Error fetching header data:", errMsg, headerData);
+                fMyConsoleLog(`❌ Failed to fetch/store header data: ${errMsg}`);
+                fShowMessage(`Error fetching character header data: ${errMsg}`).catch(e => console.error("Error showing message:", e));
+                // Decide if grid rendering should proceed without header data?
+                // For now, let's proceed but header info will be blank.
+                fRenderFullGrid(() => {
+                    fRunPostRenderFormatting();
+                });
+            }
+        })
+        .withFailureHandler((error) => {
+            // Handle transport errors
+            const errorMsg = `Failed to call server for header data: ${error.message}`;
+            console.error(errorMsg, error);
+            fMyConsoleLog(`❌ ${errorMsg}`);
+            fShowMessage(`Error fetching character header data: ${error.message}`).catch(e => console.error("Error showing message:", e));
+            // Proceed with grid rendering without header data
+            fRenderFullGrid(() => {
+                fRunPostRenderFormatting();
+            });
+        })
+        .fGetCharacterHeaderData(gIndexCSID); // <<< MODIFIED: Pass gIndexCSID here
+
 } // END fOnDataLoaded
+
+
 
 
 // fStoreAndValidateData ///////////////////////////////////////////////////////////
