@@ -159,12 +159,13 @@
 
  #menu-bar {
   /* Menu Button Spacing */
-  --menu-indent: 60px;
+  --menu-indent: 30px;
   --gap-nish-roll: 100px;
   --gap-roll-free: 30px;
   --gap-free-luck: 10px;
   --gap-luck-game: 125px;
-  --gap-game-gear: 185px;
+  --gap-game-gear: 150px;
+  --gap-gear-data: 150px;
 
   /* Other Menu Bar Styles */
   display: flex;
@@ -246,6 +247,11 @@
 
  #gear-menu-item {
   margin-left: var(--gap-game-gear);
+ }
+
+
+ #data-menu-item {
+  margin-left: var(--gap-gear-data);
  }
 
 

@@ -3877,7 +3877,7 @@ function fSetupDelegatedMenuActionClick(menuBar) {
                  // --- Game Menu Actions ---
                  case 'game-nishStartEnd':       (async () => await fHandleNishStartOrEnd())();      break;
                  case 'game-toggleSidebar':      fToggleSidebar();                              break;
-                 case 'game-updateHeaderInfo':   (async () => await fHandleUpdateHeaderInfo())(); break; // <<< ADDED
+                 case 'game-updateHeaderInfo':   (async () => await fHandleUpdateHeaderInfo())(); break;
                  // case 'game-gmAward':                                                             break; // Handler TBD
                  case 'game-metaFlood':          (async () => await fMetaFlood())();            break;
                  case 'game-healingNatural':     (async () => await fCalc_NaturalHealing())();  break;
@@ -3905,6 +3905,11 @@ function fSetupDelegatedMenuActionClick(menuBar) {
                  // case 'gear-lootGem':                                                           break; // Handler TBD
                  // case 'gear-lootSocketed':                                                      break; // Handler TBD
                  // case 'gear-lootValuables':                                                     break; // Handler TBD
+
+                 // --- Data Menu Actions (Firebase PoC) --- <<< NEW SECTION >>>
+                 case 'data-saveTest':           (async () => await fHandleSaveTestData())();   break;
+                 case 'data-loadTest':           (async () => await fHandleLoadTestData())();   break;
+                 // --- END NEW SECTION ---
 
                  // --- Default (Unhandled Actions) ---
                  default:
@@ -5135,6 +5140,48 @@ function fToggleGearColumns() {
 
 
 
+// fHandleSaveTestData ///////////////////////////////////////////////////////////
+// Purpose -> Handles the "Save Test Data" menu action. Placeholder for now.
+// Inputs  -> None.
+// Outputs -> (Promise<void>): Resolves when actions complete (placeholder).
+async function fHandleSaveTestData() {
+    fMyConsoleLog("⚙️ Menu Action: Save Test Data Triggered...");
+    // TODO:
+    // 1. Get Document ID (e.g., "TestSave_" + gIndexCSID)
+    // 2. Create Data Object { content: "Hello World", timestamp: new Date().toISOString() }
+    // 3. Call server function: google.script.run...fSaveTestDataToFirestore(docId, data)
+    // 4. Handle success/failure -> fShowMessage(...)
+
+    await fShowMessage("Save Test Data action not yet implemented."); // Placeholder message
+
+
+    fMyConsoleLog("✅ Save Test Data Action Placeholder Complete.");
+} // END fHandleSaveTestData
+
+
+
+// fHandleLoadTestData ///////////////////////////////////////////////////////////
+// Purpose -> Handles the "Load Test Data" menu action. Placeholder for now.
+// Inputs  -> None.
+// Outputs -> (Promise<void>): Resolves when actions complete (placeholder).
+async function fHandleLoadTestData() {
+    fMyConsoleLog("⚙️ Menu Action: Load Test Data Triggered...");
+    // TODO:
+    // 1. Get Document ID (e.g., "TestSave_" + gIndexCSID)
+    // 2. Call server function: google.script.run...fLoadTestDataFromFirestore(docId)
+    // 3. Handle success/failure:
+    //    - If data received: fShowMessage("Loaded: " + data.content + " @ " + data.timestamp)
+    //    - If not found: fShowMessage("Test save data not found.")
+    //    - On error: fShowMessage("Error loading data: " + error.message)
+
+    await fShowMessage("Load Test Data action not yet implemented."); // Placeholder message
+
+
+    fMyConsoleLog("✅ Load Test Data Action Placeholder Complete.");
+} // END fHandleLoadTestData
+
+
+
 // ==========================================================================
 // === MENU BAR "LIKE"     (End of Menu Bar Click) ===
 // ==========================================================================
@@ -5584,16 +5631,22 @@ function fSetupMenuInteractivity() {
     const dropdownGame = document.getElementById('dropdown-game');
     const btnGear = document.getElementById('btn-gear-menu');
     const dropdownGear = document.getElementById('dropdown-gear');
+    const btnData = document.getElementById('btn-data-menu');             // <<< NEW
+    const dropdownData = document.getElementById('dropdown-data');         // <<< NEW
     const sidebarCloseBtn = document.getElementById('sidebar-close-btn');
-    const sidebarRollBtn = document.getElementById('sidebar-roll-btn'); // <<< NEW
-    const sidebarRefreshLogBtn = document.getElementById('sidebar-refresh-log-btn'); // <<< NEW
+    const sidebarRollBtn = document.getElementById('sidebar-roll-btn');
+    const sidebarRefreshLogBtn = document.getElementById('sidebar-refresh-log-btn');
 
     // === Validate Elements ===
-    // Check if all required elements were found
-    // <<< Added sidebarRollBtn, sidebarRefreshLogBtn to validation >>>
-    if (!menuBar || !btnNish || !btnRoll || !btnFree || !btnLuck || !btnGame || !dropdownGame || !btnGear || !dropdownGear || !sidebarCloseBtn || !sidebarRollBtn || !sidebarRefreshLogBtn) {
+    // <<< Added btnData, dropdownData to validation >>>
+    if (!menuBar || !btnNish || !btnRoll || !btnFree || !btnLuck ||
+        !btnGame || !dropdownGame || !btnGear || !dropdownGear ||
+        !btnData || !dropdownData || // <<< NEW Check
+        !sidebarCloseBtn || !sidebarRollBtn || !sidebarRefreshLogBtn)
+    {
         console.error("❌ Could not find all required menu/sidebar elements for interactivity setup.");
         // Log specific missing elements for easier debugging
+        if(!menuBar) console.error("     -> Missing: #menu-bar");
         if(!btnNish) console.error("     -> Missing: #btn-nish");
         if(!btnRoll) console.error("     -> Missing: #btn-roll");
         if(!btnFree) console.error("     -> Missing: #btn-free");
@@ -5602,15 +5655,31 @@ function fSetupMenuInteractivity() {
         if(!dropdownGame) console.error("     -> Missing: #dropdown-game");
         if(!btnGear) console.error("     -> Missing: #btn-gear-menu");
         if(!dropdownGear) console.error("     -> Missing: #dropdown-gear");
+        if(!btnData) console.error("     -> Missing: #btn-data-menu");           // <<< NEW Check
+        if(!dropdownData) console.error("     -> Missing: #dropdown-data");         // <<< NEW Check
         if(!sidebarCloseBtn) console.error("     -> Missing: #sidebar-close-btn");
-        if(!sidebarRollBtn) console.error("     -> Missing: #sidebar-roll-btn"); // <<< NEW Check
-        if(!sidebarRefreshLogBtn) console.error("     -> Missing: #sidebar-refresh-log-btn"); // <<< NEW Check
+        if(!sidebarRollBtn) console.error("     -> Missing: #sidebar-roll-btn");
+        if(!sidebarRefreshLogBtn) console.error("     -> Missing: #sidebar-refresh-log-btn");
         return; // Stop setup if essential elements are missing
     }
 
     // === Attach Listeners ===
     // Main menu bar button click handlers (Nish, Roll, Free, Luck, Game, Gear)
     fSetupMenuButtonListeners(btnNish, btnRoll, btnFree, btnLuck, btnGame, dropdownGame, btnGear, dropdownGear);
+
+    // --- Specific Listener for Data Menu Button --- <<< MODIFIED BLOCK >>>
+    if (btnData && dropdownData) {
+        btnData.addEventListener('click', (event) => {
+            event.stopPropagation(); // Prevent window listener from closing it immediately
+            const currentlyShown = dropdownData.classList.contains('show');
+            fCloseAllDropdowns(); // Close any other open menus
+            // Toggle the Data dropdown
+            if (!currentlyShown) {
+                dropdownData.classList.add('show');
+            }
+        });
+    }
+    // --- End MODIFIED BLOCK ---
 
     // Window listener to close dropdowns on outside click
     fSetupWindowClickListener();
@@ -5624,7 +5693,7 @@ function fSetupMenuInteractivity() {
     // Listener for the sidebar close button
     sidebarCloseBtn.addEventListener('click', fHideSidebar);
 
-    // --- NEW: Sidebar Header Button Listeners ---
+    // --- Sidebar Header Button Listeners ---
     // Sidebar Roll Button (simulates click on main Roll button)
     sidebarRollBtn.addEventListener('click', () => {
         fMyConsoleLog("🖱️ Sidebar Roll Button Clicked -> Simulating Main Roll Button Click...");
@@ -5636,10 +5705,9 @@ function fSetupMenuInteractivity() {
         fMyConsoleLog("🖱️ Sidebar Refresh Log Button Clicked -> Calling fSendLogToGMScreenNPS...");
         fSendLogToGMScreenNPS(); // Call the function to resend logs
     });
-    // --- End NEW Listeners ---
+    // --- End Sidebar Listeners ---
 
     fMyConsoleLog("✅ Menu & Sidebar Interactivity Setup Done");
-
 } // END fSetupMenuInteractivity
 
 
