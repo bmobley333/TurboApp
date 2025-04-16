@@ -775,19 +775,19 @@ function fGetDocumentText(docId) {
 
 
 // fGetCharacterHeaderData /////////////////////////////////////////////////////
-// Purpose -> Reads specific static data (Race/Class, Level, Player/Char Names)
+// Purpose -> Reads specific static data (Race/Class, Level, Player/Char Names, Slot)
 //            from the player's Character Sheet ('RaceClass' tab).
-// Inputs  -> csId (String): The ID of the player's Character Sheet. // <<< MODIFIED
-// Outputs -> (Object): { raceClass, level, playerName, charName } on success.
-// Throws  -> (Error): If sheet/tab/tags not found or values are missing.
-function fGetCharacterHeaderData(csId) { // <<< MODIFIED: Added csId parameter
+// Inputs  -> csId (String): The ID of the player's Character Sheet.
+// Outputs -> (Object): { raceClass, level, playerName, charName, slotNum } on success.
+//            'slotNum' will be the cleaned tag (e.g., "Slot3") or null if validation fails.
+// Throws  -> (Error): If sheet/tab/tags not found or critical values are missing.
+function fGetCharacterHeaderData(csId) {
     const funcName = "fGetCharacterHeaderData";
-    // Logger.log(`${funcName}: Fetching static header data from CS ID: ${csId}`); // <<< MODIFIED: Log received csId
+    // Logger.log(`${funcName}: Fetching static header data from CS ID: ${csId}`);
 
     try {
         // --- 1. Validate CS ID ---
-        // const csId = gSrv.ids.sheets.cs; // <<< REMOVED: csId is now passed as argument
-        if (!csId) { // <<< Keep validation for the passed argument
+        if (!csId) {
             throw new Error("Character Sheet ID argument was not provided or is empty.");
         }
 
@@ -798,7 +798,6 @@ function fGetCharacterHeaderData(csId) { // <<< MODIFIED: Added csId parameter
             throw new Error(`Sheet named 'RaceClass' not found in CS ID: ${csId}.`);
         }
 
-        // ... (rest of the function remains the same) ...
         // --- 3. Read Full Data & Build Tags ---
         const fullData = raceClassSheet.getDataRange().getValues();
         if (fullData.length === 0 || fullData[0]?.length === 0) {
@@ -812,15 +811,17 @@ function fGetCharacterHeaderData(csId) { // <<< MODIFIED: Added csId parameter
         const rowLevelIndex = fServerResolveTag('level', rowTag, 'row');
         const rowPlayerNameIndex = fServerResolveTag('playerName', rowTag, 'row');
         const rowCharNameIndex = fServerResolveTag('charName', rowTag, 'row');
+        const rowSlotIndex = fServerResolveTag('slot', rowTag, 'row'); // <<< ADDED
 
-        // Validate all tags resolved
-        if ([colValIndex, rowRaceClassIndex, rowLevelIndex, rowPlayerNameIndex, rowCharNameIndex].some(isNaN)) {
+        // Validate all required tags resolved (including 'slot')
+        if ([colValIndex, rowRaceClassIndex, rowLevelIndex, rowPlayerNameIndex, rowCharNameIndex, rowSlotIndex].some(isNaN)) {
             let missing = [];
             if (isNaN(colValIndex)) missing.push("Column 'Val'");
             if (isNaN(rowRaceClassIndex)) missing.push("Row 'RC'");
             if (isNaN(rowLevelIndex)) missing.push("Row 'level'");
             if (isNaN(rowPlayerNameIndex)) missing.push("Row 'playerName'");
             if (isNaN(rowCharNameIndex)) missing.push("Row 'charName'");
+            if (isNaN(rowSlotIndex)) missing.push("Row 'slot'"); // <<< ADDED check
             throw new Error(`Could not resolve required tags in 'RaceClass' sheet: ${missing.join(', ')}.`);
         }
 
@@ -829,24 +830,44 @@ function fGetCharacterHeaderData(csId) { // <<< MODIFIED: Added csId parameter
         const level = fullData[rowLevelIndex]?.[colValIndex] ?? '';
         const playerNameRaw = fullData[rowPlayerNameIndex]?.[colValIndex] ?? '';
         const charNameRaw = fullData[rowCharNameIndex]?.[colValIndex] ?? '';
+        const slotRaw = fullData[rowSlotIndex]?.[colValIndex] ?? ''; // <<< ADDED
 
         // --- 6. Process Player/Char Names (Get first word) ---
         const playerName = String(playerNameRaw).trim().split(' ')[0] || '';
         const charName = String(charNameRaw).trim().split(' ')[0] || '';
 
-        // --- 7. Log and Return ---
+        // --- 7. Validate and Clean Slot Number --- <<< ADDED SECTION
+        let cleanedSlotNum = null; // Default to null
+        const slotString = String(slotRaw).trim();
+        const slotRegex = /^Slot\s+([1-9])$/i; // Matches "Slot #[1-9]" case-insensitive
+        const match = slotString.match(slotRegex);
+
+        if (match && match[1]) {
+            // Valid format found, clean it (remove space)
+            cleanedSlotNum = `Slot${match[1]}`;
+            Logger.log(`${funcName}: Valid Slot found: "${slotString}", Cleaned: "${cleanedSlotNum}"`);
+        } else {
+            // Invalid format or empty
+            Logger.log(`${funcName}: Invalid Slot format found: "${slotString}". Setting slotNum to null.`);
+            // cleanedSlotNum remains null
+        }
+        // --- END Slot Number Processing --- <<< END ADDED SECTION
+
+        // --- 8. Log and Return ---
         const result = {
             raceClass: String(raceClass),
             level: String(level),
             playerName: playerName,
-            charName: charName
+            charName: charName,
+            slotNum: cleanedSlotNum // <<< ADDED: Include cleaned slot number (or null)
         };
         Logger.log(`${funcName}: Success. Returning: ${JSON.stringify(result)}`);
         return result;
 
     } catch (e) {
         // Log detailed error and re-throw
-        console.error(`Error in ${funcName} for CS ID ${csId}: ${e.message}\nStack: ${e.stack}`); // Added csId to log
+        console.error(`Error in ${funcName} for CS ID ${csId}: ${e.message}\nStack: ${e.stack}`);
+        // Ensure specific error message is propagated
         throw new Error(`Server error getting character header data: ${e.message || e}`);
     }
 
@@ -856,16 +877,17 @@ function fGetCharacterHeaderData(csId) { // <<< MODIFIED: Added csId parameter
 
 // fSetLogAndHeaderData ////////////////////////////////////////////////////////
 // Purpose -> Writes bundled log and header data to target sheets (DB/GMScreen
-//            and PS/PartyLog) using relative offsets from a base cell.
-// Inputs  -> dataBundle (Object): { log, vit, nish, url, raceClass, level, playerChar }
+//            and PS/PartyLog) using relative offsets from a base cell identified by
+//            'Log' row tag and a dynamic slot column tag (e.g., 'Slot3') passed in the bundle.
+// Inputs  -> dataBundle (Object): { log, vit, nish, url, raceClass, level, playerChar, slotNum }
 // Outputs -> (Boolean): True if both writes succeeded, false otherwise.
-// Throws  -> (Error): If critical errors occur (e.g., opening sheets, resolving base cell).
+// Throws  -> (Error): If critical errors occur (e.g., opening sheets, invalid bundle).
 function fSetLogAndHeaderData(dataBundle) {
     const funcName = "fSetLogAndHeaderData";
     Logger.log(`${funcName}: Received data bundle. Preparing to write to DB and PS.`);
 
     // --- 1. Validate Input Bundle ---
-    const requiredKeys = ['log', 'vit', 'nish', 'url', 'raceClass', 'level', 'playerChar'];
+    const requiredKeys = ['log', 'vit', 'nish', 'url', 'raceClass', 'level', 'playerChar', 'slotNum']; // Added slotNum
     if (!dataBundle || typeof dataBundle !== 'object' || !requiredKeys.every(key => dataBundle.hasOwnProperty(key))) {
         const missing = requiredKeys.filter(key => !dataBundle?.hasOwnProperty(key));
         const errorMsg = `Invalid or incomplete dataBundle received. Missing keys: ${missing.join(', ')}`;
@@ -873,24 +895,36 @@ function fSetLogAndHeaderData(dataBundle) {
         throw new Error(`${funcName}: ${errorMsg}`);
     }
 
-    // --- 2. Define Targets and Base Cell ---
+    // === 1a. Validate Slot Number <<< NEW SECTION ===
+    const slotNumTag = dataBundle.slotNum;
+    if (!slotNumTag || typeof slotNumTag !== 'string' || !slotNumTag.startsWith('Slot')) {
+         const errorMsg = `Invalid slotNum ("${slotNumTag}") received in dataBundle. Must be a valid Slot tag (e.g., 'Slot3').`;
+         console.error(`${funcName} Error: ${errorMsg}`);
+         // Return false here instead of throwing, as the client call might succeed otherwise
+         // Let the client handle the 'false' return value.
+         return false;
+    }
+    Logger.log(`${funcName}: Using Slot Tag: ${slotNumTag}`);
+    // === END NEW SECTION ===
+
+    // --- 2. Define Targets and Base Row ---
     const targets = [
         { key: 'db', sheetName: 'GMScreen' },
         { key: 'ps', sheetName: 'PartyLog' }
     ];
-    const baseCellTagR = 'Log';
-    const baseCellTagC = 'Slot1';
-    const numHeaderRows = 6; // Number of rows above the log row (URL, Race, Level, Vit, Nish, Player)
+    const baseCellTagR = 'Log'; // Keep base row tag fixed
+    // Column tag is now dynamic: baseCellTagC = slotNumTag
+    const numHeaderRows = 6;
 
     // --- 3. Prepare Data Array (in correct vertical order) ---
     const dataToWrite = [
-        [dataBundle.url],        // Log - 6
-        [dataBundle.raceClass],  // Log - 5
-        [dataBundle.level],      // Log - 4
-        [dataBundle.vit],        // Log - 3
-        [dataBundle.nish],       // Log - 2
-        [dataBundle.playerChar], // Log - 1
-        [dataBundle.log]         // Log Row
+        [dataBundle.url],
+        [dataBundle.raceClass],
+        [dataBundle.level],
+        [dataBundle.vit],
+        [dataBundle.nish],
+        [dataBundle.playerChar],
+        [dataBundle.log]
     ];
 
     let overallSuccess = true;
@@ -915,13 +949,14 @@ function fSetLogAndHeaderData(dataBundle) {
             }
             const { rowTag, colTag } = fServerBuildTagMaps(fullData);
 
-            // Resolve the *base cell* ('Log', 'Slot1') to absolute indices
+            // Resolve the *base cell* using fixed Row ('Log') and dynamic Column (slotNumTag)
             const baseRowIndex = fServerResolveTag(baseCellTagR, rowTag, 'row');
-            const baseColIndex = fServerResolveTag(baseCellTagC, colTag, 'col');
+            const baseColIndex = fServerResolveTag(slotNumTag, colTag, 'col'); // <<< Use slotNumTag
+
             if (isNaN(baseRowIndex) || isNaN(baseColIndex)) {
-                throw new Error(`Could not resolve base cell tags ('${baseCellTagR}', '${baseCellTagC}') in sheet "${target.sheetName}".`);
+                throw new Error(`Could not resolve base cell tags ('${baseCellTagR}', '${slotNumTag}') in sheet "${target.sheetName}".`);
             }
-            Logger.log(`   -> Resolved Base Cell ('${baseCellTagR}', '${baseCellTagC}') to [${baseRowIndex}, ${baseColIndex}] in "${target.sheetName}".`);
+            Logger.log(`   -> Resolved Base Cell ('${baseCellTagR}', '${slotNumTag}') to [${baseRowIndex}, ${baseColIndex}] in "${target.sheetName}".`);
 
             // Calculate the top-left cell of the 7-row range
             const startRowIndex = baseRowIndex - numHeaderRows;
@@ -953,12 +988,7 @@ function fSetLogAndHeaderData(dataBundle) {
 
     // --- 5. Return Overall Success Status ---
     Logger.log(`${funcName}: Finished processing all targets. Overall Success: ${overallSuccess}`);
-    // Note: This function returns true even if only *one* target succeeded,
-    //       but logs errors for failures. Adjust if stricter all-or-nothing needed.
-    //       Returning overallSuccess requires BOTH to succeed.
     if (!overallSuccess) {
-       // Optionally throw an error here if partial success is unacceptable
-       // throw new Error("Failed to write update to one or more target sheets.");
        Logger.log(`${funcName}: Write failed for at least one target.`);
     }
 

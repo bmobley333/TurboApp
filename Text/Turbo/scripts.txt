@@ -46,6 +46,7 @@ const gUI = {
 
   // === Character RaceClass Info ===
   characterInfo: { 
+    slotNum: '',
     raceClass: '',
     level: '',
     playerName: '',
@@ -3680,7 +3681,7 @@ function fSetupSingleSubMenuItem(item, index) {
 //            the GMScreen sheet ('db') and the PartyLog sheet ('ps') via the
 //            server-side fSetLogAndHeaderData function. Uses a lock.
 // Inputs  -> None (Uses gUI state: plainTextLogEntries, arr, characterInfo, isSendingLog).
-// Outputs -> None (Calls google.script.run if not already sending).
+// Outputs -> None (Calls google.script.run if not already sending and slotNum is valid).
 function fSendLogToGMScreenNPS() {
     // === 1. Check Lock ===
     if (gUI.isSendingLog) {
@@ -3688,9 +3689,22 @@ function fSendLogToGMScreenNPS() {
         return;
     }
 
+    // === 1a. Validate Slot Number === <<< NEW SECTION
+    const slotNum = gUI.characterInfo?.slotNum;
+    if (!slotNum || typeof slotNum !== 'string' || !slotNum.startsWith('Slot')) {
+        // Only log this warning once perhaps, or make it less prominent?
+        // For now, we log it every time the send is blocked.
+        fMyConsoleLog(`📤 Cannot send Log & Headers: Invalid or missing slotNum ('${slotNum}').`);
+        // Do not set the lock, just return.
+        // Optionally show a message the first time?
+        // fShowMessage("Cannot send log updates: Invalid player Slot #.").catch(e=>console.error(e));
+        return;
+    }
+    // === END NEW SECTION ===
+
     // === 2. Set Lock ===
     gUI.isSendingLog = true;
-    fMyConsoleLog("📤 Preparing to send Log & Header data (Lock Acquired)...");
+    fMyConsoleLog(`📤 Preparing to send Log & Header data for ${slotNum} (Lock Acquired)...`);
 
     // === 3. Prepare Log Content ===
     const logEntriesSnapshot = [...gUI.plainTextLogEntries];
@@ -3709,16 +3723,10 @@ function fSendLogToGMScreenNPS() {
     fMyConsoleLog(`   -> Dynamic Header Data: Vit='${vitString}', Nish='${nishValue}'`);
 
     // --- Static/Constructed Data (from gUI.characterInfo / gIndexCSID) ---
-    // Use || {} as fallback in case characterInfo hasn't loaded yet
     const { raceClass, level, playerName, charName } = gUI.characterInfo || {};
     const playerCharString = `${playerName || '?'} (${charName || '?'})`;
-
-    // let urlStr = "https://docs.google.com/spreadsheets/d/";
-    // urlStr += String(gIndexCSID);
-    // const characterUrl = urlStr;
     const characterUrl = "https://docs.google.com/spreadsheets/d/" + gIndexCSID + "/";
-
-    fMyConsoleLog(`   -> Static Header Data: URL='${characterUrl}', RaceClass='${raceClass}', Level='${level}', PlayerChar='${playerCharString}'`);
+    fMyConsoleLog(`   -> Static Header Data: URL='${characterUrl}', RaceClass='${raceClass}', Level='${level}', PlayerChar='${playerCharString}', Slot='${slotNum}'`); // Added Slot here
 
     // === 5. Create Data Bundle ===
     const dataBundle = {
@@ -3726,9 +3734,10 @@ function fSendLogToGMScreenNPS() {
         vit: vitString,
         nish: nishValue,
         url: characterUrl,
-        raceClass: raceClass || '', // Ensure strings
+        raceClass: raceClass || '',
         level: level || '',
-        playerChar: playerCharString
+        playerChar: playerCharString,
+        slotNum: slotNum // <<< ADDED slotNum to the bundle
     };
 
     // === 6. Call Server Function ===
@@ -3738,16 +3747,13 @@ function fSendLogToGMScreenNPS() {
             if (success) {
                 fMyConsoleLog("   -> ✅ Log & Headers updated successfully on server targets.");
             } else {
-                // Server function returned false, indicating one or both writes failed (error logged server-side)
                 fMyConsoleLog("   -> ⚠️ Log & Headers update partially failed on server. Check server logs.");
-                // Optionally show a less severe message than full failure
                 fShowMessage("Warning: Update failed for one or more target sheets.").catch(e => console.error("Error showing message:", e));
             }
             gUI.isSendingLog = false; // Release Lock
             fMyConsoleLog("   -> Lock Released.");
         })
         .withFailureHandler((error) => {
-            // Handle transport errors or server-side exceptions
             const errorMsg = error?.message || "Unknown server error";
             console.error(`fSendLogToGMScreenNPS Failure: ${errorMsg}`, error);
             fMyConsoleLog(`   -> ❌ Error sending Log & Headers: ${errorMsg}`);
@@ -3755,7 +3761,7 @@ function fSendLogToGMScreenNPS() {
             fMyConsoleLog("   -> Lock Released due to error.");
             fShowMessage(`Error: Could not send updates: ${errorMsg}`).catch(e => console.error("Error showing message:", e));
         })
-        .fSetLogAndHeaderData(dataBundle); // Call the new server function
+        .fSetLogAndHeaderData(dataBundle);
 
 } // END fSendLogToGMScreenNPS
 
@@ -5578,8 +5584,6 @@ function fSetupMenuInteractivity() {
 
 
 
-// scripts.html
-
 // fOnDataLoaded ///////////////////////////////////////////////////////////////////
 // Purpose -> Callback function executed upon successful data retrieval from the
 //            server (fCSGetGameSheet5). Validates data, stores it in gUI, sets up
@@ -5588,7 +5592,6 @@ function fSetupMenuInteractivity() {
 // Outputs -> None (Initiates UI rendering and setup).
 function fOnDataLoaded(data) {
     fMyConsoleLog("✅ Main Sheet Data received from server");
-
     // === 1. Validate and Store Main Data ===
     const isValid = fStoreAndValidateData(data);
     if (!isValid) { return; } // Stop if main data invalid
@@ -5596,15 +5599,17 @@ function fOnDataLoaded(data) {
     // === 2. Initial UI Setup (Before Render) ===
     fSetupTooltipAndModal(); // Cache tooltip/modal elements
 
-    // === 3. Fetch Static Header Data (Race/Class, Level, Names) ===
+    // === 3. Fetch Static Header Data (Race/Class, Level, Names, Slot) ===
     fMyConsoleLog("⚙️ Requesting Static Character Header Data...");
-    // <<< Pass gIndexCSID to the server function >>>
     google.script.run
         .withSuccessHandler((headerData) => {
             fMyConsoleLog("✅ Static Character Header Data received.");
+            let proceedWithRender = true; // Flag to control rendering
+
             if (headerData && typeof headerData === 'object' && !headerData.error) {
                 // Store the received data
                 gUI.characterInfo = {
+                    slotNum: headerData.slotNum ?? null, // Use null coalesce for safety
                     raceClass: headerData.raceClass ?? '',
                     level: headerData.level ?? '',
                     playerName: headerData.playerName ?? '',
@@ -5612,11 +5617,16 @@ function fOnDataLoaded(data) {
                 };
                 fMyConsoleLog(`   -> Stored Header Data: ${JSON.stringify(gUI.characterInfo)}`);
 
-                // === 4. Render Grid & Apply Post-Processing ===
-                // Now that both main data AND header data are loaded, render the grid.
-                fRenderFullGrid(() => {
-                    fRunPostRenderFormatting(); // Apply merges, borders, listeners, etc.
-                });
+                // <<< NEW: Validate Slot Number >>>
+                if (!gUI.characterInfo.slotNum) {
+                    const slotErrorMsg = "Error: Invalid or missing Slot # found on RaceClass tab. Cannot save log updates.";
+                    fMyConsoleLog(`   -> ⚠️ ${slotErrorMsg}`);
+                    // Show message, but still allow rendering to proceed for now
+                    fShowMessage(slotErrorMsg).catch(e => console.error("Error showing message:", e));
+                    // Depending on requirements, you might set proceedWithRender = false here
+                    // if a valid slot is absolutely required for the UI to function.
+                }
+                // <<< END NEW Validation >>>
 
             } else {
                 // Handle error case from server function
@@ -5626,9 +5636,19 @@ function fOnDataLoaded(data) {
                 fShowMessage(`Error fetching character header data: ${errMsg}`).catch(e => console.error("Error showing message:", e));
                 // Decide if grid rendering should proceed without header data?
                 // For now, let's proceed but header info will be blank.
+                gUI.characterInfo = { slotNum: null, raceClass: '', level: '', playerName: '', charName: '' }; // Reset
+            }
+
+            // === 4. Render Grid & Apply Post-Processing ===
+            if (proceedWithRender) {
                 fRenderFullGrid(() => {
-                    fRunPostRenderFormatting();
+                    fRunPostRenderFormatting(); // Apply merges, borders, listeners, etc.
                 });
+            } else {
+                 fMyConsoleLog("❌ Halting grid rendering due to critical error (e.g., invalid Slot #).");
+                 // Optionally display a message in the grid container
+                 const gridDiv = document.getElementById('grid');
+                 if(gridDiv) gridDiv.innerHTML = '<p style="color:red;">Critical error loading character data. Please check configuration.</p>';
             }
         })
         .withFailureHandler((error) => {
@@ -5637,12 +5657,13 @@ function fOnDataLoaded(data) {
             console.error(errorMsg, error);
             fMyConsoleLog(`❌ ${errorMsg}`);
             fShowMessage(`Error fetching character header data: ${error.message}`).catch(e => console.error("Error showing message:", e));
-            // Proceed with grid rendering without header data
+            // Proceed with grid rendering without header data in case of transport failure
+            gUI.characterInfo = { slotNum: null, raceClass: '', level: '', playerName: '', charName: '' }; // Reset
             fRenderFullGrid(() => {
                 fRunPostRenderFormatting();
             });
         })
-        .fGetCharacterHeaderData(gIndexCSID); // <<< MODIFIED: Pass gIndexCSID here
+        .fGetCharacterHeaderData(gIndexCSID);
 
 } // END fOnDataLoaded
 
