@@ -3308,6 +3308,78 @@ function fSetupSidebarActionListeners() {
 
 
 
+
+// fHandleUpdateHeaderInfo ///////////////////////////////////////////////////////
+// Purpose -> Handles the "Update (Level, Slot, Names)" menu action. Fetches fresh
+//            header data, validates it (especially slotNum), updates gUI.characterInfo,
+//            and triggers a log refresh if successful.
+// Inputs  -> None.
+// Outputs -> (Promise<void>): Resolves after completing actions or handling errors.
+async function fHandleUpdateHeaderInfo() {
+    fMyConsoleLog("⚙️ Menu Action: Update Header Info Triggered...");
+
+    // Add visual feedback maybe? (e.g., temporary button text change?)
+
+    fMyConsoleLog("   -> Requesting fresh Character Header Data...");
+    google.script.run
+        .withSuccessHandler((headerData) => {
+            fMyConsoleLog("   -> Received fresh Character Header Data.");
+
+            // Validate the response structure
+            if (!headerData || typeof headerData !== 'object' || headerData.error) {
+                const errMsg = headerData?.message || "Invalid header data structure received during update.";
+                console.error("fHandleUpdateHeaderInfo Error:", errMsg, headerData);
+                fMyConsoleLog(`   -> ❌ Update failed: ${errMsg}`);
+                fShowMessage(`Error updating header data: ${errMsg}`).catch(e => console.error("Error showing message:", e));
+                return; // Stop processing on invalid data structure
+            }
+
+            // Validate Slot Number specifically
+            const receivedSlotNum = headerData.slotNum ?? null;
+            if (!receivedSlotNum || typeof receivedSlotNum !== 'string' || !receivedSlotNum.startsWith('Slot')) {
+                 const slotErrorMsg = "Error: Invalid or missing Slot # found on RaceClass tab. Cannot save log updates.";
+                 fMyConsoleLog(`   -> ❌ Update failed: ${slotErrorMsg}`);
+                 fShowMessage(slotErrorMsg).catch(e => console.error("Error showing message:", e));
+                 return; // Stop processing if Slot Number is invalid
+            }
+
+            // --- Update Successful & Valid ---
+            // Update the global character info object
+            gUI.characterInfo = {
+                slotNum: receivedSlotNum, // Store validated slot number
+                raceClass: headerData.raceClass ?? '',
+                level: headerData.level ?? '',
+                playerName: headerData.playerName ?? '',
+                charName: headerData.charName ?? ''
+            };
+            fMyConsoleLog(`   -> gUI.characterInfo updated: ${JSON.stringify(gUI.characterInfo)}`);
+
+            // Find and click the sidebar refresh button
+            const refreshButton = document.getElementById('sidebar-refresh-log-btn');
+            if (refreshButton) {
+                fMyConsoleLog("   -> Simulating click on sidebar refresh button...");
+                refreshButton.click(); // Trigger the log send with updated info
+            } else {
+                 fMyConsoleLog("   -> ⚠️ Could not find sidebar refresh button (#sidebar-refresh-log-btn) to click.");
+                 // Optionally show a message that refresh couldn't be triggered automatically
+            }
+
+            // Show success message to the user
+            fShowMessage("✅ Header Info Updated.").catch(e => console.error("Error showing message:", e));
+
+        })
+        .withFailureHandler((error) => {
+            // Handle transport errors
+            const errorMsg = `Failed to call server for header update: ${error.message}`;
+            console.error(errorMsg, error);
+            fMyConsoleLog(`   -> ❌ ${errorMsg}`);
+            fShowMessage(`Error updating header data: ${error.message}`).catch(e => console.error("Error showing message:", e));
+        })
+        .fGetCharacterHeaderData(gIndexCSID); // Call the existing server function
+
+} // END fHandleUpdateHeaderInfo
+
+
 // ==========================================================================
 // === Menu Bar Setup                 (End of Sidebar) ===
 // ==========================================================================
@@ -3803,42 +3875,43 @@ function fSetupDelegatedMenuActionClick(menuBar) {
              // Use an IIFE (Immediately Invoked Function Expression) for async cases within switch
              switch (action) {
                  // --- Game Menu Actions ---
-                 case 'game-nishStartEnd':    (async () => await fHandleNishStartOrEnd())(); break;
-                 case 'game-toggleSidebar':   fToggleSidebar();           break;
-                 // case 'game-gmAward':        // Handler TBD             break;
-                 case 'game-metaFlood':       (async () => await fMetaFlood())();            break;
-                 case 'game-healingNatural':  (async () => await fCalc_NaturalHealing())();  break;
-                 case 'game-healingAll':      (async () => await fHealAllWounds())();        break;
-                 case 'game-setMaxMeta':      fMeta_SetToMax();           break;
-                 case 'game-setMaxLuck':      (async () => await fLuck_SetToMax())();        break;
-                 case 'game-setMaxVit':       (async () => await fCalc_VitMaxNowPerc())();   break;
-                 case 'game-setMaxAll':       (async () => await fHandleResetAllToMax())(); break; 
-                 case 'game-clearChanneled':  fClearChanneledMeta();      break;
-                 case 'game-clearCheckboxes': fClearSk1Sk2Checkboxes();   break;
-                 case 'game-clearMonsters':   fClearMonsters();           break;
-                 case 'game-clearMorphs':     fClearMorphs();             break;
-                 case 'game-clearNish':       fClearCurrentNish();        break;
-                 case 'game-clearRollLog':    fClearRollLog();            break;
-                 case 'game-restTimeRest':    (async () => await fHandleRestTimeRest())(); break;
-                 case 'game-restTimeSleep':   (async () => await fHandleRestTimeSleep())(); break;
+                 case 'game-nishStartEnd':       (async () => await fHandleNishStartOrEnd())();      break;
+                 case 'game-toggleSidebar':      fToggleSidebar();                              break;
+                 case 'game-updateHeaderInfo':   (async () => await fHandleUpdateHeaderInfo())(); break; // <<< ADDED
+                 // case 'game-gmAward':                                                             break; // Handler TBD
+                 case 'game-metaFlood':          (async () => await fMetaFlood())();            break;
+                 case 'game-healingNatural':     (async () => await fCalc_NaturalHealing())();  break;
+                 case 'game-healingAll':         (async () => await fHealAllWounds())();        break;
+                 case 'game-setMaxMeta':         fMeta_SetToMax();                              break;
+                 case 'game-setMaxLuck':         (async () => await fLuck_SetToMax())();        break;
+                 case 'game-setMaxVit':          (async () => await fCalc_VitMaxNowPerc())();   break;
+                 case 'game-setMaxAll':          (async () => await fHandleResetAllToMax())();  break;
+                 case 'game-clearChanneled':     fClearChanneledMeta();                         break;
+                 case 'game-clearCheckboxes':    fClearSk1Sk2Checkboxes();                      break;
+                 case 'game-clearMonsters':      fClearMonsters();                              break;
+                 case 'game-clearMorphs':        fClearMorphs();                                break;
+                 case 'game-clearNish':          fClearCurrentNish();                           break;
+                 case 'game-clearRollLog':       fClearRollLog();                               break;
+                 case 'game-restTimeRest':       (async () => await fHandleRestTimeRest())();   break;
+                 case 'game-restTimeSleep':      (async () => await fHandleRestTimeSleep())();  break;
                  case 'game-restTimeNewSession': (async () => await fHandleRestTimeNewSession())(); break;
 
                  // --- Gear Menu Actions ---
-                 case 'gear-toggleGear':      fToggleGearColumns();       break;
-                 // case 'gear-loot':            // Handler TBD             break;
-                 // case 'gear-lootArtifact':    // Handler TBD             break;
-                 // case 'gear-lootChaosCrystal': // Handler TBD          break;
-                 // case 'gear-lootGear':        // Handler TBD             break;
-                 // case 'gear-lootGem':         // Handler TBD             break;
-                 // case 'gear-lootSocketed':    // Handler TBD             break;
-                 // case 'gear-lootValuables':   // Handler TBD             break;
+                 case 'gear-toggleGear':         fToggleGearColumns();                          break;
+                 // case 'gear-loot':                                                              break; // Handler TBD
+                 // case 'gear-lootArtifact':                                                      break; // Handler TBD
+                 // case 'gear-lootChaosCrystal':                                                  break; // Handler TBD
+                 // case 'gear-lootGear':                                                          break; // Handler TBD
+                 // case 'gear-lootGem':                                                           break; // Handler TBD
+                 // case 'gear-lootSocketed':                                                      break; // Handler TBD
+                 // case 'gear-lootValuables':                                                     break; // Handler TBD
 
                  // --- Default (Unhandled Actions) ---
                  default:
                      console.log(`ACTION: Menu item clicked: ${action} (No handler defined yet)`);
                      fMyConsoleLog(`🖱️ Menu: ${action} (No handler)`);
                      // Optionally show a message for unimplemented actions:
-                     // fShowMessage(`Action "${action}" is not yet implemented.`);
+                     fShowMessage(`Action "${action}" is not yet implemented.`);
              }
          } // End if(targetLink)
 

@@ -913,7 +913,7 @@ function fSetLogAndHeaderData(dataBundle) {
         { key: 'ps', sheetName: 'PartyLog' }
     ];
     const baseCellTagR = 'Log'; // Keep base row tag fixed
-    // Column tag is now dynamic: baseCellTagC = slotNumTag
+    const baseCellTagC = slotNumTag; // <<< Use dynamic slot tag
     const numHeaderRows = 6;
 
     // --- 3. Prepare Data Array (in correct vertical order) ---
@@ -949,14 +949,14 @@ function fSetLogAndHeaderData(dataBundle) {
             }
             const { rowTag, colTag } = fServerBuildTagMaps(fullData);
 
-            // Resolve the *base cell* using fixed Row ('Log') and dynamic Column (slotNumTag)
+            // Resolve the *base cell* using fixed Row ('Log') and dynamic Column (baseCellTagC)
             const baseRowIndex = fServerResolveTag(baseCellTagR, rowTag, 'row');
-            const baseColIndex = fServerResolveTag(slotNumTag, colTag, 'col'); // <<< Use slotNumTag
+            const baseColIndex = fServerResolveTag(baseCellTagC, colTag, 'col'); // <<< Use dynamic tag
 
             if (isNaN(baseRowIndex) || isNaN(baseColIndex)) {
-                throw new Error(`Could not resolve base cell tags ('${baseCellTagR}', '${slotNumTag}') in sheet "${target.sheetName}".`);
+                throw new Error(`Could not resolve base cell tags ('${baseCellTagR}', '${baseCellTagC}') in sheet "${target.sheetName}".`);
             }
-            Logger.log(`   -> Resolved Base Cell ('${baseCellTagR}', '${slotNumTag}') to [${baseRowIndex}, ${baseColIndex}] in "${target.sheetName}".`);
+            Logger.log(`   -> Resolved Base Cell ('${baseCellTagR}', '${baseCellTagC}') to [${baseRowIndex}, ${baseColIndex}] in "${target.sheetName}".`);
 
             // Calculate the top-left cell of the 7-row range
             const startRowIndex = baseRowIndex - numHeaderRows;
