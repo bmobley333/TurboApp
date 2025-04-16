@@ -441,6 +441,10 @@ function fExtractSheetData(sh) {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////// END fCSGetGameSheet and helpers
 
+
+
+
+
 // ==========================================================================
 // === Read/Write to Google Sheets/Docs                        (End of Get Game Sheet data/styles) ===
 // ==========================================================================
@@ -995,6 +999,156 @@ function fSetLogAndHeaderData(dataBundle) {
     return overallSuccess; // Return true only if BOTH writes succeeded
 
 } // END fSetLogAndHeaderData
+
+
+
+// ==========================================================================
+// === Firebase                       (End of Read/Write to Google Sheets/Docs ) ===
+// ==========================================================================
+
+
+
+// fGetFirestoreInstance ///////////////////////////////////////////////////////
+// Purpose -> Initializes and returns an authenticated Firestore instance using
+//            credentials stored in PropertiesService. [Processes Key String]
+// Inputs  -> None.
+// Outputs -> (Object | null): Authenticated Firestore instance or null on error.
+function fGetFirestoreInstance() {
+    const funcName = "fGetFirestoreInstance";
+    Logger.log(`${funcName}: Attempting to initialize Firestore...`);
+    let clientEmail, privateKeyRaw, projectId, processedKey; // Declare vars
+    try {
+        // Retrieve credentials from Script Properties
+        const scriptProperties = PropertiesService.getScriptProperties();
+        clientEmail = scriptProperties.getProperty('FIRESTORE_CLIENT_EMAIL');
+        privateKeyRaw = scriptProperties.getProperty('FIRESTORE_PRIVATE_KEY'); // Get the raw string
+        projectId = scriptProperties.getProperty('FIRESTORE_PROJECT_ID');
+
+        // Validate credentials & Log Status
+        if (!clientEmail) Logger.log(`   -> ${funcName} Error: FIRESTORE_CLIENT_EMAIL not found or empty.`);
+        if (!privateKeyRaw) Logger.log(`   -> ${funcName} Error: FIRESTORE_PRIVATE_KEY not found or empty.`);
+        if (!projectId) Logger.log(`   -> ${funcName} Error: FIRESTORE_PROJECT_ID not found or empty.`);
+
+        if (!clientEmail || !privateKeyRaw || !projectId) {
+            console.error(`${funcName} Error: Missing Firestore credentials in Script Properties.`);
+            return null; // Exit if any credential is fundamentally missing
+        }
+
+        // --- Process the Private Key String ---
+        Logger.log(`   -> Raw Private Key from Props (Snippet): ${privateKeyRaw.substring(0, 20)}...${privateKeyRaw.substring(privateKeyRaw.length - 20)}`);
+        processedKey = privateKeyRaw;
+        // 1. Remove surrounding quotes if present (handle copy-paste variations)
+        if (processedKey.startsWith('"') && processedKey.endsWith('"')) {
+            processedKey = processedKey.substring(1, processedKey.length - 1);
+            Logger.log(`   -> Removed surrounding quotes from key.`);
+        }
+        // 2. Replace literal "\\n" sequences with actual newline characters "\n"
+        //    (Important: Use double backslash in replaceAll to match the literal sequence)
+        processedKey = processedKey.replaceAll('\\n', '\n');
+        Logger.log(`   -> Replaced \\\\n with \\n in key.`);
+        Logger.log(`   -> Processed Private Key (Snippet): ${processedKey.substring(0, 40)}...${processedKey.substring(processedKey.length - 40)}`);
+        // --- End Key Processing ---
+
+        // Log other retrieved values
+        Logger.log(`   -> Project ID: ${projectId}`);
+        Logger.log(`   -> Client Email: ${clientEmail}`);
+
+
+        // Initialize Firestore using the library and *processed* key
+        Logger.log(`   -> Calling FirestoreApp.getFirestore with processed credentials...`);
+        const firestore = FirestoreApp.getFirestore(clientEmail, processedKey, projectId); // Use processedKey here
+
+        // Check if firestore object was created
+        if (!firestore) {
+           Logger.log(`   -> ${funcName} Error: FirestoreApp.getFirestore returned null/undefined after processing key.`);
+           console.error(`${funcName} Error: FirestoreApp.getFirestore failed to return an instance.`);
+           return null;
+        }
+
+        Logger.log(`${funcName}: Firestore instance appears initialized successfully for project ${projectId}.`);
+        return firestore;
+
+    } catch (e) {
+        // Catch errors during property retrieval or initialization
+        console.error(`Error caught in ${funcName}: ${e.message}\nStack: ${e.stack}`);
+        Logger.log(`   -> ❌ Exception during Firestore initialization: ${e.message}`);
+        // Log potentially relevant details if available before the error
+        Logger.log(`   -> Details at time of error: ProjectID=${projectId || 'N/A'}, Email=${clientEmail || 'N/A'}, Key Raw loaded=${!!privateKeyRaw}, Key Processed Snippet=${processedKey ? processedKey.substring(0,20) + '...' : 'N/A'}`);
+        return null;
+    }
+} // END fGetFirestoreInstance
+
+
+
+// fSaveTestDataToFirestore ////////////////////////////////////////////////////
+// Purpose -> Saves test data received from the client to Firestore under the
+//            'TestData' collection, using the provided baseDocId. [Enhanced Logging]
+// Inputs  -> baseDocId (String): The base ID (e.g., "Data_SheetID") used for the document name.
+//         -> data (Object): The data object to save.
+// Outputs -> (Object): { success: Boolean, message?: String }
+function fSaveTestDataToFirestore(baseDocId, data) {
+    const funcName = "fSaveTestDataToFirestore";
+    Logger.log(`${funcName}: Received request to save data for Base ID: ${baseDocId}`);
+
+    // --- 1. Validate Inputs ---
+    if (!baseDocId || typeof baseDocId !== 'string' || baseDocId.trim() === '') {
+        const msg = "Invalid or missing baseDocId.";
+        console.error(`${funcName} Error: ${msg}`);
+        Logger.log(`   -> ${funcName} Error: ${msg}`);
+        return { success: false, message: msg };
+    }
+    if (!data || typeof data !== 'object') {
+        const msg = `Invalid or missing data object for Base ID: ${baseDocId}.`;
+        console.error(`${funcName} Error: ${msg}`);
+        Logger.log(`   -> ${funcName} Error: ${msg}`);
+        return { success: false, message: msg };
+    }
+
+    // --- 2. Get Firestore Instance ---
+    const firestore = fGetFirestoreInstance(); // Calls the enhanced logging version
+    if (!firestore) {
+        const msg = "Failed to initialize Firestore instance (check previous logs).";
+        Logger.log(`${funcName} Error: ${msg}`);
+        // Don't expose credential details to client
+        return { success: false, message: "Server configuration error." };
+    }
+     Logger.log(`   -> Firestore instance obtained successfully.`);
+
+    // --- 3. Define Firestore Path ---
+    const documentPath = `TestData/${baseDocId}`;
+    Logger.log(`   -> Firestore document path: ${documentPath}`);
+
+    try {
+        // --- 4. Save/Update Document ---
+        Logger.log(`   -> Attempting firestore.updateDocument for path: ${documentPath}`);
+        const writeResult = firestore.updateDocument(documentPath, data, false); // false = don't mask, overwrite
+
+        // Log the raw result from the library call
+        Logger.log(`   -> firestore.updateDocument result: ${JSON.stringify(writeResult)}`);
+
+        if (writeResult && typeof writeResult === 'object') { // Check if result seems valid
+             Logger.log(`   -> ✅ Successfully saved/updated data for path: ${documentPath}.`);
+             return { success: true }; // Indicate success
+        } else {
+             const msg = `Firestore updateDocument returned unexpected result for path: ${documentPath}.`;
+             console.error(`${funcName} Error: ${msg}`, writeResult);
+             Logger.log(`   -> ❌ ${msg}`);
+             // Try to provide a slightly more specific error if possible
+             return { success: false, message: `Firestore write operation returned unexpected result: ${JSON.stringify(writeResult)}` };
+        }
+
+    } catch (e) {
+        // Handle potential errors (e.g., Permissions, API errors)
+        console.error(`Exception caught in ${funcName} saving to path ${documentPath}: ${e.message}\nStack: ${e.stack}`);
+        Logger.log(`   -> ❌ Exception during Firestore save for path ${documentPath}: ${e.message}`);
+        // Return specific error if safe, otherwise generic
+        const safeErrorMessage = e.message.includes("permission") ? "Permission denied." : "Server error during Firestore save.";
+        // Also include the raw error message for server logs
+        Logger.log(`   -> Returning error message: "${safeErrorMessage}" (Raw: ${e.message})`);
+        return { success: false, message: safeErrorMessage };
+    }
+
+} // END fSaveTestDataToFirestore
 
 
 

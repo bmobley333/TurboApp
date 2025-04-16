@@ -5141,21 +5141,61 @@ function fToggleGearColumns() {
 
 
 // fHandleSaveTestData ///////////////////////////////////////////////////////////
-// Purpose -> Handles the "Save Test Data" menu action. Placeholder for now.
+// Purpose -> Handles the "Save Test Data" menu action. Creates test data and
+//            calls a server-side function to save it to Firestore.
 // Inputs  -> None.
-// Outputs -> (Promise<void>): Resolves when actions complete (placeholder).
+// Outputs -> (Promise<void>): Resolves when actions complete.
 async function fHandleSaveTestData() {
-    fMyConsoleLog("⚙️ Menu Action: Save Test Data Triggered...");
-    // TODO:
-    // 1. Get Document ID (e.g., "TestSave_" + gIndexCSID)
-    // 2. Create Data Object { content: "Hello World", timestamp: new Date().toISOString() }
-    // 3. Call server function: google.script.run...fSaveTestDataToFirestore(docId, data)
-    // 4. Handle success/failure -> fShowMessage(...)
+    fMyConsoleLog("⚙️ Menu Action: Save Test Data Triggered (Firestore)...");
 
-    await fShowMessage("Save Test Data action not yet implemented."); // Placeholder message
+    // 1. Create Data Object
+    const testData = {
+        content: "Hello Firebase!", // Updated message
+        timestamp: new Date().toISOString(), // ISO format string for timestamp
+        savedFrom: gIndexCSID // Add CS ID for context
+    };
+    // Document ID within Firestore will be derived from gIndexCSID on the server
+    const baseDocId = `Data_${gIndexCSID}`;
 
+    fMyConsoleLog(`   -> Preparing to save test data with Base ID: ${baseDocId}`);
+    fMyConsoleLog(`   -> Data: ${JSON.stringify(testData)}`);
 
-    fMyConsoleLog("✅ Save Test Data Action Placeholder Complete.");
+    // 2. Call Server Function
+    try {
+        // Show a temporary "Saving..." message
+        const savingMessage = fShowMessage("💾 Saving Test Data to Firestore..."); // Don't await here
+
+        const result = await new Promise((resolve, reject) => {
+            google.script.run
+                // Assuming success handler receives an object { success: boolean, message?: string }
+                .withSuccessHandler(resolve)
+                .withFailureHandler(reject)  // Reject promise with error object
+                .fSaveTestDataToFirestore(baseDocId, testData); // Pass ID and data object
+        });
+
+        fHideMessage(); // Hide the "Saving..." message
+
+        if (result && result.success) {
+            fMyConsoleLog("   -> ✅ Server reported success saving test data to Firestore.");
+            await fShowMessage("✅ Test Data Saved Successfully to Firestore!");
+        } else {
+            // This case might indicate a handled error on the server
+            const serverMsg = result?.message || "server reported issue";
+            fMyConsoleLog(`   -> ⚠️ Server reported failure saving test data to Firestore: ${serverMsg}`);
+            await fShowMessage(`⚠️ Could not save test data to Firestore (${serverMsg}).`);
+        }
+
+    } catch (error) {
+        // Handle transport errors or unhandled server exceptions
+        fHideMessage(); // Ensure loading message is hidden on error
+        const errorMsg = `Error saving test data to Firestore: ${error.message || error}`;
+        console.error("fHandleSaveTestData Failure:", error);
+        fMyConsoleLog(`   -> ❌ ${errorMsg}`);
+        await fShowMessage(`❌ ${errorMsg}`);
+    }
+
+    fMyConsoleLog("✅ Save Test Data (Firestore) Action Complete.");
+
 } // END fHandleSaveTestData
 
 
