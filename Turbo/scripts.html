@@ -5201,23 +5201,62 @@ async function fHandleSaveTestData() {
 
 
 // fHandleLoadTestData ///////////////////////////////////////////////////////////
-// Purpose -> Handles the "Load Test Data" menu action. Placeholder for now.
+// Purpose -> Handles the "Load Test Data" menu action. Calls server-side function
+//            to retrieve test data from Firestore and displays it.
 // Inputs  -> None.
-// Outputs -> (Promise<void>): Resolves when actions complete (placeholder).
+// Outputs -> (Promise<void>): Resolves when actions complete.
 async function fHandleLoadTestData() {
-    fMyConsoleLog("⚙️ Menu Action: Load Test Data Triggered...");
-    // TODO:
-    // 1. Get Document ID (e.g., "TestSave_" + gIndexCSID)
-    // 2. Call server function: google.script.run...fLoadTestDataFromFirestore(docId)
-    // 3. Handle success/failure:
-    //    - If data received: fShowMessage("Loaded: " + data.content + " @ " + data.timestamp)
-    //    - If not found: fShowMessage("Test save data not found.")
-    //    - On error: fShowMessage("Error loading data: " + error.message)
+    fMyConsoleLog("⚙️ Menu Action: Load Test Data Triggered (Firestore)...");
 
-    await fShowMessage("Load Test Data action not yet implemented."); // Placeholder message
+    // 1. Determine Document ID
+    const baseDocId = `Data_${gIndexCSID}`;
+    fMyConsoleLog(`   -> Preparing to load test data with Base ID: ${baseDocId}`);
 
+    // 2. Call Server Function
+    try {
+        // Show a temporary "Loading..." message
+        const loadingMessage = fShowMessage("💾 Loading Test Data from Firestore..."); // Don't await here
 
-    fMyConsoleLog("✅ Load Test Data Action Placeholder Complete.");
+        const result = await new Promise((resolve, reject) => {
+            google.script.run
+                .withSuccessHandler(resolve) // Resolve promise with server's return value {success, data?, message?}
+                .withFailureHandler(reject)  // Reject promise with error object
+                .fLoadTestDataFromFirestore(baseDocId); // Pass ID
+        });
+
+        fHideMessage(); // Hide the "Loading..." message
+
+        // 3. Handle Result
+        if (result && result.success && result.data) {
+            fMyConsoleLog("   -> ✅ Server reported success loading test data from Firestore.");
+            fMyConsoleLog("   -> Loaded Data:", result.data);
+            // Display the loaded data - using fShowMessage for simplicity
+            const displayData = JSON.stringify(result.data, null, 2); // Pretty print JSON
+            await fShowMessage(`✅ Test Data Loaded:\n${displayData}`);
+
+        } else if (result && !result.success && result.notFound) {
+             // Handle case where document wasn't found (not necessarily an error)
+             fMyConsoleLog(`   -> ℹ️ Document not found on server for ID: ${baseDocId}`);
+             await fShowMessage(`ℹ️ No test data found for this character sheet (ID: ${baseDocId}). Save test data first.`);
+
+        } else {
+            // Handle other server-reported failures
+            const serverMsg = result?.message || "Unknown server issue";
+            fMyConsoleLog(`   -> ⚠️ Server reported failure loading test data: ${serverMsg}`);
+            await fShowMessage(`⚠️ Could not load test data (${serverMsg}).`);
+        }
+
+    } catch (error) {
+        // Handle transport errors or unhandled server exceptions
+        fHideMessage(); // Ensure loading message is hidden on error
+        const errorMsg = `Error loading test data from Firestore: ${error.message || error}`;
+        console.error("fHandleLoadTestData Failure:", error);
+        fMyConsoleLog(`   -> ❌ ${errorMsg}`);
+        await fShowMessage(`❌ ${errorMsg}`);
+    }
+
+    fMyConsoleLog("✅ Load Test Data (Firestore) Action Complete.");
+
 } // END fHandleLoadTestData
 
 
