@@ -12,7 +12,8 @@
 
       <a href="#" data-action="game-nishStartEnd">Nish Start or End</a>
       <a href="#" data-action="game-toggleSidebar">Sidebar (Show/Hide)</a>
-      <a href="#" data-action="game-updateHeaderInfo">Update (Level, Slot, Names)</a> <a href="#" data-action="game-gmAward">GM Award</a>
+      <a href="#" data-action="game-updateHeaderInfo">Update (Level, Slot, Names)</a>
+      <a href="#" data-action="game-gmAward">GM Award</a>
 
       <div class="sub-menu-item">
         <a href="#">Meta</a>
@@ -55,7 +56,8 @@
         <div class="dropdown-content sub-menu">
           <a href="#" data-action="game-setMaxLuck">Luck</a>
           <a href="#" data-action="game-setMaxMeta">Meta</a>
-          <a href="#" data-action="game-setMaxVit">Vit Max</a> <a href="#" data-action="game-setMaxAll">Reset All to Max</a>
+          <a href="#" data-action="game-setMaxVit">Vit Max</a>
+          <a href="#" data-action="game-setMaxAll">Reset All to Max</a>
         </div>
       </div>
     </div>
@@ -63,7 +65,7 @@
 
 
 <div id="gear-menu-item" class="menu-item">
-    <button id="btn-gear-menu"><span class="button-icon">⚙️</span> Gear</button>
+    <button id="btn-gear-menu"><span class="button-icon">🛠️</span> Gear</button>
     <div id="dropdown-gear" class="dropdown-content">
       <a href="#" data-action="gear-toggleGear">Gear (Show/Hide)</a>
 
@@ -77,7 +79,6 @@
           <a href="#" data-action="gear-lootGear">Gear</a>
           <a href="#" data-action="gear-lootGem">Gem (for socket)</a>
           <a href="#" data-action="gear-lootSocketed">Socketed Gear</a>
-
           <a href="#" data-action="gear-lootValuables">Valuables</a>
         </div>
       </div>
@@ -90,10 +91,17 @@
     <div id="dropdown-data" class="dropdown-content">
       <a href="#" data-action="data-saveTest">Save Test Data</a>
       <a href="#" data-action="data-loadTest">Load Test Data</a>
-     </div>
+      <a href="#" data-action="data-designerOnly">Designer Only</a> </div>
   </div>
 
-</div> <div id="grid"></div>
+  <div id="designer-menu-item" class="menu-item">
+      <button id="btn-designer-menu" style="display: none; margin-left: var(--gap-data-designer);">
+        <span class="button-icon">⚙️</span> Designer
+      </button>
+      <div id="dropdown-designer" class="dropdown-content">
+        </div>
+  </div>
+  </div> <div id="grid"></div>
 <div id="cell-tooltip"></div>
 
 <div id="image-modal" style="display: none;">
@@ -131,7 +139,8 @@
 <div id="roll-log-sidebar">
   <div class="sidebar-header">
     <h4 class="sidebar-title">Roll Log</h4>
-    <button id="sidebar-roll-btn" title="Simulate Main Roll Button">🎲 Roll</button> <button id="sidebar-refresh-log-btn" title="Resend Log to GM/Party">🔄</button>
+    <button id="sidebar-roll-btn" title="Simulate Main Roll Button">🎲 Roll</button>
+    <button id="sidebar-refresh-log-btn" title="Resend Log to GM/Party">🔄</button>
     <button id="sidebar-close-btn" title="Close Sidebar">&times;</button>
   </div>
   <div id="sidebar-content">

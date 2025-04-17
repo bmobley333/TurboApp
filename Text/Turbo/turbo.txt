@@ -30,7 +30,8 @@ const gSrv = { // Using gSrv prefix for server-side globals
   },
   // Configuration values
   DATA_TAB_NAME: 'Data', // Name of the CS tab holding player-specific IDs
-  MYKL_ID_CELL_A1: 'F8' // A1 notation for the cell containing MyKL ID in the Data tab
+  MYKL_ID_CELL_A1: 'F8', // A1 notation for the cell containing MyKL ID in the Data tab
+  designerPassword: 'Ogluck',
   // Add other server-side constants if needed
 };
 
@@ -149,7 +150,45 @@ function fGetMyKlId(myCsId) {
 
 
 // ==========================================================================
-// === Google Sheet/Doc Helper Functions  (END of Global Variables & doGet)===
+// === Desinger Password  (END of Global Variables & doGet)===
+// ==========================================================================
+
+
+
+// fValidateDesignerPassword /////////////////////////////////////////////////
+// Purpose -> Validates a password attempt against the stored designer password.
+// Inputs  -> passwordAttempt (String): The password entered by the user.
+// Outputs -> (Boolean): True if the password matches, false otherwise.
+function fValidateDesignerPassword(passwordAttempt) {
+    const funcName = "fValidateDesignerPassword";
+    const storedPassword = gSrv.designerPassword; // Assuming password is in gSrv
+
+    if (!storedPassword) {
+        console.error(`${funcName}: Designer password is not set in server globals (gSrv.designerPassword).`);
+        Logger.log(`${funcName}: ERROR - Designer password not configured on server.`);
+        // Return false if the server doesn't have a password configured
+        return false;
+    }
+
+    // Basic check to ensure we have a string attempt
+    if (typeof passwordAttempt !== 'string') {
+        Logger.log(`${funcName}: Invalid password attempt type received: ${typeof passwordAttempt}`);
+        return false;
+    }
+
+    // Perform case-sensitive comparison
+    const isValid = (passwordAttempt === storedPassword);
+
+    // Optional: Log the attempt result (avoid logging passwords themselves in production)
+    Logger.log(`${funcName}: Password validation attempt. Result: ${isValid ? 'Success' : 'Failure'}`);
+
+    return isValid;
+} // END fValidateDesignerPassword
+
+
+
+// ==========================================================================
+// === Google Sheet/Doc Helper Functions  (END of Desinger Password)===
 // ==========================================================================
 
 
