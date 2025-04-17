@@ -1192,77 +1192,6 @@ function fSaveTestDataToFirestore(baseDocId, data) {
 
 
 
-// fLoadTestDataFromFirestore //////////////////////////////////////////////////
-// Purpose -> Loads test data from Firestore for a given base document ID.
-// Inputs  -> baseDocId (String): The base ID (e.g., "Data_SheetID") used for the document name.
-// Outputs -> (Object): { success: Boolean, data?: Object, message?: String }
-function fLoadTestDataFromFirestore(baseDocId) {
-    const funcName = "fLoadTestDataFromFirestore";
-    Logger.log(`${funcName}: Received request to load data for Base ID: ${baseDocId}`);
-
-    // --- 1. Validate Inputs ---
-    if (!baseDocId || typeof baseDocId !== 'string' || baseDocId.trim() === '') {
-        const msg = "Invalid or missing baseDocId.";
-        console.error(`${funcName} Error: ${msg}`);
-        Logger.log(`   -> ${funcName} Error: ${msg}`);
-        return { success: false, message: msg };
-    }
-
-    // --- 2. Get Firestore Instance ---
-    const firestore = fGetFirestoreInstance(); // Uses the existing helper function
-    if (!firestore) {
-        const msg = "Failed to initialize Firestore instance (check previous logs).";
-        Logger.log(`${funcName} Error: ${msg}`);
-        return { success: false, message: "Server configuration error." };
-    }
-    Logger.log(`   -> Firestore instance obtained successfully.`);
-
-    // --- 3. Define Firestore Path ---
-    const documentPath = `TestData/${baseDocId}`;
-    Logger.log(`   -> Firestore document path to load: ${documentPath}`);
-
-    try {
-        // --- 4. Get Document ---
-        Logger.log(`   -> Attempting firestore.getDocument for path: ${documentPath}`);
-        const document = firestore.getDocument(documentPath);
-
-        // Log the raw result from the library call
-        Logger.log(`   -> firestore.getDocument result: ${JSON.stringify(document)}`);
-
-        // --- 5. Process Result ---
-        if (document && document.obj) {
-            // The FirestoreGoogleAppsScript library typically returns the data within the 'obj' property
-            Logger.log(`   -> ✅ Successfully loaded data for path: ${documentPath}.`);
-            return { success: true, data: document.obj }; // Return the actual data object
-        } else if (document && !document.obj) {
-             // Document might exist but be empty or structured differently than expected by the library?
-             const msg = `Document found at path ${documentPath}, but data object (document.obj) is missing or empty.`;
-             console.warn(`${funcName} Warning: ${msg}`, document);
-             Logger.log(`   -> ⚠️ ${msg}`);
-             return { success: false, message: msg };
-        }
-         else {
-             // Document likely does not exist
-             const msg = `Document not found at path: ${documentPath}.`;
-             Logger.log(`   -> ${funcName}: ${msg}`);
-             // This isn't necessarily an error, just means no data was saved yet
-             return { success: false, message: msg, notFound: true }; // Add a flag for 'not found'
-        }
-
-    } catch (e) {
-        // Handle potential errors (e.g., Permissions, API errors)
-        console.error(`Exception caught in ${funcName} loading from path ${documentPath}: ${e.message}\nStack: ${e.stack}`);
-        Logger.log(`   -> ❌ Exception during Firestore load for path ${documentPath}: ${e.message}`);
-        // Return specific error if safe, otherwise generic
-        const safeErrorMessage = e.message.includes("permission") ? "Permission denied." : "Server error during Firestore load.";
-        Logger.log(`   -> Returning error message: "${safeErrorMessage}" (Raw: ${e.message})`);
-        return { success: false, message: safeErrorMessage };
-    }
-
-} // END fLoadTestDataFromFirestore
-
-
-
 
 // fSaveTextDataToFirestore ////////////////////////////////////////////////////
 // Purpose -> Saves grid text data and character metadata to a Firestore document
@@ -1305,7 +1234,7 @@ function fSaveTextDataToFirestore(csId, textData, charInfo) {
     // Sanitize player name (replace spaces/special chars, though Firestore might handle some)
     // A simple replacement of non-alphanumeric chars (excluding underscore) with underscore
     const sanitizedPlayerName = charInfo.playerName.trim().replace(/[^a-zA-Z0-9_]/g, '_');
-    const documentId = `${sanitizedPlayerName}_${csId}`; // New Format: PlayerName_CSID
+    const documentId = `GSID_${csId}`;
     const collectionName = 'GameTextData'; 
     const documentPath = `${collectionName}/${documentId}`; // New Path
 

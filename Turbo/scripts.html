@@ -3930,8 +3930,11 @@ function fSetupDelegatedMenuActionClick(menuBar) {
                  // ... other gear loot actions ...
 
                  // --- Data Menu Actions ---
-                 case 'data-saveNow':            fHandleAutoSaveTextData();                   break; // <<< UPDATED to call auto-save
-                 // case 'data-loadTest':           (async () => await fHandleLoadTestData())();   break; // <<< REMOVED (or comment out if needed later)
+                 case 'data-saveNow':
+                     fHandleAutoSaveTextData();
+                     fShowMessage("✅ Grid text data saved.").catch(e => console.error("Error showing save message:", e)); // <<< ADDED feedback
+                     break;
+                 // REMOVED 'data-loadTest' case
                  case 'data-designerOnly':       fHandleDesignerOnlyClick();                    break;
 
                  // --- Default (Unhandled Actions) ---
@@ -5167,66 +5170,6 @@ function fToggleGearColumns() {
 
 
 
-// fHandleLoadTestData ///////////////////////////////////////////////////////////
-// Purpose -> Handles the "Load Test Data" menu action. Calls server-side function
-//            to retrieve test data from Firestore and displays it.
-// Inputs  -> None.
-// Outputs -> (Promise<void>): Resolves when actions complete.
-async function fHandleLoadTestData() {
-    fMyConsoleLog("⚙️ Menu Action: Load Test Data Triggered (Firestore)...");
-
-    // 1. Determine Document ID
-    const baseDocId = `Data_${gIndexCSID}`;
-    fMyConsoleLog(`   -> Preparing to load test data with Base ID: ${baseDocId}`);
-
-    // 2. Call Server Function
-    try {
-        // Show a temporary "Loading..." message
-        const loadingMessage = fShowMessage("💾 Loading Test Data from Firestore..."); // Don't await here
-
-        const result = await new Promise((resolve, reject) => {
-            google.script.run
-                .withSuccessHandler(resolve) // Resolve promise with server's return value {success, data?, message?}
-                .withFailureHandler(reject)  // Reject promise with error object
-                .fLoadTestDataFromFirestore(baseDocId); // Pass ID
-        });
-
-        fHideMessage(); // Hide the "Loading..." message
-
-        // 3. Handle Result
-        if (result && result.success && result.data) {
-            fMyConsoleLog("   -> ✅ Server reported success loading test data from Firestore.");
-            fMyConsoleLog("   -> Loaded Data:", result.data);
-            // Display the loaded data - using fShowMessage for simplicity
-            const displayData = JSON.stringify(result.data, null, 2); // Pretty print JSON
-            await fShowMessage(`✅ Test Data Loaded:\n${displayData}`);
-
-        } else if (result && !result.success && result.notFound) {
-             // Handle case where document wasn't found (not necessarily an error)
-             fMyConsoleLog(`   -> ℹ️ Document not found on server for ID: ${baseDocId}`);
-             await fShowMessage(`ℹ️ No test data found for this character sheet (ID: ${baseDocId}). Save test data first.`);
-
-        } else {
-            // Handle other server-reported failures
-            const serverMsg = result?.message || "Unknown server issue";
-            fMyConsoleLog(`   -> ⚠️ Server reported failure loading test data: ${serverMsg}`);
-            await fShowMessage(`⚠️ Could not load test data (${serverMsg}).`);
-        }
-
-    } catch (error) {
-        // Handle transport errors or unhandled server exceptions
-        fHideMessage(); // Ensure loading message is hidden on error
-        const errorMsg = `Error loading test data from Firestore: ${error.message || error}`;
-        console.error("fHandleLoadTestData Failure:", error);
-        fMyConsoleLog(`   -> ❌ ${errorMsg}`);
-        await fShowMessage(`❌ ${errorMsg}`);
-    }
-
-    fMyConsoleLog("✅ Load Test Data (Firestore) Action Complete.");
-
-} // END fHandleLoadTestData
-
-
 
 
 // fHandleDesignerOnlyClick ////////////////////////////////////////////////////
@@ -5755,16 +5698,7 @@ function fHandleAutoSaveSuccess(result) {
         // If server returns {success: false, message: '...'}, failure handler should catch it.
     }
 
-    // --- Subtle UI Feedback (Example: Flash an icon) ---
-    // Add an element like <span id="save-indicator" style="display:none;">💾</span> to your ui.html
-    const indicator = document.getElementById('save-indicator'); // <<<< Make sure you have this element
-    if (indicator) {
-        indicator.style.display = 'inline';
-        setTimeout(() => {
-            indicator.style.display = 'none';
-        }, 1000); // Hide after 1 second
-    }
-    // --- End UI Feedback Example ---
+    // --- REMOVED Subtle UI Feedback (Flash icon) ---
 
 } // END fHandleAutoSaveSuccess
 
