@@ -3927,24 +3927,19 @@ function fSetupDelegatedMenuActionClick(menuBar) {
                  // --- Gear Menu Actions ---
                  case 'gear-toggleGear':         fToggleGearColumns();                          break;
                  // case 'gear-loot':                                                              break; // Handler TBD
-                 // case 'gear-lootArtifact':                                                      break; // Handler TBD
-                 // case 'gear-lootChaosCrystal':                                                  break; // Handler TBD
-                 // case 'gear-lootGear':                                                          break; // Handler TBD
-                 // case 'gear-lootGem':                                                           break; // Handler TBD
-                 // case 'gear-lootSocketed':                                                      break; // Handler TBD
-                 // case 'gear-lootValuables':                                                     break; // Handler TBD
+                 // ... other gear loot actions ...
 
                  // --- Data Menu Actions ---
-                 case 'data-saveTest':           (async () => await fHandleSaveTestData())();   break;
-                 case 'data-loadTest':           (async () => await fHandleLoadTestData())();   break;
-                 case 'data-designerOnly':       fHandleDesignerOnlyClick();                    break; 
+                 case 'data-saveNow':            fHandleAutoSaveTextData();                   break; // <<< UPDATED to call auto-save
+                 // case 'data-loadTest':           (async () => await fHandleLoadTestData())();   break; // <<< REMOVED (or comment out if needed later)
+                 case 'data-designerOnly':       fHandleDesignerOnlyClick();                    break;
 
                  // --- Default (Unhandled Actions) ---
                  default:
                      console.log(`ACTION: Menu item clicked: ${action} (No handler defined yet)`);
                      fMyConsoleLog(`🖱️ Menu: ${action} (No handler)`);
                      // Optionally show a message for unimplemented actions:
-                     fShowMessage(`Action "${action}" is not yet implemented.`);
+                     // fShowMessage(`Action "${action}" is not yet implemented.`);
              }
          } // End if(targetLink)
 
@@ -5168,63 +5163,7 @@ function fToggleGearColumns() {
 
 
 
-// fHandleSaveTestData ///////////////////////////////////////////////////////////
-// Purpose -> Handles the "Save Test Data" menu action. Creates test data and
-//            calls a server-side function to save it to Firestore.
-// Inputs  -> None.
-// Outputs -> (Promise<void>): Resolves when actions complete.
-async function fHandleSaveTestData() {
-    fMyConsoleLog("⚙️ Menu Action: Save Test Data Triggered (Firestore)...");
 
-    // 1. Create Data Object
-    const testData = {
-        content: "Hello Firebase!", // Updated message
-        timestamp: new Date().toISOString(), // ISO format string for timestamp
-        savedFrom: gIndexCSID // Add CS ID for context
-    };
-    // Document ID within Firestore will be derived from gIndexCSID on the server
-    const baseDocId = `Data_${gIndexCSID}`;
-
-    fMyConsoleLog(`   -> Preparing to save test data with Base ID: ${baseDocId}`);
-    fMyConsoleLog(`   -> Data: ${JSON.stringify(testData)}`);
-
-    // 2. Call Server Function
-    try {
-        // Show a temporary "Saving..." message
-        const savingMessage = fShowMessage("💾 Saving Test Data to Firestore..."); // Don't await here
-
-        const result = await new Promise((resolve, reject) => {
-            google.script.run
-                // Assuming success handler receives an object { success: boolean, message?: string }
-                .withSuccessHandler(resolve)
-                .withFailureHandler(reject)  // Reject promise with error object
-                .fSaveTestDataToFirestore(baseDocId, testData); // Pass ID and data object
-        });
-
-        fHideMessage(); // Hide the "Saving..." message
-
-        if (result && result.success) {
-            fMyConsoleLog("   -> ✅ Server reported success saving test data to Firestore.");
-            await fShowMessage("✅ Test Data Saved Successfully to Firestore!");
-        } else {
-            // This case might indicate a handled error on the server
-            const serverMsg = result?.message || "server reported issue";
-            fMyConsoleLog(`   -> ⚠️ Server reported failure saving test data to Firestore: ${serverMsg}`);
-            await fShowMessage(`⚠️ Could not save test data to Firestore (${serverMsg}).`);
-        }
-
-    } catch (error) {
-        // Handle transport errors or unhandled server exceptions
-        fHideMessage(); // Ensure loading message is hidden on error
-        const errorMsg = `Error saving test data to Firestore: ${error.message || error}`;
-        console.error("fHandleSaveTestData Failure:", error);
-        fMyConsoleLog(`   -> ❌ ${errorMsg}`);
-        await fShowMessage(`❌ ${errorMsg}`);
-    }
-
-    fMyConsoleLog("✅ Save Test Data (Firestore) Action Complete.");
-
-} // END fHandleSaveTestData
 
 
 
@@ -5702,7 +5641,162 @@ async function fRefreshMonsterData() {
 
 
 // ==========================================================================
-// === Initialization & Setup Functions     (End of Header Button Click) ===
+// === Firestore Text Read/Write     (End of Header Button Click) ===
+// ==========================================================================
+
+
+
+// fCaptureTextState ///////////////////////////////////////////////////////////
+// Purpose -> Iterates through grid data (gUI.arr) and notes (gUI.notes),
+//            building an object containing only non-empty text/note values,
+//            keyed by 'r,c' strings.
+// Inputs  -> None (Uses gUI.arr, gUI.notes).
+// Outputs -> (Object): { 'r,c': 'text', 'r2,c2': 'note text', ... } or empty object.
+function fCaptureTextState() {
+    fMyConsoleLog("💾 Capturing Grid Text State...");
+    const textData = {};
+    const numRows = gUI.arr?.length || 0;
+    const numCols = numRows > 0 ? gUI.arr[0].length : 0;
+    let cellsWithText = 0;
+
+    // Iterate through main data array (gUI.arr)
+    for (let r = 0; r < numRows; r++) {
+        for (let c = 0; c < numCols; c++) {
+            const value = gUI.arr[r]?.[c];
+            // Only add if value is a non-empty string (trimmed)
+            if (typeof value === 'string' && value.trim() !== '') {
+                const key = `${r},${c}`;
+                textData[key] = value; // Store original value
+                cellsWithText++;
+            }
+        }
+    }
+
+    // Iterate through notes array (gUI.notes)
+    const noteRows = gUI.notes?.length || 0;
+    if (noteRows > 0) {
+        const noteCols = gUI.notes[0]?.length || 0;
+        for (let r = 0; r < noteRows; r++) {
+            for (let c = 0; c < noteCols; c++) {
+                const noteText = gUI.notes[r]?.[c]?.trim();
+                // Only add if note text is non-empty
+                if (noteText) {
+                    const key = `${r},${c}_note`; // Use distinct key for notes
+                    // Avoid overwriting if cell text and note exist for same r,c
+                    // Although keys are now distinct, this check prevents adding if note is blank
+                    if (!textData[key]) {
+                         textData[key] = noteText; // Store trimmed note text
+                         cellsWithText++; // Count notes with text as well
+                    }
+                }
+            }
+        }
+    }
+
+    fMyConsoleLog(`   -> Captured text/notes from ${cellsWithText} cells.`);
+    return textData;
+} // END fCaptureTextState
+
+
+
+
+// fHandleAutoSaveTextData /////////////////////////////////////////////////////
+// Purpose -> Orchestrates the background auto-saving of grid text data to Firestore.
+//            Calls text capture, checks if data exists, and initiates server call.
+// Inputs  -> None.
+// Outputs -> None (Initiates async server call).
+function fHandleAutoSaveTextData() {
+    fMyConsoleLog("💾 Handling Auto-Save Text Data...");
+
+    // Capture the current text state
+    const textData = fCaptureTextState();
+
+    // Check if there's any data to save
+    if (Object.keys(textData).length === 0) {
+        fMyConsoleLog("   -> No text data found to save. Skipping server call.");
+        return; // Nothing to save
+    }
+
+    // Log snippet of data being sent (optional)
+    // fMyConsoleLog(`   -> Text data prepared: ${JSON.stringify(textData).substring(0, 100)}...`);
+
+    // Validate character info needed for metadata
+    if (!gUI.characterInfo || !gIndexCSID) {
+         console.error("fHandleAutoSaveTextData: Missing gIndexCSID or gUI.characterInfo needed for saving.");
+         fMyConsoleLog("   -> ❌ Auto-save aborted: Missing CS ID or character info.");
+         // Optionally show a non-disruptive warning? Maybe only after repeated fails?
+         return;
+    }
+
+    fMyConsoleLog("   -> Calling server function fSaveTextDataToFirestore...");
+    // Call the server function in the background
+    google.script.run
+        .withSuccessHandler(fHandleAutoSaveSuccess)
+        .withFailureHandler(fHandleAutoSaveFailure)
+        .fSaveTextDataToFirestore(gIndexCSID, textData, gUI.characterInfo);
+
+} // END fHandleAutoSaveTextData
+
+
+
+
+// fHandleAutoSaveSuccess //////////////////////////////////////////////////////
+// Purpose -> Success callback for the fSaveTextDataToFirestore server call.
+//            Logs success and provides minimal UI feedback.
+// Inputs  -> result (Object): The object returned from the server (expected: { success: true }).
+// Outputs -> None.
+function fHandleAutoSaveSuccess(result) {
+    // Basic check if server explicitly indicated success (optional)
+    if (result && result.success) {
+        fMyConsoleLog("   -> ✅ Auto-save successful (Server confirmed).");
+    } else {
+        // Log even if server didn't return explicit success, as long as failure handler wasn't called
+        fMyConsoleLog("   -> ✅ Auto-save call completed (Server response did not explicitly indicate failure).");
+        // If server returns {success: false, message: '...'}, failure handler should catch it.
+    }
+
+    // --- Subtle UI Feedback (Example: Flash an icon) ---
+    // Add an element like <span id="save-indicator" style="display:none;">💾</span> to your ui.html
+    const indicator = document.getElementById('save-indicator'); // <<<< Make sure you have this element
+    if (indicator) {
+        indicator.style.display = 'inline';
+        setTimeout(() => {
+            indicator.style.display = 'none';
+        }, 1000); // Hide after 1 second
+    }
+    // --- End UI Feedback Example ---
+
+} // END fHandleAutoSaveSuccess
+
+
+
+// fHandleAutoSaveFailure //////////////////////////////////////////////////////
+// Purpose -> Failure callback for the fSaveTextDataToFirestore server call.
+//            Logs the error comprehensively to the console. Avoids disruptive user messages.
+// Inputs  -> error (Error Object): The error object from the failed server call.
+// Outputs -> None.
+function fHandleAutoSaveFailure(error) {
+    const errorMsg = `Auto-save to Firestore failed: ${error?.message || 'Unknown error'}`;
+    console.error("❌ fHandleAutoSaveFailure:", errorMsg, error); // Log detailed error object
+    fMyConsoleLog(`   -> ❌ ${errorMsg}`); // Log simplified message via fMyConsoleLog
+
+    // --- Avoid Disruptive Messages ---
+    // Generally, do NOT show fShowMessage here for background saves unless absolutely
+    // critical or after repeated failures, as it interrupts the user experience.
+    // If needed, implement a counter or flag for repeated failures.
+    // Example (Conditional Message):
+    // gUI.autoSaveFailureCount = (gUI.autoSaveFailureCount || 0) + 1;
+    // if (gUI.autoSaveFailureCount > 3) {
+    //     fShowMessage("Warning: Repeatedly failed to auto-save grid text.").catch(e => {});
+    //     gUI.autoSaveFailureCount = 0; // Reset counter
+    // }
+
+} // END fHandleAutoSaveFailure
+
+
+
+// ==========================================================================
+// === Initialization & Setup Functions     (End of Firestore Text Read/Write) ===
 // ==========================================================================
 
 

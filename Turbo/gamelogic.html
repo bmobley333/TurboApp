@@ -50,7 +50,8 @@ async function fHandleRollDiceAction() {
         const multiRollCount = gUI.roll.multiRollCount;
         const isFreeRoll = gUI.buttonOrMenu.isFree || gUI.roll.isFreeRoll || (isNishAbilityRoll && gUI.buttonOrMenu.isNish);
         const isLuckedRoll = gUI.buttonOrMenu.isLuck || gUI.roll.isLuckedRoll;
-        gUI.roll.isFreeRoll = isFreeRoll; gUI.roll.isLuckedRoll = isLuckedRoll;
+        gUI.roll.isFreeRoll = isFreeRoll;
+        gUI.roll.isLuckedRoll = isLuckedRoll;
         const resTyp = gUI.roll.resTyp;
         const hasDifficultyMorph = (typeof gUI.roll.resDif === 'number' && gUI.roll.resDif !== '');
 
@@ -251,6 +252,10 @@ async function fHandleRollDiceAction() {
         }
         // gUI.roll.htmlHeader = ''; // Not needed anymore
 
+        // ===> !!! ADD AUTO-SAVE CALL HERE !!! <===
+        fHandleAutoSaveTextData(); // Initiate background save
+        // ===> !!! END ADDED CALL !!! <===
+
     } catch (err) {
         // --- Catch Unexpected Errors ---
         console.error("Critical Error in fHandleRollDiceAction:", err);
@@ -258,7 +263,8 @@ async function fHandleRollDiceAction() {
         await fShowMessage(`❌ Critical Error during roll: ${err.message}. Please check console.`);
         fSetButtonOrMenuState(null);
         // Attempt to send log even after critical error, slightly delayed
-        setTimeout(() => fSendLogToGMScreenNPS(), 0); // <<< MODIFIED >>>
+        setTimeout(() => fSendLogToGMScreenNPS(), 0);
+        // <<< MODIFIED >>>
         return; // Exit after critical error
     }
 

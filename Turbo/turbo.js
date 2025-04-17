@@ -1042,7 +1042,7 @@ function fSetLogAndHeaderData(dataBundle) {
 
 
 // ==========================================================================
-// === Firebase                       (End of Read/Write to Google Sheets/Docs ) ===
+// === Firestore                       (End of Read/Write to Google Sheets/Docs ) ===
 // ==========================================================================
 
 
@@ -1261,6 +1261,86 @@ function fLoadTestDataFromFirestore(baseDocId) {
 
 } // END fLoadTestDataFromFirestore
 
+
+
+
+// fSaveTextDataToFirestore ////////////////////////////////////////////////////
+// Purpose -> Saves grid text data and character metadata to a Firestore document
+//            in the 'GameTextData' collection. Document ID is playerName_csId.
+//            Uses updateDocument which creates if not exists.
+// Inputs  -> csId (String): The Character Sheet ID (used for document path).
+//         -> textData (Object): The object containing {'r,c': text} data.
+//         -> charInfo (Object): Character metadata { slotNum, raceClass, playerName, etc. }.
+// Outputs -> (Object): { success: Boolean, message?: String }
+function fSaveTextDataToFirestore(csId, textData, charInfo) {
+    const funcName = "fSaveTextDataToFirestore";
+    Logger.log(`${funcName}: Saving text data for CS ID: ${csId}...`);
+
+    // === 1. Validate Inputs ===
+    if (!csId || typeof csId !== 'string') {
+        return { success: false, message: "Invalid Character Sheet ID provided." };
+    }
+    if (!textData || typeof textData !== 'object') {
+        return { success: false, message: "Invalid textData object provided." };
+    }
+     // Validate characterInfo and specifically playerName needed for document ID
+     if (!charInfo || typeof charInfo !== 'object' || !charInfo.playerName || typeof charInfo.playerName !== 'string' || charInfo.playerName.trim() === '') {
+        const msg = "Invalid or missing characterInfo.playerName for Firestore document ID.";
+        Logger.log(`   -> ${funcName} Error: ${msg}`);
+        return { success: false, message: msg }; // Fail if playerName is missing
+    }
+    Logger.log(`   -> Received ${Object.keys(textData).length} text/note entries.`);
+    Logger.log(`   -> Received charInfo: ${JSON.stringify(charInfo)}`);
+
+    // === 2. Get Firestore Instance ===
+    const firestore = fGetFirestoreInstance();
+    if (!firestore) {
+        const msg = "Failed to initialize Firestore instance (check previous logs).";
+        Logger.log(`${funcName} Error: ${msg}`);
+        return { success: false, message: "Server configuration error (Firestore)." };
+    }
+    Logger.log(`   -> Firestore instance obtained.`);
+
+    // === 3. Define Path and Data ===
+    // Sanitize player name (replace spaces/special chars, though Firestore might handle some)
+    // A simple replacement of non-alphanumeric chars (excluding underscore) with underscore
+    const sanitizedPlayerName = charInfo.playerName.trim().replace(/[^a-zA-Z0-9_]/g, '_');
+    const documentId = `${sanitizedPlayerName}_${csId}`; // New Format: PlayerName_CSID
+    const collectionName = 'GameTextData'; 
+    const documentPath = `${collectionName}/${documentId}`; // New Path
+
+    const dataToSave = {
+        characterInfo: charInfo,    // Store character metadata
+        gridText: textData,         // Store the actual grid text/notes
+        lastUpdated: new Date()     // Add a server-side timestamp
+    };
+    Logger.log(`   -> Target Firestore Path: ${documentPath}`); // Log updated path
+    // Logger.log(`   -> Data to Save (Snippet): ${JSON.stringify(dataToSave).substring(0, 200)}...`); // Optional: Log snippet
+
+    // === 4. Save to Firestore ===
+    try {
+        Logger.log(`   -> Calling firestore.updateDocument...`);
+        // Use updateDocument with mask=false to overwrite the entire document or create if needed.
+        const writeResult = firestore.updateDocument(documentPath, dataToSave, false);
+        Logger.log(`   -> Firestore write result: ${JSON.stringify(writeResult)}`); // Log raw result
+
+        // Basic check on writeResult (can be adapted based on library specifics)
+        if (writeResult && typeof writeResult === 'object') {
+             Logger.log(`   -> ✅ Successfully saved text data for ${csId} to ${documentPath}.`);
+             return { success: true };
+        } else {
+             const msg = `Firestore updateDocument returned unexpected result.`;
+             Logger.log(`   -> ❌ ${funcName} Error: ${msg}`);
+             return { success: false, message: `Firestore write returned unexpected result: ${JSON.stringify(writeResult)}` };
+        }
+
+    } catch (e) {
+        console.error(`Exception caught in ${funcName} saving to path ${documentPath}: ${e.message}\nStack: ${e.stack}`);
+        Logger.log(`   -> ❌ Exception during Firestore save for ${csId}: ${e.message}`);
+        const safeErrorMessage = e.message.includes("permission") ? "Permission denied." : "Server error during Firestore save.";
+        return { success: false, message: safeErrorMessage };
+    }
+} // END fSaveTextDataToFirestore
 
 
 
