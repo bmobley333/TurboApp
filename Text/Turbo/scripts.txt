@@ -5644,26 +5644,20 @@ function fCaptureTextState() {
 
 
 // fHandleAutoSaveTextData /////////////////////////////////////////////////////
-// Purpose -> Orchestrates the background auto-saving of grid text data to Firestore.
-//            Calls text capture, checks if data exists, and initiates server call.
+// Purpose -> Orchestrates the background auto-saving of the entire gUI.arr to Firestore.
+//            Checks if data exists and initiates server call.
 // Inputs  -> None.
 // Outputs -> None (Initiates async server call).
 function fHandleAutoSaveTextData() {
-    fMyConsoleLog("💾 Handling Auto-Save Text Data...");
+    fMyConsoleLog("💾 Handling Auto-Save Data (Full Array)...");
 
-    // Capture the current text state
-    const textData = fCaptureTextState();
-
-    // Check if there's any data to save
-    if (Object.keys(textData).length === 0) {
-        fMyConsoleLog("   -> No text data found to save. Skipping server call.");
+    // === 1. Check if gUI.arr exists and has data ===
+    if (!gUI.arr || !Array.isArray(gUI.arr) || gUI.arr.length === 0) {
+        fMyConsoleLog("   -> No grid data (gUI.arr) found to save. Skipping server call.");
         return; // Nothing to save
     }
 
-    // Log snippet of data being sent (optional)
-    // fMyConsoleLog(`   -> Text data prepared: ${JSON.stringify(textData).substring(0, 100)}...`);
-
-    // Validate character info needed for metadata
+    // === 2. Validate character info needed for metadata ===
     if (!gUI.characterInfo || !gIndexCSID) {
          console.error("fHandleAutoSaveTextData: Missing gIndexCSID or gUI.characterInfo needed for saving.");
          fMyConsoleLog("   -> ❌ Auto-save aborted: Missing CS ID or character info.");
@@ -5671,12 +5665,13 @@ function fHandleAutoSaveTextData() {
          return;
     }
 
-    fMyConsoleLog("   -> Calling server function fSaveTextDataToFirestore...");
-    // Call the server function in the background
+    // === 3. Call Server Function ===
+    fMyConsoleLog("   -> Calling server function fSaveTextDataToFirestore with full gUI.arr...");
+    // Pass gUI.arr directly instead of textData
     google.script.run
         .withSuccessHandler(fHandleAutoSaveSuccess)
         .withFailureHandler(fHandleAutoSaveFailure)
-        .fSaveTextDataToFirestore(gIndexCSID, textData, gUI.characterInfo);
+        .fSaveTextDataToFirestore(gIndexCSID, gUI.arr, gUI.characterInfo); // Pass gUI.arr
 
 } // END fHandleAutoSaveTextData
 
