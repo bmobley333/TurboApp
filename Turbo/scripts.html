@@ -3167,6 +3167,9 @@ function fPrependToSidebar(htmlMessage, plainTextMessage = null) {
     // Push the plain text version to the log array
     gUI.plainTextLogEntries.push(textToLog);
 
+    // Save Turbo text to Firestore
+    fHandleAutoSaveTextData();
+
     // --- Optional: Immediate GMScreen Update (Consider using throttle/debounce if called too often) ---
     // fSendLogToGMScreenNPS(); // Direct call - we'll add calls at end-of-action instead
 
