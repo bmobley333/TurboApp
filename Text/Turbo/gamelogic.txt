@@ -2345,6 +2345,9 @@ async function fHandlePrepARClick(event) {
         return;
     }
 
+    // Post text to Firestore
+    fHandleAutoSaveTextData();
+
     // === 5. Clean up History ===
     // Remove the processed entry from the history map
     try {
@@ -2505,6 +2508,10 @@ async function fHandlePrepDmgClick(event) {
         // Note: History entry remains here on error
         return;
     }
+
+    // Post text to Firestore
+    fHandleAutoSaveTextData();
+
 
     // === 5. Clean up History ===
     // Remove the processed entry from the history map

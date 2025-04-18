@@ -3296,6 +3296,9 @@ async function fHandleApplyWoundsClick(event) {
     fMyConsoleLog("   -> Recalculating Vit Now & Percent...");
     await fVitNowNPercent_Calc(); // Update Vit Now and Vit Now Percent cells
 
+    // Post text to Firestore
+    fHandleAutoSaveTextData();
+
     fMyConsoleLog("✅ Wounds Applied Successfully.");
 } // END fHandleApplyWoundsClick
 
