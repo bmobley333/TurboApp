@@ -264,7 +264,6 @@ async function fHandleRollDiceAction() {
         fSetButtonOrMenuState(null);
         // Attempt to send log even after critical error, slightly delayed
         setTimeout(() => fSendLogToGMScreenNPS(), 0);
-        // <<< MODIFIED >>>
         return; // Exit after critical error
     }
 
@@ -273,7 +272,7 @@ async function fHandleRollDiceAction() {
     fMyConsoleLog(`✅ Roll Dice Action Completed.`);
 
     // Send the final log state to the GMScreen (with slight delay)
-    setTimeout(() => fSendLogToGMScreenNPS(), 0); // <<< MODIFIED >>>
+    setTimeout(() => fSendLogToGMScreenNPS(), 0); 
 
 } // END fHandleRollDiceAction
 
@@ -838,14 +837,14 @@ async function fAct_VerifyAndProcessCost() {
     const actCost = Number(skAct);
     const changes = [];
     const headers = []; // Array for HTML headers
-    const headersText = []; // <<< NEW: Array for plain text headers
+    const headersText = []; // Array for plain text headers
 
     if (actCost > 0) {
         let currentAct = fGetGridValue('Act', 'ActTot', true);
         if (isNaN(currentAct)) {
             await fShowMessage(`❌ Error reading current Action Points from cell ('Act', 'ActTot'). Cannot proceed.`);
             fMyConsoleLog("🚫 Failed to verify Act cost: Could not read Action Points.");
-            return { success: false, cancelledByUser: false, changes: [], headers: [], headersText: [] }; // <<< Added headersText
+            return { success: false, cancelledByUser: false, changes: [], headers: [], headersText: [] }; 
         }
 
         if (actCost > currentAct) {
@@ -853,12 +852,12 @@ async function fAct_VerifyAndProcessCost() {
             const proceed = await fShowPrompt(`Not Enough Action Points (${currentAct}) to use '${skName}' (Cost: ${actCost})<br><br>Do you want to go negative?`);
             if (!proceed) {
                 fMyConsoleLog("🚫 User cancelled Act cost due to insufficient points.");
-                return { success: false, cancelledByUser: true, changes: [], headers: [], headersText: [] }; // <<< Added headersText
+                return { success: false, cancelledByUser: true, changes: [], headers: [], headersText: [] }; 
             }
             fMyConsoleLog("✅ User chose to proceed despite insufficient Action Points.");
             const warningText = `⚠️ NEGATIVE ACT POINTS: ${currentAct - actCost}`;
             headers.push(`<span class="red-bold">${warningText}</span>`); // HTML version
-            headersText.push(warningText); // <<< Plain text version
+            headersText.push(warningText); // Plain text version
         }
 
         const newActTotal = currentAct - actCost;
@@ -868,7 +867,7 @@ async function fAct_VerifyAndProcessCost() {
         fMyConsoleLog("   -> No Action Point cost for this ability.");
     }
 
-    return { success: true, cancelledByUser: false, changes: changes, headers: headers, headersText: headersText }; // <<< Added headersText
+    return { success: true, cancelledByUser: false, changes: changes, headers: headers, headersText: headersText }; 
 } // END fAct_VerifyAndProcessCost
 
 
@@ -883,12 +882,12 @@ async function fUses_VerifyAndProcessCost(multiRollCount) {
     const { skUses, skName, ability_R } = gUI.roll;
     const changes = [];
     const headers = []; // HTML headers
-    const headersText = []; // <<< NEW: Plain text headers
+    const headersText = []; 
 
     const currentUses = Number(skUses);
     if (skUses === '' || isNaN(currentUses)) {
         fMyConsoleLog("   -> No 'Uses' cost defined for this ability.");
-        return { success: true, cancelledByUser: false, changes: [], headers: [], headersText: [] }; // <<< Added headersText
+        return { success: true, cancelledByUser: false, changes: [], headers: [], headersText: [] }; 
     }
 
     const totalUsesCost = Math.max(1, multiRollCount);
@@ -900,17 +899,17 @@ async function fUses_VerifyAndProcessCost(multiRollCount) {
         const proceed = await fShowPrompt(`Not Enough Uses Left (${currentUses}) to use '${skName}' ${multiRollCount} times (Cost: ${totalUsesCost})<br><br>Do you want to go negative?`);
         if (!proceed) {
             fMyConsoleLog("🚫 User cancelled Uses cost due to insufficient points.");
-            return { success: false, cancelledByUser: true, changes: [], headers: [], headersText: [] }; // <<< Added headersText
+            return { success: false, cancelledByUser: true, changes: [], headers: [], headersText: [] }; 
         }
         fMyConsoleLog("✅ User chose to proceed despite insufficient Uses.");
         const warningText = `⚠️ NEGATIVE USES: ${newUses}`;
         headers.push(`<span class="red-bold">${warningText}</span>`); // HTML version
-        headersText.push(warningText); // <<< Plain text version
+        headersText.push(warningText); 
     }
 
     changes.push({ r: ability_R, c: 'Uses', value: newUses });
     fMyConsoleLog(`   -> Uses: ${currentUses} -> ${newUses} (Pending, cost: ${totalUsesCost})`);
-    return { success: true, cancelledByUser: false, changes: changes, headers: headers, headersText: headersText }; // <<< Added headersText
+    return { success: true, cancelledByUser: false, changes: changes, headers: headers, headersText: headersText }; 
 } // END fUses_VerifyAndProcessCost
 
 
@@ -2164,10 +2163,10 @@ function fBuildRollLogHTML(rollNum, totalRolls, isFirstRoll) {
             const delta = resRoll - dif;
             if (delta >= 0) {
                 htmlSuccessDelta = ` =+${delta} ✅`;
-                textSuccessDelta = ` =+${delta} ✅`; // <<< USE SYMBOL >>>
+                textSuccessDelta = ` =+${delta} ✅`; 
             } else {
                 htmlSuccessDelta = ` =${delta} ❌`;
-                textSuccessDelta = ` =${delta} ❌`; // <<< USE SYMBOL >>>
+                textSuccessDelta = ` =${delta} ❌`; 
             }
         }
     }
@@ -2608,7 +2607,7 @@ async function fHandleNishButtonClick(event) { // Added event parameter to use s
 async function fExecuteNishSequence() {
     fMyConsoleLog("🎬 Executing Nish Sequence...");
     // 1. Add Sidebar Divider (HTML and Plain Text)
-    // Use '======================' for the plain text version <<< MODIFIED >>>
+    // Use '======================' for the plain text version 
     fPrependToSidebar('<hr class="nish-divider"><br>', '\n======================\n');
     fMyConsoleLog("   -> Sidebar divider added.");
 
@@ -2894,7 +2893,6 @@ async function fHandleChaosGemClick(r, c) {
 
     // Build Sidebar Message (HTML and Plain Text)
     const trimmedAbilityText = String(abilityText).trim();
-    // <<< ADD ICON TO BOTH HTML AND TEXT >>>
     const sidebarMsgHtml = `💎 <span class="blue-bold">Chaos Crystal</span> (${newUses} Uses Left):<br>${trimmedAbilityText}`;
     const sidebarMsgText = `💎 Chaos Crystal (${newUses} Uses Left):\n${trimmedAbilityText}`;
 
@@ -2939,7 +2937,6 @@ async function fHandleAdHocRoll(cellText) {
         const num = parseInt(match[1], 10);
         if (!isNaN(num) && num > 0) {
             rollResult = fCSD(num); matchedString = match[0];
-            // <<< ADD ICON TO BOTH HTML AND TEXT >>>
             logHeaderHtml = '🎲 <span class="blue-bold">Custom Roll</span> Sk'; logHeaderText = '🎲 Custom Roll Sk';
             logDetailsHtml = `Sk(${num}) ~${rollResult}`; logDetailsText = `Sk(${num}) ~${rollResult}`;
             patternMatched = true; fMyConsoleLog(`   -> Matched EXACT Sk pattern: ${matchedString}. Result: ${rollResult}`);
@@ -2947,7 +2944,6 @@ async function fHandleAdHocRoll(cellText) {
     } else if ((match = text.match(dieStringExactPattern))) {
         matchedString = match[0].trim(); rollResult = fRollDieString(matchedString);
         if (rollResult !== null) {
-             // <<< ADD ICON TO BOTH HTML AND TEXT >>>
             logHeaderHtml = '🎲 <span class="blue-bold">Die Roll</span>'; logHeaderText = '🎲 Die Roll';
             logDetailsHtml = `Die(${matchedString}) ~${rollResult}`; logDetailsText = `Die(${matchedString}) ~${rollResult}`;
             patternMatched = true; fMyConsoleLog(`   -> Matched EXACT Die String pattern: ${matchedString}. Result: ${rollResult}`);
@@ -2957,7 +2953,6 @@ async function fHandleAdHocRoll(cellText) {
         if (!isNaN(num) && num > 0) {
             matchedString = `d${num}`; rollResult = fRollDieString(matchedString);
             if (rollResult !== null) {
-                 // <<< ADD ICON TO BOTH HTML AND TEXT >>>
                 logHeaderHtml = '🎲 <span class="blue-bold">Die Roll</span>'; logHeaderText = '🎲 Die Roll';
                 logDetailsHtml = `Die(${matchedString}) ~${rollResult}`; logDetailsText = `Die(${matchedString}) ~${rollResult}`;
                 patternMatched = true; fMyConsoleLog(`   -> Matched EXACT Number pattern: ${num} (rolled as ${matchedString}). Result: ${rollResult}`);
@@ -2974,7 +2969,6 @@ async function fHandleAdHocRoll(cellText) {
                 matchedString = match[1]; const num = parseInt(match[2], 10);
                 if (!isNaN(num) && num > 0) {
                     rollResult = fCSD(num);
-                     // <<< ADD ICON TO BOTH HTML AND TEXT >>>
                     logHeaderHtml = '🎲 <span class="blue-bold">Custom Roll</span> Sk'; logHeaderText = '🎲 Custom Roll Sk';
                     logDetailsHtml = `Sk(${num}) ~${rollResult}`; logDetailsText = `Sk(${num}) ~${rollResult}`;
                     patternMatched = true; fMyConsoleLog(`   -> PARSED first Sk pattern: ${matchedString}. Result: ${rollResult}`);
@@ -2982,7 +2976,6 @@ async function fHandleAdHocRoll(cellText) {
             } else if (match[3]) { // Matched die string
                 matchedString = match[3].trim(); rollResult = fRollDieString(matchedString);
                  if (rollResult !== null) {
-                      // <<< ADD ICON TO BOTH HTML AND TEXT >>>
                      logHeaderHtml = '🎲 <span class="blue-bold">Die Roll</span>'; logHeaderText = '🎲 Die Roll';
                      logDetailsHtml = `Die(${matchedString}) ~${rollResult}`; logDetailsText = `Die(${matchedString}) ~${rollResult}`;
                      patternMatched = true; fMyConsoleLog(`   -> PARSED first Die String pattern: ${matchedString}. Result: ${rollResult}`);

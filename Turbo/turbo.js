@@ -854,7 +854,7 @@ function fGetCharacterHeaderData(csId) {
         const rowLevelIndex = fServerResolveTag('level', rowTag, 'row');
         const rowPlayerNameIndex = fServerResolveTag('playerName', rowTag, 'row');
         const rowCharNameIndex = fServerResolveTag('charName', rowTag, 'row');
-        const rowSlotIndex = fServerResolveTag('slot', rowTag, 'row'); // <<< ADDED
+        const rowSlotIndex = fServerResolveTag('slot', rowTag, 'row');
 
         // Validate all required tags resolved (including 'slot')
         if ([colValIndex, rowRaceClassIndex, rowLevelIndex, rowPlayerNameIndex, rowCharNameIndex, rowSlotIndex].some(isNaN)) {
@@ -864,7 +864,7 @@ function fGetCharacterHeaderData(csId) {
             if (isNaN(rowLevelIndex)) missing.push("Row 'level'");
             if (isNaN(rowPlayerNameIndex)) missing.push("Row 'playerName'");
             if (isNaN(rowCharNameIndex)) missing.push("Row 'charName'");
-            if (isNaN(rowSlotIndex)) missing.push("Row 'slot'"); // <<< ADDED check
+            if (isNaN(rowSlotIndex)) missing.push("Row 'slot'"); 
             throw new Error(`Could not resolve required tags in 'RaceClass' sheet: ${missing.join(', ')}.`);
         }
 
@@ -873,7 +873,7 @@ function fGetCharacterHeaderData(csId) {
         const level = fullData[rowLevelIndex]?.[colValIndex] ?? '';
         const playerNameRaw = fullData[rowPlayerNameIndex]?.[colValIndex] ?? '';
         const charNameRaw = fullData[rowCharNameIndex]?.[colValIndex] ?? '';
-        const slotRaw = fullData[rowSlotIndex]?.[colValIndex] ?? ''; // <<< ADDED
+        const slotRaw = fullData[rowSlotIndex]?.[colValIndex] ?? ''; 
 
         // --- 6. Process Player/Char Names (Get first word) ---
         const playerName = String(playerNameRaw).trim().split(' ')[0] || '';
@@ -902,7 +902,7 @@ function fGetCharacterHeaderData(csId) {
             level: String(level),
             playerName: playerName,
             charName: charName,
-            slotNum: cleanedSlotNum // <<< ADDED: Include cleaned slot number (or null)
+            slotNum: cleanedSlotNum // Include cleaned slot number (or null)
         };
         Logger.log(`${funcName}: Success. Returning: ${JSON.stringify(result)}`);
         return result;
@@ -956,7 +956,7 @@ function fSetLogAndHeaderData(dataBundle) {
         { key: 'ps', sheetName: 'PartyLog' }
     ];
     const baseCellTagR = 'Log'; // Keep base row tag fixed
-    const baseCellTagC = slotNumTag; // <<< Use dynamic slot tag
+    const baseCellTagC = slotNumTag; // Use dynamic slot tag
     const numHeaderRows = 6;
 
     // --- 3. Prepare Data Array (in correct vertical order) ---
@@ -994,7 +994,7 @@ function fSetLogAndHeaderData(dataBundle) {
 
             // Resolve the *base cell* using fixed Row ('Log') and dynamic Column (baseCellTagC)
             const baseRowIndex = fServerResolveTag(baseCellTagR, rowTag, 'row');
-            const baseColIndex = fServerResolveTag(baseCellTagC, colTag, 'col'); // <<< Use dynamic tag
+            const baseColIndex = fServerResolveTag(baseCellTagC, colTag, 'col'); // Use dynamic tag
 
             if (isNaN(baseRowIndex) || isNaN(baseColIndex)) {
                 throw new Error(`Could not resolve base cell tags ('${baseCellTagR}', '${baseCellTagC}') in sheet "${target.sheetName}".`);
@@ -1222,9 +1222,10 @@ function fSaveTextDataToFirestore(csId, fullArrData, charInfo) {
 
 // fGetTextDataFromFirestore ///////////////////////////////////////////////////
 // Purpose -> Fetches the character info and grid data stored in Firestore for a given CS ID.
-//            Converts Firestore types to standard JS types.
+//            Converts Firestore types to standard JS types. Unpacks gUIarr server-side.
 // Inputs  -> csId (String): The Character Sheet ID (used for document path).
-// Outputs -> (Object): { success: Boolean, data?: { characterInfo: Object, arrData: Array }, message?: String }
+// Outputs -> (Object): { success: Boolean, data?: { characterInfo: Object, arrData: Array[][] }, message?: String }
+//            'arrData' is the standard 2D array if success is true.
 function fGetTextDataFromFirestore(csId) {
     const funcName = "fGetTextDataFromFirestore";
     Logger.log(`${funcName}: Fetching data for CS ID: ${csId}...`);
@@ -1251,7 +1252,7 @@ function fGetTextDataFromFirestore(csId) {
 
     try {
         const doc = firestore.getDocument(documentPath);
-        Logger.log(`   -> Raw doc object fetched: ${JSON.stringify(doc).substring(0, 500)}...`); // Keep logging raw doc
+        Logger.log(`   -> Raw doc object fetched: ${JSON.stringify(doc).substring(0, 500)}...`);
 
         // === 4. Validate Fetched Document (using fields check) ===
         if (!doc || !doc.fields) {
@@ -1264,49 +1265,54 @@ function fGetTextDataFromFirestore(csId) {
         Logger.log(`   -> Document fields appear to exist. Proceeding to convert types...`);
 
         // === 5. Convert Firestore Types to JavaScript Types ===
-        // Ensure the expected top-level keys exist before trying to convert
-         if (!fetchedData.gUIcharacterInfo || !fetchedData.gUIarr) {
-             const msg = `Firestore document at ${documentPath} is missing expected top-level fields (gUIcharacterInfo or gUIarr) before type conversion.`;
-             Logger.log(`   -> ${funcName} Error: ${msg}`);
-             Logger.log(`   -> Found keys: ${Object.keys(fetchedData).join(', ')}`);
-             return { success: false, message: "Saved data format is invalid or incomplete." };
-         }
+        if (!fetchedData.gUIcharacterInfo || !fetchedData.gUIarr) {
+            const msg = `Firestore document at ${documentPath} is missing expected top-level fields (gUIcharacterInfo or gUIarr) before type conversion.`;
+            Logger.log(`   -> ${funcName} Error: ${msg}`);
+            Logger.log(`   -> Found keys: ${Object.keys(fetchedData).join(', ')}`);
+            return { success: false, message: "Saved data format is invalid or incomplete." };
+        }
 
         const characterInfoRaw = fetchedData.gUIcharacterInfo;
-        const arrDataRaw = fetchedData.gUIarr;
-
+        const arrDataRaw = fetchedData.gUIarr; // This is the array-of-row-objects structure
         Logger.log(`   -> Converting characterInfo...`);
-        const characterInfo = fConvertFirestoreTypesToJS(characterInfoRaw); // Convert charInfo
-        Logger.log(`   -> Converting arrData...`);
-        const arrData = fConvertFirestoreTypesToJS(arrDataRaw); // Convert arrData
+        const characterInfo = fConvertFirestoreTypesToJS(characterInfoRaw);
+        Logger.log(`   -> Converting arrData (array-of-objects)...`);
+        const arrDataConverted = fConvertFirestoreTypesToJS(arrDataRaw); // Still array-of-objects
 
         // === 6. Validate Converted JavaScript Types ===
-        // Now these checks should work on the plain JS objects/arrays
-        if (typeof characterInfo !== 'object' || characterInfo === null || Array.isArray(characterInfo)) { // Also check charInfo is not null/array
+        if (typeof characterInfo !== 'object' || characterInfo === null || Array.isArray(characterInfo)) {
             const msg = `Invalid data type for characterInfo after conversion. Expected object, got ${typeof characterInfo}. Value: ${JSON.stringify(characterInfo)}`;
             Logger.log(`   -> ${funcName} Error: ${msg}`);
             return { success: false, message: "Invalid character info format retrieved." };
         }
-        if (!Array.isArray(arrData)) {
-            const msg = `Invalid data type for arrData after conversion. Expected array, got ${typeof arrData}. Value: ${JSON.stringify(arrData).substring(0,200)}...`;
+        if (!Array.isArray(arrDataConverted)) { // Validate it's an array before unpacking
+            const msg = `Invalid data type for arrData after conversion. Expected array (of objects), got ${typeof arrDataConverted}. Value: ${JSON.stringify(arrDataConverted).substring(0,200)}...`;
             Logger.log(`   -> ${funcName} Error: ${msg}`);
-            return { success: false, message: "Invalid grid data format retrieved." };
+            return { success: false, message: "Invalid grid data format retrieved (expected array)." };
         }
 
-        // === 7. Return Successfully Converted Data ===
-        Logger.log(`   -> ✅ Successfully fetched and converted data from ${documentPath}.`);
+        // === 7. Unpack Firestore Array ===
+        Logger.log(`   -> Unpacking Firestore array data server-side...`);
+        const unpackedArr = fUnpackFirestoreArray_Server(arrDataConverted);
+        Logger.log(`   -> Unpacked into ${unpackedArr.length}x${unpackedArr[0]?.length || 0} array.`);
+
+
+        // === 8. Return Successfully Converted and Unpacked Data ===
+        Logger.log(`   -> ✅ Successfully fetched, converted, and unpacked data from ${documentPath}.`);
         return {
             success: true,
             data: {
                 characterInfo: characterInfo, // Return plain JS object
-                arrData: arrData              // Return plain JS array (still in [{"row0": [...]}, ...] format)
+                arrData: unpackedArr          // Return standard 2D array
             }
         };
 
     } catch (e) {
         console.error(`Exception caught in ${funcName} fetching/converting from path ${documentPath}: ${e.message}\nStack: ${e.stack}`);
         Logger.log(`   -> ❌ Exception during Firestore fetch/convert for ${csId}: ${e.message}`);
-        const safeErrorMessage = e.message.includes("permission") ? "Permission denied." : "Server error during Firestore operation.";
+        const safeErrorMessage = e.message?.includes("permission") ? "Permission denied."
+                               : e.message?.includes("NOT_FOUND") ? "No saved Firestore data found for this character." // More specific not found
+                               : "Server error during Firestore operation.";
         return { success: false, message: safeErrorMessage };
     }
 } // END fGetTextDataFromFirestore
@@ -1355,4 +1361,157 @@ function fConvertFirestoreTypesToJS(firestoreValue) {
   Logger.log(`fConvertFirestoreTypesToJS: Encountered unexpected value structure: ${JSON.stringify(firestoreValue).substring(0,100)}... Returning as is.`);
   return firestoreValue;
 } // END fConvertFirestoreTypesToJS
+
+
+
+// fUnpackFirestoreArray_Server //////////////////////////////////////////////
+// Purpose -> Converts the Firestore array-of-row-objects format into a standard
+//            2D JavaScript array server-side. Handles potential sparse arrays.
+// Inputs  -> firestoreArr (Array): Array from Firestore after type conversion,
+//            e.g., [ {"row0":[...]}, {"row1":[...]}, ... ]
+// Outputs -> (Array[][]): A standard 2D JavaScript array. Returns empty array on error.
+function fUnpackFirestoreArray_Server(firestoreArr) {
+    const funcName = "fUnpackFirestoreArray_Server";
+    if (!Array.isArray(firestoreArr)) {
+        Logger.log(`${funcName}: Input is not an array. Returning empty array.`);
+        return [];
+    }
+
+    const new2DArray = [];
+    let maxRow = -1;
+    let maxCols = 0;
+
+    // First pass: Populate based on keys, find max row/col
+    for (const rowObject of firestoreArr) {
+        if (typeof rowObject !== 'object' || rowObject === null) continue; // Skip non-objects
+
+        const key = Object.keys(rowObject)[0];
+        if (!key || !key.startsWith('row')) continue; // Skip invalid keys
+
+        const rowNum = parseInt(key.substring(3), 10);
+        if (isNaN(rowNum)) continue; // Skip if key is not like "rowX"
+
+        const rowData = rowObject[key];
+        if (!Array.isArray(rowData)) {
+             Logger.log(`${funcName}: Value for key ${key} is not an array. Skipping.`);
+             continue; // Ensure the value is actually an array
+        }
+
+        new2DArray[rowNum] = rowData;
+        if (rowNum > maxRow) maxRow = rowNum;
+        if (rowData.length > maxCols) maxCols = rowData.length; // Track max column length
+    }
+
+    // Second pass: Fill potential sparse gaps and ensure consistent column length
+    for (let r = 0; r <= maxRow; r++) {
+        if (typeof new2DArray[r] === 'undefined') {
+            new2DArray[r] = Array(maxCols).fill(''); // Initialize sparse rows with empty strings
+        } else {
+            // Ensure existing rows have the correct length
+            while (new2DArray[r].length < maxCols) {
+                new2DArray[r].push(''); // Pad with empty strings
+            }
+        }
+    }
+    // Ensure the final array itself isn't sparse (if maxRow was > initial length)
+    while(new2DArray.length <= maxRow) {
+        new2DArray.push(Array(maxCols).fill(''));
+    }
+
+
+    // Handle case where firestoreArr was empty
+    if (maxRow === -1) {
+        return [[]]; // Return array with one empty row if input was empty
+    }
+
+
+    return new2DArray;
+} // END fUnpackFirestoreArray_Server
+
+
+
+// fCheckAndLoadFirestoreData //////////////////////////////////////////////////
+// Purpose -> Checks Firestore for a document based on CS ID. If found, extracts
+//            the gUIarr field, converts types, unpacks it into a 2D array,
+//            and returns it. Handles document not found and errors gracefully.
+// Inputs  -> csId (String): The Character Sheet ID.
+// Outputs -> (Object): { success: Boolean, firestoreArr?: Array[][], message?: String }
+//            'firestoreArr' is the standard 2D array if success is true.
+function fCheckAndLoadFirestoreData(csId) {
+    const funcName = "fCheckAndLoadFirestoreData";
+    Logger.log(`${funcName}: Checking Firestore for data for CS ID: ${csId}...`);
+
+    // === 1. Validate Input ===
+    if (!csId || typeof csId !== 'string') {
+        const msg = "Invalid Character Sheet ID provided.";
+        Logger.log(`${funcName} Error: ${msg}`);
+        // Note: Don't throw, return failure object for client handling
+        return { success: false, message: msg };
+    }
+
+    // === 2. Get Firestore Instance ===
+    const firestore = fGetFirestoreInstance();
+    if (!firestore) {
+        const msg = "Failed to initialize Firestore instance.";
+        Logger.log(`${funcName} Error: ${msg}`);
+        return { success: false, message: "Server configuration error (Firestore)." };
+    }
+    Logger.log(`   -> Firestore instance obtained.`);
+
+    // === 3. Define Path and Fetch Data ===
+    const documentId = `GSID_${csId}`;
+    const collectionName = 'GameTextData';
+    const documentPath = `${collectionName}/${documentId}`;
+    Logger.log(`   -> Target Firestore Path: ${documentPath}`);
+
+    try {
+        // Attempt to get the document
+        const doc = firestore.getDocument(documentPath);
+
+        // === 4. Check if Document Exists & Has Data ===
+        if (!doc || !doc.fields || !doc.fields.gUIarr) {
+            const msg = `Document not found or missing 'gUIarr' field at path: ${documentPath}.`;
+            Logger.log(`   -> ${funcName}: ${msg}`);
+            return { success: false, message: "No saved Firestore data found for this character." };
+        }
+        Logger.log(`   -> Document found. Processing 'gUIarr' field...`);
+
+        // === 5. Convert Firestore Types for gUIarr ===
+        const arrDataRaw = doc.fields.gUIarr;
+        const arrDataConverted = fConvertFirestoreTypesToJS(arrDataRaw);
+
+        // === 6. Validate Converted Data (Should be Array of Objects) ===
+        if (!Array.isArray(arrDataConverted)) {
+            const msg = `Invalid data type for gUIarr after conversion. Expected array, got ${typeof arrDataConverted}. Path: ${documentPath}`;
+            Logger.log(`   -> ${funcName} Error: ${msg}`);
+            return { success: false, message: "Invalid grid data format retrieved from Firestore." };
+        }
+
+        // === 7. Unpack Array of Objects into 2D Array ===
+        Logger.log(`   -> Unpacking Firestore array data server-side...`);
+        const unpackedArr = fUnpackFirestoreArray_Server(arrDataConverted);
+        Logger.log(`   -> Unpacked into ${unpackedArr.length}x${unpackedArr[0]?.length || 0} array.`);
+
+        // === 8. Return Success with Unpacked Data ===
+        Logger.log(`   -> ✅ Successfully fetched and unpacked Firestore data for ${csId}.`);
+        return {
+            success: true,
+            firestoreArr: unpackedArr // Return the standard 2D array
+        };
+
+    } catch (e) {
+        // Handle potential errors during Firestore operations (e.g., permissions)
+        const safeErrorMessage = e.message?.includes("permission")
+                               ? "Permission denied accessing Firestore."
+                               : e.message?.includes("NOT_FOUND")
+                               ? "No saved Firestore data found for this character." // More specific not found
+                               : `Server error during Firestore read: ${e.message || e}`;
+
+        console.error(`Exception caught in ${funcName} fetching from path ${documentPath}: ${e.message}\nStack: ${e.stack}`);
+        Logger.log(`   -> ❌ Exception during Firestore read for ${csId}: ${safeErrorMessage}`);
+        return { success: false, message: safeErrorMessage };
+    }
+} // END fCheckAndLoadFirestoreData
+
+
 
