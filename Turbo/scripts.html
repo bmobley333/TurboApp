@@ -3941,7 +3941,6 @@ function fSetupDelegatedMenuActionClick() {
 
             // Data Menu Actions
             case 'data-saveNow':            fHandleAutoSaveTextData(); break;
-            case 'data-loadNow':            fHandleLoadNow(); break;
             case 'data-designerOnly':       fHandleDesignerOnlyClick(); break; // Keep reference
 
             // Placeholder/Legacy Actions (can be removed if not needed)
@@ -5260,103 +5259,6 @@ function fHandleDesignerPasswordResult(isValid) {
     }
 } // END fHandleDesignerPasswordResult
 
-
-
-
-// fHandleLoadNow //////////////////////////////////////////////////////////////
-// Purpose -> Initiates the process of loading character and grid data from Firestore.
-// Inputs  -> None.
-// Outputs -> None (Calls server function).
-function fHandleLoadNow() {
-    fMyConsoleLog("🔄 Load Now Action Triggered");
-
-    // Check if gIndexCSID is available
-    if (!gIndexCSID) {
-        const errorMsg = "Cannot Load Now: Character Sheet ID (gIndexCSID) is missing.";
-        console.error(errorMsg);
-        fShowMessage(errorMsg); // Use fShowMessage for user feedback
-        return;
-    }
-
-    fMyConsoleLog(`   -> Calling server function fGetTextDataFromFirestore for CS ID: ${gIndexCSID}...`);
-    google.script.run
-        .withSuccessHandler(fHandleLoadNowSuccess)
-        .withFailureHandler(fHandleLoadNowFailure)
-        .fGetTextDataFromFirestore(gIndexCSID);
-
-} // END fHandleLoadNow
-
-
-
-
-// fHandleLoadNowSuccess ///////////////////////////////////////////////////////
-// Purpose -> Handles the successful response from fGetTextDataFromFirestore (manual load).
-//            Updates gUI.characterInfo and gUI.arr (with server-unpacked 2D array),
-//            preserves existing gUI.notes, and triggers a full grid re-render.
-// Inputs  -> response (Object): The success object from the server, containing
-//            { success: true, data: { characterInfo: Object, arrData: Array[][] } }.
-//            'arrData' is expected to be a standard 2D array.
-// Outputs -> None (Updates gUI, triggers re-render, shows message).
-function fHandleLoadNowSuccess(response) {
-    fMyConsoleLog("✅ Server call fGetTextDataFromFirestore (Manual Load) succeeded.");
-
-    // Validate response structure
-    if (!response || !response.success) {
-        const errorMsg = "Manual Load failed: Server returned success=false or invalid response.";
-        console.error(errorMsg, response);
-        fShowMessage(errorMsg);
-        return;
-    }
-    if (!response.data || !response.data.characterInfo || !response.data.arrData) {
-        const errorMsg = "Manual Load failed: Server response missing expected data fields.";
-        console.error(errorMsg, response.data);
-        fShowMessage(errorMsg);
-        return;
-    }
-    // Validate arrData is a 2D array (basic check)
-    if (!Array.isArray(response.data.arrData) || (response.data.arrData.length > 0 && !Array.isArray(response.data.arrData[0])) ) {
-        const errorMsg = "Manual Load failed: Server returned invalid arrData format (expected 2D array).";
-        console.error(errorMsg, response.data.arrData);
-        fShowMessage(errorMsg);
-        return;
-    }
-
-
-    // === 1. Update Character Info ===
-    gUI.characterInfo = response.data.characterInfo;
-    fMyConsoleLog("   -> Updated gUI.characterInfo from manual load.");
-
-    // === 2. Update Grid Data and Notes ===
-    gUI.arr = response.data.arrData; // Use the server-unpacked 2D array directly
-    // gUI.notes remains untouched, preserving Sheet notes
-    fMyConsoleLog(`   -> Updated gUI.arr from manual load (Dimensions: ${gUI.arr.length}x${gUI.arr[0]?.length || 0}). Preserved gUI.notes.`);
-
-    // === 3. Trigger Full Grid Re-render ===
-    fMyConsoleLog("   -> Triggering full grid re-render after manual load...");
-    // Re-render the entire grid with the newly loaded data
-    // Assuming format data doesn't need reloading for just a text/state load
-    fRenderFullGrid(() => {
-        fRunPostRenderFormatting(); // Apply formatting after render
-        fMyConsoleLog("✅ Manual Load process completed successfully.");
-        fShowMessage("Data loaded successfully from Firestore."); // User feedback
-    });
-
-} // END fHandleLoadNowSuccess
-
-
-
-
-// fHandleLoadNowFailure ///////////////////////////////////////////////////////
-// Purpose -> Handles errors returned from the fGetTextDataFromFirestore server call.
-// Inputs  -> error (Error): The error object from google.script.run.
-// Outputs -> None (Logs error and shows message to user).
-function fHandleLoadNowFailure(error) {
-    const errorMsg = `❌ Error loading data from Firestore: ${error.message}`;
-    console.error(errorMsg, error);
-    fMyConsoleLog(errorMsg);
-    fShowMessage(`Failed to load data. Error: ${error.message}`); // Show error to user
-
-} // END fHandleLoadNowFailure
 
 
 
