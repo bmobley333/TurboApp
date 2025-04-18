@@ -3874,87 +3874,64 @@ function fSendLogToGMScreenNPS() {
 
 
 
-// fSetupDelegatedMenuActionClick ////////////////////////////////////////////////
-// Purpose -> Adds a single delegated click listener to the menu bar (#menu-bar)
-//            to handle clicks on menu items (<a> tags) that have a 'data-action'
-//            attribute. Prevents default link behavior, closes dropdowns, and
-//            dispatches the action to the appropriate handler function via a switch statement.
-// Inputs  -> menuBar (HTMLElement): The menu bar container element.
-// Outputs -> None (Attaches event listener).
-function fSetupDelegatedMenuActionClick(menuBar) {
-     if (!menuBar) return; // Validate menu bar element
+// fSetupDelegatedMenuActionClick //////////////////////////////////////////////
+// Purpose -> Sets up a single event listener on the menu bar to handle clicks
+//            on menu items using event delegation and data attributes.
+// Inputs  -> None. Relies on DOM structure.
+// Outputs -> None. Attaches event listener.
+function fSetupDelegatedMenuActionClick() {
+    const menuBar = document.getElementById('menu-bar');
+    if (!menuBar) {
+        console.error("Setup failed: Menu bar (#menu-bar) not found.");
+        return; // Stop if the menu bar isn't there
+    }
 
-     // Attach the delegated listener
-     menuBar.addEventListener('click', (event) => {
-         // Find the closest ancestor link with a data-action attribute
-         const targetLink = event.target.closest('.dropdown-content a[data-action]');
+    menuBar.addEventListener('click', (event) => {
+        const target = event.target.closest('a[data-action]'); // Find the clicked link with a data-action
+        if (!target) return; // Exit if the click wasn't on an action link
 
-         // --- Handle Action Link Clicks ---
-         if (targetLink) {
-             event.preventDefault(); // Prevent default link navigation
-             event.stopPropagation(); // Stop click from propagating further (e.g., to window listener)
+        event.preventDefault(); // Prevent default link behavior (like navigating)
+        const action = target.dataset.action;
+        fMyConsoleLog(`🎬 Menu Action Clicked: ${action}`);
 
-             const action = targetLink.getAttribute('data-action'); // Get the action string
-             fMyConsoleLog(`🖱️ Menu Action Triggered: ${action}`);
-             fCloseAllDropdowns(); // Close all dropdowns after action selection
+        // Close any open dropdowns first
+        document.querySelectorAll('.dropdown-content.show').forEach(dropdown => {
+            dropdown.classList.remove('show');
+        });
+        // Close any open sub-menus
+         document.querySelectorAll('.dropdown-content.sub-menu.show-sub').forEach(subMenu => {
+             subMenu.classList.remove('show-sub');
+         });
 
-             // === Action Dispatcher ===
-             // Route the action to the corresponding function
-             // Use an IIFE (Immediately Invoked Function Expression) for async cases within switch
-             switch (action) {
-                 // --- Game Menu Actions ---
-                 case 'game-nishStartEnd':      (async () => await fHandleNishStartOrEnd())();      break;
-                 case 'game-toggleSidebar':      fToggleSidebar();                              break;
-                 case 'game-updateHeaderInfo':   (async () => await fHandleUpdateHeaderInfo())(); break;
-                 // case 'game-gmAward':                                                             break; // Handler TBD
-                 case 'game-metaFlood':          (async () => await fMetaFlood())();            break;
-                 case 'game-healingNatural':     (async () => await fCalc_NaturalHealing())();  break;
-                 case 'game-healingAll':         (async () => await fHealAllWounds())();        break;
-                 case 'game-setMaxMeta':         fMeta_SetToMax();                              break;
-                 case 'game-setMaxLuck':         (async () => await fLuck_SetToMax())();        break;
-                 case 'game-setMaxVit':          (async () => await fCalc_VitMaxNowPerc())();   break;
-                 case 'game-setMaxAll':          (async () => await fHandleResetAllToMax())();  break;
-                 case 'game-clearChanneled':     fClearChanneledMeta();                         break;
-                 case 'game-clearCheckboxes':    fClearSk1Sk2Checkboxes();                      break;
-                 case 'game-clearMonsters':      fClearMonsters();                              break;
-                 case 'game-clearMorphs':        fClearMorphs();                                break;
-                 case 'game-clearNish':          fClearCurrentNish();                           break;
-                 case 'game-clearRollLog':       fClearRollLog();                               break;
-                 case 'game-restTimeRest':       (async () => await fHandleRestTimeRest())();   break;
-                 case 'game-restTimeSleep':      (async () => await fHandleRestTimeSleep())();  break;
-                 case 'game-restTimeNewSession': (async () => await fHandleRestTimeNewSession())(); break;
 
-                 // --- Gear Menu Actions ---
-                 case 'gear-toggleGear':         fToggleGearColumns();                          break;
-                 // case 'gear-loot':                                                              break; // Handler TBD
-                 // ... other gear loot actions ...
+        // --- Handle actions based on the data-action attribute ---
+        switch (action) {
+            // Game Menu Actions
+            case 'game-nishStartEnd': fHandleNishStartEndAction(); break;
+            case 'game-toggleSidebar': fToggleSidebar(); break;
+            case 'game-updateHeaderInfo': fUpdateHeaderInfoAction(); break;
+            case 'game-gmAward': fHandleGMAwardAction(); break;
+            case 'game-metaFlood': fHandleMetaFloodAction(); break;
+            case 'game-healingNatural': fHandleHealingAction('Natural'); break;
+            case 'game-healingMagic': fHandleHealingAction('Magic'); break;
+            case 'game-lootAdd': fHandleLootAction('Add'); break;
+            case 'game-lootRemove': fHandleLootAction('Remove'); break;
 
-                 // --- Data Menu Actions ---
-                 case 'data-saveNow':
-                     fHandleAutoSaveTextData();
-                     fShowMessage("✅ Grid text data saved.").catch(e => console.error("Error showing save message:", e)); // <<< ADDED feedback
-                     break;
-                 // REMOVED 'data-loadTest' case
-                 case 'data-designerOnly':       fHandleDesignerOnlyClick();                    break;
+            // Data Menu Actions
+            case 'data-saveNow': fHandleAutoSaveTextData(); break; // Trigger manual save
+            case 'data-loadNow': fHandleLoadNow(); break; // ADDED CASE
 
-                 // --- Default (Unhandled Actions) ---
-                 default:
-                     console.log(`ACTION: Menu item clicked: ${action} (No handler defined yet)`);
-                     fMyConsoleLog(`🖱️ Menu: ${action} (No handler)`);
-                     // Optionally show a message for unimplemented actions:
-                     // fShowMessage(`Action "${action}" is not yet implemented.`);
-             }
-         } // End if(targetLink)
+            // Add other menu actions here...
+            case 'view-toggleTester': fToggleTesterVisibility(); break;
 
-         // --- Handle Submenu Trigger Clicks ---
-         // If the click was on a submenu trigger link itself (not an action link within it),
-         // prevent its default '#' navigation behavior.
-         const subMenuTriggerLink = event.target.closest('.sub-menu-item > a');
-         if (subMenuTriggerLink && !targetLink) {
-             event.preventDefault();
-         }
+            // Default case for unhandled actions
+            default:
+                fMyConsoleLog(`   -> WARNING: No handler defined for action: ${action}`);
+                fShowMessage(`Action "${action}" is not yet implemented.`);
+        }
+    });
 
-     }); // End menuBar CLICK listener
+    fMyConsoleLog("✅ Delegated Menu Action Click Listener Attached.");
 
 } // END fSetupDelegatedMenuActionClick
 
@@ -5263,6 +5240,107 @@ function fHandleDesignerPasswordResult(isValid) {
 
 
 
+
+// fHandleLoadNow //////////////////////////////////////////////////////////////
+// Purpose -> Initiates the process of loading character and grid data from Firestore.
+// Inputs  -> None.
+// Outputs -> None (Calls server function).
+function fHandleLoadNow() {
+    fMyConsoleLog("🔄 Load Now Action Triggered");
+
+    // Check if gIndexCSID is available
+    if (!gIndexCSID) {
+        const errorMsg = "Cannot Load Now: Character Sheet ID (gIndexCSID) is missing.";
+        console.error(errorMsg);
+        fShowMessage(errorMsg); // Use fShowMessage for user feedback
+        return;
+    }
+
+    fMyConsoleLog(`   -> Calling server function fGetTextDataFromFirestore for CS ID: ${gIndexCSID}...`);
+    google.script.run
+        .withSuccessHandler(fHandleLoadNowSuccess)
+        .withFailureHandler(fHandleLoadNowFailure)
+        .fGetTextDataFromFirestore(gIndexCSID);
+
+} // END fHandleLoadNow
+
+
+
+
+// fHandleLoadNowSuccess ///////////////////////////////////////////////////////
+// Purpose -> Handles the successful response from fGetTextDataFromFirestore. Updates
+//            gUI.characterInfo, unpacks Firestore data into gUI.arr, and updates
+//            a specific cell display using fSetGridValue.
+// Inputs  -> response (Object): The success object from the server, containing
+//            { success: true, data: { characterInfo: Object, arrData: Array } }.
+// Outputs -> None (Updates gUI and DOM).
+function fHandleLoadNowSuccess(response) {
+    fMyConsoleLog("✅ Server call fGetTextDataFromFirestore succeeded.");
+
+    // Double-check server reported success (already done by withSuccessHandler, but good practice)
+    if (!response || !response.success) {
+        const errorMsg = "Load Now failed: Server returned success=false or invalid response.";
+        console.error(errorMsg, response);
+        fShowMessage(errorMsg);
+        return;
+    }
+
+    if (!response.data || !response.data.characterInfo || !response.data.arrData) {
+        const errorMsg = "Load Now failed: Server response missing expected data fields.";
+        console.error(errorMsg, response.data);
+        fShowMessage(errorMsg);
+        return;
+    }
+
+    // === 1. Update Character Info ===
+    gUI.characterInfo = response.data.characterInfo;
+    fMyConsoleLog("   -> Updated gUI.characterInfo.");
+    // Optional: Trigger header update if needed (e.g., fUpdateHeaderDisplay())
+
+    // === 2. Unpack Firestore Array ===
+    const firestoreArr = response.data.arrData; // [{"row0": [...]}, ...]
+    fMyConsoleLog(`   -> Unpacking Firestore array data (${firestoreArr.length} entries)...`);
+    gUI.arr = fUnpackFirestoreArray(firestoreArr);
+    fMyConsoleLog(`   -> Successfully unpacked data into gUI.arr (New dimensions: ${gUI.arr.length}x${gUI.arr[0]?.length || 0}).`);
+
+    // === 3. Update Specific Cell (Example: [2][2]) ===
+    const targetRow = 2;
+    const targetCol = 2;
+
+    // Ensure the target cell exists in the unpacked array
+    if (gUI.arr.length > targetRow && gUI.arr[targetRow] && gUI.arr[targetRow].length > targetCol) {
+        const newValue = gUI.arr[targetRow][targetCol];
+        fMyConsoleLog(`   -> Updating cell [${targetRow}][${targetCol}] with value: "${newValue}"`);
+
+        // Use the CORRECT existing function to update DOM and gUI.arr
+        fSetGridValue(targetRow, targetCol, newValue); 
+        fMyConsoleLog(`   -> Cell [${targetRow}][${targetCol}] display updated via fSetGridValue.`);
+    } else {
+        fMyConsoleLog(`   -> ⚠️ Cell [${targetRow}][${targetCol}] does not exist in the loaded data. Skipping specific update.`);
+    }
+
+    fMyConsoleLog("✅ Load Now process completed successfully.");
+    fShowMessage("Data loaded successfully from Firestore."); // User feedback
+
+} // END fHandleLoadNowSuccess
+
+
+
+
+// fHandleLoadNowFailure ///////////////////////////////////////////////////////
+// Purpose -> Handles errors returned from the fGetTextDataFromFirestore server call.
+// Inputs  -> error (Error): The error object from google.script.run.
+// Outputs -> None (Logs error and shows message to user).
+function fHandleLoadNowFailure(error) {
+    const errorMsg = `❌ Error loading data from Firestore: ${error.message}`;
+    console.error(errorMsg, error);
+    fMyConsoleLog(errorMsg);
+    fShowMessage(`Failed to load data. Error: ${error.message}`); // Show error to user
+
+} // END fHandleLoadNowFailure
+
+
+
 // ==========================================================================
 // === MENU BAR "LIKE"     (End of Menu Bar Click) ===
 // ==========================================================================
@@ -5722,6 +5800,61 @@ function fHandleAutoSaveFailure(error) {
 
 } // END fHandleAutoSaveFailure
 
+
+
+
+// fUnpackFirestoreArray ///////////////////////////////////////////////////////
+// Purpose -> Converts the Firestore array-of-row-objects format back into a
+//            standard 2D JavaScript array.
+// Inputs  -> firestoreArr (Array): The array from Firestore, e.g.,
+//            [ {"row0":[...]}, {"row1":[...]}, ... ]
+// Outputs -> (Array[][]): A standard 2D JavaScript array.
+function fUnpackFirestoreArray(firestoreArr) {
+    const new2DArray = [];
+    let maxRow = -1;
+
+    // First pass to populate based on keys and find max row index encountered
+    for (const rowObject of firestoreArr) {
+        // Assuming only one key like "rowX" per object
+        const key = Object.keys(rowObject)[0];
+        if (!key || !key.startsWith('row')) continue; // Skip invalid objects
+
+        const rowNum = parseInt(key.substring(3), 10);
+        if (isNaN(rowNum)) continue; // Skip if key is not like "rowX"
+
+        new2DArray[rowNum] = rowObject[key] || []; // Assign the inner array, default to empty
+        if (rowNum > maxRow) {
+            maxRow = rowNum;
+        }
+    }
+
+    // Second pass to fill potential sparse gaps with empty arrays up to maxRow
+    // This ensures gUI.arr doesn't have 'undefined' holes if Firestore data was sparse
+    for (let r = 0; r <= maxRow; r++) {
+         if (typeof new2DArray[r] === 'undefined') {
+             new2DArray[r] = []; // Initialize empty row for sparse gaps
+         }
+    }
+
+     // Optional Third Pass: Ensure all rows have the same length (based on the longest row found)
+     // This might be necessary depending on how other code interacts with gUI.arr.
+     // If not strictly needed, this step can be skipped for efficiency.
+     /*
+     let maxCols = 0;
+     for(let r = 0; r < new2DArray.length; r++) {
+         if (new2DArray[r].length > maxCols) {
+             maxCols = new2DArray[r].length;
+         }
+     }
+     for(let r = 0; r < new2DArray.length; r++) {
+         while (new2DArray[r].length < maxCols) {
+             new2DArray[r].push(''); // Pad with empty strings or appropriate default
+         }
+     }
+     */
+
+    return new2DArray;
+} // END fUnpackFirestoreArray
 
 
 // ==========================================================================

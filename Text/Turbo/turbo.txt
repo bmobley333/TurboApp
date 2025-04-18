@@ -1182,7 +1182,7 @@ function fSaveTextDataToFirestore(csId, fullArrData, charInfo) {
 
     const dataToSave = {
         gUIcharacterInfo: charInfo,       // Store character metadata
-        gUIarr: arrayOfRowObjects,        // Store the array of row objects
+        gUIarr: arrayOfRowObjects,        // Stores gUI.arr as an array of row objects
         _lastUpdated: new Date()           // Add a server-side timestamp
     };
     Logger.log(`   -> Target Firestore Path: ${documentPath}`);
@@ -1217,4 +1217,142 @@ function fSaveTextDataToFirestore(csId, fullArrData, charInfo) {
     }
 } // END fSaveTextDataToFirestore
 
+
+
+
+// fGetTextDataFromFirestore ///////////////////////////////////////////////////
+// Purpose -> Fetches the character info and grid data stored in Firestore for a given CS ID.
+//            Converts Firestore types to standard JS types.
+// Inputs  -> csId (String): The Character Sheet ID (used for document path).
+// Outputs -> (Object): { success: Boolean, data?: { characterInfo: Object, arrData: Array }, message?: String }
+function fGetTextDataFromFirestore(csId) {
+    const funcName = "fGetTextDataFromFirestore";
+    Logger.log(`${funcName}: Fetching data for CS ID: ${csId}...`);
+
+    // === 1. Validate Input ===
+    if (!csId || typeof csId !== 'string') {
+        return { success: false, message: "Invalid Character Sheet ID provided." };
+    }
+
+    // === 2. Get Firestore Instance ===
+    const firestore = fGetFirestoreInstance();
+    if (!firestore) {
+        const msg = "Failed to initialize Firestore instance (check previous logs).";
+        Logger.log(`${funcName} Error: ${msg}`);
+        return { success: false, message: "Server configuration error (Firestore)." };
+    }
+    Logger.log(`   -> Firestore instance obtained.`);
+
+    // === 3. Define Path and Fetch Data ===
+    const documentId = `GSID_${csId}`;
+    const collectionName = 'GameTextData';
+    const documentPath = `${collectionName}/${documentId}`;
+    Logger.log(`   -> Target Firestore Path: ${documentPath}`);
+
+    try {
+        const doc = firestore.getDocument(documentPath);
+        Logger.log(`   -> Raw doc object fetched: ${JSON.stringify(doc).substring(0, 500)}...`); // Keep logging raw doc
+
+        // === 4. Validate Fetched Document (using fields check) ===
+        if (!doc || !doc.fields) {
+            const msg = `Document object retrieved, but 'fields' property is missing or document is empty. Path: ${documentPath}`;
+            Logger.log(`   -> ${funcName} Warning: ${msg}`);
+            Logger.log(`   -> Raw doc object for check: ${JSON.stringify(doc)}`);
+            return { success: false, message: "No saved data found or data format error." };
+        }
+        const fetchedData = doc.fields;
+        Logger.log(`   -> Document fields appear to exist. Proceeding to convert types...`);
+
+        // === 5. Convert Firestore Types to JavaScript Types ===
+        // Ensure the expected top-level keys exist before trying to convert
+         if (!fetchedData.gUIcharacterInfo || !fetchedData.gUIarr) {
+             const msg = `Firestore document at ${documentPath} is missing expected top-level fields (gUIcharacterInfo or gUIarr) before type conversion.`;
+             Logger.log(`   -> ${funcName} Error: ${msg}`);
+             Logger.log(`   -> Found keys: ${Object.keys(fetchedData).join(', ')}`);
+             return { success: false, message: "Saved data format is invalid or incomplete." };
+         }
+
+        const characterInfoRaw = fetchedData.gUIcharacterInfo;
+        const arrDataRaw = fetchedData.gUIarr;
+
+        Logger.log(`   -> Converting characterInfo...`);
+        const characterInfo = fConvertFirestoreTypesToJS(characterInfoRaw); // Convert charInfo
+        Logger.log(`   -> Converting arrData...`);
+        const arrData = fConvertFirestoreTypesToJS(arrDataRaw); // Convert arrData
+
+        // === 6. Validate Converted JavaScript Types ===
+        // Now these checks should work on the plain JS objects/arrays
+        if (typeof characterInfo !== 'object' || characterInfo === null || Array.isArray(characterInfo)) { // Also check charInfo is not null/array
+            const msg = `Invalid data type for characterInfo after conversion. Expected object, got ${typeof characterInfo}. Value: ${JSON.stringify(characterInfo)}`;
+            Logger.log(`   -> ${funcName} Error: ${msg}`);
+            return { success: false, message: "Invalid character info format retrieved." };
+        }
+        if (!Array.isArray(arrData)) {
+            const msg = `Invalid data type for arrData after conversion. Expected array, got ${typeof arrData}. Value: ${JSON.stringify(arrData).substring(0,200)}...`;
+            Logger.log(`   -> ${funcName} Error: ${msg}`);
+            return { success: false, message: "Invalid grid data format retrieved." };
+        }
+
+        // === 7. Return Successfully Converted Data ===
+        Logger.log(`   -> ✅ Successfully fetched and converted data from ${documentPath}.`);
+        return {
+            success: true,
+            data: {
+                characterInfo: characterInfo, // Return plain JS object
+                arrData: arrData              // Return plain JS array (still in [{"row0": [...]}, ...] format)
+            }
+        };
+
+    } catch (e) {
+        console.error(`Exception caught in ${funcName} fetching/converting from path ${documentPath}: ${e.message}\nStack: ${e.stack}`);
+        Logger.log(`   -> ❌ Exception during Firestore fetch/convert for ${csId}: ${e.message}`);
+        const safeErrorMessage = e.message.includes("permission") ? "Permission denied." : "Server error during Firestore operation.";
+        return { success: false, message: safeErrorMessage };
+    }
+} // END fGetTextDataFromFirestore
+
+
+
+
+// fConvertFirestoreTypesToJS //////////////////////////////////////////////////
+// Purpose -> Recursively converts Firestore's typed value objects (mapValue,
+//            arrayValue, stringValue, etc.) into standard JavaScript types
+//            (objects, arrays, strings, numbers, booleans).
+// Inputs  -> firestoreValue (Object): A value object from Firestore (e.g.,
+//            doc.fields.someProperty or an element within an arrayValue/mapValue).
+// Outputs -> (Any): The corresponding standard JavaScript value or type.
+function fConvertFirestoreTypesToJS(firestoreValue) {
+  if (!firestoreValue) return firestoreValue; // Handle null/undefined cases safely
+
+  // Check for primitive types
+  if (firestoreValue.stringValue !== undefined) return firestoreValue.stringValue;
+  if (firestoreValue.integerValue !== undefined) return parseInt(firestoreValue.integerValue, 10); // Parse as integer
+  if (firestoreValue.doubleValue !== undefined) return parseFloat(firestoreValue.doubleValue); // Parse as float
+  if (firestoreValue.booleanValue !== undefined) return firestoreValue.booleanValue;
+  if (firestoreValue.nullValue !== undefined) return null;
+  if (firestoreValue.timestampValue !== undefined) return new Date(firestoreValue.timestampValue); // Convert to JS Date
+
+  // Check for bytesValue, geoPointValue if you use them, otherwise ignore or return placeholder
+
+  // Check for array type
+  if (firestoreValue.arrayValue && firestoreValue.arrayValue.values) {
+    // It's an array, recursively convert its elements
+    return firestoreValue.arrayValue.values.map(element => fConvertFirestoreTypesToJS(element));
+  }
+
+  // Check for map/object type
+  if (firestoreValue.mapValue && firestoreValue.mapValue.fields) {
+    // It's an object/map, recursively convert its properties
+    const jsObject = {};
+    for (const key in firestoreValue.mapValue.fields) {
+      jsObject[key] = fConvertFirestoreTypesToJS(firestoreValue.mapValue.fields[key]);
+    }
+    return jsObject;
+  }
+
+  // If it's none of the known Firestore types (e.g., already a JS primitive passed in), return as is.
+  // Or potentially log a warning if an unexpected structure is encountered.
+  Logger.log(`fConvertFirestoreTypesToJS: Encountered unexpected value structure: ${JSON.stringify(firestoreValue).substring(0,100)}... Returning as is.`);
+  return firestoreValue;
+} // END fConvertFirestoreTypesToJS
 

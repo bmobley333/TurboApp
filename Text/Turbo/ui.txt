@@ -90,6 +90,7 @@
     <button id="btn-data-menu"><span class="button-icon">💾</span> Data</button>
     <div id="dropdown-data" class="dropdown-content">
       <a href="#" data-action="data-saveNow">Save Now</a>
+      <a href="#" data-action="data-loadNow">Load Now</a>
       <a href="#" data-action="data-designerOnly">Designer Only</a>
     </div>
   </div>
