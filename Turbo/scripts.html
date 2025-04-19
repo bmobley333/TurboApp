@@ -4298,7 +4298,7 @@ async function fProcessWoundHealing(woundRangeTag, vitMax, divisor, degreeLabel)
 
     // === Calculate Healing ===
     const healingDieSize = Math.max(1, Math.round(vitMax / divisor)); // Die size is at least 1
-    const healingRoll = fDie(healingDieSize); // Roll the healing die
+    const healingRoll = fdRoll(healingDieSize); // Roll the healing die
     fMyConsoleLog(`         -> Healing roll (${degreeLabel}): d${healingDieSize} = ${healingRoll}`);
 
     // === Calculate New Wounds and Amount Healed ===

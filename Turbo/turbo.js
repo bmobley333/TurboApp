@@ -791,43 +791,6 @@ function fSrvSaveDataToSheetRange(sheetKey, sheetName, rangeObject, valueOrValue
 
 
 
-// fSrvGetGoogleDocumentText ////////////////////////////////////////////////////////////
-// Purpose -> Reads the text content from a given Google Doc.
-// Inputs  -> docId (String): The ID of the Google Doc.
-// Outputs -> (String): The text content of the Doc's body.
-// Throws  -> (Error): If docId is invalid or document access fails.
-function fSrvGetGoogleDocumentText(docId) {
-  // Validate input
-  if (!docId || typeof docId !== 'string') {
-    console.error("fSrvGetGoogleDocumentText Error: Invalid or missing Document ID provided.");
-    throw new Error("getDocumentText: Invalid or missing Document ID provided.");
-  }
-  Logger.log(`fSrvGetGoogleDocumentText: Reading text from Doc ID: ${docId}`);
-
-  try {
-    // Open the document
-    const doc = DocumentApp.openById(docId);
-    if (!doc) {
-        throw new Error(`Could not open document with ID: ${docId}. Check permissions and ID validity.`);
-    }
-
-    // Get the text content from the body
-    const textContent = doc.getBody().getText();
-
-    Logger.log(`fSrvGetGoogleDocumentText: Successfully read ${textContent?.length ?? 0} characters from Doc ID: ${docId}.`);
-    return textContent; // Return the text content
-
-  } catch (e) {
-    // Log detailed error and re-throw a user-friendly error
-    console.error(`Error in fSrvGetGoogleDocumentText for ID ${docId}: ${e.message}\nStack: ${e.stack}`);
-    throw new Error(`Server error reading document: ${e.message || e}`);
-  }
-
-} // END fSrvGetGoogleDocumentText
-
-
-
-
 // fSrvGetURLToPlayerCharForGMScreen /////////////////////////////////////////////////////
 // Purpose -> Reads specific static data (Race/Class, Level, Player/Char Names, Slot)
 //            from the player's Character Sheet ('RaceClass' tab).

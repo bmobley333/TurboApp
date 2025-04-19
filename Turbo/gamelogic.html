@@ -274,21 +274,6 @@ async function fMain_AbilityRoll() {
 
 
 
-// fAppendToSidebarHeader /////////////////////////////////////////////////////////////
-// Purpose -> Appends a string (typically a cost/status header) to the
-//            gUI.roll.htmlHeader string, adding an HTML line break (<br>).
-//            Used to build the initial part of the sidebar log entry.
-// Inputs  -> newHeader (String): The header string to append.
-// Outputs -> None (Modifies gUI.roll.htmlHeader).
-function fAppendToSidebarHeader(newHeader) {
-    // Append the new header text followed by a line break
-    gUI.roll.htmlHeader += `${newHeader}<br>`;
-} // END fAppendToSidebarHeader
-
-
-
-
-
 // fIsSk1Sk2RadioCheckbox //////////////////////////////////////////////////////////////
 // Purpose -> Validates that the provided coordinates (r, c) correspond to a valid
 //            Sk1/Sk2 checkbox location based on gUI.range.sk1sk2CheckBoxes.
@@ -698,126 +683,6 @@ function fApplyMorphResults(acc) {
         if (!isNaN(num)) r.resDif = num;
     }
 } // END fApplyMorphResults
-
-
-
-
-// fVerifyNSetActMetaLuckUsesOnEtc /////////////////////////////////////////////////
-// Purpose -> Orchestrates the verification of all standard ability costs (Action Points,
-//            Uses, IsOn status update, Skill Meta, Focus Meta) based on the current
-//            gUI.roll state. Uses helper functions (fAct_Verify..., fUses_Verify..., etc.)
-//            which collect pending changes in gUI.pendingChangesMap. If all checks pass
-//            (or are overridden by user prompt), applies all collected changes at once.
-//            Logs relevant headers to the sidebar log buffer (gUI.roll.htmlHeader).
-// Inputs  -> None (Uses gUI.roll, gUI.pendingChangesMap, calls cost verification helpers).
-// Outputs -> (Promise<Boolean>): Resolves true if all costs met/overridden and applied,
-//                                resolves false if verification fails or user cancels.
-async function fVerifyNSetActMetaLuckUsesOnEtc() {
-    fMyConsoleLog("🛡️ Verifying Costs & Processing 'Is On' (using Change Map)...");
-
-    // === Initialize ===
-    gUI.pendingChangesMap = {}; // Clear/init map for pending grid updates { 'r,c': newValue }
-    const pendingHeaders = [];  // Array for sidebar log header messages
-
-    // Helper to merge changes from verification functions into the main map
-    const addChangesToMap = (changesArray) => {
-        if (!Array.isArray(changesArray)) return;
-        changesArray.forEach(change => {
-            if (change && typeof change.r !== 'undefined' && typeof change.c !== 'undefined') {
-                const key = `${change.r},${change.c}`; // Key combines row/col refs
-                gUI.pendingChangesMap[key] = change.value;
-                // fMyConsoleLog(`   -> Pending Change Added/Updated: ${key} = ${change.value}`); // Optional debug log
-            } else {
-                console.warn("addChangesToMap: Invalid change object received:", change);
-            }
-        });
-    };
-
-    // === Sequentially Verify Costs & Collect Changes/Headers ===
-    // Each helper returns { success: Boolean, cancelledByUser?: Boolean, changes: Array, headers: Array }
-    // If any verification fails (returns success: false), the whole process halts.
-
-    // 1. Action Points
-    const actResult = await fAct_VerifyAndProcessCost();
-    if (!actResult.success) return false; // Halt if check failed or user cancelled
-    addChangesToMap(actResult.changes);
-    pendingHeaders.push(...actResult.headers);
-
-    // 2. Uses
-    const usesResult = await fUses_VerifyAndProcessCost(gUI.roll.multiRollCount); // Pass multiRollCount
-    if (!usesResult.success) return false; // Halt if check failed or user cancelled
-    addChangesToMap(usesResult.changes);
-    pendingHeaders.push(...usesResult.headers);
-
-    // 3. Is On / Duration
-    // This prepares the change to copy Duration -> IsOn if it was an Sk1 roll.
-    const isOnResult = await fIsOn_VerifyAndProcessCost();
-    addChangesToMap(isOnResult.changes);
-    pendingHeaders.push(...isOnResult.headers); // Usually empty
-
-    // 4. Skill Meta Cost (Applies only if Sk1 was used)
-    const skMetaResult = await fSkMeta_VerifyAndProcessCost(gUI.pendingChangesMap);
-    if (!skMetaResult.success) return false; // Halt if cost cannot be paid
-    addChangesToMap(skMetaResult.changes);
-    pendingHeaders.push(...skMetaResult.headers); // Usually empty
-
-    // 5. Focus Meta Cost (Applies if 'Focus' morph was used)
-    const focusMetaResult = await fFocus_VerifyAndProcessCost(gUI.pendingChangesMap);
-    if (!focusMetaResult.success) return false; // Halt if cost cannot be paid
-    addChangesToMap(focusMetaResult.changes);
-    pendingHeaders.push(...focusMetaResult.headers); // Usually empty
-
-    // === Apply All Pending Changes ===
-    // This section only runs if all previous verification steps succeeded.
-    fMyConsoleLog("✅ All Verifications Passed. Applying Pending Changes from Map...");
-
-    // Prepend collected header messages to the sidebar log buffer
-    pendingHeaders.forEach(header => fAppendToSidebarHeader(header));
-
-    // Apply the collected grid changes from the map
-    let applyErrors = false;
-    const changeEntries = Object.entries(gUI.pendingChangesMap);
-    fMyConsoleLog(`   -> Applying ${changeEntries.length} changes from map...`);
-
-    for (const [key, value] of changeEntries) {
-        try {
-            const keyParts = key.split(',');
-            if (keyParts.length !== 2) { // Validate key format
-                 console.warn(`Invalid key format in pendingChangesMap: "${key}"`);
-                 applyErrors = true; continue;
-            }
-            const [rowPart, colPart] = keyParts;
-            // Determine if rowPart is an index or tag
-            let rowRef = parseInt(rowPart, 10);
-            if (isNaN(rowRef) || rowRef < 0) { rowRef = rowPart; } // Use as tag if not valid index
-
-            // Apply change using fSetGridValue
-            if (!fSetGridValue(rowRef, colPart, value)) {
-                 applyErrors = true; // fSetGridValue logs specific errors
-                 fMyConsoleLog(`      -> Error applying change via fSetGridValue for: ${key} = ${value}`);
-            }
-            // Optional success log: else { fMyConsoleLog(`      -> Applied: ${key} = ${value}`); }
-        } catch (parseError) {
-             console.error(`Error processing change key "${key}":`, parseError);
-             applyErrors = true;
-        }
-    }
-
-    // Clean up the map
-    gUI.pendingChangesMap = {};
-
-    // Handle potential errors during the application phase
-    if (applyErrors) {
-        fMyConsoleLog("❌ Errors occurred while applying cost/state changes from the map.");
-        await fShowMessage("Error applying some cost/state changes. Please check grid state.");
-        return false; // Indicate overall failure if application had errors
-    }
-
-    fMyConsoleLog("✅ Costs Verified & Changes Applied Successfully using Change Map.");
-    return true; // Signal overall success
-
-} // END fVerifyNSetActMetaLuckUsesOnEtc
-
 
 
 
@@ -2918,7 +2783,7 @@ async function fHandleAdHocRoll(cellText) {
     if ((match = text.match(skExactPattern))) {
         const num = parseInt(match[1], 10);
         if (!isNaN(num) && num > 0) {
-            rollResult = fD(num); matchedString = match[0];
+            rollResult = fMetaDieRoll(num); matchedString = match[0];
             logHeaderHtml = '🎲 <span class="blue-bold">Custom Roll</span> Sk'; logHeaderText = '🎲 Custom Roll Sk';
             logDetailsHtml = `Sk(${num}) ~${rollResult}`; logDetailsText = `Sk(${num}) ~${rollResult}`;
             patternMatched = true; fMyConsoleLog(`   -> Matched EXACT Sk pattern: ${matchedString}. Result: ${rollResult}`);
@@ -2950,7 +2815,7 @@ async function fHandleAdHocRoll(cellText) {
             if (match[1]) { // Matched sk#
                 matchedString = match[1]; const num = parseInt(match[2], 10);
                 if (!isNaN(num) && num > 0) {
-                    rollResult = fD(num);
+                    rollResult = fMetaDieRoll(num);
                     logHeaderHtml = '🎲 <span class="blue-bold">Custom Roll</span> Sk'; logHeaderText = '🎲 Custom Roll Sk';
                     logDetailsHtml = `Sk(${num}) ~${rollResult}`; logDetailsText = `Sk(${num}) ~${rollResult}`;
                     patternMatched = true; fMyConsoleLog(`   -> PARSED first Sk pattern: ${matchedString}. Result: ${rollResult}`);
@@ -3009,37 +2874,37 @@ async function fHandleAdHocRoll(cellText) {
 // ==========================================================================
 
 
-// fDie //////////////////////////////////////////////////////////////////////
+// fdRoll //////////////////////////////////////////////////////////////////////
 // Purpose -> Standard linear distribution die roll (e.g., 1d6).
 // Inputs  -> die (Number): The number of sides on the die.
 // Outputs -> (Number): The result of the roll (integer from 1 to die).
-function fDie(die) {
+function fdRoll(die) {
   const numDie = Number(die); // Ensure input is treated as a number
 
   // Validate input
   if (isNaN(numDie) || numDie < 1) {
-    console.error(`fDie received invalid die size: ${die}`);
+    console.error(`fdRoll received invalid die size: ${die}`);
     return 1; // Return 1 for invalid input
   }
 
   // Calculate and return random integer between 1 and numDie (inclusive)
   return Math.floor(Math.random() * numDie) + 1;
-} // END fDie
+} // END fdRoll
 
 
 
-// fD //////////////////////////////////////////////////////////////////////
+// fMetaDieRoll //////////////////////////////////////////////////////////////////////
 // Purpose -> Performs a non-linear "exploding" dice roll common in MetaScape,
 //            weighted towards lower results but with potential for high values.
 //            Used for skill/attribute checks (Sk, Atr, Atk, Def). No T/C.
 // Inputs  -> die (Number): The base value (skill/attribute) for the roll.
 // Outputs -> (Number): The integer result of the roll (minimum 1).
-function fD(die) {
+function fMetaDieRoll(die) {
   const numDie = Number(die); // Ensure input is treated as a number
 
   // Validate input
   if (isNaN(numDie) || numDie < 1) {
-    console.error(`fD received invalid die value: ${die}`);
+    console.error(`fMetaDieRoll received invalid die value: ${die}`);
     return 1; // Return 1 for invalid input
   }
 
@@ -3052,7 +2917,7 @@ function fD(die) {
 
   // Calculate result: (die * rand1) / rand2 + 1, floored
   return Math.floor((numDie * rand1) / rand2) + 1;
-} // END fD
+} // END fMetaDieRoll
 
 
 
@@ -3062,7 +2927,7 @@ function fD(die) {
 // Inputs  -> None.
 // Outputs -> (String): Formatted "T", "C", or "" (empty string).
 function fTC() {
-  const roll = fDie(16); // Standard d16 roll
+  const roll = fdRoll(16); // Standard d16 roll
 
   // Return formatted string based on roll result
   return roll === 1
@@ -3077,7 +2942,7 @@ function fTC() {
 
 // fSkRoll ////////////////////////////////////////////////////////////////////
 // Purpose -> Performs a standard MetaScape Skill roll (used for Sk, Atr, Str).
-//            Averages a linear d(die*2) roll and a non-linear fD(die) roll.
+//            Averages a linear d(die*2) roll and a non-linear fMetaDieRoll(die) roll.
 // Inputs  -> die (Number): The base skill value.
 // Outputs -> (Number): The rounded integer result of the skill roll.
 function fSkRoll(die) {
@@ -3089,8 +2954,8 @@ function fSkRoll(die) {
     return 1; // Return 1 for invalid input
   }
 
-  // Calculate average of a linear d(2*die) and a non-linear fD(die)
-  return Math.round((fDie(numDie * 2) + fD(numDie)) / 2);
+  // Calculate average of a linear d(2*die) and a non-linear fMetaDieRoll(die)
+  return Math.round((fdRoll(numDie * 2) + fMetaDieRoll(numDie)) / 2);
 } // END fSkRoll
 
 
@@ -3110,13 +2975,13 @@ function fAtkRoll(die) {
   }
 
   // Currently uses the same calculation as fSkRoll
-  return Math.round((fDie(numDie * 2) + fD(numDie)) / 2);
+  return Math.round((fdRoll(numDie * 2) + fMetaDieRoll(numDie)) / 2);
 } // END fAtkRoll
 
 
 
 // fDefRoll ////////////////////////////////////////////////////////////////////
-// Purpose -> Performs a MetaScape Defense roll. Based on fD(die) * 0.75.
+// Purpose -> Performs a MetaScape Defense roll. Based on fMetaDieRoll(die) * 0.75.
 // Inputs  -> die (Number): The base defense value.
 // Outputs -> (Number): The rounded integer result of the defense roll.
 function fDefRoll(die) {
@@ -3129,7 +2994,7 @@ function fDefRoll(die) {
   }
 
   // Calculate based on the non-linear roll, scaled down
-  return Math.round(fD(numDie) * 0.75);
+  return Math.round(fMetaDieRoll(numDie) * 0.75);
 } // END fDefRoll
 
 
@@ -3167,7 +3032,7 @@ function fARRoll(pcAR) {
 
 // fRollRPGDieString //////////////////////////////////////////////////////////////////
 // Purpose -> Parses a standard RPG die string (e.g., "d6", "2d8", "3d10+5", "1d12-2")
-//            and rolls the dice using fDie (linear distribution), returning the total.
+//            and rolls the dice using fdRoll (linear distribution), returning the total.
 // Inputs  -> dieString (String): The dice notation string.
 // Outputs -> (Number | null): The numerical result of the roll, or null if parsing fails.
 function fRollRPGDieString(dieString) {
@@ -3203,7 +3068,7 @@ function fRollRPGDieString(dieString) {
     let total = 0;
     fMyConsoleLog(`   -> Rolling Die String: ${numDice}d${numSides}`);
     for (let i = 0; i < numDice; i++) {
-        const roll = fDie(numSides); // Use standard linear roll
+        const roll = fdRoll(numSides); // Use standard linear roll
         total += roll;
         // fMyConsoleLog(`      - Roll ${i+1}: ${roll}`); // Optional: Log individual rolls
     }
