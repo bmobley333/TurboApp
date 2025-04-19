@@ -245,7 +245,7 @@ async function fHandleRollDiceAction() {
 
         // === 10. Log Result to Sidebar ===
         if (logHtmlToSend) {
-            fPrependToSidebar(logHtmlToSend, logTextToSend);
+            fPostToSidebar(logHtmlToSend, logTextToSend);
             fShowSidebar(); // Ensure sidebar is visible
         } else {
            fMyConsoleLog("ℹ️ No final log message generated.");
@@ -259,7 +259,7 @@ async function fHandleRollDiceAction() {
         await fShowMessage(`❌ Critical Error during roll: ${err.message}. Please check console.`);
         fSetButtonOrMenuState(null);
         // Attempt to send log even after critical error, slightly delayed
-        setTimeout(() => fSendLogToGMScreenNPS(), 0);
+        setTimeout(() => fSendLogToGMScreenAndPS(), 0);
         return; // Exit after critical error
     }
 
@@ -268,7 +268,7 @@ async function fHandleRollDiceAction() {
     fMyConsoleLog(`✅ Roll Dice Action Completed.`);
 
     // Send the final log state to the GMScreen (with slight delay)
-    setTimeout(() => fSendLogToGMScreenNPS(), 0); 
+    setTimeout(() => fSendLogToGMScreenAndPS(), 0); 
 
 } // END fHandleRollDiceAction
 
@@ -1262,7 +1262,7 @@ async function fPerformPlayerAttackRolls(initialLogHtml, initialLogText) {
     fMyConsoleLog("   -> Entering Player Attack Logic...");
     // === 1. Get Monster Range & Validate ===
     const monsterRangeDef = gUI.range?.monsters;
-    if (!monsterRangeDef || !fIsValidRangeObject(monsterRangeDef)) {
+    if (!monsterRangeDef || !fDoesObjectHaveR1C1R2C2Properties(monsterRangeDef)) {
         const msg = "Monster range definition (gUI.range.monsters) missing/invalid.";
         console.warn(`fPerformPlayerAttackRolls: ${msg}`);
         await fShowMessage(`❌ Error: ${msg}`);
@@ -1270,7 +1270,7 @@ async function fPerformPlayerAttackRolls(initialLogHtml, initialLogText) {
     }
 
     // === 2. Resolve Indices ===
-    const resolved = fResolveRangeIndices(monsterRangeDef);
+    const resolved = fConvertsR1C1R2C2TagOrNumToIndices(monsterRangeDef);
     if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
         const msg = `Could not resolve monster range tags: ${JSON.stringify(monsterRangeDef)}`;
         console.warn(`fPerformPlayerAttackRolls: ${msg}`);
@@ -1420,7 +1420,7 @@ async function fPerformPlayerDamageRolls(initialLogHtml, initialLogText) {
     fMyConsoleLog("   -> Entering Player Damage Logic...");
     // === 1. Get Monster Range & Validate ===
     const monsterRangeDef = gUI.range?.monsters;
-    if (!monsterRangeDef || !fIsValidRangeObject(monsterRangeDef)) {
+    if (!monsterRangeDef || !fDoesObjectHaveR1C1R2C2Properties(monsterRangeDef)) {
         const msg = "Monster range definition (gUI.range.monsters) missing/invalid.";
         console.warn(`fPerformPlayerDamageRolls: ${msg}`);
         await fShowMessage(`❌ Error: ${msg}`);
@@ -1428,7 +1428,7 @@ async function fPerformPlayerDamageRolls(initialLogHtml, initialLogText) {
     }
 
     // === 2. Resolve Indices (Including MonAR) ===
-    const resolved = fResolveRangeIndices(monsterRangeDef);
+    const resolved = fConvertsR1C1R2C2TagOrNumToIndices(monsterRangeDef);
     if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
         const msg = `Could not resolve monster range tags: ${JSON.stringify(monsterRangeDef)}`;
         console.warn(`fPerformPlayerDamageRolls: ${msg}`);
@@ -1555,7 +1555,7 @@ async function fPerformPlayerDefenseRolls(initialLogHtml, initialLogText) {
     fMyConsoleLog("   -> Entering Player Defense Logic...");
     // === 1. Get Monster Range & Validate ===
     const monsterRangeDef = gUI.range?.monsters;
-    if (!monsterRangeDef || !fIsValidRangeObject(monsterRangeDef)) {
+    if (!monsterRangeDef || !fDoesObjectHaveR1C1R2C2Properties(monsterRangeDef)) {
         const msg = "Monster range definition (gUI.range.monsters) missing/invalid.";
         console.warn(`fPerformPlayerDefenseRolls: ${msg}`);
         await fShowMessage(`❌ Error: ${msg}`);
@@ -1563,7 +1563,7 @@ async function fPerformPlayerDefenseRolls(initialLogHtml, initialLogText) {
     }
 
     // === 2. Resolve Indices (Including MonAtk) ===
-    const resolved = fResolveRangeIndices(monsterRangeDef);
+    const resolved = fConvertsR1C1R2C2TagOrNumToIndices(monsterRangeDef);
     if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
         const msg = `Could not resolve monster range tags: ${JSON.stringify(monsterRangeDef)}`;
         console.warn(`fPerformPlayerDefenseRolls: ${msg}`);
@@ -1712,7 +1712,7 @@ async function fPerformPlayerArmorRolls(initialLogHtml, initialLogText) {
     fMyConsoleLog("   -> Entering Player Armor Logic...");
     // === 1. Get Monster Range & Validate ===
     const monsterRangeDef = gUI.range?.monsters;
-    if (!monsterRangeDef || !fIsValidRangeObject(monsterRangeDef)) {
+    if (!monsterRangeDef || !fDoesObjectHaveR1C1R2C2Properties(monsterRangeDef)) {
         const msg = "Monster range definition (gUI.range.monsters) missing/invalid.";
         console.warn(`fPerformPlayerArmorRolls: ${msg}`);
         await fShowMessage(`❌ Error: ${msg}`);
@@ -1720,7 +1720,7 @@ async function fPerformPlayerArmorRolls(initialLogHtml, initialLogText) {
     }
 
     // === 2. Resolve Indices (Including MonDmg) ===
-    const resolved = fResolveRangeIndices(monsterRangeDef);
+    const resolved = fConvertsR1C1R2C2TagOrNumToIndices(monsterRangeDef);
     if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
         const msg = `Could not resolve monster range tags: ${JSON.stringify(monsterRangeDef)}`;
         console.warn(`fPerformPlayerArmorRolls: ${msg}`);
@@ -2060,7 +2060,7 @@ function fCalcRollLogPrepend() {
     const html = fBuildRollLogHTML(1, 1, true); // Assumes single roll for this direct call context
 
     // Prepend the generated HTML to the sidebar
-    fPrependToSidebar(html);
+    fPostToSidebar(html);
     // Ensure the sidebar is visible
     fShowSidebar();
 
@@ -2346,7 +2346,7 @@ async function fHandlePrepARClick(event) {
     }
 
     // Post text to Firestore
-    fHandleAutoSaveTextData();
+    fHandleAutoSaveTextToFirestore();
 
     // === 5. Clean up History ===
     // Remove the processed entry from the history map
@@ -2510,7 +2510,7 @@ async function fHandlePrepDmgClick(event) {
     }
 
     // Post text to Firestore
-    fHandleAutoSaveTextData();
+    fHandleAutoSaveTextToFirestore();
 
 
     // === 5. Clean up History ===
@@ -2611,7 +2611,7 @@ async function fExecuteNishSequence() {
     fMyConsoleLog("🎬 Executing Nish Sequence...");
     // 1. Add Sidebar Divider (HTML and Plain Text)
     // Use '======================' for the plain text version 
-    fPrependToSidebar('<hr class="nish-divider"><br>', '\n======================\n');
+    fPostToSidebar('<hr class="nish-divider"><br>', '\n======================\n');
     fMyConsoleLog("   -> Sidebar divider added.");
 
     // 2. Run Meta Channeling (Skip if Luck button initiated the action)
@@ -2635,7 +2635,7 @@ async function fExecuteNishSequence() {
     }
 
     fMyConsoleLog("✅ Nish Sequence Execution Complete.");
-    // Note: No fSendLogToGMScreenNPS here, as it's often called by another function (fHandleNishButtonClick or fHandleRollDiceAction)
+    // Note: No fSendLogToGMScreenAndPS here, as it's often called by another function (fHandleNishButtonClick or fHandleRollDiceAction)
     // which will handle the final send.
 
 } // END fExecuteNishSequence
@@ -2681,7 +2681,7 @@ async function fUpdateTurboMonsterTable(gmDataArray, gmColTags, gmRowTags) {
 
     // === 2. Resolve Turbo Table Boundaries ===
     const turboRangeDef = gUI.range?.monsters;
-    if (!turboRangeDef || !fIsValidRangeObject(turboRangeDef)) {
+    if (!turboRangeDef || !fDoesObjectHaveR1C1R2C2Properties(turboRangeDef)) {
         fMyConsoleLog("❌ fUpdateTurboMonsterTable Error: Turbo monster range (gUI.range.monsters) invalid.");
         await fShowMessage("Error: Turbo monster table range definition is missing.");
         return;
@@ -2867,10 +2867,10 @@ async function fHandleChaosGemClick(r, c) {
 
     // === 2. Get Chaos Gem Range & Validate ===
     const chaosRangeDef = gUI.range?.chaosGems;
-    if (!chaosRangeDef || !fIsValidRangeObject(chaosRangeDef)) { fMyConsoleLog("   -> Cannot check Chaos Gem: Range definition missing/invalid."); return false; }
+    if (!chaosRangeDef || !fDoesObjectHaveR1C1R2C2Properties(chaosRangeDef)) { fMyConsoleLog("   -> Cannot check Chaos Gem: Range definition missing/invalid."); return false; }
 
     // === 3. Resolve Range & Check if Click Was Inside ===
-    const resolved = fResolveRangeIndices(chaosRangeDef);
+    const resolved = fConvertsR1C1R2C2TagOrNumToIndices(chaosRangeDef);
     if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) { fMyConsoleLog(`   -> Cannot check Chaos Gem: Failed to resolve range tags: ${JSON.stringify(chaosRangeDef)}`); return false; }
     const rMin = Math.min(resolved.r1, resolved.r2); const rMax = Math.max(resolved.r1, resolved.r2);
     const cMin = Math.min(resolved.c1, resolved.c2); const cMax = Math.max(resolved.c1, resolved.c2);
@@ -2900,13 +2900,13 @@ async function fHandleChaosGemClick(r, c) {
     const sidebarMsgText = `💎 Chaos Crystal (${newUses} Uses Left):\n${trimmedAbilityText}`;
 
     // Update Sidebar
-    fPrependToSidebar(sidebarMsgHtml, sidebarMsgText);
+    fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
     fShowSidebar();
 
     fMyConsoleLog("✅ Chaos Gem Used Successfully.");
 
     // Send log update to GMScreen (with slight delay)
-    setTimeout(() => fSendLogToGMScreenNPS(), 0);
+    setTimeout(() => fSendLogToGMScreenAndPS(), 0);
 
     return true; // Signal that the gem click was fully processed
 
@@ -3007,12 +3007,12 @@ async function fHandleAdHocRoll(cellText) {
 
         const finalLogHtml = `${formattedHeaderHtml}<br>${logDetailsHtml}${tcSuffixHtml}`;
         const finalLogText = `${formattedHeaderText}\n${logDetailsText}${tcSuffixText ? ' ' + tcSuffixText : ''}`;
-        fPrependToSidebar(finalLogHtml, finalLogText);
+        fPostToSidebar(finalLogHtml, finalLogText);
         fShowSidebar();
         fMyConsoleLog(`   -> Ad-Hoc Roll logged to sidebar.`);
 
         // Send log update to GMScreen (with slight delay)
-        setTimeout(() => fSendLogToGMScreenNPS(), 0);
+        setTimeout(() => fSendLogToGMScreenAndPS(), 0);
 
         return true; // Indicate roll was handled
     }

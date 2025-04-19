@@ -403,13 +403,13 @@ function fIsCellInRangeArray(r, c, rangeArray) {
     // Iterate through each range definition
     for (const rangeDef of rangesToCheck) {
         // Validate the range definition object structure
-        if (!fIsValidRangeObject(rangeDef)) {
+        if (!fDoesObjectHaveR1C1R2C2Properties(rangeDef)) {
              console.warn("fIsCellInRangeArray: Skipping invalid range definition object:", rangeDef);
              continue;
         }
 
         // Resolve tags/indices for the current range
-        const resolved = fResolveRangeIndices(rangeDef);
+        const resolved = fConvertsR1C1R2C2TagOrNumToIndices(rangeDef);
         if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
              console.warn("fIsCellInRangeArray: Skipping range due to unresolved indices:", rangeDef);
              continue;
@@ -464,13 +464,13 @@ function fIsSkRadioGroupMember(r, c) {
     // Loop through each defined range for the Sk1/Sk2 checkboxes
     for (const range of ranges) {
         // Validate the range object structure
-        if (!fIsValidRangeObject(range)) { // Use existing helper function
+        if (!fDoesObjectHaveR1C1R2C2Properties(range)) { // Use existing helper function
              console.warn("fIsSkRadioGroupMember: Skipping invalid range object", range);
              continue;
         }
 
         // Resolve the tags/indices for the current range
-        const resolved = fResolveRangeIndices(range); // Use existing helper function
+        const resolved = fConvertsR1C1R2C2TagOrNumToIndices(range); // Use existing helper function
         if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
              console.warn("fIsSkRadioGroupMember: Skipping range due to unresolved indices", range);
              continue;
@@ -494,14 +494,14 @@ function fIsSkRadioGroupMember(r, c) {
 
 
 
-// fMakeCheckBox ///////////////////////////////////////////////////////////////////
+// fMakeCorrectCheckBoxType ///////////////////////////////////////////////////////////////////
 // Purpose -> Returns a checkbox input element reflecting boolean value in gUI.arr[r][c].
 //            Disables checkbox if background color is not white/default.
 //            Adds 'data-sk-group' attribute if part of the Sk1/Sk2 radio group.
 // Inputs  -> r (Number): 0-based row index.
 //         -> c (Number): 0-based column index.
 // Outputs -> (HTMLInputElement): The configured checkbox element.
-function fMakeCheckBox(r, c) {
+function fMakeCorrectCheckBoxType(r, c) {
     const value = gUI.arr[r]?.[c];
     const checkbox = document.createElement("input");
 
@@ -525,7 +525,7 @@ function fMakeCheckBox(r, c) {
     }
 
     return checkbox;
-} // END fMakeCheckBox
+} // END fMakeCorrectCheckBoxType
 
 
 
@@ -664,6 +664,8 @@ function fCheckIfEditable(bgColor, isCheckbox) {
 } // END fCheckIfEditable
 
 
+
+
 // fSetCellAttributes //////////////////////////////////////////////////////////////
 // Purpose -> Sets the data-r and data-c attributes on a cell element. Also sets
 //            contentEditable and related styles if the cell is designated as editable.
@@ -746,18 +748,18 @@ function fCheckAndTagUrl(cell, value) {
 
 
 // fPopulateCellContent ////////////////////////////////////////////////////////////
-// Purpose -> Populates a cell element with either a checkbox (using fMakeCheckBox)
+// Purpose -> Populates a cell element with either a checkbox (using fMakeCorrectCheckBoxType)
 //            or text content. Strips trailing ID patterns from text content.
 // Inputs  -> cell (HTMLElement): The cell div element.
-//         -> r (Number): 0-based row index (passed to fMakeCheckBox).
-//         -> c (Number): 0-based column index (passed to fMakeCheckBox).
+//         -> r (Number): 0-based row index (passed to fMakeCorrectCheckBoxType).
+//         -> c (Number): 0-based column index (passed to fMakeCorrectCheckBoxType).
 //         -> displayValue (Any): The value to display (used for text content).
 //         -> isCheckbox (Boolean): True if the cell should contain a checkbox.
 // Outputs -> None (Modifies the input cell element's content).
 function fPopulateCellContent(cell, r, c, displayValue, isCheckbox) {
     if (isCheckbox) {
         // Append a checkbox if required
-        cell.appendChild(fMakeCheckBox(r, c));
+        cell.appendChild(fMakeCorrectCheckBoxType(r, c));
     } else {
         // Otherwise, set text content, stripping any trailing ID
         const idPattern = /\s{2,}_\w{6}$/; // Matches '  _XXXXXX' at end of string
@@ -814,19 +816,19 @@ function fApplyCellFormatting(cell, c, bgColor, rowFormat, isUrl) {
 
 
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////// START fRenderFullGrid and helpers
+////////////////////////////////////////////////////////////////////////////////////////////////////////// START fRenderTurbosFullGrid and helpers
 
 
 
 
-// fRenderFullGrid /////////////////////////////////////////////////////////////////
+// fRenderTurbosFullGrid /////////////////////////////////////////////////////////////////
 // Purpose -> Main controller function to render the entire grid dynamically.
 //            Initializes grid, sets up columns/tags, then renders cells in chunks
 //            using requestAnimationFrame for better performance. Calls a callback
 //            function after rendering is complete for post-processing.
 // Inputs  -> callback (Function): Function to execute after the grid is fully rendered.
 // Outputs -> None (Modifies DOM, populates gUI.grid2D).
-function fRenderFullGrid(callback) {
+function fRenderTurbosFullGrid(callback) {
     fMyConsoleLog("⚙️ Rendering Full Grid...");
 
     // === Get DOM Elements and Data ===
@@ -853,7 +855,7 @@ function fRenderFullGrid(callback) {
     const renderChunk = fRenderChunkFactory(grid, gameArr, format, 50, callback);
     requestAnimationFrame(renderChunk); // Start the chunked rendering process
 
-} // END fRenderFullGrid
+} // END fRenderTurbosFullGrid
 
 
 
@@ -909,6 +911,8 @@ function fSetGridColumnWidths(grid, format, numCols) {
 
 
 
+
+
 // fBuildRowFormat /////////////////////////////////////////////////////////////////
 // Purpose -> Extracts and returns a formatting object specific to a single row index
 //            from the main format object.
@@ -928,6 +932,8 @@ function fBuildRowFormat(format, rowIdx) {
         wrap: format.wrap?.[rowIdx]
     };
 } // END fBuildRowFormat
+
+
 
 
 // fAppendRowCells /////////////////////////////////////////////////////////////////
@@ -1004,7 +1010,7 @@ function fRenderChunkFactory(grid, gameArr, format, chunkSize, callback) {
 
 
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////// END fRenderFullGrid and helpers
+////////////////////////////////////////////////////////////////////////////////////////////////////////// END fRenderTurbosFullGrid and helpers
 
 
 
@@ -1016,13 +1022,13 @@ function fRenderChunkFactory(grid, gameArr, format, chunkSize, callback) {
 
 
 
-// fSetHeader ////////////////////////////////////////////////////////////////////
+// fSetTurbosGridHeaderRows ////////////////////////////////////////////////////////////////////
 // Purpose -> Hides the top utility rows (0, 1) and applies sticky positioning
 //            and styling to the header rows (2, 3, 4). Also adds a visual
 //            indicator style to the row immediately below the sticky header (row 5).
 // Inputs  -> None (Uses gUI.grid2D, gUI.ROW_HEIGHT_PX, gUI.format.bg).
 // Outputs -> None (Modifies DOM cell styles and classes).
-function fSetHeader() {
+function fSetTurbosGridHeaderRows() {
     fMyConsoleLog("🔒 Applying Sticky Header...");
     const numRows = gUI.grid2D.length;
 
@@ -1077,23 +1083,23 @@ function fSetHeader() {
     }
 
     fMyConsoleLog("✅ Sticky Header Applied");
-} // END fSetHeader
+} // END fSetTurbosGridHeaderRows
 
 
 
 
-// fUpdateGridColumnTemplate ///////////////////////////////////////////////////////
+// fAppliesGridColumnOnOff ///////////////////////////////////////////////////////
 // Purpose -> Recalculates and applies the 'grid-template-columns' CSS style to the
 //            grid container based on the current state of gUI.hiddenColumns.
 //            Sets width to '0px' for hidden columns, uses original width otherwise.
 // Inputs  -> None (Uses gUI.hiddenColumns, gUI.format.colWidths, gUI.arr).
 // Outputs -> None (Modifies the grid element's style).
-function fUpdateGridColumnTemplate() {
+function fAppliesGridColumnOnOff() {
     const grid = document.getElementById("grid");
 
     // Validate prerequisites
     if (!grid || !gUI.format.colWidths || !gUI.arr || gUI.arr.length === 0) {
-        console.error("fUpdateGridColumnTemplate: Missing prerequisites (grid element, colWidths, or arr data).");
+        console.error("fAppliesGridColumnOnOff: Missing prerequisites (grid element, colWidths, or arr data).");
         return;
     }
 
@@ -1117,24 +1123,24 @@ function fUpdateGridColumnTemplate() {
     // Apply the new style to the grid
     grid.style.gridTemplateColumns = newTemplateString;
 
-} // END fUpdateGridColumnTemplate
+} // END fAppliesGridColumnOnOff
 
 
 
 
-// fSetColumnVisibility ////////////////////////////////////////////////////////////
+// fSetsGridColumnVisibility ////////////////////////////////////////////////////////////
 // Purpose -> Hides or shows a single column by updating the `visibility: collapse`
 //            style of its cells and optionally updating the grid template.
 //            Manages the column index in the gUI.hiddenColumns Set.
 // Inputs  -> colIndex (Number): 0-based index of the column to modify.
 //         -> isVisible (Boolean): True to show the column, false to hide it.
-//         -> updateTemplate (Boolean): If true (default), calls fUpdateGridColumnTemplate
+//         -> updateTemplate (Boolean): If true (default), calls fAppliesGridColumnOnOff
 //                                       after modifying cell visibility.
 // Outputs -> None (Modifies cell styles, gUI.hiddenColumns, potentially grid style).
-function fSetColumnVisibility(colIndex, isVisible, updateTemplate = true) {
+function fSetsGridColumnVisibility(colIndex, isVisible, updateTemplate = true) {
     // === Validate Input ===
     if (isNaN(colIndex) || colIndex < 0 || !gUI.grid2D[0] || colIndex >= gUI.grid2D[0].length) {
-        console.warn(`fSetColumnVisibility: Invalid column index ${colIndex}`);
+        console.warn(`fSetsGridColumnVisibility: Invalid column index ${colIndex}`);
         return;
     }
 
@@ -1164,26 +1170,26 @@ function fSetColumnVisibility(colIndex, isVisible, updateTemplate = true) {
         // === Update Grid Template (Optional) ===
         // Regenerate the grid template only if requested (e.g., batch updates skip this)
         if (updateTemplate) {
-             fUpdateGridColumnTemplate();
+             fAppliesGridColumnOnOff();
         }
     }
     // else: Column is already in the desired state, no action needed.
-} // END fSetColumnVisibility
+} // END fSetsGridColumnVisibility
 
 
 
 
-// fSetRowVisibility ///////////////////////////////////////////////////////////////
+// fSetGridRowVisibility ///////////////////////////////////////////////////////////////
 // Purpose -> Hides or shows a single row by setting the 'display' style of its cells
 //            and managing the row index in the gUI.hiddenRows Set.
 //            Also handles resetting sticky styles if hiding a potentially sticky row.
 // Inputs  -> rowIndex (Number): 0-based index of the row to modify.
 //         -> isVisible (Boolean): True to show the row, false to hide it.
-// Outputs -> None (Modifies cell styles, gUI.hiddenRows, potentially calls fSetHeader).
-function fSetRowVisibility(rowIndex, isVisible) {
+// Outputs -> None (Modifies cell styles, gUI.hiddenRows, potentially calls fSetTurbosGridHeaderRows).
+function fSetGridRowVisibility(rowIndex, isVisible) {
     // === Validate Input ===
      if (isNaN(rowIndex) || rowIndex < 0 || rowIndex >= gUI.grid2D.length) {
-        console.warn(`fSetRowVisibility: Invalid row index ${rowIndex}.`);
+        console.warn(`fSetGridRowVisibility: Invalid row index ${rowIndex}.`);
         return;
     }
 
@@ -1209,28 +1215,28 @@ function fSetRowVisibility(rowIndex, isVisible) {
              }
          } else {
              // Optional: Log if cell element is unexpectedly missing, especially in early columns
-             // if (c < 5) console.warn(`fSetRowVisibility: Cell gUI.grid2D[${rowIndex}][${c}] not found!`);
+             // if (c < 5) console.warn(`fSetGridRowVisibility: Cell gUI.grid2D[${rowIndex}][${c}] not found!`);
          }
     }
 
     // === Handle Sticky Rows ===
     // If showing a row that could be part of the sticky header (rows 2-5), re-apply header formatting
-    // to ensure correct offsets and styles are applied. Rows 0/1 are handled by fSetHeader initial run.
+    // to ensure correct offsets and styles are applied. Rows 0/1 are handled by fSetTurbosGridHeaderRows initial run.
     if (isVisible && rowIndex >= 2 && rowIndex <= 5) {
-         fSetHeader(); // Re-run fSetHeader to ensure stickiness is correct
+         fSetTurbosGridHeaderRows(); // Re-run fSetTurbosGridHeaderRows to ensure stickiness is correct
     }
 
-} // END fSetRowVisibility
+} // END fSetGridRowVisibility
 
 
 
 
-// fApplyDynamicMerges /////////////////////////////////////////////////////////////
+// fApplyGridDynamicMerges /////////////////////////////////////////////////////////////
 // Purpose -> Applies cell merging based on the `gUI.format.merges` array.
 //            Sets grid-column/row span on the anchor cell and hides covered cells.
 // Inputs  -> None (Uses gUI.format.merges, gUI.grid2D).
 // Outputs -> None (Modifies DOM cell styles).
-function fApplyDynamicMerges() {
+function fApplyGridDynamicMerges() {
     fMyConsoleLog("🧩 Applying Merges...");
     const merges = gUI.format?.merges || []; // Get merge definitions or empty array
 
@@ -1271,18 +1277,18 @@ function fApplyDynamicMerges() {
     } // End loop through merge definitions
 
      fMyConsoleLog("✅ Merges Applied");
-} // END fApplyDynamicMerges
+} // END fApplyGridDynamicMerges
 
 
 
 
-// fApplyManualBorders /////////////////////////////////////////////////////////////
+// fApplyGridManualBorders /////////////////////////////////////////////////////////////
 // Purpose -> Applies CSS border styles to cells within sections defined in
 //            gUI.manualBorderSections. Applies top/left borders to all cells
 //            in a section and right/bottom borders based on the 'edges' property.
 // Inputs  -> None (Uses gUI.manualBorderSections, gUI.grid2D).
 // Outputs -> None (Modifies DOM cell styles).
-function fApplyManualBorders() {
+function fApplyGridManualBorders() {
     fMyConsoleLog("🖌️ Applying Manual Borders...");
     let appliedCount = 0;
 
@@ -1333,19 +1339,19 @@ function fApplyManualBorders() {
     }); // End forEach section
 
     fMyConsoleLog(`✅ Manual Borders Applied (${appliedCount} styles set)`);
-} // END fApplyManualBorders
+} // END fApplyGridManualBorders
 
 
 
 
-// fApplyManualColoring ////////////////////////////////////////////////////////////
+// fApplyGridManualColoring ////////////////////////////////////////////////////////////
 // Purpose -> Applies specific font colors to predefined ranges based on the
 //            gUI.fontColorRange configuration array. Automatically applies a
 //            contrasting color (black/white) if the intended font color matches
 //            the cell's background color.
 // Inputs  -> None (Uses gUI.fontColorRange, gUI.grid2D, gUI.format.bg).
 // Outputs -> None (Modifies DOM cell styles).
-function fApplyManualColoring() {
+function fApplyGridManualColoring() {
     fMyConsoleLog("🎨 Applying Manual Font Colors...");
     const colorConfigArray = gUI.fontColorRange;
 
@@ -1378,13 +1384,13 @@ function fApplyManualColoring() {
         // === Iterate Through Each Range for the Current Color ===
         ranges.forEach(range => {
             // Validate range object structure
-            if (!fIsValidRangeObject(range)) {
+            if (!fDoesObjectHaveR1C1R2C2Properties(range)) {
                  console.warn(`Skipping invalid range object for color '${cssColor}':`, range);
                  return; // Skip this range
             }
 
             // Resolve range tags/indices
-            const resolved = fResolveRangeIndices(range);
+            const resolved = fConvertsR1C1R2C2TagOrNumToIndices(range);
             if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
                  console.warn(`Could not resolve tags for range in color '${cssColor}':`, range);
                  return; // Skip range if tags invalid
@@ -1439,21 +1445,21 @@ function fApplyManualColoring() {
     }); // end forEach colorDef
 
     fMyConsoleLog(`✅ Manual Colors Applied (${colorsAppliedCount} direct, ${contrastAppliedCount} contrast).`);
-} // END fApplyManualColoring
+} // END fApplyGridManualColoring
 
 
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////// START fAddHeaderButtons and helpers
+////////////////////////////////////////////////////////////////////////////////////////////////////////// START fAddGridsHeaderRowButtons and helpers
 
 
 
 
-// fAddHeaderButtons ///////////////////////////////////////////////////////////////
+// fAddGridsHeaderRowButtons ///////////////////////////////////////////////////////////////
 // Purpose -> Finds specific cells designated by tags in headerButtonConfigs, clears
 //            their content, and inserts configured image buttons.
 // Inputs  -> None (Uses gUI.grid2D, calls helper functions).
 // Outputs -> None (Modifies DOM by inserting images into cells).
-function fAddHeaderButtons() {
+function fAddGridsHeaderRowButtons() {
     fMyConsoleLog("⚙️ Adding Header Buttons...");
     let buttonsAdded = 0;
 
@@ -1507,13 +1513,13 @@ function fAddHeaderButtons() {
     // Iterate through configurations and add buttons to grid
     headerButtonConfigs.forEach(config => {
         // Find the target cell using tags
-        const cell = fGetResolvedCell(config.rowTag, config.colTag);
+        const cell = fGetGridCellFromRTagCTag(config.rowTag, config.colTag);
         if (!cell) return; // Skip if cell not found or tags invalid
 
         // Create the image element
-        const img = fCreateHeaderButtonImage(config);
+        const img = fCreateGridHeaderRowButtonImage(config);
         // Clear cell and insert the image
-        fApplyHeaderButtonToCell(cell, img);
+        fApplyGridButtonToCell(cell, img);
         buttonsAdded++;
     });
 
@@ -1522,25 +1528,25 @@ function fAddHeaderButtons() {
         ? `✅ Added ${buttonsAdded} Header Button(s).`
         : `ℹ️ No valid Header Buttons found or added.`);
 
-} // END fAddHeaderButtons
+} // END fAddGridsHeaderRowButtons
 
 
 
-// fGetResolvedCell ////////////////////////////////////////////////////////////////
+// fGetGridCellFromRTagCTag ////////////////////////////////////////////////////////////////
 // Purpose -> Resolves row and column tags to indices and retrieves the corresponding
 //            cell DOM element from gUI.grid2D. Logs warnings if resolution or
 //            element retrieval fails. Used primarily for finding header button cells.
 // Inputs  -> rowTag (String): The row tag to resolve.
 //         -> colTag (String): The column tag to resolve.
 // Outputs -> (HTMLElement | null): The cell element if found, otherwise null.
-function fGetResolvedCell(rowTag, colTag) {
+function fGetGridCellFromRTagCTag(rowTag, colTag) {
     // Resolve tags to indices
     const r = fResolveRow(rowTag);
     const c = fResolveCol(colTag);
 
     // Validate resolved indices
     if (isNaN(r) || isNaN(c)) {
-        console.warn(`fGetResolvedCell: Could not resolve tags [${rowTag}, ${colTag}]`);
+        console.warn(`fGetGridCellFromRTagCTag: Could not resolve tags [${rowTag}, ${colTag}]`);
         return null;
     }
 
@@ -1549,23 +1555,23 @@ function fGetResolvedCell(rowTag, colTag) {
 
     // Validate cell element exists
     if (!cell) {
-        console.warn(`fGetResolvedCell: Cell element not found at resolved [${r}, ${c}] for tags [${rowTag}, ${colTag}]`);
+        console.warn(`fGetGridCellFromRTagCTag: Cell element not found at resolved [${r}, ${c}] for tags [${rowTag}, ${colTag}]`);
         return null;
     }
 
     return cell;
-} // END fGetResolvedCell
+} // END fGetGridCellFromRTagCTag
 
 
 
 
-// fCreateHeaderButtonImage //////////////////////////////////////////////////////
+// fCreateGridHeaderRowButtonImage //////////////////////////////////////////////////////
 // Purpose -> Creates and returns a styled <img> element for a header button based
 //            on the provided configuration object.
 // Inputs  -> config (Object): Button configuration containing imageUrl, altText,
 //                             titleText, and action (for data-button-action).
 // Outputs -> (HTMLImageElement): The configured <img> element.
-function fCreateHeaderButtonImage(config) {
+function fCreateGridHeaderRowButtonImage(config) {
     const img = document.createElement('img');
 
     // Set image attributes from config
@@ -1578,18 +1584,18 @@ function fCreateHeaderButtonImage(config) {
     img.classList.add('header-button-img');
 
     return img;
-} // END fCreateHeaderButtonImage
+} // END fCreateGridHeaderRowButtonImage
 
 
 
 
-// fApplyHeaderButtonToCell //////////////////////////////////////////////////////
+// fApplyGridButtonToCell //////////////////////////////////////////////////////
 // Purpose -> Clears the target cell's content, inserts the provided image element,
 //            and applies centering styles suitable for image buttons.
 // Inputs  -> cell (HTMLElement): The target cell div element.
 //         -> img (HTMLImageElement): The configured <img> element to insert.
 // Outputs -> None (Modifies the input cell element's content and style).
-function fApplyHeaderButtonToCell(cell, img) {
+function fApplyGridButtonToCell(cell, img) {
     // Clear existing content and append the image
     cell.innerHTML = '';
     cell.appendChild(img);
@@ -1598,7 +1604,7 @@ function fApplyHeaderButtonToCell(cell, img) {
     cell.style.justifyContent = 'center';
     cell.style.alignItems = 'center';
     cell.style.padding = '0'; // Remove padding for better image fit
-} // END fApplyHeaderButtonToCell
+} // END fApplyGridButtonToCell
 
 
 
@@ -1609,16 +1615,16 @@ function fApplyHeaderButtonToCell(cell, img) {
 
 
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////// END fAddHeaderButtons and helpers
+////////////////////////////////////////////////////////////////////////////////////////////////////////// END fAddGridsHeaderRowButtons and helpers
 
 
-// fMarkOverflowingCells ///////////////////////////////////////////////////////////
+// fMarkGridOverflowingCells ///////////////////////////////////////////////////////////
 // Purpose -> Adds the 'overflow-left' CSS class to grid cells where the content's
 //            scrollWidth exceeds the cell's clientWidth, indicating text overflow.
 //            Optimized by separating DOM reads (dimensions) from writes (classList).
 // Inputs  -> None (Queries DOM for cells).
 // Outputs -> None (Modifies cell classLists).
-function fMarkOverflowingCells() {
+function fMarkGridOverflowingCells() {
     fMyConsoleLog("↔️ Checking Cell Overflow (Optimized)...");
     const cells = document.querySelectorAll('#grid .cell:not([style*="display: none"])'); // Get visible cells
     let cellsToModify = []; // Store cells needing class modification
@@ -1654,24 +1660,24 @@ function fMarkOverflowingCells() {
     });
 
     fMyConsoleLog(`✅ Overflow Checked (Optimized - ${count} cells newly marked)`);
-} // END fMarkOverflowingCells
+} // END fMarkGridOverflowingCells
 
 
 
 
-// fHideColumnRange ////////////////////////////////////////////////////////////////
+// fHideGridsColumnRange ////////////////////////////////////////////////////////////////
 // Purpose -> Hides one or more ranges of columns defined in an array of range objects.
-//            Calls fSetColumnVisibility for each affected column without updating the
+//            Calls fSetsGridColumnVisibility for each affected column without updating the
 //            grid template individually, then updates the template once at the end.
 // Inputs  -> rangeArray (Array<Object>): An array of range definition objects,
 //                                         each with c1 and c2 properties (tags/indices).
 // Outputs -> None (Modifies cell styles, gUI.hiddenColumns, grid style).
-function fHideColumnRange(rangeArray) {
+function fHideGridsColumnRange(rangeArray) {
     fMyConsoleLog(`👁️ Hiding Column Ranges...`);
 
     // === Validate Input ===
     if (!Array.isArray(rangeArray)) {
-        console.error("fHideColumnRange: Invalid input - requires an array.", rangeArray);
+        console.error("fHideGridsColumnRange: Invalid input - requires an array.", rangeArray);
         return;
     }
 
@@ -1681,7 +1687,7 @@ function fHideColumnRange(rangeArray) {
     for (const range of rangeArray) {
         // Validate range object structure
         if (!range || typeof range.c1 === 'undefined' || typeof range.c2 === 'undefined') {
-             console.warn("fHideColumnRange: Skipping invalid range object:", range);
+             console.warn("fHideGridsColumnRange: Skipping invalid range object:", range);
              continue;
         }
 
@@ -1691,7 +1697,7 @@ function fHideColumnRange(rangeArray) {
 
         // Validate resolved indices
         if (isNaN(startCol) || isNaN(endCol)) {
-            console.warn(`fHideColumnRange: Skipping range due to invalid tags/indices: ${range.c1}, ${range.c2}`);
+            console.warn(`fHideGridsColumnRange: Skipping range due to invalid tags/indices: ${range.c1}, ${range.c2}`);
             continue;
         }
 
@@ -1704,7 +1710,7 @@ function fHideColumnRange(rangeArray) {
             // Check if the column is not already hidden
             if (!gUI.hiddenColumns.has(c)) {
                 // Hide the column, but defer template update
-                fSetColumnVisibility(c, false, false);
+                fSetsGridColumnVisibility(c, false, false);
                 anyColumnsChanged = true; // Mark that a change occurred
             }
             // else: Column already hidden, do nothing for this column index
@@ -1714,29 +1720,29 @@ function fHideColumnRange(rangeArray) {
     // === Update Grid Template (if needed) ===
     // Update the grid template ONCE after processing all ranges, only if changes were made.
     if (anyColumnsChanged) {
-        fUpdateGridColumnTemplate();
+        fAppliesGridColumnOnOff();
         fMyConsoleLog(`✅ Column Ranges Hidden.`);
     } else {
         fMyConsoleLog(`ℹ️ All Specified Column Ranges Already Hidden (or no valid ranges found).`);
     }
-} // END fHideColumnRange
+} // END fHideGridsColumnRange
 
 
 
 
-// fShowColumnRange ////////////////////////////////////////////////////////////////
+// fShowGridsColumnRange ////////////////////////////////////////////////////////////////
 // Purpose -> Shows one or more ranges of columns defined in an array of range objects.
-//            Calls fSetColumnVisibility for each affected column without updating the
+//            Calls fSetsGridColumnVisibility for each affected column without updating the
 //            grid template individually, then updates the template once at the end.
 // Inputs  -> rangeArray (Array<Object>): An array of range definition objects,
 //                                         each with c1 and c2 properties (tags/indices).
 // Outputs -> None (Modifies cell styles, gUI.hiddenColumns, grid style).
-function fShowColumnRange(rangeArray) {
+function fShowGridsColumnRange(rangeArray) {
     fMyConsoleLog(`👁️ Showing Column Ranges...`);
 
     // === Validate Input ===
     if (!Array.isArray(rangeArray)) {
-        console.error("fShowColumnRange: Invalid input - requires an array.", rangeArray);
+        console.error("fShowGridsColumnRange: Invalid input - requires an array.", rangeArray);
         return;
     }
 
@@ -1746,7 +1752,7 @@ function fShowColumnRange(rangeArray) {
     for (const range of rangeArray) {
         // Validate range object structure
         if (!range || typeof range.c1 === 'undefined' || typeof range.c2 === 'undefined') {
-             console.warn("fShowColumnRange: Skipping invalid range object:", range);
+             console.warn("fShowGridsColumnRange: Skipping invalid range object:", range);
              continue;
         }
 
@@ -1756,7 +1762,7 @@ function fShowColumnRange(rangeArray) {
 
         // Validate resolved indices
         if (isNaN(startCol) || isNaN(endCol)) {
-            console.warn(`fShowColumnRange: Skipping range due to invalid tags/indices: ${range.c1}, ${range.c2}`);
+            console.warn(`fShowGridsColumnRange: Skipping range due to invalid tags/indices: ${range.c1}, ${range.c2}`);
             continue;
         }
 
@@ -1769,7 +1775,7 @@ function fShowColumnRange(rangeArray) {
              // Check if the column IS currently hidden
              if (gUI.hiddenColumns.has(c)) {
                  // Show the column, but defer template update
-                 fSetColumnVisibility(c, true, false);
+                 fSetsGridColumnVisibility(c, true, false);
                  anyColumnsChanged = true; // Mark that a change occurred
              }
              // else: Column already visible, do nothing for this column index
@@ -1779,29 +1785,29 @@ function fShowColumnRange(rangeArray) {
     // === Update Grid Template (if needed) ===
     // Update the grid template ONCE after processing all ranges, only if changes were made.
     if (anyColumnsChanged) {
-        fUpdateGridColumnTemplate();
+        fAppliesGridColumnOnOff();
         fMyConsoleLog(`✅ Column Ranges Shown.`);
     } else {
          fMyConsoleLog(`ℹ️ All Specified Column Ranges Already Visible (or no valid ranges found).`);
     }
-} // END fShowColumnRange
+} // END fShowGridsColumnRange
 
 
 
 
-// fApplyInitialVisibility ///////////////////////////////////////////////////////
+// fApplyGridColAndRowInitialVisibility ///////////////////////////////////////////////////////
 // Purpose -> Applies the initial hidden state for columns and rows based on the
 //            gUI.initialHiddenCols and gUI.initialHiddenRows configuration arrays.
-//            Calls fHideColumnRange for columns and fSetRowVisibility for rows.
+//            Calls fHideGridsColumnRange for columns and fSetGridRowVisibility for rows.
 // Inputs  -> None (Uses gUI.initialHiddenCols, gUI.initialHiddenRows).
 // Outputs -> None (Calls other functions that modify DOM/state).
-function fApplyInitialVisibility() {
+function fApplyGridColAndRowInitialVisibility() {
     fMyConsoleLog("👁️ Applying Initial Visibility...");
 
     // === Hide Initial Columns ===
     if (gUI.initialHiddenCols && gUI.initialHiddenCols.length > 0) {
         // Use the dedicated range function for columns
-        fHideColumnRange(gUI.initialHiddenCols);
+        fHideGridsColumnRange(gUI.initialHiddenCols);
     } else {
          fMyConsoleLog("   -> ℹ️ No initial columns defined to hide.");
     }
@@ -1816,14 +1822,14 @@ function fApplyInitialVisibility() {
              const r2 = fResolveRow(range.r2);
              // Validate resolved indices
              if (isNaN(r1) || isNaN(r2)) {
-                 console.warn("fApplyInitialVisibility: Skipping invalid row range due to tags:", range);
+                 console.warn("fApplyGridColAndRowInitialVisibility: Skipping invalid row range due to tags:", range);
                  return; // Skip this range
              }
              // Determine bounds and hide each row individually
              const startRow = Math.min(r1, r2);
              const endRow = Math.max(r1, r2);
              for (let r = startRow; r <= endRow; r++) {
-                 fSetRowVisibility(r, false); // Hide the row
+                 fSetGridRowVisibility(r, false); // Hide the row
              }
          });
          fMyConsoleLog("   -> ✅ Initial Rows Hidden.");
@@ -1831,7 +1837,7 @@ function fApplyInitialVisibility() {
         fMyConsoleLog("   -> ℹ️ No initial rows defined to hide.");
     }
 
-} // END fApplyInitialVisibility
+} // END fApplyGridColAndRowInitialVisibility
 
 
 
@@ -1843,13 +1849,13 @@ function fApplyInitialVisibility() {
 
 
 
-// fPositionTooltip ////////////////////////////////////////////////////////////////
+// fConfineNotesTooltipBox ////////////////////////////////////////////////////////////////
 // Purpose -> Calculates and sets the top/left style properties for the tooltip
 //            element, ensuring it stays within the browser viewport boundaries.
 // Inputs  -> tooltip (HTMLElement): The tooltip element (#cell-tooltip).
 //         -> event (MouseEvent): The mouse event that triggered the hover.
 // Outputs -> None (Modifies the tooltip element's style).
-function fPositionTooltip(tooltip, event) {
+function fConfineNotesTooltipBox(tooltip, event) {
     if (!tooltip || !event) return; // Basic validation
 
     // === Get Dimensions and Positions ===
@@ -1893,7 +1899,7 @@ function fPositionTooltip(tooltip, event) {
     tooltip.style.top = `${newTop}px`;
     tooltip.style.left = `${newLeft}px`;
 
-} // END fPositionTooltip
+} // END fConfineNotesTooltipBox
 
 
 
@@ -1904,7 +1910,7 @@ function fPositionTooltip(tooltip, event) {
 
 // fHandleCellHover ////////////////////////////////////////////////////////////////
 // Purpose -> Delegated mouseenter/mouseover handler for grid cells. Starts a timer
-//            to show the tooltip (via fStartTooltipTimer) if applicable.
+//            to show the tooltip (via fStartTooltipBoxDelayTimer) if applicable.
 // Inputs  -> event (MouseEvent): The mouse event.
 // Outputs -> None.
 function fHandleCellHover(event) {
@@ -1921,8 +1927,10 @@ function fHandleCellHover(event) {
 
     // Start the timer to potentially show the tooltip
     // This also clears any previous hide timer
-    fStartTooltipTimer(cell, event);
+    fStartTooltipBoxDelayTimer(cell, event);
 } // END fHandleCellHover
+
+
 
 
 // fGetValidTargetCell /////////////////////////////////////////////////////////////
@@ -1933,6 +1941,8 @@ function fHandleCellHover(event) {
 function fGetValidTargetCell(event) {
     return event.target.closest('.cell');
 } // END fGetValidTargetCell
+
+
 
 
 // fHideTooltip ////////////////////////////////////////////////////////////////////
@@ -1951,14 +1961,16 @@ function fHideTooltip() {
 } // END fHideTooltip
 
 
-// fShouldShowTooltip //////////////////////////////////////////////////////////////
+
+
+// fIsTooltipBoxNeeded //////////////////////////////////////////////////////////////
 // Purpose -> Determines if a tooltip should be shown for a given cell based on
 //            whether its content overflows or if it has an associated note.
 // Inputs  -> r (Number): 0-based row index.
 //         -> c (Number): 0-based column index.
 //         -> cell (HTMLElement): The cell element.
 // Outputs -> (Boolean): True if tooltip should be shown, false otherwise.
-function fShouldShowTooltip(r, c, cell) {
+function fIsTooltipBoxNeeded(r, c, cell) {
     // Check for horizontal overflow (scrollWidth > clientWidth)
     const isOverflowing = cell.scrollWidth > cell.clientWidth + 1; // +1 for tolerance
 
@@ -1967,17 +1979,19 @@ function fShouldShowTooltip(r, c, cell) {
 
     // Return true if either condition is met
     return isOverflowing || !!noteText; // Use !! to cast noteText presence to boolean
-} // END fShouldShowTooltip
+} // END fIsTooltipBoxNeeded
 
 
-// fBuildTooltipContent ////////////////////////////////////////////////////////////
+
+
+// fBuildsTooltipBoxesContent ////////////////////////////////////////////////////////////
 // Purpose -> Constructs the HTML content for the tooltip, combining overflow text
 //            and/or cell notes as needed.
 // Inputs  -> r (Number): 0-based row index.
 //         -> c (Number): 0-based column index.
 //         -> cell (HTMLElement): The cell element.
 // Outputs -> (String): HTML string content for the tooltip.
-function fBuildTooltipContent(r, c, cell) {
+function fBuildsTooltipBoxesContent(r, c, cell) {
     const isOverflowing = cell.scrollWidth > cell.clientWidth + 1;
     const noteText = gUI.notes?.[r]?.[c]?.trim();
     let tooltipContent = '';
@@ -1998,16 +2012,16 @@ function fBuildTooltipContent(r, c, cell) {
 
     // Convert newlines to HTML line breaks for display
     return tooltipContent.replace(/\n/g, '<br>');
-} // END fBuildTooltipContent
+} // END fBuildsTooltipBoxesContent
 
 
-// fStartTooltipTimer //////////////////////////////////////////////////////////////
+// fStartTooltipBoxDelayTimer //////////////////////////////////////////////////////////////
 // Purpose -> Sets a timeout (`gUI.HOVER_DELAY_MS`) before attempting to show the
 //            tooltip for a hovered cell. Clears any previous timeout.
 // Inputs  -> cell (HTMLElement): The cell element being hovered over.
 //         -> event (MouseEvent): The mouse event (used for positioning).
 // Outputs -> None (Sets a timeout, potentially modifies tooltip content/style later).
-function fStartTooltipTimer(cell, event) {
+function fStartTooltipBoxDelayTimer(cell, event) {
     // Clear any existing timeout before starting a new one
     clearTimeout(gUI.tooltipTimeoutId);
 
@@ -2025,18 +2039,18 @@ function fStartTooltipTimer(cell, event) {
         }
 
         // Check if tooltip should be shown for this cell
-        if (fShouldShowTooltip(r, c, cell)) {
+        if (fIsTooltipBoxNeeded(r, c, cell)) {
             // Build content, display tooltip, and position it
-            gUI.tooltipElement.innerHTML = fBuildTooltipContent(r, c, cell);
+            gUI.tooltipElement.innerHTML = fBuildsTooltipBoxesContent(r, c, cell);
             gUI.tooltipElement.style.display = 'block';
-            fPositionTooltip(gUI.tooltipElement, event); // Position relative to mouse event
+            fConfineNotesTooltipBox(gUI.tooltipElement, event); // Position relative to mouse event
         } else {
             // Hide tooltip if conditions (overflow/note) are no longer met
             fHideTooltip();
         }
 
     }, gUI.HOVER_DELAY_MS); // Use configured delay
-} // END fStartTooltipTimer
+} // END fStartTooltipBoxDelayTimer
 
 
 
@@ -2135,7 +2149,7 @@ function fHandleDropdownChange(event) {
     const originalChoice = gUI.dropDownBox
         .find(config => config.ranges.some(range => {
             // Find the config that applies to this cell's range
-            const resolved = fResolveRangeIndices(range);
+            const resolved = fConvertsR1C1R2C2TagOrNumToIndices(range);
             return !isNaN(resolved.r1) && !isNaN(resolved.c1) && !isNaN(resolved.r2) && !isNaN(resolved.c2) &&
                    r >= Math.min(resolved.r1, resolved.r2) && r <= Math.max(resolved.r1, resolved.r2) &&
                    c >= Math.min(resolved.c1, resolved.c2) && c <= Math.max(resolved.c1, resolved.c2);
@@ -2186,13 +2200,13 @@ function fApplyDropdownsToGrid() {
         // === Iterate Through Ranges for This Config ===
         config.ranges.forEach(range => {
             // Validate range object structure
-            if (!fIsValidRangeObject(range)) {
+            if (!fDoesObjectHaveR1C1R2C2Properties(range)) {
                  console.warn("fApplyDropdownsToGrid: Skipping invalid range object within dropdown config:", range);
                  return; // Skip this range
             }
 
             // Resolve range tags/indices
-            const resolved = fResolveRangeIndices(range);
+            const resolved = fConvertsR1C1R2C2TagOrNumToIndices(range);
             if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
                  console.warn("fApplyDropdownsToGrid: Skipping dropdown range due to unresolved indices:", range);
                  return; // Skip range if tags invalid
@@ -2314,6 +2328,8 @@ function fIsValidGridCoords(r, c) {
 } // END fIsValidGridCoords
 
 
+
+
 // fHandleSkGroupCheckboxClick /////////////////////////////////////////////////////
 // Purpose -> Handles the specific logic for Sk1/Sk2 checkboxes, ensuring only one
 //            in the defined group (gUI.range.sk1sk2CheckBoxes) can be checked at a time.
@@ -2344,6 +2360,8 @@ function fHandleSkGroupCheckboxClick(r, c, isChecked) {
         fMyConsoleLog(`Radio group: Unchecked box [${r}, ${c}]`);
     }
 } // END fHandleSkGroupCheckboxClick
+
+
 
 
 // fUncheckOldSkGroupBox ///////////////////////////////////////////////////////////
@@ -2392,7 +2410,7 @@ async function fHandleGridClick(event) { // Keep async for potential future need
     // Check if the click was on an image inside a header button cell
     const buttonImg = target.closest('.header-button-img[data-button-action]');
     if (buttonImg) {
-        fHandleHeaderButtonClick(event, buttonImg);
+        fHandleGridButtonClick(event, buttonImg);
         // Note: cellClickInfo is NOT updated for header button clicks.
         return; // Stop further processing
     }
@@ -2452,6 +2470,8 @@ async function fHandleGridClick(event) { // Keep async for potential future need
 } // END fHandleGridClick
 
 
+
+
 // fIsCheckboxClick ////////////////////////////////////////////////////////////////
 // Purpose -> Helper to check if the event target is a checkbox input element.
 // Inputs  -> target (HTMLElement): The event target element.
@@ -2459,6 +2479,8 @@ async function fHandleGridClick(event) { // Keep async for potential future need
 function fIsCheckboxClick(target) {
     return target.tagName === 'INPUT' && target.type === 'checkbox';
 } // END fIsCheckboxClick
+
+
 
 
 // fIsEditableCell /////////////////////////////////////////////////////////////////
@@ -2471,6 +2493,8 @@ function fIsEditableCell(cellDiv) {
 } // END fIsEditableCell
 
 
+
+
 // fIsUrlLinkCell //////////////////////////////////////////////////////////////////
 // Purpose -> Helper to check if a cell element has the 'url-link' class.
 // Inputs  -> cellDiv (HTMLElement): The cell div element.
@@ -2479,6 +2503,8 @@ function fIsUrlLinkCell(cellDiv) {
     // Use optional chaining
     return cellDiv?.classList.contains('url-link');
 } // END fIsUrlLinkCell
+
+
 
 
 // fHandleDriveLink ////////////////////////////////////////////////////////////////
@@ -2491,6 +2517,8 @@ function fHandleDriveLink(url) {
 } // END fHandleDriveLink
 
 
+
+
 // fHandleImageModal ///////////////////////////////////////////////////////////////
 // Purpose -> Handles clicks on standard image links (not Drive links) by showing
 //            the image in the modal using fShowImageTab.
@@ -2500,6 +2528,8 @@ function fHandleImageModal(imageUrl) {
     fMyConsoleLog(`🖱️ Clicked Standard Image Link: ${imageUrl.substring(0, 100)}...`);
     fShowImageTab(imageUrl);
 } // END fHandleImageModal
+
+
 
 
 // fShowImageTab ///////////////////////////////////////////////////////////////////
@@ -2530,6 +2560,8 @@ function fShowImageTab(imageUrl) {
 } // END fShowImageTab
 
 
+
+
 // fHandleWebLink //////////////////////////////////////////////////////////////////
 // Purpose -> Opens non-image, non-Drive web links in a new browser tab.
 // Inputs  -> url (String): The web URL.
@@ -2538,6 +2570,8 @@ function fHandleWebLink(url) {
     fMyConsoleLog(`🖱️ Clicked Web Link: ${url.substring(0, 100)}...`);
     window.open(url, '_blank');
 } // END fHandleWebLink
+
+
 
 
 // fHandleUrlClick /////////////////////////////////////////////////////////////////
@@ -2624,32 +2658,34 @@ function fHandleGridCellEdit(event) {
 
 
 
-// fIsValidRangeObject /////////////////////////////////////////////////////////////
+// fDoesObjectHaveR1C1R2C2Properties /////////////////////////////////////////////////////////////
 // Purpose -> Checks if a given object has the required properties (r1, c1, r2, c2)
 //            to be considered a valid range definition object.
 // Inputs  -> range (Object): The object to check.
 // Outputs -> (Boolean): True if the object is a valid range definition, false otherwise.
-function fIsValidRangeObject(range) {
+function fDoesObjectHaveR1C1R2C2Properties(range) {
     return range &&
         typeof range.r1 !== 'undefined' &&
         typeof range.c1 !== 'undefined' &&
         typeof range.r2 !== 'undefined' &&
         typeof range.c2 !== 'undefined';
-} // END fIsValidRangeObject
+} // END fDoesObjectHaveR1C1R2C2Properties
 
 
-// fResolveRangeIndices ////////////////////////////////////////////////////////////
+
+
+// fConvertsR1C1R2C2TagOrNumToIndices ////////////////////////////////////////////////////////////
 // Purpose -> Converts tag strings or numeric indices within a range definition
 //            object into resolved 0-based numeric indices using fResolveRow/fResolveCol.
 // Inputs  -> range (Object): The range definition object {r1, c1, r2, c2}.
 // Outputs -> (Object): An object {r1, c1, r2, c2} with resolved numeric indices (or NaN).
-function fResolveRangeIndices(range) {
+function fConvertsR1C1R2C2TagOrNumToIndices(range) {
     const r1 = fResolveRow(range.r1);
     const c1 = fResolveCol(range.c1);
     const r2 = fResolveRow(range.r2);
     const c2 = fResolveCol(range.c2);
     return { r1, c1, r2, c2 };
-} // END fResolveRangeIndices
+} // END fConvertsR1C1R2C2TagOrNumToIndices
 
 
 
@@ -2910,7 +2946,7 @@ function fSetGridValue(rowRef, colRef, newValue) {
 
 
 
-// fSetRangeValues /////////////////////////////////////////////////////////////////
+// fSetRangeOfGridValues /////////////////////////////////////////////////////////////////
 // Purpose -> Updates values in a specified grid range (both gUI.arr and DOM) using
 //            either a single value (fill) or a 1D/2D array matching the range dimensions.
 // Inputs  -> r1Ref (String|Number): Starting row tag or 0-based index.
@@ -2919,7 +2955,7 @@ function fSetGridValue(rowRef, colRef, newValue) {
 //         -> c2Ref (String|Number): Ending column tag or 0-based index.
 //         -> valueOrArray (Array|Any): 1D/2D array matching range dimensions, OR a single value.
 // Outputs -> (Boolean): True if all updates were successful, false otherwise.
-function fSetRangeValues(r1Ref, c1Ref, r2Ref, c2Ref, valueOrArray) {
+function fSetRangeOfGridValues(r1Ref, c1Ref, r2Ref, c2Ref, valueOrArray) {
     fMyConsoleLog(`⚙️ Setting range values: ${r1Ref},${c1Ref} to ${r2Ref},${c2Ref}...`);
 
     // === 1. Resolve Indices & Validate ===
@@ -2929,8 +2965,8 @@ function fSetRangeValues(r1Ref, c1Ref, r2Ref, c2Ref, valueOrArray) {
     const c2 = fResolveCol(c2Ref);
 
     if ([r1, c1, r2, c2].some(isNaN)) {
-        console.warn(`fSetRangeValues: Could not resolve one or more references: (${r1Ref}, ${c1Ref}, ${r2Ref}, ${c2Ref}) -> (${r1}, ${c1}, ${r2}, ${c2}).`);
-        fMyConsoleLog(`❌ fSetRangeValues failed: Invalid range references.`);
+        console.warn(`fSetRangeOfGridValues: Could not resolve one or more references: (${r1Ref}, ${c1Ref}, ${r2Ref}, ${c2Ref}) -> (${r1}, ${c1}, ${r2}, ${c2}).`);
+        fMyConsoleLog(`❌ fSetRangeOfGridValues failed: Invalid range references.`);
         return false;
     }
 
@@ -2966,8 +3002,8 @@ function fSetRangeValues(r1Ref, c1Ref, r2Ref, c2Ref, valueOrArray) {
                 arrCols = newValArr[0]?.length || 0; // Handle empty inner array edge case
                 // Check for consistent column lengths in 2D array
                 if (!newValArr.every(row => Array.isArray(row) && row.length === arrCols)) {
-                    console.warn(`fSetRangeValues: Input 2D array has inconsistent column lengths.`);
-                    fMyConsoleLog(`❌ fSetRangeValues failed: Input 2D array malformed.`);
+                    console.warn(`fSetRangeOfGridValues: Input 2D array has inconsistent column lengths.`);
+                    fMyConsoleLog(`❌ fSetRangeOfGridValues failed: Input 2D array malformed.`);
                     return false;
                 }
             } else {
@@ -2988,7 +3024,7 @@ function fSetRangeValues(r1Ref, c1Ref, r2Ref, c2Ref, valueOrArray) {
                          arrRows = newValArr.length;
                          arrCols = 1;
                     }
-                    console.warn(`fSetRangeValues: Ambiguous 1D array input for multi-dimensional range (${rangeRows}x${rangeCols}). Assuming ${arrRows}x${arrCols}.`);
+                    console.warn(`fSetRangeOfGridValues: Ambiguous 1D array input for multi-dimensional range (${rangeRows}x${rangeCols}). Assuming ${arrRows}x${arrCols}.`);
                 }
             }
         }
@@ -2996,8 +3032,8 @@ function fSetRangeValues(r1Ref, c1Ref, r2Ref, c2Ref, valueOrArray) {
 
         // Check if calculated array dimensions match range dimensions
         if (rangeRows !== arrRows || rangeCols !== arrCols) {
-            console.warn(`fSetRangeValues: Dimension mismatch. Range: ${rangeRows}x${rangeCols}, Array: ${arrRows}x${arrCols}.`);
-            fMyConsoleLog(`❌ fSetRangeValues failed: Dimension mismatch.`);
+            console.warn(`fSetRangeOfGridValues: Dimension mismatch. Range: ${rangeRows}x${rangeCols}, Array: ${arrRows}x${arrCols}.`);
+            fMyConsoleLog(`❌ fSetRangeOfGridValues failed: Dimension mismatch.`);
             return false;
         }
     } // End array dimension validation
@@ -3008,7 +3044,7 @@ function fSetRangeValues(r1Ref, c1Ref, r2Ref, c2Ref, valueOrArray) {
     for (let r = rMin; r <= rMax; r++) {
         // Skip if row doesn't exist in data model or DOM cache
         if (!gUI.arr[r] || !gUI.grid2D[r]) {
-            console.warn(`fSetRangeValues: Row ${r} does not exist in gUI.arr or gUI.grid2D. Skipping row.`);
+            console.warn(`fSetRangeOfGridValues: Row ${r} does not exist in gUI.arr or gUI.grid2D. Skipping row.`);
             updateErrors += rangeCols; // Count all columns in this row as errors
             continue;
         }
@@ -3037,10 +3073,10 @@ function fSetRangeValues(r1Ref, c1Ref, r2Ref, c2Ref, valueOrArray) {
         } // End col loop
     } // End row loop
 
-    fMyConsoleLog(`✅ fSetRangeValues: ${isSingleValueFill ? 'Filled' : 'Updated'} ${updateCount} cells. ${updateErrors > 0 ? `(${updateErrors} errors)` : ''}`);
+    fMyConsoleLog(`✅ fSetRangeOfGridValues: ${isSingleValueFill ? 'Filled' : 'Updated'} ${updateCount} cells. ${updateErrors > 0 ? `(${updateErrors} errors)` : ''}`);
     return updateErrors === 0; // Return true only if no errors occurred
 
-} // END fSetRangeValues
+} // END fSetRangeOfGridValues
 
 
 
@@ -3051,18 +3087,18 @@ function fSetRangeValues(r1Ref, c1Ref, r2Ref, c2Ref, valueOrArray) {
 
 
 
-// fPrependToSidebar ///////////////////////////////////////////////////////////////
+// fPostToSidebar ///////////////////////////////////////////////////////////////
 // Purpose -> Prepends a message (HTML) as a new paragraph (<p>) to the sidebar
 //            content area (#sidebar-content). Also adds a plain text version to
 //            gUI.plainTextLogEntries for GMScreen updates.
 // Inputs  -> htmlMessage (String): The HTML content to prepend to the sidebar display.
 //         -> plainTextMessage (String): The plain text version to add to the log array.
 // Outputs -> None (Modifies DOM and gUI.plainTextLogEntries).
-function fPrependToSidebar(htmlMessage, plainTextMessage = null) {
+function fPostToSidebar(htmlMessage, plainTextMessage = null) {
     const sidebarContent = document.getElementById('sidebar-content');
     // Validate sidebar element
     if (!sidebarContent) {
-        console.error("fPrependToSidebar: Cannot find sidebar content element (#sidebar-content).");
+        console.error("fPostToSidebar: Cannot find sidebar content element (#sidebar-content).");
         return;
     }
 
@@ -3091,29 +3127,12 @@ function fPrependToSidebar(htmlMessage, plainTextMessage = null) {
     gUI.plainTextLogEntries.push(textToLog);
 
     // Save Turbo text to Firestore
-    fHandleAutoSaveTextData();
+    fHandleAutoSaveTextToFirestore();
 
     // --- Optional: Immediate GMScreen Update (Consider using throttle/debounce if called too often) ---
-    // fSendLogToGMScreenNPS(); // Direct call - we'll add calls at end-of-action instead
+    // fSendLogToGMScreenAndPS(); // Direct call - we'll add calls at end-of-action instead
 
-} // END fPrependToSidebar
-
-
-
-
-// fRollLogMsg /////////////////////////////////////////////////////////////////////
-// Purpose -> Logs a warning message to the console and prepends it to the sidebar,
-//            ensuring the sidebar is visible. Used for roll-related warnings/errors.
-// Inputs  -> msg (String): Message to display.
-// Outputs -> None (Logs to console, calls fPrependToSidebar, fShowSidebar).
-function fRollLogMsg(msg) {
-    // Only proceed if a message is provided
-    if (msg) {
-        console.warn(msg); // Log as warning
-        fPrependToSidebar(msg); // Add message to sidebar
-        fShowSidebar(); // Ensure sidebar is visible
-    }
-} // END fRollLogMsg
+} // END fPostToSidebar
 
 
 
@@ -3220,7 +3239,7 @@ async function fHandleApplyWoundsClick(event) {
     await fVitNowNPercent_Calc(); // Update Vit Now and Vit Now Percent cells
 
     // Post text to Firestore
-    fHandleAutoSaveTextData();
+    fHandleAutoSaveTextToFirestore();
 
     fMyConsoleLog("✅ Wounds Applied Successfully.");
 } // END fHandleApplyWoundsClick
@@ -3266,13 +3285,13 @@ function fSetupSidebarActionListeners() {
 
 
 
-// fHandleUpdateHeaderInfo ///////////////////////////////////////////////////////
+// fHandleGetRaceClassInfo ///////////////////////////////////////////////////////
 // Purpose -> Handles the "Update (Level, Slot, Names)" menu action. Fetches fresh
 //            header data, validates it (especially slotNum), updates gUI.characterInfo,
 //            and triggers a log refresh if successful.
 // Inputs  -> None.
 // Outputs -> (Promise<void>): Resolves after completing actions or handling errors.
-async function fHandleUpdateHeaderInfo() {
+async function fHandleGetRaceClassInfo() {
     fMyConsoleLog("⚙️ Menu Action: Update Header Info Triggered...");
 
     // Add visual feedback maybe? (e.g., temporary button text change?)
@@ -3285,7 +3304,7 @@ async function fHandleUpdateHeaderInfo() {
             // Validate the response structure
             if (!headerData || typeof headerData !== 'object' || headerData.error) {
                 const errMsg = headerData?.message || "Invalid header data structure received during update.";
-                console.error("fHandleUpdateHeaderInfo Error:", errMsg, headerData);
+                console.error("fHandleGetRaceClassInfo Error:", errMsg, headerData);
                 fMyConsoleLog(`   -> ❌ Update failed: ${errMsg}`);
                 fShowMessage(`Error updating header data: ${errMsg}`).catch(e => console.error("Error showing message:", e));
                 return; // Stop processing on invalid data structure
@@ -3334,7 +3353,7 @@ async function fHandleUpdateHeaderInfo() {
         })
         .fSrvGetURLToPlayerCharForGMScreen(gIndexCSID); // Call the existing server function
 
-} // END fHandleUpdateHeaderInfo
+} // END fHandleGetRaceClassInfo
 
 
 // ==========================================================================
@@ -3532,6 +3551,8 @@ function fSetButtonOrMenuState(buttonType) {
 } // END fSetButtonOrMenuState
 
 
+
+
 // fSetupWindowClickListener ///////////////////////////////////////////////////////
 // Purpose -> Adds a global click listener to the window. If a click occurs outside
 //            of the main menu bar buttons or dropdown menu items, it closes all
@@ -3575,12 +3596,12 @@ function fSetupSubMenuHover(menuBar) {
 
 
 
-// fClearHideTimeout ///////////////////////////////////////////////////////////////
+// fClearSubMenuHideTimeout ///////////////////////////////////////////////////////////////
 // Purpose -> Clears any active 'hide' timeout associated with a submenu panel.
 //            Reads the timeout ID from the panel's dataset.
 // Inputs  -> panel (HTMLElement): The submenu panel element.
 // Outputs -> None (Clears timeout, modifies panel's dataset).
-function fClearHideTimeout(panel) {
+function fClearSubMenuHideTimeout(panel) {
     // Get timeout ID stored on the element, default to 0 if not found/invalid
     const timeoutId = parseInt(panel.dataset.hideTimeoutId || '0');
 
@@ -3589,7 +3610,7 @@ function fClearHideTimeout(panel) {
         clearTimeout(timeoutId);
         panel.dataset.hideTimeoutId = ''; // Reset dataset property
     }
-} // END fClearHideTimeout
+} // END fClearSubMenuHideTimeout
 
 
 
@@ -3617,7 +3638,7 @@ function fIsAnySiblingSubmenuOpen(item) {
 
 
 
-// fStartHideTimeout ///////////////////////////////////////////////////////////////
+// fStartSubMenuHideTimeout ///////////////////////////////////////////////////////////////
 // Purpose -> Sets a timeout (default 250ms) to hide a submenu panel. Before hiding,
 //            checks if the parent dropdown's overflow style needs to be restored
 //            (only if no other sibling submenus are currently open).
@@ -3626,9 +3647,9 @@ function fIsAnySiblingSubmenuOpen(item) {
 //         -> mainDropdown (HTMLElement | null): The parent dropdown panel element.
 //         -> delayMs (Number): Delay in milliseconds before hiding (default 250).
 // Outputs -> None (Sets timeout, potentially modifies mainDropdown style, modifies panel classList).
-function fStartHideTimeout(item, panel, mainDropdown, delayMs = 250) {
+function fStartSubMenuHideTimeout(item, panel, mainDropdown, delayMs = 250) {
     // Clear any previously set hide timeout for this panel
-    fClearHideTimeout(panel);
+    fClearSubMenuHideTimeout(panel);
 
     // Set a new timeout to hide the panel
     const timeoutId = setTimeout(() => {
@@ -3643,7 +3664,7 @@ function fStartHideTimeout(item, panel, mainDropdown, delayMs = 250) {
 
     // Store the timeout ID on the panel element's dataset
     panel.dataset.hideTimeoutId = timeoutId;
-} // END fStartHideTimeout
+} // END fStartSubMenuHideTimeout
 
 
 
@@ -3673,7 +3694,7 @@ function fSetupSingleSubMenuItem(item, index) {
     // --- Mouse Enter Item ---
     // Show submenu immediately, clear hide timer, ensure parent allows overflow
     item.addEventListener('mouseenter', () => {
-        fClearHideTimeout(subMenuPanel);
+        fClearSubMenuHideTimeout(subMenuPanel);
         if (mainDropdown) mainDropdown.style.overflowY = 'visible'; // Allow overflow
         subMenuPanel.classList.add('show');
     });
@@ -3681,19 +3702,19 @@ function fSetupSingleSubMenuItem(item, index) {
     // --- Mouse Leave Item ---
     // Start timer to hide the submenu
     item.addEventListener('mouseleave', () => {
-        fStartHideTimeout(item, subMenuPanel, mainDropdown);
+        fStartSubMenuHideTimeout(item, subMenuPanel, mainDropdown);
     });
 
     // --- Mouse Enter Submenu Panel ---
     // If mouse moves directly onto the submenu panel, keep it open (clear hide timer)
     subMenuPanel.addEventListener('mouseenter', () => {
-        fClearHideTimeout(subMenuPanel);
+        fClearSubMenuHideTimeout(subMenuPanel);
     });
 
     // --- Mouse Leave Submenu Panel ---
     // If mouse leaves the submenu panel itself, start timer to hide it
     subMenuPanel.addEventListener('mouseleave', () => {
-        fStartHideTimeout(item, subMenuPanel, mainDropdown);
+        fStartSubMenuHideTimeout(item, subMenuPanel, mainDropdown);
     });
 } // END fSetupSingleSubMenuItem
 
@@ -3705,13 +3726,13 @@ function fSetupSingleSubMenuItem(item, index) {
 
 
 
-// fSendLogToGMScreenNPS ////////////////////////////////////////////////////////////
+// fSendLogToGMScreenAndPS ////////////////////////////////////////////////////////////
 // Purpose -> Sends bundled log and header data (dynamic + static) sequentially to
 //            the GMScreen sheet ('db') and the PartyLog sheet ('ps') via the
 //            server-side fSrvSaveURLtoNamesAndLogToDBandPS function. Uses a lock.
 // Inputs  -> None (Uses gUI state: plainTextLogEntries, arr, characterInfo, isSendingLog).
 // Outputs -> None (Calls google.script.run if not already sending and slotNum is valid).
-function fSendLogToGMScreenNPS() {
+function fSendLogToGMScreenAndPS() {
     // === 1. Check Lock ===
     if (gUI.isSendingLog) {
         fMyConsoleLog("📤 Log & Header send already in progress, skipping.");
@@ -3784,7 +3805,7 @@ function fSendLogToGMScreenNPS() {
         })
         .withFailureHandler((error) => {
             const errorMsg = error?.message || "Unknown server error";
-            console.error(`fSendLogToGMScreenNPS Failure: ${errorMsg}`, error);
+            console.error(`fSendLogToGMScreenAndPS Failure: ${errorMsg}`, error);
             fMyConsoleLog(`   -> ❌ Error sending Log & Headers: ${errorMsg}`);
             gUI.isSendingLog = false; // Release Lock
             fMyConsoleLog("   -> Lock Released due to error.");
@@ -3792,7 +3813,7 @@ function fSendLogToGMScreenNPS() {
         })
         .fSrvSaveURLtoNamesAndLogToDBandPS(dataBundle);
 
-} // END fSendLogToGMScreenNPS
+} // END fSendLogToGMScreenAndPS
 
 
 
@@ -3803,12 +3824,12 @@ function fSendLogToGMScreenNPS() {
 
 
 
-// fSetupDelegatedMenuActionClick //////////////////////////////////////////////
+// fSetupMenuActionClickListener //////////////////////////////////////////////
 // Purpose -> Sets up a single event listener on the menu bar to handle clicks
 //            on menu items using event delegation and data attributes.
 // Inputs  -> None. Relies on DOM structure.
 // Outputs -> None. Attaches event listener.
-function fSetupDelegatedMenuActionClick() {
+function fSetupMenuActionClickListener() {
     const menuBar = document.getElementById('menu-bar');
     if (!menuBar) {
         console.error("Setup failed: Menu bar (#menu-bar) not found.");
@@ -3839,7 +3860,7 @@ function fSetupDelegatedMenuActionClick() {
             // Game Menu Actions
             case 'game-nishStartEnd':       fHandleNishStartOrEnd(); break;
             case 'game-toggleSidebar':      fToggleSidebar(); break;
-            case 'game-updateHeaderInfo':   fHandleUpdateHeaderInfo(); break; // Corrected name
+            case 'game-updateHeaderInfo':   fHandleGetRaceClassInfo(); break; // Corrected name
             case 'game-gmAward':            /* fHandleGMAwardAction(); */ fShowMessage(`Action "${action}" is not yet implemented.`); break; // Placeholder
             case 'game-metaFlood':          fMetaFlood(); break; // Correct function call
             case 'game-healingNatural':     fCalc_NaturalHealing(); break; // Correct function call
@@ -3869,7 +3890,7 @@ function fSetupDelegatedMenuActionClick() {
             case 'gear-lootValuables':      /* fHandleLootAction('Valuables'); */ fShowMessage(`Action "${action}" is not yet implemented.`); break; // Placeholder
 
             // Data Menu Actions
-            case 'data-saveNow':            fHandleAutoSaveTextData(); break;
+            case 'data-saveNow':            fHandleAutoSaveTextToFirestore(); break;
             case 'data-designerOnly':       fHandleDesignerOnlyClick(); break; // Keep reference
 
             // Placeholder/Legacy Actions (can be removed if not needed)
@@ -3883,7 +3904,8 @@ function fSetupDelegatedMenuActionClick() {
     });
 
     fMyConsoleLog("✅ Delegated Menu Action Click Listener Attached.");
-} // END fSetupDelegatedMenuActionClick
+} // END fSetupMenuActionClickListener
+
 
 
 
@@ -3902,13 +3924,13 @@ async function fHandleNishStartOrEnd() {
     // Log completion to sidebar (HTML and Plain Text)
     const sidebarMsgHtml = `🚩<span class="blue-bold">Nish Start or End</span>`;
     const sidebarMsgText = `🚩 Nish Start or End`;
-    fPrependToSidebar(sidebarMsgHtml, sidebarMsgText);
+    fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
     fShowSidebar();
 
     fMyConsoleLog("✅ Nish Start or End Action Completed.");
 
     // Send log update to GMScreen (with slight delay)
-    setTimeout(() => fSendLogToGMScreenNPS(), 0); 
+    setTimeout(() => fSendLogToGMScreenAndPS(), 0); 
 
 } // END fHandleNishStartOrEnd
 
@@ -3935,7 +3957,7 @@ function fClearIsOnDurationRange() {
     // === Clear Cells in Each Range ===
     rangesToClear.forEach(range => {
         // Validate the range object structure
-        if (!fIsValidRangeObject(range)) {
+        if (!fDoesObjectHaveR1C1R2C2Properties(range)) {
             console.warn("fClearIsOnDurationRange: Skipping invalid range object within gUI.range.isONDur:", range);
             allSucceeded = false;
             return; // Skip this invalid range
@@ -3954,8 +3976,8 @@ function fClearIsOnDurationRange() {
             return; // Skip this range
         }
 
-        // Call fSetRangeValues to set all cells in the range to empty string
-        const success = fSetRangeValues(r1, c1, r2, c2, ''); // Set value to empty string
+        // Call fSetRangeOfGridValues to set all cells in the range to empty string
+        const success = fSetRangeOfGridValues(r1, c1, r2, c2, ''); // Set value to empty string
         if (!success) {
             allSucceeded = false; // Track if any update fails
         }
@@ -3970,6 +3992,8 @@ function fClearIsOnDurationRange() {
     }
 
 } // END fClearIsOnDurationRange
+
+
 
 
 // fToggleSidebar //////////////////////////////////////////////////////////////////
@@ -4009,7 +4033,7 @@ async function fMetaFlood() {
     fMyConsoleLog("⚙️ Menu Action: Meta Flood...");
     const metaRangeDef = gUI.range?.meta; const metaCaps = gUI.list?.metaFull; const metaColorTags = gUI.list?.metaColor;
     let errorMsg = '';
-    if (!metaRangeDef || !fIsValidRangeObject(metaRangeDef)) errorMsg = "Meta range definition missing or invalid.";
+    if (!metaRangeDef || !fDoesObjectHaveR1C1R2C2Properties(metaRangeDef)) errorMsg = "Meta range definition missing or invalid.";
     else if (!Array.isArray(metaCaps) || metaCaps.length === 0) errorMsg = "Meta caps list (gUI.list.metaFull) missing or invalid.";
     // Allow missing metaColorTags for now
     if (errorMsg) { console.warn(`fMetaFlood: ${errorMsg}`); fMyConsoleLog(`⚠️ Meta Flood failed: ${errorMsg}`); await fShowMessage(`Error: ${errorMsg}`); return; }
@@ -4035,20 +4059,20 @@ async function fMetaFlood() {
     }
 
     fMyConsoleLog(`   -> Updating Meta columns ${startCol} to ${selectedColIndex} with final values: [${finalValues.join(', ')}]`);
-    const success = fSetRangeValues(metaRowTag, startCol, metaRowTag, selectedColIndex, finalValues);
+    const success = fSetRangeOfGridValues(metaRowTag, startCol, metaRowTag, selectedColIndex, finalValues);
 
     if (!success) {
-        errorMsg = `fSetRangeValues failed to update Meta grid.`;
+        errorMsg = `fSetRangeOfGridValues failed to update Meta grid.`;
         fMyConsoleLog(`   -> ⚠️ Meta Flood Error: ${errorMsg}`); await fShowMessage(`Error: ${errorMsg}`);
     } else {
         fMyConsoleLog("✅ Meta Flood Update Complete.");
         const sidebarMsgHtml = `<span class="blue-bold">ℹ️ Meta Flood (Rolled ${selectedColTag}):</span>`;
         const sidebarMsgText = `ℹ️ Meta Flood (Rolled ${selectedColTag}):`;
-        fPrependToSidebar(sidebarMsgHtml, sidebarMsgText);
+        fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
         fShowSidebar();
 
         // Send log update to GMScreen (with slight delay) <<< ADDED CALL >>>
-        setTimeout(() => fSendLogToGMScreenNPS(), 0);
+        setTimeout(() => fSendLogToGMScreenAndPS(), 0);
     }
 } // END fMetaFlood
 
@@ -4064,7 +4088,7 @@ async function fMetaChannel() {
     fMyConsoleLog("⚙️ Calculating Meta Channel...");
     const channelRangeDef = gUI.range?.metaChannel; const metaColorTags = gUI.list?.metaColor;
     let errorMsg = '';
-    if (!channelRangeDef || !fIsValidRangeObject(channelRangeDef)) errorMsg = "Meta Channel range definition missing or invalid.";
+    if (!channelRangeDef || !fDoesObjectHaveR1C1R2C2Properties(channelRangeDef)) errorMsg = "Meta Channel range definition missing or invalid.";
     // Allow missing metaColorTags
     if (errorMsg) { console.warn(`fMetaChannel: ${errorMsg}`); fMyConsoleLog(`⚠️ Meta Channel failed: ${errorMsg}`); await fShowMessage(`Error: ${errorMsg}`); return; }
 
@@ -4089,7 +4113,7 @@ async function fMetaChannel() {
         // Build and Display Sidebar Message (HTML and Plain Text)
         const sidebarMsgHtml = `<span class="blue-bold">ℹ️ Meta Channeled (${selectedColTag}):</span> ${currentVal} &rarr; ${newValue}`;
         const sidebarMsgText = `ℹ️ Meta Channeled (${selectedColTag}): ${currentVal} -> ${newValue}`;
-        fPrependToSidebar(sidebarMsgHtml, sidebarMsgText); // Update sidebar and plain text log
+        fPostToSidebar(sidebarMsgHtml, sidebarMsgText); // Update sidebar and plain text log
         // No GMScreen update here - handled by calling function
     }
 } // END fMetaChannel
@@ -4122,14 +4146,14 @@ async function fIsOn_NewNishSet() {
     // === Iterate Through Each Defined Range ===
     for (const range of rangeDefs) {
         // Validate range object structure
-        if (!fIsValidRangeObject(range)) {
+        if (!fDoesObjectHaveR1C1R2C2Properties(range)) {
              console.warn("fIsOn_NewNishSet: Skipping invalid range object", range);
              errorsEncountered = true;
              continue;
         }
 
         // Resolve range tags/indices
-        const resolved = fResolveRangeIndices(range);
+        const resolved = fConvertsR1C1R2C2TagOrNumToIndices(range);
         if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
              console.warn("fIsOn_NewNishSet: Skipping range due to unresolved indices", range);
              errorsEncountered = true;
@@ -4231,12 +4255,12 @@ async function fCalc_NaturalHealing() {
     if (healingResults['2nd'] !== null) { sidebarMsgHtml += `<br>${healingResults['2nd']} -> 2nd Deg Wnds`; sidebarMsgText += `\n${healingResults['2nd']} -> 2nd Deg Wnds`; }
     if (healingResults['3rd'] !== null) { sidebarMsgHtml += `<br>${healingResults['3rd']} -> 3rd Deg Wnds`; sidebarMsgText += `\n${healingResults['3rd']} -> 3rd Deg Wnds`; }
 
-    fPrependToSidebar(sidebarMsgHtml, sidebarMsgText);
+    fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
     fShowSidebar();
     fMyConsoleLog(`✅ Natural Healing Process Complete ${errorsOccurred ? '(with errors)' : ''}.`);
 
     // === 5. Send Log Update (with slight delay) ===
-    setTimeout(() => fSendLogToGMScreenNPS(), 0); 
+    setTimeout(() => fSendLogToGMScreenAndPS(), 0); 
 
 } // END fCalc_NaturalHealing
 
@@ -4332,20 +4356,20 @@ async function fHealAllWounds() {
     // === Log to Sidebar ===
     const sidebarMsgHtml = `<span class="blue-bold">ℹ️ All Wounds Healed</span>`;
     const sidebarMsgText = `ℹ️ All Wounds Healed`;
-    fPrependToSidebar(sidebarMsgHtml, sidebarMsgText);
+    fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
     fShowSidebar();
 
     fMyConsoleLog(`✅ Clear All Wounds Process Complete ${errorsOccurred ? '(with errors)' : ''}.`);
 
     // Send log update to GMScreen (with slight delay) <<< MODIFIED >>>
-    setTimeout(() => fSendLogToGMScreenNPS(), 0);
+    setTimeout(() => fSendLogToGMScreenAndPS(), 0);
 
 } // END fHealAllWounds
 
 
 
 // fHandleRestTimeRest /////////////////////////////////////////////////////////////
-// Purpose -> Handles <Game><Rest or Time><Rest>. Runs Meta Flood, logs action,
+// Purpose -> Handles <Game><Rest> or <Time><Rest>. Runs Meta Flood, logs action,
 //            and sends update.
 // Inputs  -> None.
 // Outputs -> (Promise<void>): Resolves after completing actions.
@@ -4356,12 +4380,12 @@ async function fHandleRestTimeRest() {
     // Log action to sidebar (HTML and Plain Text)
     const sidebarMsgHtml = `🕒 <span class="blue-bold">Character Rested</span>`;
     const sidebarMsgText = `🕒 Character Rested`;
-    fPrependToSidebar(sidebarMsgHtml, sidebarMsgText);
+    fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
     fShowSidebar();
     fMyConsoleLog("✅ Rest Action Completed.");
 
     // Send log update to GMScreen (with slight delay) <<< MODIFIED >>>
-    setTimeout(() => fSendLogToGMScreenNPS(), 0);
+    setTimeout(() => fSendLogToGMScreenAndPS(), 0);
 
 } // END fHandleRestTimeRest
 
@@ -4380,14 +4404,14 @@ async function fHandleRestTimeNewSession() {
     // Log action to sidebar (HTML and Plain Text)
     const sidebarMsgHtml = `⚡ <span class="blue-bold">New Game Session</span>`;
     const sidebarMsgText = `⚡ New Game Session`;
-    fPrependToSidebar(sidebarMsgHtml, sidebarMsgText);
+    fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
     fShowSidebar();
 
     fMyConsoleLog("✅ New Game Session Action Completed.");
 
     // Send log update to GMScreen (with slight delay) <<< MODIFIED >>>
     // This ensures this *final* message is also included if fLuck_SetToMax finished quickly
-    setTimeout(() => fSendLogToGMScreenNPS(), 0);
+    setTimeout(() => fSendLogToGMScreenAndPS(), 0);
 
 } // END fHandleRestTimeNewSession
 
@@ -4406,14 +4430,14 @@ async function fHandleRestTimeSleep() {
     // Log action to sidebar (HTML and Plain Text)
     const sidebarMsgHtml = `🕒 <span class="blue-bold">Character Slept</span>`;
     const sidebarMsgText = `🕒 Character Slept`;
-    fPrependToSidebar(sidebarMsgHtml, sidebarMsgText);
+    fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
     fShowSidebar();
 
     fMyConsoleLog("✅ Sleep Action Completed.");
 
     // Send log update to GMScreen (with slight delay) <<< MODIFIED >>>
     // This ensures this *final* message is included if helpers finished quickly
-    setTimeout(() => fSendLogToGMScreenNPS(), 0);
+    setTimeout(() => fSendLogToGMScreenAndPS(), 0);
 
 } // END fHandleRestTimeSleep
 
@@ -4425,27 +4449,27 @@ async function fHandleRestTimeSleep() {
 // Purpose -> Handles <Game><Set to Max><Meta>. Sets 'meta' row to max values,
 //            logs action, and sends update.
 // Inputs  -> None.
-// Outputs -> None (Calls fSetRangeValues, potentially fShowMessage, logs to sidebar/GMScreen).
+// Outputs -> None (Calls fSetRangeOfGridValues, potentially fShowMessage, logs to sidebar/GMScreen).
 function fMeta_SetToMax() {
     fMyConsoleLog("⚙️ Menu Action: Setting Meta to Max...");
     const metaRange = gUI.range?.meta; const maxMetaValues = gUI.list?.metaFull;
     let errorMsg = '';
-    if (!metaRange || !fIsValidRangeObject(metaRange)) errorMsg = "Meta range definition is missing or invalid.";
+    if (!metaRange || !fDoesObjectHaveR1C1R2C2Properties(metaRange)) errorMsg = "Meta range definition is missing or invalid.";
     else if (!Array.isArray(maxMetaValues) || maxMetaValues.length === 0) errorMsg = "Max Meta values list (gUI.list.metaFull) is missing or empty.";
     if (errorMsg) { console.warn(`fMeta_SetToMax: ${errorMsg}`); fMyConsoleLog(`⚠️ Cannot set Meta to max: ${errorMsg}`); fShowMessage(`Error: ${errorMsg}`); return; }
 
-    const success = fSetRangeValues(metaRange.r1, metaRange.c1, metaRange.r2, metaRange.c2, maxMetaValues);
+    const success = fSetRangeOfGridValues(metaRange.r1, metaRange.c1, metaRange.r2, metaRange.c2, maxMetaValues);
     if (!success) {
-        fMyConsoleLog(`⚠️ Failed to set Meta to max using fSetRangeValues.`);
+        fMyConsoleLog(`⚠️ Failed to set Meta to max using fSetRangeOfGridValues.`);
     } else {
         fMyConsoleLog("✅ Meta Set to Max.");
         const sidebarMsgHtml = `<span class="blue-bold">ℹ️ Meta Set to Max</span>`;
         const sidebarMsgText = `ℹ️ Meta Set to Max`;
-        fPrependToSidebar(sidebarMsgHtml, sidebarMsgText);
+        fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
         fShowSidebar();
 
         // Send log update to GMScreen (with slight delay) <<< MODIFIED >>>
-        setTimeout(() => fSendLogToGMScreenNPS(), 0);
+        setTimeout(() => fSendLogToGMScreenAndPS(), 0);
     }
 } // END fMeta_SetToMax
 
@@ -4480,11 +4504,11 @@ async function fLuck_SetToMax() {
         fMyConsoleLog(`✅ Luck Set to Max (${newLuckValue}).`);
         const sidebarMsgHtml = `<span class="blue-bold">ℹ️ Luck Set to Max</span>`;
         const sidebarMsgText = `ℹ️ Luck Set to Max`;
-        fPrependToSidebar(sidebarMsgHtml, sidebarMsgText);
+        fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
         fShowSidebar();
 
         // Send log update to GMScreen (with slight delay) <<< MODIFIED >>>
-        setTimeout(() => fSendLogToGMScreenNPS(), 0);
+        setTimeout(() => fSendLogToGMScreenAndPS(), 0);
     }
 } // END fLuck_SetToMax
 
@@ -4739,7 +4763,7 @@ async function fHandleResetAllToMax() {
         fMyConsoleLog("   -> Cleared local logs (HTML & array).");
 
         // --- Execute Reset Sequence ---
-        // NOTE: These functions log AND call fSendLogToGMScreenNPS (delayed)
+        // NOTE: These functions log AND call fSendLogToGMScreenAndPS (delayed)
         fClearCurrentNish();         // Sync
         fMeta_SetToMax();          // Async (Logs only)
         fClearChanneledMeta();       // Sync
@@ -4754,13 +4778,13 @@ async function fHandleResetAllToMax() {
         // Log final completion message to sidebar (HTML and Plain Text)
         const sidebarMsgHtml = `⚡ <span class="red-bold">RESET ALL TO MAX!</span> ⚡`;
         const sidebarMsgText = `⚡ RESET ALL TO MAX! ⚡`;
-        fPrependToSidebar(sidebarMsgHtml, sidebarMsgText); // Add final message
+        fPostToSidebar(sidebarMsgHtml, sidebarMsgText); // Add final message
         fShowSidebar();
 
         fMyConsoleLog("✅ Reset All to Max Action Completed.");
 
         // Send final log state AFTER all actions AND the final message are logged (with slight delay)
-        setTimeout(() => fSendLogToGMScreenNPS(), 0); 
+        setTimeout(() => fSendLogToGMScreenAndPS(), 0); 
 
     } else {
         fMyConsoleLog("   -> User cancelled Reset All action.");
@@ -4773,7 +4797,7 @@ async function fHandleResetAllToMax() {
 // fClearChanneledMeta /////////////////////////////////////////////////////////////
 // Purpose -> Handles the <Game><Clear><Channeled Meta> menu action. Clears the
 //            values in the Channeled Meta range (defined by gUI.range.metaChannel)
-//            by setting them to empty strings using fSetRangeValues.
+//            by setting them to empty strings using fSetRangeOfGridValues.
 // Inputs  -> None.
 // Outputs -> None (Modifies grid data/DOM).
 function fClearChanneledMeta() {
@@ -4783,7 +4807,7 @@ function fClearChanneledMeta() {
     const metaChannelRange = gUI.range?.metaChannel;
 
     // === 2. Validate Range Object ===
-    if (!metaChannelRange || !fIsValidRangeObject(metaChannelRange)) {
+    if (!metaChannelRange || !fDoesObjectHaveR1C1R2C2Properties(metaChannelRange)) {
         console.warn("fClearChanneledMeta: Channeled Meta range definition is missing or incomplete in gUI.range.metaChannel.");
         fMyConsoleLog("⚠️ Cannot clear Channeled Meta: Range definition missing or incomplete.");
         fShowMessage("Error: Channeled Meta range definition is missing.");
@@ -4791,8 +4815,8 @@ function fClearChanneledMeta() {
     }
 
     // === 3. Clear Range Values ===
-    // Call fSetRangeValues to set all cells in the range to empty string
-    const success = fSetRangeValues(
+    // Call fSetRangeOfGridValues to set all cells in the range to empty string
+    const success = fSetRangeOfGridValues(
         metaChannelRange.r1,
         metaChannelRange.c1,
         metaChannelRange.r2,
@@ -4802,7 +4826,7 @@ function fClearChanneledMeta() {
 
     // === 4. Log Result ===
     if (!success) {
-        // fSetRangeValues logs specific errors
+        // fSetRangeOfGridValues logs specific errors
         fMyConsoleLog(`⚠️ Failed to clear Channeled Meta range (${metaChannelRange.r1},${metaChannelRange.c1} to ${metaChannelRange.r2},${metaChannelRange.c2}).`);
         // Optional: fShowMessage("Error clearing the channeled meta range.");
     } else {
@@ -4816,7 +4840,7 @@ function fClearChanneledMeta() {
 // fClearSk1Sk2Checkboxes ////////////////////////////////////////////////////////
 // Purpose -> Handles the <Game><Clear><All Check Boxes...> menu action. Clears
 //            (sets to false) all checkboxes within the ranges defined in
-//            gUI.range.sk1sk2CheckBoxes using fSetRangeValues. Also clears the tracker.
+//            gUI.range.sk1sk2CheckBoxes using fSetRangeOfGridValues. Also clears the tracker.
 // Inputs  -> None.
 // Outputs -> None (Modifies grid data/DOM, clears gUI.currentSkRadioChecked).
 function fClearSk1Sk2Checkboxes() {
@@ -4845,8 +4869,8 @@ function fClearSk1Sk2Checkboxes() {
              return; // Skip this range
         }
 
-        // Call fSetRangeValues to set all checkboxes in the range to false
-        const success = fSetRangeValues(r1, c1, r2, c2, false);
+        // Call fSetRangeOfGridValues to set all checkboxes in the range to false
+        const success = fSetRangeOfGridValues(r1, c1, r2, c2, false);
         if (!success) {
              allSucceeded = false; // Track if any update fails
         }
@@ -4871,7 +4895,7 @@ function fClearSk1Sk2Checkboxes() {
 // fClearMonsters ////////////////////////////////////////////////////////////////
 // Purpose -> Handles the <Game><Clear><Monsters> menu action. Clears the monster
 //            data range (defined by gUI.range.monsters) by setting cell values
-//            to a space character (' ') using fSetRangeValues.
+//            to a space character (' ') using fSetRangeOfGridValues.
 // Inputs  -> None.
 // Outputs -> None (Modifies grid data/DOM).
 function fClearMonsters() {
@@ -4879,7 +4903,7 @@ function fClearMonsters() {
     const monsterRange = gUI.range?.monsters; // Get the range definition
 
     // === Validate Range Definition ===
-    if (!monsterRange || !fIsValidRangeObject(monsterRange)) {
+    if (!monsterRange || !fDoesObjectHaveR1C1R2C2Properties(monsterRange)) {
         console.warn("fClearMonsters: Monster range definition is missing or incomplete in gUI.range.monsters.");
         fMyConsoleLog("⚠️ Cannot clear monsters: Range definition missing or incomplete.");
         // Optional: fShowMessage("Error: Monster range definition missing.");
@@ -4888,7 +4912,7 @@ function fClearMonsters() {
 
     // === Clear Range Values ===
     const clearValue = ' '; // Use a space character to clear cells
-    const success = fSetRangeValues(
+    const success = fSetRangeOfGridValues(
         monsterRange.r1,
         monsterRange.c1,
         monsterRange.r2,
@@ -4898,7 +4922,7 @@ function fClearMonsters() {
 
     // === Log Result ===
     if (!success) {
-         // fSetRangeValues logs specific errors
+         // fSetRangeOfGridValues logs specific errors
          fMyConsoleLog(`⚠️ Failed to clear Monsters range (${monsterRange.r1},${monsterRange.c1} to ${monsterRange.r2},${monsterRange.c2}).`);
          // Optional: fShowMessage("Error clearing the monster data range.");
     } else {
@@ -4932,14 +4956,14 @@ function fClearMorphs() {
     // === Clear Each Morph Range ===
     morphRanges.forEach(range => {
         // Validate the range object structure
-        if (!fIsValidRangeObject(range)) {
+        if (!fDoesObjectHaveR1C1R2C2Properties(range)) {
             console.warn("fClearMorphs: Skipping invalid range object within gUI.range.morphs:", range);
             allSucceeded = false;
             return; // Skip this invalid range
          }
 
-        // Call fSetRangeValues to clear the range with spaces
-        const success = fSetRangeValues(range.r1, range.c1, range.r2, range.c2, ' ');
+        // Call fSetRangeOfGridValues to clear the range with spaces
+        const success = fSetRangeOfGridValues(range.r1, range.c1, range.r2, range.c2, ' ');
         if (!success) {
              allSucceeded = false; // Track if any update fails
         }
@@ -4968,7 +4992,7 @@ function fClearCurrentNish() {
     const nishRange = gUI.range?.currentNish; // Get the range definition
 
     // === Validate Range Definition ===
-    if (!nishRange || !fIsValidRangeObject(nishRange)) {
+    if (!nishRange || !fDoesObjectHaveR1C1R2C2Properties(nishRange)) {
         console.warn("fClearCurrentNish: Nish range definition is missing or incomplete in gUI.range.currentNish.");
         fMyConsoleLog("⚠️ Cannot clear Nish: Range definition missing or incomplete.");
         // Optional: fShowMessage("Error: Nish range definition missing.");
@@ -4977,7 +5001,7 @@ function fClearCurrentNish() {
 
     // === Clear Cell Value ===
     const clearValue = ' '; // Use a space character to clear the cell
-    const success = fSetRangeValues(
+    const success = fSetRangeOfGridValues(
         nishRange.r1,
         nishRange.c1,
         nishRange.r2, // Usually same as r1 for single cell
@@ -4987,7 +5011,7 @@ function fClearCurrentNish() {
 
     // === Log Result ===
     if (!success) {
-         // fSetRangeValues logs specific errors
+         // fSetRangeOfGridValues logs specific errors
          fMyConsoleLog(`⚠️ Failed to clear Nish range (${nishRange.r1},${nishRange.c1}).`);
          // Optional: fShowMessage("Error clearing the Nish data cell.");
     } else {
@@ -5002,7 +5026,7 @@ function fClearCurrentNish() {
 // Purpose -> Handles the <Game><Clear><Roll Log> menu action. Clears the sidebar,
 //            plain text log array, displays confirmation, shows sidebar, and sends update.
 // Inputs  -> None.
-// Outputs -> None (Modifies sidebar DOM, gUI.plainTextLogEntries, calls fShowSidebar, fSendLogToGMScreenNPS).
+// Outputs -> None (Modifies sidebar DOM, gUI.plainTextLogEntries, calls fShowSidebar, fSendLogToGMScreenAndPS).
 function fClearRollLog() {
     fMyConsoleLog("⚙️ Menu Action: Clearing Roll Log...");
     const sidebarContent = document.getElementById('sidebar-content');
@@ -5025,7 +5049,7 @@ function fClearRollLog() {
     fShowSidebar();
 
     // Send the cleared state (with the confirmation message) to the GMScreen (with slight delay)
-    setTimeout(() => fSendLogToGMScreenNPS(), 0);
+    setTimeout(() => fSendLogToGMScreenAndPS(), 0);
 
 } // END fClearRollLog
 
@@ -5035,7 +5059,7 @@ function fClearRollLog() {
 // fToggleGearColumns //////////////////////////////////////////////////////////////
 // Purpose -> Handles the <Gear><Gear (Show/Hide)> menu action. Checks if any column
 //            within the gear ranges (defined in gUI.gearTblCols) is currently visible.
-//            Calls fHideColumnRange or fShowColumnRange accordingly to toggle visibility.
+//            Calls fHideGridsColumnRange or fShowGridsColumnRange accordingly to toggle visibility.
 // Inputs  -> None.
 // Outputs -> None (Calls show/hide range functions).
 function fToggleGearColumns() {
@@ -5083,18 +5107,12 @@ function fToggleGearColumns() {
     // Call the appropriate show/hide function based on current state
     if (isCurrentlyVisible) {
         fMyConsoleLog("⚙️ Toggling Gear: Currently Visible -> Hiding...");
-        fHideColumnRange(gearRanges); // Hide all defined gear ranges
+        fHideGridsColumnRange(gearRanges); // Hide all defined gear ranges
     } else {
         fMyConsoleLog("⚙️ Toggling Gear: Currently Hidden -> Showing...");
-        fShowColumnRange(gearRanges); // Show all defined gear ranges
+        fShowGridsColumnRange(gearRanges); // Show all defined gear ranges
     }
 } // END fToggleGearColumns
-
-
-
-
-
-
 
 
 
@@ -5311,12 +5329,12 @@ async function fCalculateMovementAndEncumbrance() {
 
 
 // ==========================================================================
-// === Header Button Click     (End of MENU BAR "LIKE") ===
+// === Grid Button Click     (End of MENU BAR "LIKE") ===
 // ==========================================================================
 
 
 
-// fHandleHeaderButtonClick //////////////////////////////////////////////////////
+// fHandleGridButtonClick //////////////////////////////////////////////////////
 // Purpose -> Handles clicks delegated from the grid specifically for header button images.
 //            Routes the click to the appropriate action handler based on the
 //            image's 'data-button-action' attribute. Simulates a click on the
@@ -5324,7 +5342,7 @@ async function fCalculateMovementAndEncumbrance() {
 // Inputs  -> event (MouseEvent): The original click event object.
 //         -> buttonImg (HTMLImageElement): The header button image element that was clicked.
 // Outputs -> None (Calls other action functions).
-function fHandleHeaderButtonClick(event, buttonImg) {
+function fHandleGridButtonClick(event, buttonImg) {
     const action = buttonImg.dataset.buttonAction;
     fMyConsoleLog(`🖱️ Header Button Clicked: ${action}`);
 
@@ -5342,7 +5360,7 @@ function fHandleHeaderButtonClick(event, buttonImg) {
                 fMyConsoleLog("   -> Simulating click on #btn-roll...");
                 rollButton.click(); // Trigger the main roll button's logic
             } else {
-                console.error("fHandleHeaderButtonClick: Could not find #btn-roll element to simulate click!");
+                console.error("fHandleGridButtonClick: Could not find #btn-roll element to simulate click!");
                 fMyConsoleLog("   -> ❌ Error: Could not find #btn-roll.");
                 // Optional: fShowMessage("Error: Could not find the main Roll button.");
             }
@@ -5370,7 +5388,7 @@ function fHandleHeaderButtonClick(event, buttonImg) {
         default:
             console.warn(`Unhandled header button action: ${action}`);
     }
-} // END fHandleHeaderButtonClick
+} // END fHandleGridButtonClick
 
 
 // fScrollGridToTop ////////////////////////////////////////////////////////////////
@@ -5441,7 +5459,7 @@ async function fRefreshMonsterData() {
     // === 1. Get and Validate Turbo Monster Range Definition ===
     // This is the range on the *client-side* Turbo grid we will populate
     const turboMonsterRangeDef = gUI.range?.monsters;
-    if (!turboMonsterRangeDef || !fIsValidRangeObject(turboMonsterRangeDef)) {
+    if (!turboMonsterRangeDef || !fDoesObjectHaveR1C1R2C2Properties(turboMonsterRangeDef)) {
         const msg = "Turbo Monster range definition (gUI.range.monsters) is missing or invalid.";
         console.error(`fRefreshMonsterData: ${msg}`);
         fMyConsoleLog(`❌ Monster Refresh Failed: ${msg}`);
@@ -5453,7 +5471,7 @@ async function fRefreshMonsterData() {
     // === 2. Get GM Screen DB Range Definition ===
     // This is the range we request from the server's 'GMScreen' sheet in the 'db' file
     const gmMonsterRangeDef = gUI.rangeDB?.monstersDB;
-     if (!gmMonsterRangeDef || !fIsValidRangeObject(gmMonsterRangeDef)) {
+     if (!gmMonsterRangeDef || !fDoesObjectHaveR1C1R2C2Properties(gmMonsterRangeDef)) {
         const msg = "GM Screen DB Monster range definition (gUI.rangeDB.monstersDB) is missing or invalid.";
         console.error(`fRefreshMonsterData: ${msg}`);
         fMyConsoleLog(`❌ Monster Refresh Failed: ${msg}`);
@@ -5517,66 +5535,12 @@ async function fRefreshMonsterData() {
 
 
 
-// fCaptureTextState ///////////////////////////////////////////////////////////
-// Purpose -> Iterates through grid data (gUI.arr) and notes (gUI.notes),
-//            building an object containing only non-empty text/note values,
-//            keyed by 'r,c' strings.
-// Inputs  -> None (Uses gUI.arr, gUI.notes).
-// Outputs -> (Object): { 'r,c': 'text', 'r2,c2': 'note text', ... } or empty object.
-function fCaptureTextState() {
-    fMyConsoleLog("💾 Capturing Grid Text State...");
-    const textData = {};
-    const numRows = gUI.arr?.length || 0;
-    const numCols = numRows > 0 ? gUI.arr[0].length : 0;
-    let cellsWithText = 0;
-
-    // Iterate through main data array (gUI.arr)
-    for (let r = 0; r < numRows; r++) {
-        for (let c = 0; c < numCols; c++) {
-            const value = gUI.arr[r]?.[c];
-            // Only add if value is a non-empty string (trimmed)
-            if (typeof value === 'string' && value.trim() !== '') {
-                const key = `${r},${c}`;
-                textData[key] = value; // Store original value
-                cellsWithText++;
-            }
-        }
-    }
-
-    // Iterate through notes array (gUI.notes)
-    const noteRows = gUI.notes?.length || 0;
-    if (noteRows > 0) {
-        const noteCols = gUI.notes[0]?.length || 0;
-        for (let r = 0; r < noteRows; r++) {
-            for (let c = 0; c < noteCols; c++) {
-                const noteText = gUI.notes[r]?.[c]?.trim();
-                // Only add if note text is non-empty
-                if (noteText) {
-                    const key = `${r},${c}_note`; // Use distinct key for notes
-                    // Avoid overwriting if cell text and note exist for same r,c
-                    // Although keys are now distinct, this check prevents adding if note is blank
-                    if (!textData[key]) {
-                         textData[key] = noteText; // Store trimmed note text
-                         cellsWithText++; // Count notes with text as well
-                    }
-                }
-            }
-        }
-    }
-
-    fMyConsoleLog(`   -> Captured text/notes from ${cellsWithText} cells.`);
-    return textData;
-} // END fCaptureTextState
-
-
-
-
-// fHandleAutoSaveTextData /////////////////////////////////////////////////////
+// fHandleAutoSaveTextToFirestore /////////////////////////////////////////////////////
 // Purpose -> Orchestrates the background auto-saving of the entire gUI.arr to Firestore.
 //            Checks if data exists and initiates server call.
 // Inputs  -> None.
 // Outputs -> None (Initiates async server call).
-function fHandleAutoSaveTextData() {
+function fHandleAutoSaveTextToFirestore() {
     fMyConsoleLog("💾 Handling Auto-Save Data (Full Array)...");
 
     // === 1. Check if gUI.arr exists and has data ===
@@ -5587,7 +5551,7 @@ function fHandleAutoSaveTextData() {
 
     // === 2. Validate character info needed for metadata ===
     if (!gUI.characterInfo || !gIndexCSID) {
-         console.error("fHandleAutoSaveTextData: Missing gIndexCSID or gUI.characterInfo needed for saving.");
+         console.error("fHandleAutoSaveTextToFirestore: Missing gIndexCSID or gUI.characterInfo needed for saving.");
          fMyConsoleLog("   -> ❌ Auto-save aborted: Missing CS ID or character info.");
          // Optionally show a non-disruptive warning? Maybe only after repeated fails?
          return;
@@ -5597,21 +5561,21 @@ function fHandleAutoSaveTextData() {
     fMyConsoleLog("   -> Calling server function fSrvSaveTurboTextAndURLtoNamesToFirestore with full gUI.arr...");
     // Pass gUI.arr directly instead of textData
     google.script.run
-        .withSuccessHandler(fHandleAutoSaveSuccess)
-        .withFailureHandler(fHandleAutoSaveFailure)
+        .withSuccessHandler(fHandleAutoSaveToFirestoreSuccess)
+        .withFailureHandler(fHandleAutoSaveToFirestoreFailure)
         .fSrvSaveTurboTextAndURLtoNamesToFirestore(gIndexCSID, gUI.arr, gUI.characterInfo); // Pass gUI.arr
 
-} // END fHandleAutoSaveTextData
+} // END fHandleAutoSaveTextToFirestore
 
 
 
 
-// fHandleAutoSaveSuccess //////////////////////////////////////////////////////
+// fHandleAutoSaveToFirestoreSuccess //////////////////////////////////////////////////////
 // Purpose -> Success callback for the fSrvSaveTurboTextAndURLtoNamesToFirestore server call.
 //            Logs success and provides minimal UI feedback.
 // Inputs  -> result (Object): The object returned from the server (expected: { success: true }).
 // Outputs -> None.
-function fHandleAutoSaveSuccess(result) {
+function fHandleAutoSaveToFirestoreSuccess(result) {
     // Basic check if server explicitly indicated success (optional)
     if (result && result.success) {
         fMyConsoleLog("   -> ✅ Auto-save successful (Server confirmed).");
@@ -5623,18 +5587,18 @@ function fHandleAutoSaveSuccess(result) {
 
     // --- REMOVED Subtle UI Feedback (Flash icon) ---
 
-} // END fHandleAutoSaveSuccess
+} // END fHandleAutoSaveToFirestoreSuccess
 
 
 
-// fHandleAutoSaveFailure //////////////////////////////////////////////////////
+// fHandleAutoSaveToFirestoreFailure //////////////////////////////////////////////////////
 // Purpose -> Failure callback for the fSrvSaveTurboTextAndURLtoNamesToFirestore server call.
 //            Logs the error comprehensively to the console. Avoids disruptive user messages.
 // Inputs  -> error (Error Object): The error object from the failed server call.
 // Outputs -> None.
-function fHandleAutoSaveFailure(error) {
+function fHandleAutoSaveToFirestoreFailure(error) {
     const errorMsg = `Auto-save to Firestore failed: ${error?.message || 'Unknown error'}`;
-    console.error("❌ fHandleAutoSaveFailure:", errorMsg, error); // Log detailed error object
+    console.error("❌ fHandleAutoSaveToFirestoreFailure:", errorMsg, error); // Log detailed error object
     fMyConsoleLog(`   -> ❌ ${errorMsg}`); // Log simplified message via fMyConsoleLog
 
     // --- Avoid Disruptive Messages ---
@@ -5648,63 +5612,9 @@ function fHandleAutoSaveFailure(error) {
     //     gUI.autoSaveFailureCount = 0; // Reset counter
     // }
 
-} // END fHandleAutoSaveFailure
+} // END fHandleAutoSaveToFirestoreFailure
 
 
-
-
-// fUnpackFirestoreArray ///////////////////////////////////////////////////////
-// Purpose -> Converts the Firestore array-of-row-objects format back into a
-//            standard 2D JavaScript array.
-// Inputs  -> firestoreArr (Array): The array from Firestore, e.g.,
-//            [ {"row0":[...]}, {"row1":[...]}, ... ]
-// Outputs -> (Array[][]): A standard 2D JavaScript array.
-function fUnpackFirestoreArray(firestoreArr) {
-    const new2DArray = [];
-    let maxRow = -1;
-
-    // First pass to populate based on keys and find max row index encountered
-    for (const rowObject of firestoreArr) {
-        // Assuming only one key like "rowX" per object
-        const key = Object.keys(rowObject)[0];
-        if (!key || !key.startsWith('row')) continue; // Skip invalid objects
-
-        const rowNum = parseInt(key.substring(3), 10);
-        if (isNaN(rowNum)) continue; // Skip if key is not like "rowX"
-
-        new2DArray[rowNum] = rowObject[key] || []; // Assign the inner array, default to empty
-        if (rowNum > maxRow) {
-            maxRow = rowNum;
-        }
-    }
-
-    // Second pass to fill potential sparse gaps with empty arrays up to maxRow
-    // This ensures gUI.arr doesn't have 'undefined' holes if Firestore data was sparse
-    for (let r = 0; r <= maxRow; r++) {
-         if (typeof new2DArray[r] === 'undefined') {
-             new2DArray[r] = []; // Initialize empty row for sparse gaps
-         }
-    }
-
-     // Optional Third Pass: Ensure all rows have the same length (based on the longest row found)
-     // This might be necessary depending on how other code interacts with gUI.arr.
-     // If not strictly needed, this step can be skipped for efficiency.
-     /*
-     let maxCols = 0;
-     for(let r = 0; r < new2DArray.length; r++) {
-         if (new2DArray[r].length > maxCols) {
-             maxCols = new2DArray[r].length;
-         }
-     }
-     for(let r = 0; r < new2DArray.length; r++) {
-         while (new2DArray[r].length < maxCols) {
-             new2DArray[r].push(''); // Pad with empty strings or appropriate default
-         }
-     }
-     */
-
-    return new2DArray;
-} // END fUnpackFirestoreArray
 
 
 // ==========================================================================
@@ -5916,7 +5826,7 @@ function fSetupMenuInteractivity() {
     // Window listener to close dropdowns on outside click
     fSetupWindowClickListener();
     // Delegated listener for actions within dropdown menus
-    fSetupDelegatedMenuActionClick(menuBar);
+    fSetupMenuActionClickListener(menuBar);
     // Listeners for submenu hover behavior
     fSetupSubMenuHover(menuBar);
     // Listener for the sidebar close button
@@ -5930,8 +5840,8 @@ function fSetupMenuInteractivity() {
     });
     // Sidebar Refresh Log Button (calls function to resend log)
     sidebarRefreshLogBtn.addEventListener('click', () => {
-        fMyConsoleLog("🖱️ Sidebar Refresh Log Button Clicked -> Calling fSendLogToGMScreenNPS...");
-        fSendLogToGMScreenNPS(); // Call the function to resend logs
+        fMyConsoleLog("🖱️ Sidebar Refresh Log Button Clicked -> Calling fSendLogToGMScreenAndPS...");
+        fSendLogToGMScreenAndPS(); // Call the function to resend logs
     });
     // --- End Sidebar Listeners ---
 
@@ -5948,19 +5858,19 @@ function fSetupMenuInteractivity() {
 
 
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////// START fOnDataLoaded and helpers
+////////////////////////////////////////////////////////////////////////////////////////////////////////// START fOnCSGameDataLoaded and helpers
 
 
 
 
-// fOnDataLoaded ///////////////////////////////////////////////////////////////////
+// fOnCSGameDataLoaded ///////////////////////////////////////////////////////////////////
 // Purpose -> Callback function executed upon successful data retrieval from the
 //            server (fSrvReadCSGameSheet). Validates data, stores it in gUI, checks
 //            Firestore for overriding data, fetches static header data, and
 //            initiates grid rendering using the final data source.
 // Inputs  -> data (Object): The structured data object from the server { arr, format, notesArr }.
 // Outputs -> None (Initiates UI rendering and setup).
-function fOnDataLoaded(data) {
+function fOnCSGameDataLoaded(data) {
     fMyConsoleLog("✅ Initial Sheet Data received from server");
 
     // === 1. Validate and Store Initial Sheet Data ===
@@ -5998,7 +5908,7 @@ function fOnDataLoaded(data) {
             // === 3. Proceed with Header Fetch & Grid Render (using final data) ===
             // This section now runs *after* the Firestore check completes.
             fSetupTooltipAndModal(); // Cache tooltip/modal elements (can be done earlier if needed)
-            fFetchCharacterHeaderAndRenderGrid(); // New function to group next steps
+            fFetchRaceClassInfoAndRenderGrid(); // New function to group next steps
 
         })
         .withFailureHandler((error) => {
@@ -6008,21 +5918,21 @@ function fOnDataLoaded(data) {
             fMyConsoleLog(`   -> ❌ ${errorMsg}. Using Sheet data as fallback.`);
             // Proceed using Sheet data despite the check failure
             fSetupTooltipAndModal();
-            fFetchCharacterHeaderAndRenderGrid(); // Proceed with rendering
+            fFetchRaceClassInfoAndRenderGrid(); // Proceed with rendering
         })
         .fSrvCheckAndLoadFirestoreGUIarrAs2D(gIndexCSID); // Call the new server function
 
-} // END fOnDataLoaded
+} // END fOnCSGameDataLoaded
 
 
 
-// fFetchCharacterHeaderAndRenderGrid //////////////////////////////////////////
+// fFetchRaceClassInfoAndRenderGrid //////////////////////////////////////////
 // Purpose -> Fetches static character header data (Race/Class, Level, Names, Slot)
 //            and then initiates the main grid rendering process. Called after
 //            initial data load and Firestore check.
 // Inputs  -> None.
 // Outputs -> None (Initiates server call, then rendering).
-function fFetchCharacterHeaderAndRenderGrid() {
+function fFetchRaceClassInfoAndRenderGrid() {
     fMyConsoleLog("⚙️ Requesting Static Character Header Data...");
     google.script.run
         .withSuccessHandler((headerData) => {
@@ -6061,7 +5971,7 @@ function fFetchCharacterHeaderAndRenderGrid() {
 
             // === Render Grid & Apply Post-Processing ===
             if (proceedWithRender) {
-                fRenderFullGrid(() => {
+                fRenderTurbosFullGrid(() => {
                     fRunPostRenderFormatting(); // Apply merges, borders, listeners, etc.
                 });
             } else {
@@ -6078,13 +5988,13 @@ function fFetchCharacterHeaderAndRenderGrid() {
             fShowMessage(`Error fetching character header data: ${error.message}`).catch(e => console.error("Error showing message:", e));
             // Proceed with grid rendering without header data
             gUI.characterInfo = { slotNum: null, raceClass: '', level: '', playerName: '', charName: '' }; // Reset
-            fRenderFullGrid(() => {
+            fRenderTurbosFullGrid(() => {
                 fRunPostRenderFormatting();
             });
         })
         .fSrvGetURLToPlayerCharForGMScreen(gIndexCSID);
 
-} // END fFetchCharacterHeaderAndRenderGrid
+} // END fFetchRaceClassInfoAndRenderGrid
 
 
 
@@ -6226,19 +6136,19 @@ function fRunPostRenderFormatting() {
     fMyConsoleLog("🚀 Applying Post-Render Formatting...");
 
     // === Apply Structural Formatting ===
-    fApplyDynamicMerges();     // Handle merged cells first
-    fAddHeaderButtons();       // Add image buttons to header cells
-    fApplyManualBorders();     // Apply borders defined in gUI.manualBorderSections
-    fApplyInitialVisibility(); // Hide initially hidden rows/columns
-    fApplyManualColoring();    // Apply font colors defined in gUI.fontColorRange
-    fSetHeader();              // Apply sticky header styling
+    fApplyGridDynamicMerges();     // Handle merged cells first
+    fAddGridsHeaderRowButtons();       // Add image buttons to header cells
+    fApplyGridManualBorders();     // Apply borders defined in gUI.manualBorderSections
+    fApplyGridColAndRowInitialVisibility(); // Hide initially hidden rows/columns
+    fApplyGridManualColoring();    // Apply font colors defined in gUI.fontColorRange
+    fSetTurbosGridHeaderRows();              // Apply sticky header styling
 
     // === Apply Interactive Elements ===
     // Apply dropdowns AFTER merges/visibility might have hidden target cells
     fApplyDropdownsToGrid();
 
     // === Final Adjustments & Listeners ===
-    fMarkOverflowingCells();    // Add class to cells with overflow after layout changes
+    fMarkGridOverflowingCells();    // Add class to cells with overflow after layout changes
     fClearSk1Sk2Checkboxes();   // Ensure radio button group starts clean (optional, depending on desired state)
 
     // Attach main grid event listeners
@@ -6256,7 +6166,7 @@ function fRunPostRenderFormatting() {
 
 
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////// END fOnDataLoaded and helpers
+////////////////////////////////////////////////////////////////////////////////////////////////////////// END fOnCSGameDataLoaded and helpers
 
 
 
@@ -6287,7 +6197,7 @@ function fLoadGameSheet() {
     // === Call Server Function ===
     // Use google.script.run to call the Apps Script function
     google.script.run
-        .withSuccessHandler(fOnDataLoaded) // Callback for successful data retrieval or server-side errors
+        .withSuccessHandler(fOnCSGameDataLoaded) // Callback for successful data retrieval or server-side errors
         .withFailureHandler(error => {     // Callback for transport errors or unhandled exceptions
             const errorMsg = `❌ Failed to call server: ${error.message}`;
             console.error(errorMsg, error);
