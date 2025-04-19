@@ -59,7 +59,7 @@ const gUI = {
 
   // === Roll Object State ===
   roll: {
-    // --- Input values from Sheet (populated by fResetPopulateNCleanGUIRoll) ---
+    // --- Input values from Sheet (populated by fClearAndSetGUIRoll) ---
     sk1CB: false,          // Flag: True if roll originated from Sk1 CheckBox column, false if Sk2
     ability_R: '',
     // 0-based row index of the ability/gear being rolled
@@ -3440,7 +3440,7 @@ function fSetupMenuButtonListeners(btnNish, btnRoll, btnFree, btnLuck, btnGame, 
         // 3. If not Chaos or Ad-Hoc, check for standard Ability roll (Sk checkbox checked)
         if (!handled && checked_r !== null) {
             fMyConsoleLog(`   -> <Roll> Click: No Chaos/Ad-Hoc handled. Active Sk checkbox [${checked_r}, ${checked_c}] found. Triggering standard roll action...`);
-            await fHandleRollDiceAction(); // Call the main ability roll handler
+            await fMain_AbilityRoll(); // Call the main ability roll handler
             handled = true; // Mark as handled
         } else if (!handled && checked_r === null) {
             fMyConsoleLog("   -> <Roll> Click: No Chaos/Ad-Hoc handled and no Ability checkbox checked.");
@@ -3459,7 +3459,7 @@ function fSetupMenuButtonListeners(btnNish, btnRoll, btnFree, btnLuck, btnGame, 
             fSetButtonOrMenuState(null); // Reset button state if nothing handled
         } else {
             // If handled by Chaos or Ad-Hoc, reset state immediately.
-            // If handled by Ability roll, state reset happens within fHandleRollDiceAction.
+            // If handled by Ability roll, state reset happens within fMain_AbilityRoll.
             const wasAbilityRoll = (checked_r !== null);
             if (!wasAbilityRoll) {
                 fSetButtonOrMenuState(null);
@@ -3472,7 +3472,7 @@ function fSetupMenuButtonListeners(btnNish, btnRoll, btnFree, btnLuck, btnGame, 
         event.stopPropagation();
         fCloseAllDropdowns();
         fSetButtonOrMenuState('Free'); // Set state
-        fHandleRollDiceAction();       // Trigger main roll handler
+        fMain_AbilityRoll();       // Trigger main roll handler
     });
 
     // === Luck Button Listener ===
@@ -3480,7 +3480,7 @@ function fSetupMenuButtonListeners(btnNish, btnRoll, btnFree, btnLuck, btnGame, 
         event.stopPropagation();
         fCloseAllDropdowns();
         fSetButtonOrMenuState('Luck'); // Set state
-        fHandleRollDiceAction();       // Trigger main roll handler
+        fMain_AbilityRoll();       // Trigger main roll handler
     });
 
     // === Game Menu Button Listener ===
@@ -4298,7 +4298,7 @@ async function fProcessWoundHealing(woundRangeTag, vitMax, divisor, degreeLabel)
 
     // === Calculate Healing ===
     const healingDieSize = Math.max(1, Math.round(vitMax / divisor)); // Die size is at least 1
-    const healingRoll = fCSd(healingDieSize); // Roll the healing die
+    const healingRoll = fDie(healingDieSize); // Roll the healing die
     fMyConsoleLog(`         -> Healing roll (${degreeLabel}): d${healingDieSize} = ${healingRoll}`);
 
     // === Calculate New Wounds and Amount Healed ===
@@ -5466,7 +5466,7 @@ async function fRefreshMonsterData() {
         await fShowMessage(`Error: ${msg}`);
         return;
     }
-    // We don't resolve indices here, fUpdateTurboMonsterTable will handle it.
+    // We don't resolve indices here, fUpdateMonsterTable will handle it.
 
     // === 2. Get GM Screen DB Range Definition ===
     // This is the range we request from the server's 'GMScreen' sheet in the 'db' file
@@ -5509,7 +5509,7 @@ async function fRefreshMonsterData() {
 
             // === Process Received Data ===
             // Call the new helper function to populate the Turbo grid
-            fUpdateTurboMonsterTable(gmDataArray, gmColTags, gmRowTags);
+            fUpdateMonsterTable(gmDataArray, gmColTags, gmRowTags);
 
         })
         // --- Failure Handler ---

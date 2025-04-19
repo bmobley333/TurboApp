@@ -12,14 +12,14 @@
 
 
 
-// fHandleRollDiceAction ///////////////////////////////////////////////////////////
+// fMain_AbilityRoll ///////////////////////////////////////////////////////////
 // Purpose -> Top-level handler for initiating an ability/gear roll. Coordinates
 //            validation, data population, morphs, costs, roll logic branching,
 //            cost application, Nish update, and final logging (HTML & plain text)
 //            to sidebar and GMScreen.
 // Inputs  -> None (Relies on gUI state).
 // Outputs -> None (Orchestrates updates to gUI, DOM, sidebar, GMScreen).
-async function fHandleRollDiceAction() {
+async function fMain_AbilityRoll() {
     fMyConsoleLog("🎲 Roll Dice Action Triggered");
     let logHtmlToSend = ''; // Store final log HTML for sidebar
     let logTextToSend = ''; // Store final log text for GMScreen update
@@ -27,9 +27,9 @@ async function fHandleRollDiceAction() {
     try { // Add try block for better error handling during the sequence
         // === 1. Initial Validation & Base gUI.roll Setup ===
         const { r, c } = gUI.currentSkRadioChecked;
-        if (!await fValidateAbilityCB(r, c)) { fSetButtonOrMenuState(null); return; }
-        if (!await fResetPopulateNCleanGUIRoll(r, c)) { fSetButtonOrMenuState(null); return; }
-        if (!await fVerifyAbility()) { fSetButtonOrMenuState(null); return; }
+        if (!await fIsSk1Sk2RadioCheckbox(r, c)) { fSetButtonOrMenuState(null); return; }
+        if (!await fClearAndSetGUIRoll(r, c)) { fSetButtonOrMenuState(null); return; }
+        if (!await fVerifyAbilityHasSkAndType()) { fSetButtonOrMenuState(null); return; }
 
         // === 2. Nish Ability Pre-Sequence Check ===
         const nishRowIndex = fResolveRow('NishAtr_R');
@@ -194,7 +194,7 @@ async function fHandleRollDiceAction() {
             if (helperSucceeded) { logHtmlToSend = finalLogResult.logHtml; logTextToSend = finalLogResult.logText; wasMonsterInteractionRoll = true; }
         } else {
             fMyConsoleLog("🎯 Performing Standard Roll(s)...");
-            finalLogResult = fPerformStandardRolls(initialLogHtml, initialLogText);
+            finalLogResult = fPerformMultiRolls(initialLogHtml, initialLogText);
             logHtmlToSend = finalLogResult.finalLogHtml;
             logTextToSend = finalLogResult.finalLogText;
             helperSucceeded = true;
@@ -254,7 +254,7 @@ async function fHandleRollDiceAction() {
 
     } catch (err) {
         // --- Catch Unexpected Errors ---
-        console.error("Critical Error in fHandleRollDiceAction:", err);
+        console.error("Critical Error in fMain_AbilityRoll:", err);
         fMyConsoleLog(`❌ CRITICAL ERROR during roll action: ${err.message}`);
         await fShowMessage(`❌ Critical Error during roll: ${err.message}. Please check console.`);
         fSetButtonOrMenuState(null);
@@ -270,33 +270,33 @@ async function fHandleRollDiceAction() {
     // Send the final log state to the GMScreen (with slight delay)
     setTimeout(() => fSendLogToGMScreenAndPS(), 0); 
 
-} // END fHandleRollDiceAction
+} // END fMain_AbilityRoll
 
 
 
-// fAppendToHTMLHeader /////////////////////////////////////////////////////////////
+// fAppendToSidebarHeader /////////////////////////////////////////////////////////////
 // Purpose -> Appends a string (typically a cost/status header) to the
 //            gUI.roll.htmlHeader string, adding an HTML line break (<br>).
 //            Used to build the initial part of the sidebar log entry.
 // Inputs  -> newHeader (String): The header string to append.
 // Outputs -> None (Modifies gUI.roll.htmlHeader).
-function fAppendToHTMLHeader(newHeader) {
+function fAppendToSidebarHeader(newHeader) {
     // Append the new header text followed by a line break
     gUI.roll.htmlHeader += `${newHeader}<br>`;
-} // END fAppendToHTMLHeader
+} // END fAppendToSidebarHeader
 
 
 
 
 
-// fValidateAbilityCB //////////////////////////////////////////////////////////////
+// fIsSk1Sk2RadioCheckbox //////////////////////////////////////////////////////////////
 // Purpose -> Validates that the provided coordinates (r, c) correspond to a valid
 //            Sk1/Sk2 checkbox location based on gUI.range.sk1sk2CheckBoxes.
 //            Shows a message if invalid.
 // Inputs  -> r (Number): 0-based row index.
 //         -> c (Number): 0-based column index.
 // Outputs -> (Promise<Boolean>): Resolves true if coordinates are valid, false otherwise.
-async function fValidateAbilityCB(row, col) {
+async function fIsSk1Sk2RadioCheckbox(row, col) {
     // Check if the coordinates fall within any defined Sk checkbox range
     const isValid = fIsSkRadioGroupMember(row, col);
 
@@ -306,12 +306,12 @@ async function fValidateAbilityCB(row, col) {
     }
 
     return isValid;
-} // END fValidateAbilityCB
+} // END fIsSk1Sk2RadioCheckbox
 
 
 
 
-// fResetPopulateNCleanGUIRoll /////////////////////////////////////////////////////
+// fClearAndSetGUIRoll /////////////////////////////////////////////////////
 // Purpose -> Resets the global gUI.roll object and populates it with base data
 //            extracted from the ability/gear row specified by the selected checkbox (r, c).
 //            Cleans and standardizes the extracted data (e.g., trims strings,
@@ -319,7 +319,7 @@ async function fValidateAbilityCB(row, col) {
 // Inputs  -> r (Number): Row index of the selected ability/gear.
 //         -> c (Number): Column index of the selected checkbox (determines Sk1 vs Sk2).
 // Outputs -> (Promise<Boolean>): Resolves true if successful, false if an error occurs.
-async function fResetPopulateNCleanGUIRoll(r, c) {
+async function fClearAndSetGUIRoll(r, c) {
     try {
         // Helper to get value from the specified row `r` and a column tag
         const getVal = tag => gUI.arr[r]?.[fResolveCol(tag)] ?? '';
@@ -396,22 +396,22 @@ async function fResetPopulateNCleanGUIRoll(r, c) {
 
     } catch (err) {
         // --- Error Handling ---
-        console.error("fResetPopulateNCleanGUIRoll: Error processing ability data:", err);
+        console.error("fClearAndSetGUIRoll: Error processing ability data:", err);
         fMyConsoleLog(`❌ Error populating/cleaning gUI.roll: ${err.message}`);
         // Show error to user via sidebar
         await fShowMessage(`❌ Error processing skill data: ${err.message}`);
         return false; // Indicate failure
     }
-} // END fResetPopulateNCleanGUIRoll
+} // END fClearAndSetGUIRoll
 
 
 
-// fVerifyAbility //////////////////////////////////////////////////////////////////
+// fVerifyAbilityHasSkAndType //////////////////////////////////////////////////////////////////
 // Purpose -> Performs basic validation on the populated gUI.roll object, ensuring
 //            the ability has a name and a valid, recognized skill type.
 // Inputs  -> None (Uses gUI.roll and gUI.list).
 // Outputs -> (Promise<Boolean>): Resolves true if ability data is valid, false otherwise.
-async function fVerifyAbility() {
+async function fVerifyAbilityHasSkAndType() {
     const { skName, skTyp, sk1CB } = gUI.roll;
 
     // --- Check Name ---
@@ -440,7 +440,7 @@ async function fVerifyAbility() {
     // --- Passed All Checks ---
     return true;
 
-} // END fVerifyAbility
+} // END fVerifyAbilityHasSkAndType
 
 
 
@@ -635,7 +635,7 @@ function fApplyMorphResults(acc) {
     if (acc.foundResTyp) {
         r.resTyp = acc.lastResTypMatch || r.skTyp;
     }
-    // else: r.resTyp already defaulted to r.skTyp in fResetPopulateNCleanGUIRoll
+    // else: r.resTyp already defaulted to r.skTyp in fClearAndSetGUIRoll
 
     // === Apply Focus Meta ===
     // Use last matched valid meta color tag.
@@ -772,7 +772,7 @@ async function fVerifyNSetActMetaLuckUsesOnEtc() {
     fMyConsoleLog("✅ All Verifications Passed. Applying Pending Changes from Map...");
 
     // Prepend collected header messages to the sidebar log buffer
-    pendingHeaders.forEach(header => fAppendToHTMLHeader(header));
+    pendingHeaders.forEach(header => fAppendToSidebarHeader(header));
 
     // Apply the collected grid changes from the map
     let applyErrors = false;
@@ -1158,7 +1158,7 @@ async function fSpendOneMeta(metaColor, pendingChangesMap) {
 
 
 
-// fPerformStandardRolls ///////////////////////////////////////////////////////////
+// fPerformMultiRolls ///////////////////////////////////////////////////////////
 // Purpose -> Handles the standard multi-roll loop for abilities targeting a specific
 //            difficulty. Calculates roll results, accumulates wounds, builds log lines
 //            (HTML & plain text), constructs the final log entry HTML, including
@@ -1166,7 +1166,7 @@ async function fSpendOneMeta(metaColor, pendingChangesMap) {
 // Inputs  -> initialLogHtml (String): Pre-built HTML log header.
 //         -> initialLogText (String): Pre-built Plain Text log header.
 // Outputs -> (Object): { finalLogHtml: String, finalLogText: String }
-function fPerformStandardRolls(initialLogHtml, initialLogText) {
+function fPerformMultiRolls(initialLogHtml, initialLogText) {
     const multiRollCount = gUI.roll.multiRollCount;
     const resTypLower = (gUI.roll.resTyp || '').toLowerCase();
     const isArmorRoll = (resTypLower === 'ar');
@@ -1205,7 +1205,7 @@ function fPerformStandardRolls(initialLogHtml, initialLogText) {
         } // End wound accumulation block
 
         // Build HTML and Plain Text lines for this specific roll
-        const { html: rollLineHtml, plainText: rollLineText } = fBuildRollLogHTML(rollNum, multiRollCount, isFirstRoll);
+        const { html: rollLineHtml, plainText: rollLineText } = fBuildSidebarHTMLAndSimpleText(rollNum, multiRollCount, isFirstRoll);
         rollResultLinesHtml.push(rollLineHtml); // Store HTML line
         rollResultLinesText.push(rollLineText); // Store Plain Text line
     } // --- End Roll Loop ---
@@ -1246,7 +1246,7 @@ function fPerformStandardRolls(initialLogHtml, initialLogText) {
     fMyConsoleLog(`✅ Standard Roll Loop Completed.`);
     // Return object with both HTML and Plain Text
     return { finalLogHtml, finalLogText };
-} // END fPerformStandardRolls
+} // END fPerformMultiRolls
 
 
 
@@ -1331,7 +1331,7 @@ async function fPerformPlayerAttackRolls(initialLogHtml, initialLogText) {
         await fShowMessage("ℹ️ No valid monsters found. Performing standard attack roll.");
         gUI.roll.resDif = ''; // Ensure difficulty is cleared
         fMyConsoleLog("         -> Cleared resDif for standard roll.");
-        const { finalLogHtml, finalLogText } = fPerformStandardRolls(initialLogHtml, initialLogText);
+        const { finalLogHtml, finalLogText } = fPerformMultiRolls(initialLogHtml, initialLogText);
         return { logHtml: finalLogHtml, logText: finalLogText, success: true };
     }
 
@@ -1365,7 +1365,7 @@ async function fPerformPlayerAttackRolls(initialLogHtml, initialLogText) {
                  fMyConsoleLog(`         -> Attack Failed! (Roll ${rollResult} < Def ${difficulty})`);
             }
 
-            const { html: rollLineHtml, plainText: rollLineText } = fBuildRollLogHTML(rollNum, target.numRolls, isOverallFirstRoll);
+            const { html: rollLineHtml, plainText: rollLineText } = fBuildSidebarHTMLAndSimpleText(rollNum, target.numRolls, isOverallFirstRoll);
             monsterLogLinesHtml.push(rollLineHtml);
             monsterLogLinesText.push(rollLineText);
             if (isOverallFirstRoll) isOverallFirstRoll = false;
@@ -1486,7 +1486,7 @@ async function fPerformPlayerDamageRolls(initialLogHtml, initialLogText) {
         await fShowMessage("ℹ️ No valid monsters found with Armor values. Performing standard damage roll.");
         gUI.roll.resDif = '';
         fMyConsoleLog("         -> Cleared resDif for standard roll.");
-        const { finalLogHtml, finalLogText } = fPerformStandardRolls(initialLogHtml, initialLogText);
+        const { finalLogHtml, finalLogText } = fPerformMultiRolls(initialLogHtml, initialLogText);
         return { logHtml: finalLogHtml, logText: finalLogText, success: true };
     }
 
@@ -1521,7 +1521,7 @@ async function fPerformPlayerDamageRolls(initialLogHtml, initialLogText) {
             fMyConsoleLog(`         -> Wound Calc: Dmg Roll=${rollResult}, calcAR=${armorDifficulty} => Wounds = max(0, round(${rollResult}/${armorDifficulty})) = ${woundsDealt}`);
             totalWoundsPerMonster += woundsDealt;
 
-            const { html: rollLineHtml, plainText: rollLineText } = fBuildRollLogHTML(rollNum, target.numRolls, isOverallFirstRoll);
+            const { html: rollLineHtml, plainText: rollLineText } = fBuildSidebarHTMLAndSimpleText(rollNum, target.numRolls, isOverallFirstRoll);
             monsterLogLinesHtml.push(rollLineHtml);
             monsterLogLinesText.push(rollLineText);
             if (isOverallFirstRoll) isOverallFirstRoll = false;
@@ -1622,7 +1622,7 @@ async function fPerformPlayerDefenseRolls(initialLogHtml, initialLogText) {
         await fShowMessage("ℹ️ No valid monsters found with Attack values. Performing standard defense roll.");
         gUI.roll.resDif = '';
         fMyConsoleLog("         -> Cleared resDif for standard roll.");
-        const { finalLogHtml, finalLogText } = fPerformStandardRolls(initialLogHtml, initialLogText);
+        const { finalLogHtml, finalLogText } = fPerformMultiRolls(initialLogHtml, initialLogText);
         return { logHtml: finalLogHtml, logText: finalLogText, success: true };
     }
 
@@ -1657,7 +1657,7 @@ async function fPerformPlayerDefenseRolls(initialLogHtml, initialLogText) {
                  fMyConsoleLog(`         -> Defense Succeeded! (Roll ${rollResult} >= Atk ${difficulty})`);
             }
 
-            const { html: rollLineHtml, plainText: rollLineText } = fBuildRollLogHTML(rollNum, target.numRolls, isOverallFirstRoll);
+            const { html: rollLineHtml, plainText: rollLineText } = fBuildSidebarHTMLAndSimpleText(rollNum, target.numRolls, isOverallFirstRoll);
             monsterLogLinesHtml.push(rollLineHtml);
             monsterLogLinesText.push(rollLineText);
             if (isOverallFirstRoll) isOverallFirstRoll = false;
@@ -1776,7 +1776,7 @@ async function fPerformPlayerArmorRolls(initialLogHtml, initialLogText) {
         await fShowMessage("ℹ️ No valid monsters found with Damage values. Performing standard armor roll.");
         gUI.roll.resDif = '';
         fMyConsoleLog("         -> Cleared resDif for standard roll.");
-        const { finalLogHtml, finalLogText } = fPerformStandardRolls(initialLogHtml, initialLogText);
+        const { finalLogHtml, finalLogText } = fPerformMultiRolls(initialLogHtml, initialLogText);
         return { logHtml: finalLogHtml, logText: finalLogText, success: true };
     }
 
@@ -1815,7 +1815,7 @@ async function fPerformPlayerArmorRolls(initialLogHtml, initialLogText) {
             totalWoundsPerMonster += woundsDealt;
             totalWoundsOverall += woundsDealt;
 
-            const { html: rollLineHtml, plainText: rollLineText } = fBuildRollLogHTML(rollNum, target.numRolls, isOverallFirstRoll);
+            const { html: rollLineHtml, plainText: rollLineText } = fBuildSidebarHTMLAndSimpleText(rollNum, target.numRolls, isOverallFirstRoll);
             monsterLogLinesHtml.push(rollLineHtml);
             monsterLogLinesText.push(rollLineText);
             if (isOverallFirstRoll) isOverallFirstRoll = false;
@@ -1928,7 +1928,7 @@ function fCalcGUIRollResSk() {
 // Purpose -> Calculates the initial "raw" die roll result (stored in gUI.roll.roll)
 //            based on the calculated resulting skill (gUI.roll.resSk) and the final
 //            roll type (gUI.roll.resTyp). Calls the appropriate dice rolling function
-//            (fCSDSk, fCSAtk, fCSDef, etc.).
+//            (fSkRoll, fAtkRoll, fDefRoll, etc.).
 // Inputs  -> None (Reads gUI.roll.resSk, gUI.roll.resTyp).
 // Outputs -> None (Writes the raw roll result to gUI.roll.roll).
 function fCalcGUIRollRoll() {
@@ -1951,24 +1951,24 @@ function fCalcGUIRollRoll() {
         case 'sk':  // Standard Skill
         case 'atr': // Attribute
         case 'str': // Strength (currently uses Sk roll)
-             gUI.roll.roll = fCSDSk(resSkValue);
+             gUI.roll.roll = fSkRoll(resSkValue);
              break;
         case 'atk': // Attack
-             gUI.roll.roll = fCSAtk(resSkValue);
+             gUI.roll.roll = fAtkRoll(resSkValue);
              break;
         case 'dmg': // Damage
-             gUI.roll.roll = fCSDDmg(resSkValue);
+             gUI.roll.roll = fDmgRoll(resSkValue);
              break;
         case 'def': // Defense
-             gUI.roll.roll = fCSDef(resSkValue);
+             gUI.roll.roll = fDefRoll(resSkValue);
              break;
         case 'ar':  // Armor (can return decimal)
-             gUI.roll.roll = fCSDArmor(resSkValue);
+             gUI.roll.roll = fARRoll(resSkValue);
              break;
         case 'un':  // Unskilled (should ideally be handled by resSk calc)
         case 'unsk':
              console.warn(`fCalcGUIRollRoll: Roll type '${resTypValue}' used directly. Check morph logic.`);
-             gUI.roll.roll = fCSDSk(resSkValue); // Fallback to Sk roll
+             gUI.roll.roll = fSkRoll(resSkValue); // Fallback to Sk roll
              break;
         default:    // Unknown type
              console.warn(`fCalcGUIRollRoll: Unknown resTyp '${resTypValue}'. Cannot calculate roll.`);
@@ -2049,28 +2049,7 @@ function fCalcGUIRollResRoll() {
 
 
 
-// fCalcRollLogPrepend /////////////////////////////////////////////////////////////
-// Purpose -> Builds the final HTML log message for a single roll using
-//            fBuildRollLogHTML and prepends it to the Roll Log sidebar.
-//            Ensures the sidebar is visible.
-// Inputs  -> None (Relies on gUI.roll state populated by previous calculations).
-// Outputs -> None (Modifies sidebar DOM).
-function fCalcRollLogPrepend() {
-    // Build the HTML string for the current roll result
-    const html = fBuildRollLogHTML(1, 1, true); // Assumes single roll for this direct call context
-
-    // Prepend the generated HTML to the sidebar
-    fPostToSidebar(html);
-    // Ensure the sidebar is visible
-    fShowSidebar();
-
-    fMyConsoleLog("📰 Roll Log message prepended.");
-} // END fCalcRollLogPrepend
-
-
-
-
-// fBuildRollLogHTML ///////////////////////////////////////////////////////////////
+// fBuildSidebarHTMLAndSimpleText ///////////////////////////////////////////////////////////////
 // Purpose -> Constructs formatted HTML and plain text log lines for a *single roll*
 //            result based on the current state of gUI.roll. Handles different roll
 //            types, multi-roll prefixes, T/C results, skill/roll values, difficulty,
@@ -2079,7 +2058,7 @@ function fCalcRollLogPrepend() {
 //         -> totalRolls (Number): Total number of rolls in the sequence (e.g., 3).
 //         -> isFirstRoll (Boolean): True if this is the first roll (for T/C).
 // Outputs -> (Object): { html: String, plainText: String } containing the formatted lines.
-function fBuildRollLogHTML(rollNum, totalRolls, isFirstRoll) {
+function fBuildSidebarHTMLAndSimpleText(rollNum, totalRolls, isFirstRoll) {
 
     // === Get Data from gUI.roll ===
     const resTyp = (gUI.roll.resTyp || '').trim();
@@ -2172,7 +2151,7 @@ function fBuildRollLogHTML(rollNum, totalRolls, isFirstRoll) {
     textLine = `${textBase}${textRollResult}${textDifIndicator}${textSuccessDelta}`.trim();
 
     // === Add T/C Result (First Roll Only) ===
-    const tc = isFirstRoll ? fCStc() : "";
+    const tc = isFirstRoll ? fTC() : "";
     const tcText = tc ? (tc.includes('red-bold') ? ' C' : ' T') : "";
     if (tc) {
         htmlLine += `   ${tc}`;
@@ -2192,7 +2171,7 @@ function fBuildRollLogHTML(rollNum, totalRolls, isFirstRoll) {
         html: `${htmlPrefix}${htmlLine}`,
         plainText: `${textPrefix}${textLine}`
     };
-} // END fBuildRollLogHTML
+} // END fBuildSidebarHTMLAndSimpleText
 
 
 // ==========================================================================
@@ -2539,7 +2518,7 @@ async function fHandlePrepDmgClick(event) {
 //            Sets the Nish button state, programmatically checks the Nish ability's
 //            Sk1 checkbox, executes the core Nish sequence (sidebar divider, meta
 //            channeling, max AP, duration updates), and then triggers the main
-//            roll action handler (fHandleRollDiceAction) for the Nish ability itself.
+//            roll action handler (fMain_AbilityRoll) for the Nish ability itself.
 // Inputs  -> None.
 // Outputs -> None (Modifies state, DOM, triggers other async functions).
 async function fHandleNishButtonClick(event) { // Added event parameter to use stopPropagation
@@ -2591,11 +2570,11 @@ async function fHandleNishButtonClick(event) { // Added event parameter to use s
     await fExecuteNishSequence();
 
     // === 4. Trigger Main Roll Handler ===
-    // fHandleRollDiceAction will now use the Nish row/column and the isNish state
-    fMyConsoleLog("   -> Triggering fHandleRollDiceAction for Nish ability...");
-    await fHandleRollDiceAction();
+    // fMain_AbilityRoll will now use the Nish row/column and the isNish state
+    fMyConsoleLog("   -> Triggering fMain_AbilityRoll for Nish ability...");
+    await fMain_AbilityRoll();
 
-    // Note: Button state (isNish) is reset at the end of fHandleRollDiceAction
+    // Note: Button state (isNish) is reset at the end of fMain_AbilityRoll
 
 } // END fHandleNishButtonClick
 
@@ -2635,7 +2614,7 @@ async function fExecuteNishSequence() {
     }
 
     fMyConsoleLog("✅ Nish Sequence Execution Complete.");
-    // Note: No fSendLogToGMScreenAndPS here, as it's often called by another function (fHandleNishButtonClick or fHandleRollDiceAction)
+    // Note: No fSendLogToGMScreenAndPS here, as it's often called by another function (fHandleNishButtonClick or fMain_AbilityRoll)
     // which will handle the final send.
 
 } // END fExecuteNishSequence
@@ -2649,7 +2628,7 @@ async function fExecuteNishSequence() {
 
 
 
-// fUpdateTurboMonsterTable ////////////////////////////////////////////////////////
+// fUpdateMonsterTable ////////////////////////////////////////////////////////
 // Purpose -> Processes monster data received from the GM Screen DB and populates
 //            the client-side Turbo monster table (gUI.range.monsters), *skipping the
 //            first row (CustMon)*. Handles active monster filtering, custom monster
@@ -2659,22 +2638,22 @@ async function fExecuteNishSequence() {
 //         -> gmColTags (Object): Map of GM Screen column tags to indices { tagName: index }.
 //         -> gmRowTags (Object): Map of GM Screen row tags to indices { tagName: index }.
 // Outputs -> None (Modifies Turbo grid data/DOM via fSetGridValue, potentially calls fShowMessage).
-async function fUpdateTurboMonsterTable(gmDataArray, gmColTags, gmRowTags) {
+async function fUpdateMonsterTable(gmDataArray, gmColTags, gmRowTags) {
     fMyConsoleLog("🧬 Processing GM Monster Data for Turbo Table...");
 
     // === 1. Validate Inputs ===
     if (!Array.isArray(gmDataArray)) {
-        fMyConsoleLog("❌ fUpdateTurboMonsterTable Error: gmDataArray is not an array.");
+        fMyConsoleLog("❌ fUpdateMonsterTable Error: gmDataArray is not an array.");
         await fShowMessage("Error: Invalid monster data received from server (not an array).");
         return;
     }
      if (typeof gmColTags !== 'object' || gmColTags === null) {
-        fMyConsoleLog("❌ fUpdateTurboMonsterTable Error: gmColTags is not a valid object.");
+        fMyConsoleLog("❌ fUpdateMonsterTable Error: gmColTags is not a valid object.");
         await fShowMessage("Error: Invalid column tag mapping received from server.");
         return;
     }
      if (typeof gmRowTags !== 'object' || gmRowTags === null) {
-        fMyConsoleLog("❌ fUpdateTurboMonsterTable Error: gmRowTags is not a valid object.");
+        fMyConsoleLog("❌ fUpdateMonsterTable Error: gmRowTags is not a valid object.");
         await fShowMessage("Error: Invalid row tag mapping received from server.");
         return;
     }
@@ -2682,7 +2661,7 @@ async function fUpdateTurboMonsterTable(gmDataArray, gmColTags, gmRowTags) {
     // === 2. Resolve Turbo Table Boundaries ===
     const turboRangeDef = gUI.range?.monsters;
     if (!turboRangeDef || !fDoesObjectHaveR1C1R2C2Properties(turboRangeDef)) {
-        fMyConsoleLog("❌ fUpdateTurboMonsterTable Error: Turbo monster range (gUI.range.monsters) invalid.");
+        fMyConsoleLog("❌ fUpdateMonsterTable Error: Turbo monster range (gUI.range.monsters) invalid.");
         await fShowMessage("Error: Turbo monster table range definition is missing.");
         return;
     }
@@ -2692,7 +2671,7 @@ async function fUpdateTurboMonsterTable(gmDataArray, gmColTags, gmRowTags) {
     const turbo_c2 = fResolveCol(turboRangeDef.c2);
 
     if ([turboMon_R_start, turboMon_R_end, turbo_c1, turbo_c2].some(isNaN)) {
-        fMyConsoleLog("❌ fUpdateTurboMonsterTable Error: Could not resolve Turbo monster range boundaries.");
+        fMyConsoleLog("❌ fUpdateMonsterTable Error: Could not resolve Turbo monster range boundaries.");
         await fShowMessage("Error: Could not resolve Turbo monster table boundaries.");
         return;
     }
@@ -2720,7 +2699,7 @@ async function fUpdateTurboMonsterTable(gmDataArray, gmColTags, gmRowTags) {
         }
     }
     if (missingColTag) {
-        fMyConsoleLog(`❌ fUpdateTurboMonsterTable Error: Missing required GM Screen column tag or invalid index for: '${missingColTag}'.`);
+        fMyConsoleLog(`❌ fUpdateMonsterTable Error: Missing required GM Screen column tag or invalid index for: '${missingColTag}'.`);
         await fShowMessage(`Error: GM Screen data is missing expected column tag or index for: ${missingColTag}.`);
         return;
     }
@@ -2845,7 +2824,7 @@ async function fUpdateTurboMonsterTable(gmDataArray, gmColTags, gmRowTags) {
 
     fMyConsoleLog(`✅ Monster Table Update Complete. Added: ${monstersAdded} monsters.${errorsSettingValue > 0 ? ` (${errorsSettingValue} errors setting values)` : ''}${isOverflowing ? ' (Overflow occurred)' : ''}`);
 
-} // END fUpdateTurboMonsterTable
+} // END fUpdateMonsterTable
 
 
 
@@ -2939,13 +2918,13 @@ async function fHandleAdHocRoll(cellText) {
     if ((match = text.match(skExactPattern))) {
         const num = parseInt(match[1], 10);
         if (!isNaN(num) && num > 0) {
-            rollResult = fCSD(num); matchedString = match[0];
+            rollResult = fD(num); matchedString = match[0];
             logHeaderHtml = '🎲 <span class="blue-bold">Custom Roll</span> Sk'; logHeaderText = '🎲 Custom Roll Sk';
             logDetailsHtml = `Sk(${num}) ~${rollResult}`; logDetailsText = `Sk(${num}) ~${rollResult}`;
             patternMatched = true; fMyConsoleLog(`   -> Matched EXACT Sk pattern: ${matchedString}. Result: ${rollResult}`);
         }
     } else if ((match = text.match(dieStringExactPattern))) {
-        matchedString = match[0].trim(); rollResult = fRollDieString(matchedString);
+        matchedString = match[0].trim(); rollResult = fRollRPGDieString(matchedString);
         if (rollResult !== null) {
             logHeaderHtml = '🎲 <span class="blue-bold">Die Roll</span>'; logHeaderText = '🎲 Die Roll';
             logDetailsHtml = `Die(${matchedString}) ~${rollResult}`; logDetailsText = `Die(${matchedString}) ~${rollResult}`;
@@ -2954,7 +2933,7 @@ async function fHandleAdHocRoll(cellText) {
     } else if (numberExactPattern.test(text)) {
         const num = parseInt(text, 10);
         if (!isNaN(num) && num > 0) {
-            matchedString = `d${num}`; rollResult = fRollDieString(matchedString);
+            matchedString = `d${num}`; rollResult = fRollRPGDieString(matchedString);
             if (rollResult !== null) {
                 logHeaderHtml = '🎲 <span class="blue-bold">Die Roll</span>'; logHeaderText = '🎲 Die Roll';
                 logDetailsHtml = `Die(${matchedString}) ~${rollResult}`; logDetailsText = `Die(${matchedString}) ~${rollResult}`;
@@ -2971,13 +2950,13 @@ async function fHandleAdHocRoll(cellText) {
             if (match[1]) { // Matched sk#
                 matchedString = match[1]; const num = parseInt(match[2], 10);
                 if (!isNaN(num) && num > 0) {
-                    rollResult = fCSD(num);
+                    rollResult = fD(num);
                     logHeaderHtml = '🎲 <span class="blue-bold">Custom Roll</span> Sk'; logHeaderText = '🎲 Custom Roll Sk';
                     logDetailsHtml = `Sk(${num}) ~${rollResult}`; logDetailsText = `Sk(${num}) ~${rollResult}`;
                     patternMatched = true; fMyConsoleLog(`   -> PARSED first Sk pattern: ${matchedString}. Result: ${rollResult}`);
                 }
             } else if (match[3]) { // Matched die string
-                matchedString = match[3].trim(); rollResult = fRollDieString(matchedString);
+                matchedString = match[3].trim(); rollResult = fRollRPGDieString(matchedString);
                  if (rollResult !== null) {
                      logHeaderHtml = '🎲 <span class="blue-bold">Die Roll</span>'; logHeaderText = '🎲 Die Roll';
                      logDetailsHtml = `Die(${matchedString}) ~${rollResult}`; logDetailsText = `Die(${matchedString}) ~${rollResult}`;
@@ -2998,7 +2977,7 @@ async function fHandleAdHocRoll(cellText) {
 
         let tcSuffixHtml = ''; let tcSuffixText = '';
         if (logHeaderText.startsWith('🎲 Custom Roll Sk')) { // Check text version for Sk roll
-            const tcResult = fCStc();
+            const tcResult = fTC();
             if (tcResult) {
                 tcSuffixHtml = `   ${tcResult}`;
                 tcSuffixText = tcResult.includes('red-bold') ? ' C' : ' T';
@@ -3030,37 +3009,37 @@ async function fHandleAdHocRoll(cellText) {
 // ==========================================================================
 
 
-// fCSd //////////////////////////////////////////////////////////////////////
+// fDie //////////////////////////////////////////////////////////////////////
 // Purpose -> Standard linear distribution die roll (e.g., 1d6).
 // Inputs  -> die (Number): The number of sides on the die.
 // Outputs -> (Number): The result of the roll (integer from 1 to die).
-function fCSd(die) {
+function fDie(die) {
   const numDie = Number(die); // Ensure input is treated as a number
 
   // Validate input
   if (isNaN(numDie) || numDie < 1) {
-    console.error(`fCSd received invalid die size: ${die}`);
+    console.error(`fDie received invalid die size: ${die}`);
     return 1; // Return 1 for invalid input
   }
 
   // Calculate and return random integer between 1 and numDie (inclusive)
   return Math.floor(Math.random() * numDie) + 1;
-} // END fCSd
+} // END fDie
 
 
 
-// fCSD //////////////////////////////////////////////////////////////////////
+// fD //////////////////////////////////////////////////////////////////////
 // Purpose -> Performs a non-linear "exploding" dice roll common in MetaScape,
 //            weighted towards lower results but with potential for high values.
 //            Used for skill/attribute checks (Sk, Atr, Atk, Def). No T/C.
 // Inputs  -> die (Number): The base value (skill/attribute) for the roll.
 // Outputs -> (Number): The integer result of the roll (minimum 1).
-function fCSD(die) {
+function fD(die) {
   const numDie = Number(die); // Ensure input is treated as a number
 
   // Validate input
   if (isNaN(numDie) || numDie < 1) {
-    console.error(`fCSD received invalid die value: ${die}`);
+    console.error(`fD received invalid die value: ${die}`);
     return 1; // Return 1 for invalid input
   }
 
@@ -3073,17 +3052,17 @@ function fCSD(die) {
 
   // Calculate result: (die * rand1) / rand2 + 1, floored
   return Math.floor((numDie * rand1) / rand2) + 1;
-} // END fCSD
+} // END fD
 
 
 
-// fCStc /////////////////////////////////////////////////////////////////////
+// fTC /////////////////////////////////////////////////////////////////////
 // Purpose -> Rolls 1d16 to determine Tremendous ('T', roll 1) or Critical ('C', roll 2)
 //            result suffix for sidebar logging.
 // Inputs  -> None.
 // Outputs -> (String): Formatted "T", "C", or "" (empty string).
-function fCStc() {
-  const roll = fCSd(16); // Standard d16 roll
+function fTC() {
+  const roll = fDie(16); // Standard d16 roll
 
   // Return formatted string based on roll result
   return roll === 1
@@ -3091,192 +3070,110 @@ function fCStc() {
     : roll === 2
     ? `<span class="red-bold">C</span>`   // Roll of 2 is Critical
     : "";                                // Other rolls result in no suffix
-} // END fCStc
+} // END fTC
 
 
 
 
-// fCSdBetween ///////////////////////////////////////////////////////////////
-// Purpose -> Rolls a standard linear die to get a random integer between a
-//            specified low and high value, inclusive.
-// Inputs  -> low (Number): The lowest possible result.
-//         -> high (Number): The highest possible result.
-// Outputs -> (Number): Random integer between low and high (inclusive).
-function fCSdBetween(low, high) {
-  const numLow = Number(low);
-  const numHigh = Number(high);
-
-  // Validate input range
-  if (isNaN(numLow) || isNaN(numHigh) || numLow > numHigh) {
-    console.error(`fCSdBetween received invalid range: ${low}-${high}`);
-    return numLow; // Return low value on error
-  }
-
-  // Calculate number of possible outcomes
-  const rangeSize = numHigh - numLow + 1;
-  // Roll d(rangeSize) and add (low - 1) to shift range
-  return fCSd(rangeSize) + (numLow - 1);
-} // END fCSdBetween
-
-
-
-
-// fCSDSk ////////////////////////////////////////////////////////////////////
+// fSkRoll ////////////////////////////////////////////////////////////////////
 // Purpose -> Performs a standard MetaScape Skill roll (used for Sk, Atr, Str).
-//            Averages a linear d(die*2) roll and a non-linear fCSD(die) roll.
+//            Averages a linear d(die*2) roll and a non-linear fD(die) roll.
 // Inputs  -> die (Number): The base skill value.
 // Outputs -> (Number): The rounded integer result of the skill roll.
-function fCSDSk(die) {
+function fSkRoll(die) {
   const numDie = Number(die); // Ensure input is treated as a number
 
   // Validate input
   if (isNaN(numDie) || numDie < 1) {
-    console.error(`fCSDSk received invalid die value: ${die}`);
+    console.error(`fSkRoll received invalid die value: ${die}`);
     return 1; // Return 1 for invalid input
   }
 
-  // Calculate average of a linear d(2*die) and a non-linear fCSD(die)
-  return Math.round((fCSd(numDie * 2) + fCSD(numDie)) / 2);
-} // END fCSDSk
+  // Calculate average of a linear d(2*die) and a non-linear fD(die)
+  return Math.round((fDie(numDie * 2) + fD(numDie)) / 2);
+} // END fSkRoll
 
 
 
 
-// fCSAtk ////////////////////////////////////////////////////////////////////
-// Purpose -> Performs a MetaScape Attack roll. Currently identical to fCSDSk.
+// fAtkRoll ////////////////////////////////////////////////////////////////////
+// Purpose -> Performs a MetaScape Attack roll. Currently identical to fSkRoll.
 // Inputs  -> die (Number): The base attack skill value.
 // Outputs -> (Number): The rounded integer result of the attack roll.
-function fCSAtk(die) {
+function fAtkRoll(die) {
   const numDie = Number(die); // Ensure input is treated as a number
 
   // Validate input
   if (isNaN(numDie) || numDie < 1) {
-    console.error(`fCSAtk received invalid die value: ${die}`);
+    console.error(`fAtkRoll received invalid die value: ${die}`);
     return 1; // Return 1 for invalid input
   }
 
-  // Currently uses the same calculation as fCSDSk
-  return Math.round((fCSd(numDie * 2) + fCSD(numDie)) / 2);
-} // END fCSAtk
+  // Currently uses the same calculation as fSkRoll
+  return Math.round((fDie(numDie * 2) + fD(numDie)) / 2);
+} // END fAtkRoll
 
 
 
-// fCSDef ////////////////////////////////////////////////////////////////////
-// Purpose -> Performs a MetaScape Defense roll. Based on fCSD(die) * 0.75.
+// fDefRoll ////////////////////////////////////////////////////////////////////
+// Purpose -> Performs a MetaScape Defense roll. Based on fD(die) * 0.75.
 // Inputs  -> die (Number): The base defense value.
 // Outputs -> (Number): The rounded integer result of the defense roll.
-function fCSDef(die) {
+function fDefRoll(die) {
   const numDie = Number(die); // Ensure input is treated as a number
 
   // Validate input
   if (isNaN(numDie) || numDie < 1) {
-    console.error(`fCSDef received invalid die value: ${die}`);
+    console.error(`fDefRoll received invalid die value: ${die}`);
     return 1; // Return 1 for invalid input
   }
 
   // Calculate based on the non-linear roll, scaled down
-  return Math.round(fCSD(numDie) * 0.75);
-} // END fCSDef
+  return Math.round(fD(numDie) * 0.75);
+} // END fDefRoll
 
 
 
 
-// fCSRollUnSkilled //////////////////////////////////////////////////////////
-// Purpose -> Performs an UnSkilled roll. Calculates a reduced 'newDie' value
-//            based on the original skill, then averages two d(newDie*2) rolls
-//            and one fCSD(newDie) roll.
-// Inputs  -> die (Number): The original base skill value before unskilled penalty.
-// Outputs -> (Number): The rounded integer result of the unskilled roll.
-function fCSRollUnSkilled(die) {
-  const numDie = Number(die); // Ensure input is treated as a number
-
-  // Validate input
-  if (isNaN(numDie) || numDie < 1) {
-    console.error(`fCSRollUnSkilled received invalid die value: ${die}`);
-    return 1; // Return 1 for invalid input
-  }
-
-  // Calculate the reduced die size for unskilled rolls
-  // Formula: max(2, min(die/2, 5 + sqrt(die)))
-  const newDie = Math.max(2, Math.min(numDie / 2, 5 + Math.sqrt(numDie)));
-
-  // Calculate result based on averaging three rolls with the reduced die size
-  return Math.round((fCSd(newDie * 2) + fCSd(newDie * 2) + fCSD(newDie)) / 3);
-} // END fCSRollUnSkilled
-
-
-
-
-// fCSRollUnSkilledDmg ///////////////////////////////////////////////////////
-// Purpose -> Rolls Unskilled Damage. Currently uses the standard fCSRollUnSkilled method.
-// Inputs  -> pcDmg (Number): The base damage value before unskilled penalty.
-// Outputs -> (Number): The result of the unskilled damage roll.
-function fCSRollUnSkilledDmg(pcDmg) {
-  // Currently just calls the standard unskilled roll function
-  return fCSRollUnSkilled(pcDmg);
-} // END fCSRollUnSkilledDmg
-
-
-
-
-// fCSRollUnSkilledArmor /////////////////////////////////////////////////////
-// Purpose -> Rolls Unskilled Armor. Uses fCSRollUnSkilled result divided by 8,
-//            truncated to one decimal place, with a minimum result of 1.0.
-// Inputs  -> pcAR (Number): The base armor value before unskilled penalty.
-// Outputs -> (Number): The result of the unskilled armor roll (min 1.0).
-function fCSRollUnSkilledArmor(pcAR) {
-  // Get the base unskilled roll result
-  const unskilledRoll = fCSRollUnSkilled(pcAR);
-
-  // Formula: max(1, floor( (UnskilledRoll / 8) * 10 ) / 10 )
-  const result = Math.trunc((unskilledRoll / 8) * 10) / 10;
-
-  // Ensure a minimum result of 1.0
-  return Math.max(1, result);
-} // END fCSRollUnSkilledArmor
-
-
-
-
-// fCSDDmg ///////////////////////////////////////////////////////////////////
-// Purpose -> Rolls standard PC Damage. Currently identical to fCSDSk.
+// fDmgRoll ///////////////////////////////////////////////////////////////////
+// Purpose -> Rolls standard PC Damage. Currently identical to fSkRoll.
 // Inputs  -> pcDmg (Number): The base damage value.
 // Outputs -> (Number): The result of the damage roll.
-function fCSDDmg(pcDmg) {
+function fDmgRoll(pcDmg) {
   // Currently just calls the standard skill roll function
-  return fCSDSk(pcDmg);
-} // END fCSDDmg
+  return fSkRoll(pcDmg);
+} // END fDmgRoll
 
 
 
-// fCSDArmor /////////////////////////////////////////////////////////////////
-// Purpose -> Rolls standard PC Armor. Uses fCSDSk result divided by 15,
+// fARRoll /////////////////////////////////////////////////////////////////
+// Purpose -> Rolls standard PC Armor. Uses fSkRoll result divided by 15,
 //            truncated to two decimal places, with a minimum result of 1.0.
 // Inputs  -> pcAR (Number): The base armor value.
 // Outputs -> (Number): The result of the armor roll (min 1.0, rounded to two decimals).
-function fCSDArmor(pcAR) {
+function fARRoll(pcAR) {
   // Get the base skill roll result for the armor value
-  const skillRoll = fCSDSk(pcAR);
+  const skillRoll = fSkRoll(pcAR);
 
   // Formula: max(1, floor( (SkillRoll / 15) * 100 ) / 100 )
   const result = Math.trunc((skillRoll / 15) * 100) / 100;
 
   // Ensure a minimum result of 1.0
   return Math.max(1, result);
-} // END fCSDArmor
+} // END fARRoll
 
 
 
 
-// fRollDieString //////////////////////////////////////////////////////////////////
+// fRollRPGDieString //////////////////////////////////////////////////////////////////
 // Purpose -> Parses a standard RPG die string (e.g., "d6", "2d8", "3d10+5", "1d12-2")
-//            and rolls the dice using fCSd (linear distribution), returning the total.
+//            and rolls the dice using fDie (linear distribution), returning the total.
 // Inputs  -> dieString (String): The dice notation string.
 // Outputs -> (Number | null): The numerical result of the roll, or null if parsing fails.
-function fRollDieString(dieString) {
+function fRollRPGDieString(dieString) {
     // === Validate Input ===
     if (typeof dieString !== 'string' || !dieString.trim()) {
-        console.warn("fRollDieString: Invalid input - requires a non-empty string.");
+        console.warn("fRollRPGDieString: Invalid input - requires a non-empty string.");
         return null;
     }
 
@@ -3287,7 +3184,7 @@ function fRollDieString(dieString) {
 
     // === Validate Match ===
     if (!match) {
-        // console.warn(`fRollDieString: Failed to parse die string: "${dieString}"`); // Can be noisy
+        // console.warn(`fRollRPGDieString: Failed to parse die string: "${dieString}"`); // Can be noisy
         return null; // String doesn't match expected format
     }
 
@@ -3298,7 +3195,7 @@ function fRollDieString(dieString) {
     const modifierValue = match[4] ? parseInt(match[4], 10) : 0; // Default 0 modifier
 
     if (isNaN(numDice) || numDice < 1 || isNaN(numSides) || numSides < 1 || isNaN(modifierValue)) {
-        console.warn(`fRollDieString: Invalid numeric components in parsed string "${dieString}"`);
+        console.warn(`fRollRPGDieString: Invalid numeric components in parsed string "${dieString}"`);
         return null; // Invalid numbers parsed
     }
 
@@ -3306,7 +3203,7 @@ function fRollDieString(dieString) {
     let total = 0;
     fMyConsoleLog(`   -> Rolling Die String: ${numDice}d${numSides}`);
     for (let i = 0; i < numDice; i++) {
-        const roll = fCSd(numSides); // Use standard linear roll
+        const roll = fDie(numSides); // Use standard linear roll
         total += roll;
         // fMyConsoleLog(`      - Roll ${i+1}: ${roll}`); // Optional: Log individual rolls
     }
@@ -3322,7 +3219,7 @@ function fRollDieString(dieString) {
     }
 
     return total;
-} // END fRollDieString
+} // END fRollRPGDieString
 
 
 
