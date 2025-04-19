@@ -19,7 +19,7 @@ const gSrv = { // Using gSrv prefix for server-side globals
       sg: '190vk3Dcqdux_pFjuryvmMx2dWTnJyl23cZvTGhM3kgU',
       // Player-specific cs/kl will be handled dynamically via functions below
       cs: '',  // this is equal to the old myCS and is the ID from the player's CS (loaded via doGet)
-      kl: ''  // this is equal to the old myKL and is the ID from the player's KL (loaded via doGet's call to fGetMyKlId)
+      kl: ''  // this is equal to the old myKL and is the ID from the player's KL (loaded via doGet's call to fSrvGetMyKlId)
     },
     docs: {
       cm: '1UuS-329gRi012k5nVtpmDltvrCO0yP04hjDIVoyoFwo',
@@ -62,8 +62,8 @@ function doGet(e) {
         Logger.log(`doGet: Assigned gSrv.ids.sheets.cs = ${gSrv.ids.sheets.cs}`);
 
         // --- 3. Get and Populate KL ID ---
-        // Call fGetMyKlId to retrieve the KL ID associated with this CS ID
-        klId = fGetMyKlId(csId); // This function handles its own internal errors/throws
+        // Call fSrvGetMyKlId to retrieve the KL ID associated with this CS ID
+        klId = fSrvGetMyKlId(csId); // This function handles its own internal errors/throws
         gSrv.ids.sheets.kl = klId;
         Logger.log(`doGet: Assigned gSrv.ids.sheets.kl = ${gSrv.ids.sheets.kl}`);
 
@@ -84,7 +84,7 @@ function doGet(e) {
         // Log detailed error and return user-friendly error message
         const errorContext = `CS ID: ${csId || 'Unknown'}, KL ID Fetch Attempted: ${klId !== null || 'No (failed before KL fetch)'}`;
         console.error(`doGet Error (${errorContext}): ${error.message}${error.stack ? '\n' + error.stack : ''}`);
-        // Provide specific feedback based on whether the error likely came from fGetMyKlId or elsewhere
+        // Provide specific feedback based on whether the error likely came from fSrvGetMyKlId or elsewhere
         let userErrorMessage = `❌ Error loading app: ${error.message}.`;
         if (error.message.includes("getMyKlId")) {
              userErrorMessage += ` Could not retrieve KL ID from CS ID '${csId}'. Check Data tab setup.`;
@@ -100,18 +100,18 @@ function doGet(e) {
 
 
 
-// fGetMyKlId //////////////////////////////////////////////////////////////////
+// fSrvGetMyKlId //////////////////////////////////////////////////////////////////
 // Purpose -> Retrieves the MyKL ID from the player's Character Sheet's <Data> tab.
 // Inputs  -> myCsId (String): The Sheet ID of the player's Character Sheet (mycs).
 // Outputs -> (String): The player's MyKL Sheet ID.
 // Throws  -> (Error): If IDs cannot be retrieved or sheets/tabs not found.
-function fGetMyKlId(myCsId) {
+function fSrvGetMyKlId(myCsId) {
   // Validate input
   if (!myCsId || typeof myCsId !== 'string') {
-    console.error("fGetMyKlId Error: Character Sheet ID (myCsId) was not provided or invalid.");
+    console.error("fSrvGetMyKlId Error: Character Sheet ID (myCsId) was not provided or invalid.");
     throw new Error("getMyKlId: Character Sheet ID (myCsId) was not provided.");
   }
-  Logger.log(`fGetMyKlId: Attempting to get MyKL ID from CS ID: ${myCsId}`);
+  Logger.log(`fSrvGetMyKlId: Attempting to get MyKL ID from CS ID: ${myCsId}`);
 
   try {
     // Open the Character Sheet using the provided ID
@@ -134,17 +134,17 @@ function fGetMyKlId(myCsId) {
        throw new Error(`Could not retrieve a valid MyKL ID from cell ${gSrv.MYKL_ID_CELL_A1} in sheet "${gSrv.DATA_TAB_NAME}". Value was: "${myKlId}"`);
     }
 
-    Logger.log(`fGetMyKlId: Successfully retrieved MyKL ID: ${myKlId}`);
+    Logger.log(`fSrvGetMyKlId: Successfully retrieved MyKL ID: ${myKlId}`);
     return myKlId.trim(); // Return the trimmed ID
 
   } catch (e) {
     // Log detailed error and re-throw a user-friendly error
-    console.error(`Error in fGetMyKlId for CS ID ${myCsId}: ${e.message}\nStack: ${e.stack}`);
+    console.error(`Error in fSrvGetMyKlId for CS ID ${myCsId}: ${e.message}\nStack: ${e.stack}`);
     // Include specific error message if available, otherwise generic
     throw new Error(`Server error getting MyKL ID: ${e.message || e}`);
   }
 
-} // END fGetMyKlId
+} // END fSrvGetMyKlId
 
 
 
@@ -155,12 +155,12 @@ function fGetMyKlId(myCsId) {
 
 
 
-// fValidateDesignerPassword /////////////////////////////////////////////////
+// fSrvValidateDesignerPassword /////////////////////////////////////////////////
 // Purpose -> Validates a password attempt against the stored designer password.
 // Inputs  -> passwordAttempt (String): The password entered by the user.
 // Outputs -> (Boolean): True if the password matches, false otherwise.
-function fValidateDesignerPassword(passwordAttempt) {
-    const funcName = "fValidateDesignerPassword";
+function fSrvValidateDesignerPassword(passwordAttempt) {
+    const funcName = "fSrvValidateDesignerPassword";
     const storedPassword = gSrv.designerPassword; // Assuming password is in gSrv
 
     if (!storedPassword) {
@@ -183,7 +183,7 @@ function fValidateDesignerPassword(passwordAttempt) {
     Logger.log(`${funcName}: Password validation attempt. Result: ${isValid ? 'Success' : 'Failure'}`);
 
     return isValid;
-} // END fValidateDesignerPassword
+} // END fSrvValidateDesignerPassword
 
 
 
@@ -192,39 +192,22 @@ function fValidateDesignerPassword(passwordAttempt) {
 // ==========================================================================
 
 
-// fColToA1 ///////////////////////////////////////////////////////////////////
-// Purpose -> Helper function to convert 0-based column index to A1 notation.
-// Inputs  -> col (Number): The 0-based column index.
-// Outputs -> (String): The A1 notation label (e.g., A, Z, AA).
-function fColToA1(col) {
-    let label = '';
-    let c = col; // Use local variable
 
-    // Loop through column value
-    while (c >= 0) {
-        label = String.fromCharCode((c % 26) + 65) + label;
-        c = Math.floor(c / 26) - 1;
-    }
-    return label;
-} // END fColToA1
-
-
-
-// fServerIndicesToA1 //////////////////////////////////////////////////////////
-// Purpose -> Converts 0-based row/column indices to standard A1 notation string
+// fSrvConvertIndicesToA1 //////////////////////////////////////////////////////////
+// Purpose -> Converts 0-based row/column indices to standard A1 or 'A1:B2' or 'A1' (if r1=r2 and c1=c2) notation string
 //            on the server-side.
 // Inputs  -> r1, c1, r2, c2 (Number): 0-based start/end row and column indices.
 // Outputs -> (String | null): A1 notation string (e.g., "C5:F10"), or null on invalid input.
-function fServerIndicesToA1(r1, c1, r2, c2) {
+function fSrvConvertIndicesToA1(r1, c1, r2, c2) {
     // Validate inputs are non-negative numbers
     if ([r1, c1, r2, c2].some(idx => typeof idx !== 'number' || idx < 0 || isNaN(idx))) {
-        console.error(`fServerIndicesToA1: Invalid indices provided (${r1},${c1},${r2},${c2})`);
+        console.error(`fSrvConvertIndicesToA1: Invalid indices provided (${r1},${c1},${r2},${c2})`);
         return null; // Return null for invalid indices
     }
 
     // Convert column indices to A1 letters using the existing helper
-    const startColA1 = fColToA1(c1);
-    const endColA1 = fColToA1(c2);
+    const startColA1 = fSrvColToA1(c1);
+    const endColA1 = fSrvColToA1(c2);
 
     // Add 1 to row indices for 1-based A1 notation
     const startRowA1 = r1 + 1;
@@ -238,23 +221,41 @@ function fServerIndicesToA1(r1, c1, r2, c2) {
         // Range notation: Top-left cell : Bottom-right cell
         return `${startColA1}${startRowA1}:${endColA1}${endRowA1}`;
     }
-} // END fServerIndicesToA1
+} // END fSrvConvertIndicesToA1
 
 
 
 
-// fServerBuildTagMaps /////////////////////////////////////////////////////////
-// Purpose -> Builds temporary rowTag and colTag maps from a 2D data array read
-//            from a sheet (Row 0 for colTags, Col 0 for rowTags).
-// Inputs  -> fullData (Array[][]): The 2D array of data from the sheet.
+// fSrvColToA1 ///////////////////////////////////////////////////////////////////
+// Purpose -> Helper function to convert 0-based column index to A1 notation.
+// Inputs  -> col (Number): The 0-based column index.
+// Outputs -> (String): The A1 notation label (e.g., A, Z, AA).
+function fSrvColToA1(col) {
+    let label = '';
+    let c = col; // Use local variable
+
+    // Loop through column value
+    while (c >= 0) {
+        label = String.fromCharCode((c % 26) + 65) + label;
+        c = Math.floor(c / 26) - 1;
+    }
+    return label;
+} // END fSrvColToA1
+
+
+
+
+// fSrvBuildTagMaps /////////////////////////////////////////////////////////
+// Purpose -> Builds rowTag and colTag maps from a 2D array (Row 0 for colTags, Col 0 for rowTags).
+// Inputs  -> fullData (Array[][]): The 2D array of data
 // Outputs -> (Object): An object { rowTag: {}, colTag: {} } containing the maps.
-function fServerBuildTagMaps(fullData) {
+function fSrvBuildTagMaps(fullData) {
     const rowTagMap = {};
     const colTagMap = {};
 
     // Validate data array structure
     if (!Array.isArray(fullData) || fullData.length === 0) {
-        console.warn("fServerBuildTagMaps: Input data array is empty or invalid.");
+        console.warn("fSrvBuildTagMaps: Input data array is empty or invalid.");
         return { rowTag: rowTagMap, colTag: colTagMap }; // Return empty maps
     }
 
@@ -272,7 +273,7 @@ function fServerBuildTagMaps(fullData) {
                     // Map the trimmed tag to the current 0-based row index (r)
                     // Warn if tag is being overwritten (optional)
                     // if (rowTagMap.hasOwnProperty(trimmedTag)) {
-                    //   console.warn(`fServerBuildTagMaps: Overwriting row tag "${trimmedTag}" (Old: ${rowTagMap[trimmedTag]}, New: ${r})`);
+                    //   console.warn(`fSrvBuildTagMaps: Overwriting row tag "${trimmedTag}" (Old: ${rowTagMap[trimmedTag]}, New: ${r})`);
                     // }
                     rowTagMap[trimmedTag] = r;
                 }
@@ -293,7 +294,7 @@ function fServerBuildTagMaps(fullData) {
                         // Map the trimmed tag to the current 0-based column index (c)
                         // Warn if tag is being overwritten (optional)
                         // if (colTagMap.hasOwnProperty(trimmedTag)) {
-                        //   console.warn(`fServerBuildTagMaps: Overwriting col tag "${trimmedTag}" (Old: ${colTagMap[trimmedTag]}, New: ${c})`);
+                        //   console.warn(`fSrvBuildTagMaps: Overwriting col tag "${trimmedTag}" (Old: ${colTagMap[trimmedTag]}, New: ${c})`);
                         // }
                         colTagMap[trimmedTag] = c;
                     }
@@ -301,22 +302,22 @@ function fServerBuildTagMaps(fullData) {
             }
         }
     } else {
-        console.warn("fServerBuildTagMaps: Header row (row 0) is missing or invalid. Cannot build column tags.");
+        console.warn("fSrvBuildTagMaps: Header row (row 0) is missing or invalid. Cannot build column tags.");
     }
 
     return { rowTag: rowTagMap, colTag: colTagMap };
-} // END fServerBuildTagMaps
+} // END fSrvBuildTagMaps
 
 
 
 
-// fServerResolveTag ///////////////////////////////////////////////////////////
+// fSrvResolveTag ///////////////////////////////////////////////////////////
 // Purpose -> Resolves a single row or column tag/index using the provided tag maps.
 // Inputs  -> tagOrIndex (String | Number): The tag string or 0-based index.
 //         -> tagMap (Object): The corresponding tag map (rowTag or colTag).
 //         -> type (String): 'row' or 'col' for logging purposes.
 // Outputs -> (Number): The resolved 0-based index, or NaN if resolution fails.
-function fServerResolveTag(tagOrIndex, tagMap, type = 'unknown') {
+function fSrvResolveTag(tagOrIndex, tagMap, type = 'unknown') {
     if (typeof tagOrIndex === 'number' && !isNaN(tagOrIndex) && tagOrIndex >= 0) {
         // Input is already a valid numeric index
         return tagOrIndex;
@@ -328,15 +329,15 @@ function fServerResolveTag(tagOrIndex, tagMap, type = 'unknown') {
             return tagMap[trimmedTag];
         } else {
             // Tag not found
-            console.warn(`fServerResolveTag: Could not resolve ${type} tag "${trimmedTag}"`);
+            console.warn(`fSrvResolveTag: Could not resolve ${type} tag "${trimmedTag}"`);
             return NaN;
         }
     } else {
         // Input is invalid type or empty
-        console.warn(`fServerResolveTag: Invalid input provided for ${type} resolution:`, tagOrIndex);
+        console.warn(`fSrvResolveTag: Invalid input provided for ${type} resolution:`, tagOrIndex);
         return NaN;
     }
-} // END fServerResolveTag
+} // END fSrvResolveTag
 
 
 
@@ -352,57 +353,67 @@ function fServerResolveTag(tagOrIndex, tagMap, type = 'unknown') {
 
 
 
-// fCSGetGameSheet5 /////////////////////////////////////////////////////////////////////////////////
-// Loads full data, format, and notes from 'Game' sheet. Returns structured object.
-function fCSGetGameSheet5(targetSheetId) {
+// fSrvReadCSGameSheet /////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Loads full data, format, and notes from the 'Game' sheet of a given spreadsheet ID.
+// Inputs  -> targetSheetId (String): The ID of the spreadsheet to read from.
+// Outputs -> (Object): Structured object { arr, format, notesArr } containing sheet data.
+// Throws  -> (Error): If sheet ID is invalid, spreadsheet/sheet cannot be opened, or data extraction fails.
+function fSrvReadCSGameSheet(targetSheetId) {
+    const funcName = 'fSrvReadCSGameSheet'; // Added funcName for better logging/errors
     try {
-        const sh = fOpenGameSheet(targetSheetId);
-        return fExtractSheetData(sh);
+        // Validate targetSheetId
+        if (!targetSheetId || typeof targetSheetId !== 'string') {
+            throw new Error("Invalid or missing Sheet ID provided.");
+        }
+        Logger.log(`${funcName}: Opening Spreadsheet ID: ${targetSheetId}`); // Log opening attempt
+
+        // Open Spreadsheet
+        const ss = SpreadsheetApp.openById(targetSheetId);
+        if (!ss) { // Check if spreadsheet opened successfully
+             throw new Error(`Could not open Spreadsheet with ID: ${targetSheetId}. Check permissions and ID validity.`);
+        }
+
+        // Get "Game" Sheet
+        const sh = ss.getSheetByName("Game");
+        if (!sh) { // Check if sheet was found
+            throw new Error(`Sheet named "Game" not found in Spreadsheet ID: ${targetSheetId}.`);
+        }
+        Logger.log(`${funcName}: Successfully opened sheet "Game" in ID: ${targetSheetId}`);
+
+        // Call fSrvExtractSheetData with the obtained sheet object
+        Logger.log(`${funcName}: Extracting data from sheet "Game"...`);
+        return fSrvExtractSheetData(sh);
+
     } catch (e) {
-        const context = e.stack?.includes("fOpenGameSheet") ? "opening spreadsheet" : "processing sheet";
-        const msg = `fCSGetGameSheet5: Error ${context}: ${e.message}`;
-        console.error(msg + "\nStack:\n" + e.stack);
-        throw new Error(msg);
+        // Determine context based on error message content for better reporting
+        const context = e.message.includes("openById") || e.message.includes("Spreadsheet with ID") ? "opening spreadsheet"
+                      : e.message.includes("getSheetByName") || e.message.includes("not found") ? "getting 'Game' sheet"
+                      : e.stack?.includes("fSrvExtractSheetData") ? "processing sheet data" // Check stack for fSrvExtractSheetData context
+                      : "during operation"; // Generic fallback context
+
+        const msg = `${funcName}: Error ${context}: ${e.message}`;
+        console.error(msg + "\nStack:\n" + e.stack); // Log detailed error
+        throw new Error(msg); // Re-throw a consolidated error message
     }
-} // END fCSGetGameSheet5
+} // END fSrvReadCSGameSheet
 
 
 
-
-// fOpenGameSheet ///////////////////////////////////////////////////////////////////////////////////
-// Opens spreadsheet and retrieves the "Game" sheet, or throws with clear message.
-function fOpenGameSheet(targetSheetId) {
-    if (!targetSheetId || typeof targetSheetId !== 'string') {
-        throw new Error("Invalid or missing Sheet ID provided.");
-    }
-
-    const ss = SpreadsheetApp.openById(targetSheetId);
-    const sh = ss.getSheetByName("Game");
-
-    if (!sh) {
-        throw new Error(`Sheet named "Game" not found.`);
-    }
-
-    return sh;
-} // END fOpenGameSheet
-
-
-
-// fIsSheetTrulyEmpty ////////////////////////////////////////////////////////////////////////////////
+// fSrvIsSheetTrulyEmpty ////////////////////////////////////////////////////////////////////////////////
 // Determines if the sheet has zero real content, returns true if it's blank.
-function fIsSheetTrulyEmpty(sh, arr) {
+function fSrvIsSheetTrulyEmpty(sh, arr) {
     const numRows = arr.length;
     const numCols = arr[0]?.length || 0;
     const onlyEmpty = numRows === 1 && numCols === 1 && arr[0][0] === "";
     return (numRows === 0 || numCols === 0 || onlyEmpty) &&
            (sh.getLastRow() === 0 && sh.getLastColumn() === 0);
-} // END fIsSheetTrulyEmpty
+} // END fSrvIsSheetTrulyEmpty
 
 
 
-// fBuildFormatObject ////////////////////////////////////////////////////////////////////////////////
+// fSrvBuildFormatObject ////////////////////////////////////////////////////////////////////////////////
 // Constructs formatting object from raw arrays and merge info.
-function fBuildFormatObject(sh, rngData, numCols) {
+function fSrvBuildFormatObject(sh, rngData, numCols) {
     const fontColorObjects = rngData.getFontColorObjects();
     const fontColorHex = fontColorObjects.map(row =>
       row.map(obj => obj?.asRgbColor?.()?.asHexString?.()?.replace(/^#ff/, '#') ?? null)
@@ -432,32 +443,32 @@ function fBuildFormatObject(sh, rngData, numCols) {
         colWidths: colWidths,
         borders: [] // client-side handles borders
     };
-} // END fBuildFormatObject
+} // END fSrvBuildFormatObject
 
 
 
 
-// fBuildReturnObject ////////////////////////////////////////////////////////////////////////////////
+// fSrvBuildReturnObject ////////////////////////////////////////////////////////////////////////////////
 // Combines the final return structure.
-function fBuildReturnObject(arr, format, notesArr) {
+function fSrvBuildReturnObject(arr, format, notesArr) {
     return {
         arr: arr,
         format: format,
         notesArr: notesArr
     };
-} // END fBuildReturnObject
+} // END fSrvBuildReturnObject
 
 
 
 
-// fExtractSheetData ////////////////////////////////////////////////////////////////////////////////
+// fSrvExtractSheetData ////////////////////////////////////////////////////////////////////////////////
 // Reads data, formats, and notes from the sheet and returns structured result.
-function fExtractSheetData(sh) {
+function fSrvExtractSheetData(sh) {
     const rngData = sh.getDataRange();
     const arr = rngData.getValues();
 
-    if (fIsSheetTrulyEmpty(sh, arr)) {
-        return fBuildReturnObject(
+    if (fSrvIsSheetTrulyEmpty(sh, arr)) {
+        return fSrvBuildReturnObject(
             [[]],
             {
                 bg: [[]], fontColorHex: [[]], weight: [[]], fontSize: [[]],
@@ -469,11 +480,11 @@ function fExtractSheetData(sh) {
     }
 
     const numCols = arr[0]?.length || 0;
-    const format = fBuildFormatObject(sh, rngData, numCols);
+    const format = fSrvBuildFormatObject(sh, rngData, numCols);
     const notesArr = rngData.getNotes();
 
-    return fBuildReturnObject(arr, format, notesArr);
-} // END fExtractSheetData
+    return fSrvBuildReturnObject(arr, format, notesArr);
+} // END fSrvExtractSheetData
 
 
 
@@ -491,7 +502,7 @@ function fExtractSheetData(sh) {
 
 
 
-// fGetServerSheetData /////////////////////////////////////////////////////////
+// fSrvGetSheetRangeDataNTags /////////////////////////////////////////////////////////
 // Purpose -> Reads data from a specified range in a given Google Sheet,
 //            accepting a sheet key OR a direct fileId, and a rangeObject.
 //            Reads the full sheet once for tag mapping. Extracts the requested
@@ -506,8 +517,8 @@ function fExtractSheetData(sh) {
 //            colTags/rowTags contain mappings with indices relative to the 'data' array structure.
 //            Returns null for 'data' on critical errors.
 // Throws  -> (Error): If inputs are invalid, sheet/range access fails, etc.
-function fGetServerSheetData(sheetKeyOrId, sheetName, rangeObject) {
-    Logger.log(`fGetServerSheetData: Request received. Key/ID: "${sheetKeyOrId}", Sheet: "${sheetName}", Range: ${JSON.stringify(rangeObject)}`);
+function fSrvGetSheetRangeDataNTags(sheetKeyOrId, sheetName, rangeObject) {
+    Logger.log(`fSrvGetSheetRangeDataNTags: Request received. Key/ID: "${sheetKeyOrId}", Sheet: "${sheetName}", Range: ${JSON.stringify(rangeObject)}`);
     let fileId = null;
     let identifiedBy = '';
     let absoluteRowTagMap = {}; // Holds tags with absolute sheet indices initially
@@ -518,7 +529,7 @@ function fGetServerSheetData(sheetKeyOrId, sheetName, rangeObject) {
     // --- 1. Resolve File ID ---
     if (!sheetKeyOrId || typeof sheetKeyOrId !== 'string') {
         const errorMsg = `Invalid or missing sheetKeyOrId parameter.`;
-        console.error(`fGetServerSheetData Error: ${errorMsg}`);
+        console.error(`fSrvGetSheetRangeDataNTags Error: ${errorMsg}`);
         throw new Error(`getServerSheetData: ${errorMsg}`);
     }
     const isLikelySheetId = sheetKeyOrId.length > 30 && /^[a-z0-9_-]+$/i.test(sheetKeyOrId);
@@ -530,7 +541,7 @@ function fGetServerSheetData(sheetKeyOrId, sheetName, rangeObject) {
         const keyLower = sheetKeyOrId.toLowerCase();
         if (!gSrv.ids.sheets[keyLower]) {
             const errorMsg = `Invalid sheetKey: "${sheetKeyOrId}". Not found in gSrv.ids.sheets.`;
-            console.error(`fGetServerSheetData Error: ${errorMsg}`);
+            console.error(`fSrvGetSheetRangeDataNTags Error: ${errorMsg}`);
             throw new Error(`getServerSheetData: ${errorMsg}`);
         }
         fileId = gSrv.ids.sheets[keyLower];
@@ -551,26 +562,26 @@ function fGetServerSheetData(sheetKeyOrId, sheetName, rangeObject) {
         const sh = ss.getSheetByName(sheetName);
         if (!sh) { throw new Error(`Sheet named "${sheetName}" not found in Sheet (${identifiedBy}).`); }
         const fullData = sh.getDataRange().getValues();
-        Logger.log(`fGetServerSheetData: Read ${fullData.length}x${fullData[0]?.length || 0} cells from "${sheetName}".`);
+        Logger.log(`fSrvGetSheetRangeDataNTags: Read ${fullData.length}x${fullData[0]?.length || 0} cells from "${sheetName}".`);
 
         // --- 4. Build *Absolute* Tag Maps ---
-        const absoluteTagMaps = fServerBuildTagMaps(fullData); // Gets maps with absolute indices
+        const absoluteTagMaps = fSrvBuildTagMaps(fullData); // Gets maps with absolute indices
         absoluteRowTagMap = absoluteTagMaps.rowTag;
         absoluteColTagMap = absoluteTagMaps.colTag;
-        // Logger.log(`fGetServerSheetData: Built absolute tag maps. Rows: ${Object.keys(absoluteRowTagMap).length}, Cols: ${Object.keys(absoluteColTagMap).length}`);
+        // Logger.log(`fSrvGetSheetRangeDataNTags: Built absolute tag maps. Rows: ${Object.keys(absoluteRowTagMap).length}, Cols: ${Object.keys(absoluteColTagMap).length}`);
 
         // --- Handle Empty Sheet Case ---
         if (fullData.length === 0 || fullData[0]?.length === 0) {
-            console.warn(`fGetServerSheetData: Sheet "${sheetName}" (${identifiedBy}) appears empty.`);
+            console.warn(`fSrvGetSheetRangeDataNTags: Sheet "${sheetName}" (${identifiedBy}) appears empty.`);
             // Return empty data and empty relative maps
             return { data: [[]], colTags: {}, rowTags: {} };
         }
 
         // --- 5. Resolve Input Range Object Tags to *Absolute* Indices ---
-        const r1_abs = fServerResolveTag(rangeObject.r1, absoluteRowTagMap, 'row');
-        const c1_abs = fServerResolveTag(rangeObject.c1, absoluteColTagMap, 'col');
-        const r2_abs = fServerResolveTag(rangeObject.r2, absoluteRowTagMap, 'row');
-        const c2_abs = fServerResolveTag(rangeObject.c2, absoluteColTagMap, 'col');
+        const r1_abs = fSrvResolveTag(rangeObject.r1, absoluteRowTagMap, 'row');
+        const c1_abs = fSrvResolveTag(rangeObject.c1, absoluteColTagMap, 'col');
+        const r2_abs = fSrvResolveTag(rangeObject.r2, absoluteRowTagMap, 'row');
+        const c2_abs = fSrvResolveTag(rangeObject.c2, absoluteColTagMap, 'col');
         if ([r1_abs, c1_abs, r2_abs, c2_abs].some(isNaN)) {
             let failedTags = [];
             if (isNaN(r1_abs)) failedTags.push(`r1: ${rangeObject.r1}`);
@@ -579,7 +590,7 @@ function fGetServerSheetData(sheetKeyOrId, sheetName, rangeObject) {
             if (isNaN(c2_abs)) failedTags.push(`c2: ${rangeObject.c2}`);
             throw new Error(`Could not resolve absolute tags/indices in rangeObject: ${JSON.stringify(rangeObject)}. Failed Tags: ${failedTags.join(', ')}`);
         }
-        Logger.log(`fGetServerSheetData: Resolved range to absolute indices: r1=${r1_abs}, c1=${c1_abs}, r2=${r2_abs}, c2=${c2_abs}`);
+        Logger.log(`fSrvGetSheetRangeDataNTags: Resolved range to absolute indices: r1=${r1_abs}, c1=${c1_abs}, r2=${r2_abs}, c2=${c2_abs}`);
 
         // --- 6. Define Extraction Boundaries ---
         const rStart = Math.min(r1_abs, r2_abs);
@@ -589,7 +600,7 @@ function fGetServerSheetData(sheetKeyOrId, sheetName, rangeObject) {
 
         // --- 7. Extract Data Slice ---
         if (rStart >= fullData.length || cStart >= (fullData[0]?.length || 0)) {
-             console.warn(`fGetServerSheetData: Resolved range start [${rStart}, ${cStart}] is outside the bounds of the sheet data [${fullData.length}, ${fullData[0]?.length||0}]. Returning empty data.`);
+             console.warn(`fSrvGetSheetRangeDataNTags: Resolved range start [${rStart}, ${cStart}] is outside the bounds of the sheet data [${fullData.length}, ${fullData[0]?.length||0}]. Returning empty data.`);
              return { data: [[]], colTags: {}, rowTags: {} }; // Return empty maps too
         }
         const extractedData = fullData
@@ -617,21 +628,21 @@ function fGetServerSheetData(sheetKeyOrId, sheetName, rangeObject) {
                 relativeRowTagMap[tag] = relativeIndex;
             }
         }
-        Logger.log(`fGetServerSheetData: Built relative tag maps. Rel Rows: ${Object.keys(relativeRowTagMap).length}, Rel Cols: ${Object.keys(relativeColTagMap).length}`);
+        Logger.log(`fSrvGetSheetRangeDataNTags: Built relative tag maps. Rel Rows: ${Object.keys(relativeRowTagMap).length}, Rel Cols: ${Object.keys(relativeColTagMap).length}`);
 
         // --- 9. Format Return Data ---
         let returnData;
         if (extractedRows === 1 && extractedCols === 1) {
-            Logger.log(`fGetServerSheetData: Formatting data as single value.`);
+            Logger.log(`fSrvGetSheetRangeDataNTags: Formatting data as single value.`);
             returnData = extractedData[0][0];
         } else if (extractedRows === 1) {
-            Logger.log(`fGetServerSheetData: Formatting data as 1D array (single row).`);
+            Logger.log(`fSrvGetSheetRangeDataNTags: Formatting data as 1D array (single row).`);
             returnData = extractedData[0];
         } else if (extractedCols === 1 && extractedData.every(row => row.length === 1)) {
-             Logger.log(`fGetServerSheetData: Formatting data as 1D array (single column).`);
+             Logger.log(`fSrvGetSheetRangeDataNTags: Formatting data as 1D array (single column).`);
              returnData = extractedData.map(row => row[0]);
         } else {
-            Logger.log(`fGetServerSheetData: Formatting data as 2D array (${extractedRows}x${extractedCols}).`);
+            Logger.log(`fSrvGetSheetRangeDataNTags: Formatting data as 2D array (${extractedRows}x${extractedCols}).`);
             returnData = extractedData;
         }
 
@@ -639,16 +650,16 @@ function fGetServerSheetData(sheetKeyOrId, sheetName, rangeObject) {
         return { data: returnData, colTags: relativeColTagMap, rowTags: relativeRowTagMap };
 
     } catch (e) {
-        console.error(`Error in fGetServerSheetData for Input "${sheetKeyOrId}", Sheet "${sheetName}", Range ${JSON.stringify(rangeObject)}: ${e.message}\nStack: ${e.stack}`);
+        console.error(`Error in fSrvGetSheetRangeDataNTags for Input "${sheetKeyOrId}", Sheet "${sheetName}", Range ${JSON.stringify(rangeObject)}: ${e.message}\nStack: ${e.stack}`);
         throw new Error(`Server error processing sheet data: ${e.message || e}`);
     }
 
-} // END fGetServerSheetData
+} // END fSrvGetSheetRangeDataNTags
 
 
 
 
-// fSetServerSheetData /////////////////////////////////////////////////////////
+// fSrvSaveDataToSheetRange /////////////////////////////////////////////////////////
 // Purpose -> Writes data to a specified range in a given Google Sheet,
 //            accepting a sheet key, sheet name, a rangeObject with tags/indices,
 //            and a value (single or 1D/2D array).
@@ -659,26 +670,26 @@ function fGetServerSheetData(sheetKeyOrId, sheetName, rangeObject) {
 // Outputs -> (Boolean): True on success.
 // Throws  -> (Error): If inputs are invalid, sheet/range access fails, or
 //                     value dimensions don't match range dimensions (for arrays).
-function fSetServerSheetData(sheetKey, sheetName, rangeObject, valueOrValues) {
-    Logger.log(`fSetServerSheetData: Requesting write to key "${sheetKey}", sheet "${sheetName}", range: ${JSON.stringify(rangeObject)}, type: ${Array.isArray(valueOrValues) ? (Array.isArray(valueOrValues[0]) ? '2D Array' : '1D Array') : typeof valueOrValues}`);
+function fSrvSaveDataToSheetRange(sheetKey, sheetName, rangeObject, valueOrValues) {
+    Logger.log(`fSrvSaveDataToSheetRange: Requesting write to key "${sheetKey}", sheet "${sheetName}", range: ${JSON.stringify(rangeObject)}, type: ${Array.isArray(valueOrValues) ? (Array.isArray(valueOrValues[0]) ? '2D Array' : '1D Array') : typeof valueOrValues}`);
 
     // === 1. Validate Inputs (Sheet Key, Name, Range Object) ===
     if (!sheetKey || typeof sheetKey !== 'string' || !gSrv.ids.sheets[sheetKey.toLowerCase()]) {
         const errorMsg = `Invalid or missing sheetKey: "${sheetKey}". Not found in gSrv.ids.sheets.`;
-        console.error(`fSetServerSheetData Error: ${errorMsg}`);
+        console.error(`fSrvSaveDataToSheetRange Error: ${errorMsg}`);
         throw new Error(`setServerSheetData: ${errorMsg}`);
     }
     const fileId = gSrv.ids.sheets[sheetKey.toLowerCase()];
     if (!sheetName || typeof sheetName !== 'string') {
         const errorMsg = `Invalid or missing sheetName: "${sheetName}".`;
-        console.error(`fSetServerSheetData Error: ${errorMsg}`);
+        console.error(`fSrvSaveDataToSheetRange Error: ${errorMsg}`);
         throw new Error(`setServerSheetData: ${errorMsg}`);
     }
     if (!rangeObject || typeof rangeObject !== 'object' ||
         rangeObject.r1 === undefined || rangeObject.c1 === undefined ||
         rangeObject.r2 === undefined || rangeObject.c2 === undefined) {
         const errorMsg = `Invalid or incomplete rangeObject: ${JSON.stringify(rangeObject)}.`;
-        console.error(`fSetServerSheetData Error: ${errorMsg}`);
+        console.error(`fSrvSaveDataToSheetRange Error: ${errorMsg}`);
         throw new Error(`setServerSheetData: ${errorMsg}`);
     }
 
@@ -691,26 +702,26 @@ function fSetServerSheetData(sheetKey, sheetName, rangeObject, valueOrValues) {
         }
         const fullData = sh.getDataRange().getValues();
         if (fullData.length === 0 || fullData[0]?.length === 0) {
-           console.warn(`fSetServerSheetData: Sheet "${sheetName}" appears empty. Tag resolution might fail if tags are used.`);
+           console.warn(`fSrvSaveDataToSheetRange: Sheet "${sheetName}" appears empty. Tag resolution might fail if tags are used.`);
         }
 
         // === 3. Build Tag Maps (from in-memory data) ===
-        const { rowTag, colTag } = fServerBuildTagMaps(fullData);
+        const { rowTag, colTag } = fSrvBuildTagMaps(fullData);
 
         // === 4. Resolve Input Range Object Tags ===
-        const r1 = fServerResolveTag(rangeObject.r1, rowTag, 'row');
-        const c1 = fServerResolveTag(rangeObject.c1, colTag, 'col');
-        const r2 = fServerResolveTag(rangeObject.r2, rowTag, 'row');
-        const c2 = fServerResolveTag(rangeObject.c2, colTag, 'col');
+        const r1 = fSrvResolveTag(rangeObject.r1, rowTag, 'row');
+        const c1 = fSrvResolveTag(rangeObject.c1, colTag, 'col');
+        const r2 = fSrvResolveTag(rangeObject.r2, rowTag, 'row');
+        const c2 = fSrvResolveTag(rangeObject.c2, colTag, 'col');
         if ([r1, c1, r2, c2].some(isNaN)) {
             throw new Error(`Could not resolve one or more tags/indices in rangeObject: ${JSON.stringify(rangeObject)}`);
         }
-        Logger.log(`fSetServerSheetData: Resolved range to indices: r1=${r1}, c1=${c1}, r2=${r2}, c2=${c2}`);
+        Logger.log(`fSrvSaveDataToSheetRange: Resolved range to indices: r1=${r1}, c1=${c1}, r2=${r2}, c2=${c2}`);
 
         // === 5. Get Target Range & Dimensions ===
         const rangeNumRows = Math.abs(r1 - r2) + 1;
         const rangeNumCols = Math.abs(c1 - c2) + 1;
-        const a1Notation = fServerIndicesToA1(r1, c1, r2, c2);
+        const a1Notation = fSrvConvertIndicesToA1(r1, c1, r2, c2);
         if (!a1Notation) {
              throw new Error(`Could not convert resolved indices [${r1},${c1},${r2},${c2}] to A1 notation.`);
         }
@@ -718,7 +729,7 @@ function fSetServerSheetData(sheetKey, sheetName, rangeObject, valueOrValues) {
         if (!targetRange) {
              throw new Error(`Could not get target range "${a1Notation}" in sheet "${sheetName}".`);
         }
-        Logger.log(`fSetServerSheetData: Target A1 notation: ${a1Notation} (${rangeNumRows}x${rangeNumCols})`);
+        Logger.log(`fSrvSaveDataToSheetRange: Target A1 notation: ${a1Notation} (${rangeNumRows}x${rangeNumCols})`);
 
         // === 6. Write Value(s) based on Type and Range Size ===
         if (rangeNumRows === 1 && rangeNumCols === 1 && !Array.isArray(valueOrValues)) {
@@ -767,31 +778,31 @@ function fSetServerSheetData(sheetKey, sheetName, rangeObject, valueOrValues) {
             targetRange.setValues(finalValuesArray);
         }
 
-        Logger.log(`fSetServerSheetData: Successfully wrote data to range ${a1Notation}.`);
+        Logger.log(`fSrvSaveDataToSheetRange: Successfully wrote data to range ${a1Notation}.`);
         return true; // Indicate success
 
     } catch (e) {
         // Log detailed error and re-throw a user-friendly error
-        console.error(`Error in fSetServerSheetData for Key ${sheetKey}, Sheet "${sheetName}", Range ${JSON.stringify(rangeObject)}: ${e.message}\nStack: ${e.stack}`);
+        console.error(`Error in fSrvSaveDataToSheetRange for Key ${sheetKey}, Sheet "${sheetName}", Range ${JSON.stringify(rangeObject)}: ${e.message}\nStack: ${e.stack}`);
         throw new Error(`Server error writing sheet data: ${e.message || e}`);
     }
 
-} // END fSetServerSheetData
+} // END fSrvSaveDataToSheetRange
 
 
 
-// fGetDocumentText ////////////////////////////////////////////////////////////
+// fSrvGetGoogleDocumentText ////////////////////////////////////////////////////////////
 // Purpose -> Reads the text content from a given Google Doc.
 // Inputs  -> docId (String): The ID of the Google Doc.
 // Outputs -> (String): The text content of the Doc's body.
 // Throws  -> (Error): If docId is invalid or document access fails.
-function fGetDocumentText(docId) {
+function fSrvGetGoogleDocumentText(docId) {
   // Validate input
   if (!docId || typeof docId !== 'string') {
-    console.error("fGetDocumentText Error: Invalid or missing Document ID provided.");
+    console.error("fSrvGetGoogleDocumentText Error: Invalid or missing Document ID provided.");
     throw new Error("getDocumentText: Invalid or missing Document ID provided.");
   }
-  Logger.log(`fGetDocumentText: Reading text from Doc ID: ${docId}`);
+  Logger.log(`fSrvGetGoogleDocumentText: Reading text from Doc ID: ${docId}`);
 
   try {
     // Open the document
@@ -803,29 +814,29 @@ function fGetDocumentText(docId) {
     // Get the text content from the body
     const textContent = doc.getBody().getText();
 
-    Logger.log(`fGetDocumentText: Successfully read ${textContent?.length ?? 0} characters from Doc ID: ${docId}.`);
+    Logger.log(`fSrvGetGoogleDocumentText: Successfully read ${textContent?.length ?? 0} characters from Doc ID: ${docId}.`);
     return textContent; // Return the text content
 
   } catch (e) {
     // Log detailed error and re-throw a user-friendly error
-    console.error(`Error in fGetDocumentText for ID ${docId}: ${e.message}\nStack: ${e.stack}`);
+    console.error(`Error in fSrvGetGoogleDocumentText for ID ${docId}: ${e.message}\nStack: ${e.stack}`);
     throw new Error(`Server error reading document: ${e.message || e}`);
   }
 
-} // END fGetDocumentText
+} // END fSrvGetGoogleDocumentText
 
 
 
 
-// fGetCharacterHeaderData /////////////////////////////////////////////////////
+// fSrvGetURLToPlayerCharForGMScreen /////////////////////////////////////////////////////
 // Purpose -> Reads specific static data (Race/Class, Level, Player/Char Names, Slot)
 //            from the player's Character Sheet ('RaceClass' tab).
 // Inputs  -> csId (String): The ID of the player's Character Sheet.
 // Outputs -> (Object): { raceClass, level, playerName, charName, slotNum } on success.
 //            'slotNum' will be the cleaned tag (e.g., "Slot3") or null if validation fails.
 // Throws  -> (Error): If sheet/tab/tags not found or critical values are missing.
-function fGetCharacterHeaderData(csId) {
-    const funcName = "fGetCharacterHeaderData";
+function fSrvGetURLToPlayerCharForGMScreen(csId) {
+    const funcName = "fSrvGetURLToPlayerCharForGMScreen";
     // Logger.log(`${funcName}: Fetching static header data from CS ID: ${csId}`);
 
     try {
@@ -846,15 +857,15 @@ function fGetCharacterHeaderData(csId) {
         if (fullData.length === 0 || fullData[0]?.length === 0) {
             throw new Error(`Sheet 'RaceClass' in CS ID: ${csId} appears empty.`);
         }
-        const { rowTag, colTag } = fServerBuildTagMaps(fullData);
+        const { rowTag, colTag } = fSrvBuildTagMaps(fullData);
 
         // --- 4. Resolve Target Cell Indices ---
-        const colValIndex = fServerResolveTag('Val', colTag, 'col');
-        const rowRaceClassIndex = fServerResolveTag('RC', rowTag, 'row');
-        const rowLevelIndex = fServerResolveTag('level', rowTag, 'row');
-        const rowPlayerNameIndex = fServerResolveTag('playerName', rowTag, 'row');
-        const rowCharNameIndex = fServerResolveTag('charName', rowTag, 'row');
-        const rowSlotIndex = fServerResolveTag('slot', rowTag, 'row');
+        const colValIndex = fSrvResolveTag('Val', colTag, 'col');
+        const rowRaceClassIndex = fSrvResolveTag('RC', rowTag, 'row');
+        const rowLevelIndex = fSrvResolveTag('level', rowTag, 'row');
+        const rowPlayerNameIndex = fSrvResolveTag('playerName', rowTag, 'row');
+        const rowCharNameIndex = fSrvResolveTag('charName', rowTag, 'row');
+        const rowSlotIndex = fSrvResolveTag('slot', rowTag, 'row');
 
         // Validate all required tags resolved (including 'slot')
         if ([colValIndex, rowRaceClassIndex, rowLevelIndex, rowPlayerNameIndex, rowCharNameIndex, rowSlotIndex].some(isNaN)) {
@@ -914,19 +925,19 @@ function fGetCharacterHeaderData(csId) {
         throw new Error(`Server error getting character header data: ${e.message || e}`);
     }
 
-} // END fGetCharacterHeaderData
+} // END fSrvGetURLToPlayerCharForGMScreen
 
 
 
-// fSetLogAndHeaderData ////////////////////////////////////////////////////////
+// fSrvSaveURLtoNamesAndLogToDBandPS ////////////////////////////////////////////////////////
 // Purpose -> Writes bundled log and header data to target sheets (DB/GMScreen
 //            and PS/PartyLog) using relative offsets from a base cell identified by
 //            'Log' row tag and a dynamic slot column tag (e.g., 'Slot3') passed in the bundle.
 // Inputs  -> dataBundle (Object): { log, vit, nish, url, raceClass, level, playerChar, slotNum }
 // Outputs -> (Boolean): True if both writes succeeded, false otherwise.
 // Throws  -> (Error): If critical errors occur (e.g., opening sheets, invalid bundle).
-function fSetLogAndHeaderData(dataBundle) {
-    const funcName = "fSetLogAndHeaderData";
+function fSrvSaveURLtoNamesAndLogToDBandPS(dataBundle) {
+    const funcName = "fSrvSaveURLtoNamesAndLogToDBandPS";
     Logger.log(`${funcName}: Received data bundle. Preparing to write to DB and PS.`);
 
     // --- 1. Validate Input Bundle ---
@@ -990,11 +1001,11 @@ function fSetLogAndHeaderData(dataBundle) {
                 console.warn(`${funcName}: Target sheet "${target.sheetName}" appears empty. Cannot resolve base cell.`);
                 throw new Error(`Target sheet "${target.sheetName}" is empty.`);
             }
-            const { rowTag, colTag } = fServerBuildTagMaps(fullData);
+            const { rowTag, colTag } = fSrvBuildTagMaps(fullData);
 
             // Resolve the *base cell* using fixed Row ('Log') and dynamic Column (baseCellTagC)
-            const baseRowIndex = fServerResolveTag(baseCellTagR, rowTag, 'row');
-            const baseColIndex = fServerResolveTag(baseCellTagC, colTag, 'col'); // Use dynamic tag
+            const baseRowIndex = fSrvResolveTag(baseCellTagR, rowTag, 'row');
+            const baseColIndex = fSrvResolveTag(baseCellTagC, colTag, 'col'); // Use dynamic tag
 
             if (isNaN(baseRowIndex) || isNaN(baseColIndex)) {
                 throw new Error(`Could not resolve base cell tags ('${baseCellTagR}', '${baseCellTagC}') in sheet "${target.sheetName}".`);
@@ -1037,7 +1048,7 @@ function fSetLogAndHeaderData(dataBundle) {
 
     return overallSuccess; // Return true only if BOTH writes succeeded
 
-} // END fSetLogAndHeaderData
+} // END fSrvSaveURLtoNamesAndLogToDBandPS
 
 
 
@@ -1047,13 +1058,13 @@ function fSetLogAndHeaderData(dataBundle) {
 
 
 
-// fGetFirestoreInstance ///////////////////////////////////////////////////////
+// fSrvGetFirestoreInstance ///////////////////////////////////////////////////////
 // Purpose -> Initializes and returns an authenticated Firestore instance using
 //            credentials stored in PropertiesService. [Processes Key String]
 // Inputs  -> None.
 // Outputs -> (Object | null): Authenticated Firestore instance or null on error.
-function fGetFirestoreInstance() {
-    const funcName = "fGetFirestoreInstance";
+function fSrvGetFirestoreInstance() {
+    const funcName = "fSrvGetFirestoreInstance";
     Logger.log(`${funcName}: Attempting to initialize Firestore...`);
     let clientEmail, privateKeyRaw, projectId, processedKey; // Declare vars
     try {
@@ -1115,13 +1126,13 @@ function fGetFirestoreInstance() {
         Logger.log(`   -> Details at time of error: ProjectID=${projectId || 'N/A'}, Email=${clientEmail || 'N/A'}, Key Raw loaded=${!!privateKeyRaw}, Key Processed Snippet=${processedKey ? processedKey.substring(0,20) + '...' : 'N/A'}`);
         return null;
     }
-} // END fGetFirestoreInstance
+} // END fSrvGetFirestoreInstance
 
 
 
 
 
-// fSaveTextDataToFirestore ////////////////////////////////////////////////////
+// fSrvSaveTurboTextAndURLtoNamesToFirestore ////////////////////////////////////////////////////
 // Purpose -> Saves grid text data and character metadata to a Firestore document
 //            in the 'GameTextData' collection. Document ID is GSID_<csId>.
 //            Processes the incoming 2D array into an Array of Row Objects format
@@ -1131,8 +1142,8 @@ function fGetFirestoreInstance() {
 //         -> fullArrData (Array[][]): The complete gUI.arr from the client.
 //         -> charInfo (Object): Character metadata { slotNum, raceClass, playerName, etc. }.
 // Outputs -> (Object): { success: Boolean, message?: String }
-function fSaveTextDataToFirestore(csId, fullArrData, charInfo) {
-    const funcName = "fSaveTextDataToFirestore";
+function fSrvSaveTurboTextAndURLtoNamesToFirestore(csId, fullArrData, charInfo) {
+    const funcName = "fSrvSaveTurboTextAndURLtoNamesToFirestore";
     Logger.log(`${funcName}: Saving array-of-row-objects data for CS ID: ${csId}...`);
 
     // === 1. Validate Inputs ===
@@ -1167,7 +1178,7 @@ function fSaveTextDataToFirestore(csId, fullArrData, charInfo) {
 
 
     // === 3. Get Firestore Instance ===
-    const firestore = fGetFirestoreInstance();
+    const firestore = fSrvGetFirestoreInstance();
     if (!firestore) {
         const msg = "Failed to initialize Firestore instance (check previous logs).";
         Logger.log(`${funcName} Error: ${msg}`);
@@ -1215,19 +1226,19 @@ function fSaveTextDataToFirestore(csId, fullArrData, charInfo) {
                                : "Server error during Firestore save.";
         return { success: false, message: safeErrorMessage };
     }
-} // END fSaveTextDataToFirestore
+} // END fSrvSaveTurboTextAndURLtoNamesToFirestore
 
 
 
 
-// fConvertFirestoreTypesToJS //////////////////////////////////////////////////
+// fSrvConvertFirestoreTypesToJS //////////////////////////////////////////////////
 // Purpose -> Recursively converts Firestore's typed value objects (mapValue,
 //            arrayValue, stringValue, etc.) into standard JavaScript types
 //            (objects, arrays, strings, numbers, booleans).
 // Inputs  -> firestoreValue (Object): A value object from Firestore (e.g.,
 //            doc.fields.someProperty or an element within an arrayValue/mapValue).
 // Outputs -> (Any): The corresponding standard JavaScript value or type.
-function fConvertFirestoreTypesToJS(firestoreValue) {
+function fSrvConvertFirestoreTypesToJS(firestoreValue) {
   if (!firestoreValue) return firestoreValue; // Handle null/undefined cases safely
 
   // Check for primitive types
@@ -1243,7 +1254,7 @@ function fConvertFirestoreTypesToJS(firestoreValue) {
   // Check for array type
   if (firestoreValue.arrayValue && firestoreValue.arrayValue.values) {
     // It's an array, recursively convert its elements
-    return firestoreValue.arrayValue.values.map(element => fConvertFirestoreTypesToJS(element));
+    return firestoreValue.arrayValue.values.map(element => fSrvConvertFirestoreTypesToJS(element));
   }
 
   // Check for map/object type
@@ -1251,27 +1262,27 @@ function fConvertFirestoreTypesToJS(firestoreValue) {
     // It's an object/map, recursively convert its properties
     const jsObject = {};
     for (const key in firestoreValue.mapValue.fields) {
-      jsObject[key] = fConvertFirestoreTypesToJS(firestoreValue.mapValue.fields[key]);
+      jsObject[key] = fSrvConvertFirestoreTypesToJS(firestoreValue.mapValue.fields[key]);
     }
     return jsObject;
   }
 
   // If it's none of the known Firestore types (e.g., already a JS primitive passed in), return as is.
   // Or potentially log a warning if an unexpected structure is encountered.
-  Logger.log(`fConvertFirestoreTypesToJS: Encountered unexpected value structure: ${JSON.stringify(firestoreValue).substring(0,100)}... Returning as is.`);
+  Logger.log(`fSrvConvertFirestoreTypesToJS: Encountered unexpected value structure: ${JSON.stringify(firestoreValue).substring(0,100)}... Returning as is.`);
   return firestoreValue;
-} // END fConvertFirestoreTypesToJS
+} // END fSrvConvertFirestoreTypesToJS
 
 
 
-// fUnpackFirestoreArray_Server //////////////////////////////////////////////
+// fSrvUnpackFirestoreArrayTo2D //////////////////////////////////////////////
 // Purpose -> Converts the Firestore array-of-row-objects format into a standard
 //            2D JavaScript array server-side. Handles potential sparse arrays.
 // Inputs  -> firestoreArr (Array): Array from Firestore after type conversion,
 //            e.g., [ {"row0":[...]}, {"row1":[...]}, ... ]
 // Outputs -> (Array[][]): A standard 2D JavaScript array. Returns empty array on error.
-function fUnpackFirestoreArray_Server(firestoreArr) {
-    const funcName = "fUnpackFirestoreArray_Server";
+function fSrvUnpackFirestoreArrayTo2D(firestoreArr) {
+    const funcName = "fSrvUnpackFirestoreArrayTo2D";
     if (!Array.isArray(firestoreArr)) {
         Logger.log(`${funcName}: Input is not an array. Returning empty array.`);
         return [];
@@ -1326,19 +1337,19 @@ function fUnpackFirestoreArray_Server(firestoreArr) {
 
 
     return new2DArray;
-} // END fUnpackFirestoreArray_Server
+} // END fSrvUnpackFirestoreArrayTo2D
 
 
 
-// fCheckAndLoadFirestoreData //////////////////////////////////////////////////
+// fSrvCheckAndLoadFirestoreGUIarrAs2D //////////////////////////////////////////////////
 // Purpose -> Checks Firestore for a document based on CS ID. If found, extracts
 //            the gUIarr field, converts types, unpacks it into a 2D array,
 //            and returns it. Handles document not found and errors gracefully.
 // Inputs  -> csId (String): The Character Sheet ID.
 // Outputs -> (Object): { success: Boolean, firestoreArr?: Array[][], message?: String }
 //            'firestoreArr' is the standard 2D array if success is true.
-function fCheckAndLoadFirestoreData(csId) {
-    const funcName = "fCheckAndLoadFirestoreData";
+function fSrvCheckAndLoadFirestoreGUIarrAs2D(csId) {
+    const funcName = "fSrvCheckAndLoadFirestoreGUIarrAs2D";
     Logger.log(`${funcName}: Checking Firestore for data for CS ID: ${csId}...`);
 
     // === 1. Validate Input ===
@@ -1350,7 +1361,7 @@ function fCheckAndLoadFirestoreData(csId) {
     }
 
     // === 2. Get Firestore Instance ===
-    const firestore = fGetFirestoreInstance();
+    const firestore = fSrvGetFirestoreInstance();
     if (!firestore) {
         const msg = "Failed to initialize Firestore instance.";
         Logger.log(`${funcName} Error: ${msg}`);
@@ -1378,7 +1389,7 @@ function fCheckAndLoadFirestoreData(csId) {
 
         // === 5. Convert Firestore Types for gUIarr ===
         const arrDataRaw = doc.fields.gUIarr;
-        const arrDataConverted = fConvertFirestoreTypesToJS(arrDataRaw);
+        const arrDataConverted = fSrvConvertFirestoreTypesToJS(arrDataRaw);
 
         // === 6. Validate Converted Data (Should be Array of Objects) ===
         if (!Array.isArray(arrDataConverted)) {
@@ -1389,7 +1400,7 @@ function fCheckAndLoadFirestoreData(csId) {
 
         // === 7. Unpack Array of Objects into 2D Array ===
         Logger.log(`   -> Unpacking Firestore array data server-side...`);
-        const unpackedArr = fUnpackFirestoreArray_Server(arrDataConverted);
+        const unpackedArr = fSrvUnpackFirestoreArrayTo2D(arrDataConverted);
         Logger.log(`   -> Unpacked into ${unpackedArr.length}x${unpackedArr[0]?.length || 0} array.`);
 
         // === 8. Return Success with Unpacked Data ===
@@ -1411,7 +1422,7 @@ function fCheckAndLoadFirestoreData(csId) {
         Logger.log(`   -> ❌ Exception during Firestore read for ${csId}: ${safeErrorMessage}`);
         return { success: false, message: safeErrorMessage };
     }
-} // END fCheckAndLoadFirestoreData
+} // END fSrvCheckAndLoadFirestoreGUIarrAs2D
 
 
 

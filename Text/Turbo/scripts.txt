@@ -378,53 +378,6 @@ function fGetContrastColor(hexColor) {
 
 
 
-// fIndicesToA1 ////////////////////////////////////////////////////////////////////
-// Purpose -> Converts 0-based row/column indices to standard A1 notation string.
-// Inputs  -> r1, c1, r2, c2 (Number): 0-based start/end row and column indices.
-// Outputs -> (String | null): A1 notation string (e.g., "C5:F10"), or null on invalid input.
-function fIndicesToA1(r1, c1, r2, c2) {
-    // Validate inputs are non-negative numbers
-    if ([r1, c1, r2, c2].some(idx => typeof idx !== 'number' || idx < 0 || isNaN(idx))) {
-        console.error(`fIndicesToA1: Invalid indices provided (${r1},${c1},${r2},${c2})`);
-        return null; // Return null for invalid indices
-    }
-
-    // Convert column indices to A1 letters
-    const startColA1 = fColToA1(c1);
-    const endColA1 = fColToA1(c2);
-
-    // Add 1 to row indices for 1-based A1 notation
-    const startRowA1 = r1 + 1;
-    const endRowA1 = r2 + 1;
-
-    // Format: Top-left cell : Bottom-right cell
-    return `${startColA1}${startRowA1}:${endColA1}${endRowA1}`;
-
-} // END fIndicesToA1
-
-
-
-
-// fColToA1 ////////////////////////////////////////////////////////////////////
-// Purpose -> Converts a 0-based column index to A1 notation (e.g., 0->A, 26->AA).
-// Inputs  -> col (Number): The 0-based column index.
-// Outputs -> (String): The A1 notation label.
-function fColToA1(col) {
-    let label = '';
-    let c = col;
-
-    // Build the label character by character
-    while (c >= 0) {
-        label = String.fromCharCode((c % 26) + 65) + label;
-        c = Math.floor(c / 26) - 1;
-    }
-
-    return label;
-} // END fColToA1
-
-
-
-
 // getBorderStyleCSS ///////////////////////////////////////////////////////////////
 // Purpose -> Generates a CSS border string (e.g., "1px solid #000000") from Google
 //            Sheet border style data.
@@ -3409,7 +3362,7 @@ async function fHandleUpdateHeaderInfo() {
             fMyConsoleLog(`   -> ❌ ${errorMsg}`);
             fShowMessage(`Error updating header data: ${error.message}`).catch(e => console.error("Error showing message:", e));
         })
-        .fGetCharacterHeaderData(gIndexCSID); // Call the existing server function
+        .fSrvGetURLToPlayerCharForGMScreen(gIndexCSID); // Call the existing server function
 
 } // END fHandleUpdateHeaderInfo
 
@@ -3785,7 +3738,7 @@ function fSetupSingleSubMenuItem(item, index) {
 // fSendLogToGMScreenNPS ////////////////////////////////////////////////////////////
 // Purpose -> Sends bundled log and header data (dynamic + static) sequentially to
 //            the GMScreen sheet ('db') and the PartyLog sheet ('ps') via the
-//            server-side fSetLogAndHeaderData function. Uses a lock.
+//            server-side fSrvSaveURLtoNamesAndLogToDBandPS function. Uses a lock.
 // Inputs  -> None (Uses gUI state: plainTextLogEntries, arr, characterInfo, isSendingLog).
 // Outputs -> None (Calls google.script.run if not already sending and slotNum is valid).
 function fSendLogToGMScreenNPS() {
@@ -3847,7 +3800,7 @@ function fSendLogToGMScreenNPS() {
     };
 
     // === 6. Call Server Function ===
-    fMyConsoleLog(`   -> Calling fSetLogAndHeaderData with bundled data...`);
+    fMyConsoleLog(`   -> Calling fSrvSaveURLtoNamesAndLogToDBandPS with bundled data...`);
     google.script.run
         .withSuccessHandler((success) => {
             if (success) {
@@ -3867,7 +3820,7 @@ function fSendLogToGMScreenNPS() {
             fMyConsoleLog("   -> Lock Released due to error.");
             fShowMessage(`Error: Could not send updates: ${errorMsg}`).catch(e => console.error("Error showing message:", e));
         })
-        .fSetLogAndHeaderData(dataBundle);
+        .fSrvSaveURLtoNamesAndLogToDBandPS(dataBundle);
 
 } // END fSendLogToGMScreenNPS
 
@@ -5223,7 +5176,7 @@ async function fPromptForDesignerPassword() {
                 const designerButton = document.getElementById('btn-designer-menu');
                 if(designerButton) designerButton.style.display = 'none';
             })
-            .fValidateDesignerPassword(enteredPassword); // Call the server function
+            .fSrvValidateDesignerPassword(enteredPassword); // Call the server function
 
     } else {
         // User clicked Cancel on the prompt
@@ -5238,7 +5191,7 @@ async function fPromptForDesignerPassword() {
 // fHandleDesignerPasswordResult ///////////////////////////////////////////////
 // Purpose -> Handles the boolean result from the server-side password validation.
 //            Shows/hides the Designer button and updates state accordingly.
-// Inputs  -> isValid (Boolean): The result from fValidateDesignerPassword.
+// Inputs  -> isValid (Boolean): The result from fSrvValidateDesignerPassword.
 // Outputs -> None (Modifies DOM, gUI state, shows messages).
 function fHandleDesignerPasswordResult(isValid) {
     fMyConsoleLog(`🔑 Handling Password Validation Result: ${isValid}`);
@@ -5582,7 +5535,7 @@ async function fRefreshMonsterData() {
         })
         // === Server Function Call ===
         // Pass the DB key, Sheet Name, and the GM Screen Range Object
-        .fGetServerSheetData('db', 'GMScreen', gmMonsterRangeDef);
+        .fSrvGetSheetRangeDataNTags('db', 'GMScreen', gmMonsterRangeDef);
 
 } // END fRefreshMonsterData
 
@@ -5671,12 +5624,12 @@ function fHandleAutoSaveTextData() {
     }
 
     // === 3. Call Server Function ===
-    fMyConsoleLog("   -> Calling server function fSaveTextDataToFirestore with full gUI.arr...");
+    fMyConsoleLog("   -> Calling server function fSrvSaveTurboTextAndURLtoNamesToFirestore with full gUI.arr...");
     // Pass gUI.arr directly instead of textData
     google.script.run
         .withSuccessHandler(fHandleAutoSaveSuccess)
         .withFailureHandler(fHandleAutoSaveFailure)
-        .fSaveTextDataToFirestore(gIndexCSID, gUI.arr, gUI.characterInfo); // Pass gUI.arr
+        .fSrvSaveTurboTextAndURLtoNamesToFirestore(gIndexCSID, gUI.arr, gUI.characterInfo); // Pass gUI.arr
 
 } // END fHandleAutoSaveTextData
 
@@ -5684,7 +5637,7 @@ function fHandleAutoSaveTextData() {
 
 
 // fHandleAutoSaveSuccess //////////////////////////////////////////////////////
-// Purpose -> Success callback for the fSaveTextDataToFirestore server call.
+// Purpose -> Success callback for the fSrvSaveTurboTextAndURLtoNamesToFirestore server call.
 //            Logs success and provides minimal UI feedback.
 // Inputs  -> result (Object): The object returned from the server (expected: { success: true }).
 // Outputs -> None.
@@ -5705,7 +5658,7 @@ function fHandleAutoSaveSuccess(result) {
 
 
 // fHandleAutoSaveFailure //////////////////////////////////////////////////////
-// Purpose -> Failure callback for the fSaveTextDataToFirestore server call.
+// Purpose -> Failure callback for the fSrvSaveTurboTextAndURLtoNamesToFirestore server call.
 //            Logs the error comprehensively to the console. Avoids disruptive user messages.
 // Inputs  -> error (Error Object): The error object from the failed server call.
 // Outputs -> None.
@@ -6032,7 +5985,7 @@ function fSetupMenuInteractivity() {
 
 // fOnDataLoaded ///////////////////////////////////////////////////////////////////
 // Purpose -> Callback function executed upon successful data retrieval from the
-//            server (fCSGetGameSheet5). Validates data, stores it in gUI, checks
+//            server (fSrvReadCSGameSheet). Validates data, stores it in gUI, checks
 //            Firestore for overriding data, fetches static header data, and
 //            initiates grid rendering using the final data source.
 // Inputs  -> data (Object): The structured data object from the server { arr, format, notesArr }.
@@ -6079,7 +6032,7 @@ function fOnDataLoaded(data) {
 
         })
         .withFailureHandler((error) => {
-            // Handle transport errors calling fCheckAndLoadFirestoreData
+            // Handle transport errors calling fSrvCheckAndLoadFirestoreGUIarrAs2D
             const errorMsg = `Error checking Firestore: ${error.message}`;
             console.error(errorMsg, error);
             fMyConsoleLog(`   -> ❌ ${errorMsg}. Using Sheet data as fallback.`);
@@ -6087,7 +6040,7 @@ function fOnDataLoaded(data) {
             fSetupTooltipAndModal();
             fFetchCharacterHeaderAndRenderGrid(); // Proceed with rendering
         })
-        .fCheckAndLoadFirestoreData(gIndexCSID); // Call the new server function
+        .fSrvCheckAndLoadFirestoreGUIarrAs2D(gIndexCSID); // Call the new server function
 
 } // END fOnDataLoaded
 
@@ -6159,7 +6112,7 @@ function fFetchCharacterHeaderAndRenderGrid() {
                 fRunPostRenderFormatting();
             });
         })
-        .fGetCharacterHeaderData(gIndexCSID);
+        .fSrvGetURLToPlayerCharForGMScreen(gIndexCSID);
 
 } // END fFetchCharacterHeaderAndRenderGrid
 
@@ -6340,7 +6293,7 @@ function fRunPostRenderFormatting() {
 // fLoadGameSheet //////////////////////////////////////////////////////////////////
 // Purpose -> Initiates the process of loading and displaying the game sheet data.
 //            Sets up timing, validates gIndexCSID, and calls the server-side
-//            function (fCSGetGameSheet5) to retrieve data, handling success and failure cases.
+//            function (fSrvReadCSGameSheet) to retrieve data, handling success and failure cases.
 // Inputs  -> None (Uses global gIndexCSID).
 // Outputs -> None (Initiates server call).
 function fLoadGameSheet() {
@@ -6373,7 +6326,7 @@ function fLoadGameSheet() {
             const gridDiv = document.getElementById('grid');
             if(gridDiv) gridDiv.innerHTML = `<p style="color:red;">${errorMsg}</p>`;
         })
-        .fCSGetGameSheet5(gIndexCSID); // The server-side function to call in Turbo.gs
+        .fSrvReadCSGameSheet(gIndexCSID); // The server-side function to call in Turbo.gs
 
 } // END fLoadGameSheet
 
