@@ -304,32 +304,32 @@ function fMyConsoleLog(msg) {
 
 
 
-// resolveRow ////////////////////////////////////////////////////////////////////
+// fResolveRow ////////////////////////////////////////////////////////////////////
 // Purpose -> Converts a string tag (from gUI.rowTag) or numeric index to a 0-based row index.
 // Inputs  -> v (String | Number): Row tag string or 0-based numeric index.
 // Outputs -> (Number): The 0-based row index, or NaN if resolution fails.
-const resolveRow = v => {
+const fResolveRow = v => {
     if (typeof v === 'string') return gUI.rowTag[v]; // Lookup tag
     if (typeof v === 'number' && v >= 0) return v;   // Assume valid index
 
-    console.warn(`resolveRow failed for value:`, v); // Log warning if invalid
+    console.warn(`fResolveRow failed for value:`, v); // Log warning if invalid
     return NaN; // Return NaN for errors
-}; // END resolveRow
+}; // END fResolveRow
 
 
 
 
-// resolveCol ////////////////////////////////////////////////////////////////////
+// fResolveCol ////////////////////////////////////////////////////////////////////
 // Purpose -> Converts a string tag (from gUI.colTag) or numeric index to a 0-based col index.
 // Inputs  -> v (String | Number): Column tag string or 0-based numeric index.
 // Outputs -> (Number): The 0-based column index, or NaN if resolution fails.
-const resolveCol = v => {
+const fResolveCol = v => {
      if (typeof v === 'string') return gUI.colTag[v]; // Lookup tag
      if (typeof v === 'number' && v >= 0) return v;   // Assume valid index
 
-     console.warn(`resolveCol failed for value:`, v); // Log warning if invalid
+     console.warn(`fResolveCol failed for value:`, v); // Log warning if invalid
      return NaN; // Return NaN for errors
-}; // END resolveCol
+}; // END fResolveCol
 
 
 
@@ -374,36 +374,6 @@ function fGetContrastColor(hexColor) {
         return defaultColor; // Fallback on error
     }
 } // END fGetContrastColor
-
-
-
-
-// getBorderStyleCSS ///////////////////////////////////////////////////////////////
-// Purpose -> Generates a CSS border string (e.g., "1px solid #000000") from Google
-//            Sheet border style data.
-// Inputs  -> borderSideData (Object): { style: String, color?: String }
-// Outputs -> (String | null): CSS border string or null if no style provided.
-function getBorderStyleCSS(borderSideData) {
-    if (!borderSideData || !borderSideData.style) return null; // No explicit border style
-
-    const styleStr = borderSideData.style;
-    const color = borderSideData.color || '#000000'; // Default to black if color missing
-    let cssStyle = 'solid', cssWidth = '1px'; // Default CSS values
-
-    // Map Google Sheet BorderStyle enum strings to CSS border properties
-    switch (styleStr) {
-        case 'DOTTED':       cssStyle = 'dotted';                  break;
-        case 'DASHED':       cssStyle = 'dashed';                  break;
-        case 'SOLID':        cssStyle = 'solid';                   break; // Default, but explicit
-        case 'SOLID_MEDIUM': cssStyle = 'solid'; cssWidth = '2px'; break;
-        case 'SOLID_THICK':  cssStyle = 'solid'; cssWidth = '3px'; break;
-        case 'DOUBLE':       cssStyle = 'double'; cssWidth = '3px'; break;
-        // default: 'solid', '1px' already set
-    }
-
-    return `${cssWidth} ${cssStyle} ${color}`;
-} // END getBorderStyleCSS
-
 
 
 
@@ -626,8 +596,8 @@ function fFindDropdownMatch(r, c) {
         // Iterate through the ranges defined for this configuration
         for (const range of config.ranges) {
             // Resolve range tags/indices
-            const r1 = resolveRow(range.r1), r2 = resolveRow(range.r2);
-            const c1 = resolveCol(range.c1), c2 = resolveCol(range.c2);
+            const r1 = fResolveRow(range.r1), r2 = fResolveRow(range.r2);
+            const c1 = fResolveCol(range.c1), c2 = fResolveCol(range.c2);
 
             // Check if resolved indices are valid and if (r, c) is within the range
             if (
@@ -1319,10 +1289,10 @@ function fApplyManualBorders() {
     // === Iterate Through Each Defined Border Section ===
     gUI.manualBorderSections.forEach(section => {
         // Resolve section boundaries and get style/edge info
-        const rowStart = resolveRow(section.r1);
-        const colStart = resolveCol(section.c1);
-        const rowEnd = resolveRow(section.r2);
-        const colEnd = resolveCol(section.c2);
+        const rowStart = fResolveRow(section.r1);
+        const colStart = fResolveCol(section.c1);
+        const rowEnd = fResolveRow(section.r2);
+        const colEnd = fResolveCol(section.c2);
         const borderStyle = section.style || '1px solid #000'; // Default to black thin solid
         const edges = section.edges || ''; // Edge flags ('t', 'b', 'l', 'r')
 
@@ -1565,8 +1535,8 @@ function fAddHeaderButtons() {
 // Outputs -> (HTMLElement | null): The cell element if found, otherwise null.
 function fGetResolvedCell(rowTag, colTag) {
     // Resolve tags to indices
-    const r = resolveRow(rowTag);
-    const c = resolveCol(colTag);
+    const r = fResolveRow(rowTag);
+    const c = fResolveCol(colTag);
 
     // Validate resolved indices
     if (isNaN(r) || isNaN(c)) {
@@ -1716,8 +1686,8 @@ function fHideColumnRange(rangeArray) {
         }
 
         // Resolve column tags/indices
-        const startCol = resolveCol(range.c1);
-        const endCol = resolveCol(range.c2);
+        const startCol = fResolveCol(range.c1);
+        const endCol = fResolveCol(range.c2);
 
         // Validate resolved indices
         if (isNaN(startCol) || isNaN(endCol)) {
@@ -1781,8 +1751,8 @@ function fShowColumnRange(rangeArray) {
         }
 
         // Resolve column tags/indices
-        const startCol = resolveCol(range.c1);
-        const endCol = resolveCol(range.c2);
+        const startCol = fResolveCol(range.c1);
+        const endCol = fResolveCol(range.c2);
 
         // Validate resolved indices
         if (isNaN(startCol) || isNaN(endCol)) {
@@ -1842,8 +1812,8 @@ function fApplyInitialVisibility() {
         // Iterate through each defined row range
         gUI.initialHiddenRows.forEach(range => {
              // Resolve row tags/indices
-             const r1 = resolveRow(range.r1);
-             const r2 = resolveRow(range.r2);
+             const r1 = fResolveRow(range.r1);
+             const r2 = fResolveRow(range.r2);
              // Validate resolved indices
              if (isNaN(r1) || isNaN(r2)) {
                  console.warn("fApplyInitialVisibility: Skipping invalid row range due to tags:", range);
@@ -2670,14 +2640,14 @@ function fIsValidRangeObject(range) {
 
 // fResolveRangeIndices ////////////////////////////////////////////////////////////
 // Purpose -> Converts tag strings or numeric indices within a range definition
-//            object into resolved 0-based numeric indices using resolveRow/resolveCol.
+//            object into resolved 0-based numeric indices using fResolveRow/fResolveCol.
 // Inputs  -> range (Object): The range definition object {r1, c1, r2, c2}.
 // Outputs -> (Object): An object {r1, c1, r2, c2} with resolved numeric indices (or NaN).
 function fResolveRangeIndices(range) {
-    const r1 = resolveRow(range.r1);
-    const c1 = resolveCol(range.c1);
-    const r2 = resolveRow(range.r2);
-    const c2 = resolveCol(range.c2);
+    const r1 = fResolveRow(range.r1);
+    const c1 = fResolveCol(range.c1);
+    const r2 = fResolveRow(range.r2);
+    const c2 = fResolveCol(range.c2);
     return { r1, c1, r2, c2 };
 } // END fResolveRangeIndices
 
@@ -2787,8 +2757,8 @@ function fSetGridTagsFromHeaders() {
 //            to a Number, or undefined/NaN if resolution or coercion fails.
 function fGetGridValue(rowRef, colRef, asNumber = false) {
     // === Resolve Coordinates ===
-    const r = resolveRow(rowRef);
-    const c = resolveCol(colRef);
+    const r = fResolveRow(rowRef);
+    const c = fResolveCol(colRef);
 
     // Validate resolved indices
     if (isNaN(r) || isNaN(c)) {
@@ -2837,8 +2807,8 @@ function fGetGridValue(rowRef, colRef, asNumber = false) {
 //                       false if resolution failed or row/cell doesn't exist.
 function fSetGridValue(rowRef, colRef, newValue) {
     // === 1. Resolve Coordinates ===
-    const r = resolveRow(rowRef);
-    const c = resolveCol(colRef);
+    const r = fResolveRow(rowRef);
+    const c = fResolveCol(colRef);
     let valueToSet = newValue; // Use a temporary variable
 
     // Validate resolved indices
@@ -2953,10 +2923,10 @@ function fSetRangeValues(r1Ref, c1Ref, r2Ref, c2Ref, valueOrArray) {
     fMyConsoleLog(`⚙️ Setting range values: ${r1Ref},${c1Ref} to ${r2Ref},${c2Ref}...`);
 
     // === 1. Resolve Indices & Validate ===
-    const r1 = resolveRow(r1Ref);
-    const c1 = resolveCol(c1Ref);
-    const r2 = resolveRow(r2Ref);
-    const c2 = resolveCol(c2Ref);
+    const r1 = fResolveRow(r1Ref);
+    const c1 = fResolveCol(c1Ref);
+    const r2 = fResolveRow(r2Ref);
+    const c2 = fResolveCol(c2Ref);
 
     if ([r1, c1, r2, c2].some(isNaN)) {
         console.warn(`fSetRangeValues: Could not resolve one or more references: (${r1Ref}, ${c1Ref}, ${r2Ref}, ${c2Ref}) -> (${r1}, ${c1}, ${r2}, ${c2}).`);
@@ -3972,10 +3942,10 @@ function fClearIsOnDurationRange() {
         }
 
         // Resolve range tags/indices
-        const r1 = resolveRow(range.r1);
-        const c1 = resolveCol(range.c1);
-        const r2 = resolveRow(range.r2);
-        const c2 = resolveCol(range.c2);
+        const r1 = fResolveRow(range.r1);
+        const c1 = fResolveCol(range.c1);
+        const r2 = fResolveRow(range.r2);
+        const c2 = fResolveCol(range.c2);
 
         // Validate resolved indices
         if ([r1, c1, r2, c2].some(isNaN)) {
@@ -4044,7 +4014,7 @@ async function fMetaFlood() {
     // Allow missing metaColorTags for now
     if (errorMsg) { console.warn(`fMetaFlood: ${errorMsg}`); fMyConsoleLog(`⚠️ Meta Flood failed: ${errorMsg}`); await fShowMessage(`Error: ${errorMsg}`); return; }
 
-    const metaRowTag = metaRangeDef.r1; const startCol = resolveCol(metaRangeDef.c1); const endCol = resolveCol(metaRangeDef.c2);
+    const metaRowTag = metaRangeDef.r1; const startCol = fResolveCol(metaRangeDef.c1); const endCol = fResolveCol(metaRangeDef.c2);
     if ([startCol, endCol].some(isNaN)) { errorMsg = `Could not resolve Meta column tags: ${metaRangeDef.c1}, ${metaRangeDef.c2}.`; console.warn(`fMetaFlood: ${errorMsg}`); fMyConsoleLog(`⚠️ Meta Flood failed: ${errorMsg}`); await fShowMessage(`Error: ${errorMsg}`); return; }
     const numMetaCols = Math.abs(endCol - startCol) + 1;
     if (metaCaps.length > 0 && numMetaCols !== metaCaps.length) { errorMsg = `Mismatch between number of Meta columns (${numMetaCols}) and Meta caps (${metaCaps.length}).`; console.warn(`fMetaFlood: ${errorMsg}`); fMyConsoleLog(`⚠️ Meta Flood failed: ${errorMsg}`); await fShowMessage(`Error: ${errorMsg}`); return; }
@@ -4098,7 +4068,7 @@ async function fMetaChannel() {
     // Allow missing metaColorTags
     if (errorMsg) { console.warn(`fMetaChannel: ${errorMsg}`); fMyConsoleLog(`⚠️ Meta Channel failed: ${errorMsg}`); await fShowMessage(`Error: ${errorMsg}`); return; }
 
-    const channelRowTag = channelRangeDef.r1; const startCol = resolveCol(channelRangeDef.c1); const endCol = resolveCol(channelRangeDef.c2);
+    const channelRowTag = channelRangeDef.r1; const startCol = fResolveCol(channelRangeDef.c1); const endCol = fResolveCol(channelRangeDef.c2);
     if ([startCol, endCol].some(isNaN)) { errorMsg = `Could not resolve Meta Channel column tags: ${channelRangeDef.c1}, ${channelRangeDef.c2}.`; console.warn(`fMetaChannel: ${errorMsg}`); fMyConsoleLog(`⚠️ Meta Channel failed: ${errorMsg}`); await fShowMessage(`Error: ${errorMsg}`); return; }
 
     const numMetaCols = Math.abs(endCol - startCol) + 1;
@@ -4863,10 +4833,10 @@ function fClearSk1Sk2Checkboxes() {
     // === Clear Checkboxes in Each Range ===
     rangesToClear.forEach(range => {
         // Resolve each range definition
-        const r1 = resolveRow(range.r1);
-        const c1 = resolveCol(range.c1);
-        const r2 = resolveRow(range.r2);
-        const c2 = resolveCol(range.c2);
+        const r1 = fResolveRow(range.r1);
+        const c1 = fResolveCol(range.c1);
+        const r2 = fResolveRow(range.r2);
+        const c2 = fResolveCol(range.c2);
 
         // Validate resolved indices
         if ([r1, c1, r2, c2].some(isNaN)) {
@@ -5089,8 +5059,8 @@ function fToggleGearColumns() {
             continue;
         }
         // Resolve tags/indices
-        const startCol = resolveCol(range.c1);
-        const endCol = resolveCol(range.c2);
+        const startCol = fResolveCol(range.c1);
+        const endCol = fResolveCol(range.c2);
         if (isNaN(startCol) || isNaN(endCol)) {
             console.warn(`fToggleGearColumns: Skipping gear range due to invalid tags/indices: ${range.c1}, ${range.c2}`);
             continue;
@@ -5434,7 +5404,7 @@ function fScrollGridToBottom(grid) {
 
     // Resolve target row index
     const targetRowTag = 'GearTblHeaderStartR';
-    const targetRowIndex = resolveRow(targetRowTag);
+    const targetRowIndex = fResolveRow(targetRowTag);
     if (isNaN(targetRowIndex)) {
         console.warn(`fScrollGridToBottom: Could not resolve row tag '${targetRowTag}' for scrolling.`);
         return;

@@ -32,7 +32,7 @@ async function fHandleRollDiceAction() {
         if (!await fVerifyAbility()) { fSetButtonOrMenuState(null); return; }
 
         // === 2. Nish Ability Pre-Sequence Check ===
-        const nishRowIndex = resolveRow('NishAtr_R');
+        const nishRowIndex = fResolveRow('NishAtr_R');
         const isNishAbilityRoll = (gUI.roll.ability_R === nishRowIndex);
         if (isNishAbilityRoll && !gUI.buttonOrMenu.isNish) {
             fMyConsoleLog("   -> Nish ability triggered via Checkbox + Roll/Free/Luck. Executing Nish sequence first...");
@@ -322,9 +322,9 @@ async function fValidateAbilityCB(row, col) {
 async function fResetPopulateNCleanGUIRoll(r, c) {
     try {
         // Helper to get value from the specified row `r` and a column tag
-        const getVal = tag => gUI.arr[r]?.[resolveCol(tag)] ?? '';
+        const getVal = tag => gUI.arr[r]?.[fResolveCol(tag)] ?? '';
         // Determine if Sk1 or Sk2 checkbox was clicked
-        const isSk1 = (c === resolveCol('Sk1ChkBox'));
+        const isSk1 = (c === fResolveCol('Sk1ChkBox'));
 
         // === Initialize gUI.roll with Extracted Data ===
         gUI.roll = {
@@ -1279,9 +1279,9 @@ async function fPerformPlayerAttackRolls(initialLogHtml, initialLogText) {
     }
     const rMin = Math.min(resolved.r1, resolved.r2);
     const rMax = Math.max(resolved.r1, resolved.r2);
-    const cNumMon = resolveCol('NumMon');
-    const cMonDef = resolveCol('MonDef'); // Difficulty column for Attack
-    const cMonName = resolveCol('MonName');
+    const cNumMon = fResolveCol('NumMon');
+    const cMonDef = fResolveCol('MonDef'); // Difficulty column for Attack
+    const cMonName = fResolveCol('MonName');
     if ([cNumMon, cMonDef, cMonName].some(isNaN)) {
          const msg = "Could not resolve required monster column tags (NumMon, MonDef, MonName).";
          console.warn(`fPerformPlayerAttackRolls: ${msg}`);
@@ -1437,9 +1437,9 @@ async function fPerformPlayerDamageRolls(initialLogHtml, initialLogText) {
     }
     const rMin = Math.min(resolved.r1, resolved.r2);
     const rMax = Math.max(resolved.r1, resolved.r2);
-    const cNumMon = resolveCol('NumMon');
-    const cMonAR = resolveCol('MonAR'); // Difficulty source for Damage
-    const cMonName = resolveCol('MonName');
+    const cNumMon = fResolveCol('NumMon');
+    const cMonAR = fResolveCol('MonAR'); // Difficulty source for Damage
+    const cMonName = fResolveCol('MonName');
     if ([cNumMon, cMonAR, cMonName].some(isNaN)) {
          const msg = "Could not resolve required monster column tags (NumMon, MonAR, MonName).";
          console.warn(`fPerformPlayerDamageRolls: ${msg}`);
@@ -1572,9 +1572,9 @@ async function fPerformPlayerDefenseRolls(initialLogHtml, initialLogText) {
     }
     const rMin = Math.min(resolved.r1, resolved.r2);
     const rMax = Math.max(resolved.r1, resolved.r2);
-    const cNumMon = resolveCol('NumMon');
-    const cMonAtk = resolveCol('MonAtk'); // Difficulty column for Defense
-    const cMonName = resolveCol('MonName');
+    const cNumMon = fResolveCol('NumMon');
+    const cMonAtk = fResolveCol('MonAtk'); // Difficulty column for Defense
+    const cMonName = fResolveCol('MonName');
     if ([cNumMon, cMonAtk, cMonName].some(isNaN)) {
          const msg = "Could not resolve required monster column tags (NumMon, MonAtk, MonName).";
          console.warn(`fPerformPlayerDefenseRolls: ${msg}`);
@@ -1729,9 +1729,9 @@ async function fPerformPlayerArmorRolls(initialLogHtml, initialLogText) {
     }
     const rMin = Math.min(resolved.r1, resolved.r2);
     const rMax = Math.max(resolved.r1, resolved.r2);
-    const cNumMon = resolveCol('NumMon');
-    const cMonDmg = resolveCol('MonDmg'); // Difficulty source for Armor
-    const cMonName = resolveCol('MonName');
+    const cNumMon = fResolveCol('NumMon');
+    const cMonDmg = fResolveCol('MonDmg'); // Difficulty source for Armor
+    const cMonName = fResolveCol('MonName');
     if ([cNumMon, cMonDmg, cMonName].some(isNaN)) {
          const msg = "Could not resolve required monster column tags (NumMon, MonDmg, MonName).";
          console.warn(`fPerformPlayerArmorRolls: ${msg}`);
@@ -2250,7 +2250,7 @@ async function fHandlePrepARClick(event) {
     const allTargetedRows_R = rollData.allTargetedRows_R; // Array of all monster rows involved
 
     // === 3. Update NumMon for All Targeted Monsters ===
-    const cNumMon = resolveCol('NumMon');
+    const cNumMon = fResolveCol('NumMon');
     let updateErrors = false;
 
     if (isNaN(cNumMon)) { // Ensure 'NumMon' column resolved
@@ -2290,8 +2290,8 @@ async function fHandlePrepARClick(event) {
     const originalSk1ColTag = 'Sk1ChkBox'; // Assume Defense is Sk1
     const targetSk2ColTag = 'Sk2ChkBox';   // Assume Armor is Sk2
 
-    const originalSk1Col = resolveCol(originalSk1ColTag);
-    const targetSk2Col = resolveCol(targetSk2ColTag);
+    const originalSk1Col = fResolveCol(originalSk1ColTag);
+    const targetSk2Col = fResolveCol(targetSk2ColTag);
 
     // Validate column resolution
     if (isNaN(originalSk1Col) || isNaN(targetSk2Col)) {
@@ -2415,7 +2415,7 @@ async function fHandlePrepDmgClick(event) {
     const allTargetedRows_R = rollData.allTargetedRows_R; // Array of all monster rows involved
 
     // === 3. Update NumMon for All Targeted Monsters ===
-    const cNumMon = resolveCol('NumMon');
+    const cNumMon = fResolveCol('NumMon');
     let updateErrors = false;
 
     if (isNaN(cNumMon)) { // Ensure 'NumMon' column resolved
@@ -2455,8 +2455,8 @@ async function fHandlePrepDmgClick(event) {
     const originalSk1ColTag = 'Sk1ChkBox'; // Assume Attack is Sk1
     const targetSk2ColTag = 'Sk2ChkBox';   // Assume Damage is Sk2
 
-    const originalSk1Col = resolveCol(originalSk1ColTag);
-    const targetSk2Col = resolveCol(targetSk2ColTag);
+    const originalSk1Col = fResolveCol(originalSk1ColTag);
+    const targetSk2Col = fResolveCol(targetSk2ColTag);
 
     // Validate column resolution
     if (isNaN(originalSk1Col) || isNaN(targetSk2Col)) {
@@ -2553,8 +2553,8 @@ async function fHandleNishButtonClick(event) { // Added event parameter to use s
     // === 2. Programmatically Check Nish Checkbox ===
     const nishRowTag = 'NishAtr_R';
     const nishColTag = 'Sk1ChkBox';
-    const r = resolveRow(nishRowTag);
-    const c = resolveCol(nishColTag);
+    const r = fResolveRow(nishRowTag);
+    const c = fResolveCol(nishColTag);
 
     // Validate Nish checkbox coordinates
     if (isNaN(r) || isNaN(c)) {
@@ -2686,10 +2686,10 @@ async function fUpdateTurboMonsterTable(gmDataArray, gmColTags, gmRowTags) {
         await fShowMessage("Error: Turbo monster table range definition is missing.");
         return;
     }
-    const turboMon_R_start = resolveRow(turboRangeDef.r1); // The 'CustMon' row index
-    const turboMon_R_end = resolveRow(turboRangeDef.r2);   // The 'LastMon_R' row index
-    const turbo_c1 = resolveCol(turboRangeDef.c1);
-    const turbo_c2 = resolveCol(turboRangeDef.c2);
+    const turboMon_R_start = fResolveRow(turboRangeDef.r1); // The 'CustMon' row index
+    const turboMon_R_end = fResolveRow(turboRangeDef.r2);   // The 'LastMon_R' row index
+    const turbo_c1 = fResolveCol(turboRangeDef.c1);
+    const turbo_c2 = fResolveCol(turboRangeDef.c2);
 
     if ([turboMon_R_start, turboMon_R_end, turbo_c1, turbo_c2].some(isNaN)) {
         fMyConsoleLog("❌ fUpdateTurboMonsterTable Error: Could not resolve Turbo monster range boundaries.");
@@ -2878,7 +2878,7 @@ async function fHandleChaosGemClick(r, c) {
     fMyConsoleLog(`   -> Click [${r}, ${c}] is inside Chaos Gem range.`);
 
     // === 4. Check Gem Conditions (Uses & Ability Text) ===
-    const usesCol = resolveCol('ChaosUses'); const abilityCol = resolveCol('ChaosAbility');
+    const usesCol = fResolveCol('ChaosUses'); const abilityCol = fResolveCol('ChaosAbility');
     if (isNaN(usesCol) || isNaN(abilityCol)) { fMyConsoleLog("   -> Cannot check Chaos Gem: Could not resolve 'ChaosUses' or 'ChaosAbility' column tags."); await fShowMessage("Error: Chaos Gem column tags are not defined correctly."); return false; }
 
     const currentUses = fGetGridValue(r, usesCol, true);
