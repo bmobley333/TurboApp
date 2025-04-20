@@ -19,6 +19,18 @@
 //            to sidebar and GMScreen.
 // Inputs  -> None (Relies on gUI state).
 // Outputs -> None (Orchestrates updates to gUI, DOM, sidebar, GMScreen).
+
+// ==========================================================================
+// === Core Ability Roll Logic ===
+// ==========================================================================
+
+// fMain_AbilityRoll ///////////////////////////////////////////////////////////
+// Purpose -> Top-level handler for initiating an ability/gear roll. Coordinates
+//            validation, data population, morphs, costs, roll logic branching,
+//            cost application, Nish update, and final logging (HTML & plain text)
+//            to sidebar and GMScreen.
+// Inputs  -> None (Relies on gUI state).
+// Outputs -> None (Orchestrates updates to gUI, DOM, sidebar, GMScreen).
 async function fMain_AbilityRoll() {
     fMyConsoleLog("🎲 Roll Dice Action Triggered");
     let logHtmlToSend = ''; // Store final log HTML for sidebar
@@ -274,6 +286,7 @@ async function fMain_AbilityRoll() {
 
 
 
+
 // fIsSk1Sk2RadioCheckbox //////////////////////////////////////////////////////////////
 // Purpose -> Validates that the provided coordinates (r, c) correspond to a valid
 //            Sk1/Sk2 checkbox location based on gUI.range.sk1sk2CheckBoxes.
@@ -391,6 +404,7 @@ async function fClearAndSetGUIRoll(r, c) {
 
 
 
+
 // fVerifyAbilityHasSkAndType //////////////////////////////////////////////////////////////////
 // Purpose -> Performs basic validation on the populated gUI.roll object, ensuring
 //            the ability has a name and a valid, recognized skill type.
@@ -426,6 +440,7 @@ async function fVerifyAbilityHasSkAndType() {
     return true;
 
 } // END fVerifyAbilityHasSkAndType
+
 
 
 
@@ -776,8 +791,6 @@ async function fUses_VerifyAndProcessCost(multiRollCount) {
 
 
 
-
-
 // fIsOn_VerifyAndProcessCost //////////////////////////////////////////////////////
 // Purpose -> Cost "Verification" Helper: Prepares the change object to copy the
 //            ability's Duration (gUI.roll.skDur) to its 'Is On' cell, but ONLY if
@@ -869,70 +882,6 @@ async function fSkMeta_VerifyAndProcessCost(pendingChangesMap) {
 
 
 
-// fFocus_VerifyAndProcessCost ///////////////////////////////////////////////////
-// Purpose -> Cost Verification Helper: Checks and prepares the change for the Focus
-//            Meta cost, if specified by a morph setting gUI.roll.resFocus to a valid
-//            Meta color tag ('R'...'B'). Uses fSpendOneMeta to find an available unit,
-//            considering pending changes. Halts if cost cannot be paid.
-// Inputs  -> pendingChangesMap (Object): Map of changes pending from previous cost checks.
-// Outputs -> (Promise<Object>): { success: Boolean, changes: Array, headers: Array }
-//            'success' is false if cost cannot be paid or tag is invalid.
-//            'changes' contains the change object for the Meta cell if successful.
-//            'headers' is always empty.
-async function fFocus_VerifyAndProcessCost(pendingChangesMap) {
-    const focusColorTag = gUI.roll.resFocus; // Get the Focus tag ('R'..'B' or '')
-    const changes = [];
-    const headers = []; // Headers not used by this function
-    const metaColors = gUI.list?.metaColor; // e.g., ['R','O','Y','G','B']
-
-    // === 1. Check if Focus Cost Applies ===
-    if (!focusColorTag || typeof focusColorTag !== 'string') {
-        fMyConsoleLog("   -> Focus Meta Cost: Skipped (No resFocus tag defined).");
-        return { success: true, changes: [], headers: [] }; // No focus cost
-    }
-
-    // === 2. Validate Focus Tag ===
-    // Check against defined meta colors
-    if (!Array.isArray(metaColors) || metaColors.length === 0) {
-        console.error("fFocus_VerifyAndProcessCost: gUI.list.metaColor is not defined or empty.");
-        await fShowMessage("❌ Internal Error: Meta color list not defined.");
-        return { success: false, changes: [], headers: [] };
-    }
-    // Ensure tag is one of the allowed colors (case-insensitive check, though stored uppercase)
-    const isValidFocusTag = metaColors.includes(focusColorTag.toUpperCase());
-    if (!isValidFocusTag) {
-        const msg = `Invalid Focus Meta tag specified in morph: '${focusColorTag}'. Allowed: ${metaColors.join(', ')}.`;
-        console.warn(`fFocus_VerifyAndProcessCost: ${msg}`);
-        fMyConsoleLog(`   -> ❌ Focus Meta Cost Failed: ${msg}`);
-        await fShowMessage(`❌ ${msg}`);
-        return { success: false, changes: [], headers: [] }; // Fail due to invalid tag
-    }
-
-    // === 3. Attempt to Spend Meta ===
-    fMyConsoleLog(`   -> Focus Meta Cost: Attempting to spend 1 unit of '${focusColorTag}' (Focus)...`);
-    // Call helper, passing the specific tag and pending changes
-    const spendResult = await fSpendOneMeta(focusColorTag, pendingChangesMap);
-
-    // === 4. Handle Result ===
-    if (spendResult.success) {
-        // Meta unit found, add the prepared change object
-        fMyConsoleLog(`      -> Success: Found 1 unit of Focus Meta (${focusColorTag}) to spend.`);
-        changes.push(spendResult.change);
-        return { success: true, changes: changes, headers: headers };
-    } else {
-        // Failed (fSpendOneMeta handles invalid tag message)
-        fMyConsoleLog(`      -> ❌ Failed: Could not find 1 unit of ${focusColorTag} (or higher) to spend for Focus.`);
-        // Show specific "Not enough" message for Focus cost
-        const errorMsg = `❌ Not enough Meta.<br>In addition to possible ability meta cost,<br>you are also trying to Focus @${focusColorTag}.`;
-        await fShowMessage(errorMsg);
-        return { success: false, changes: [], headers: [] }; // Indicate failure
-    }
-
-} // END fFocus_VerifyAndProcessCost
-
-
-
-
 // fSpendOneMeta ///////////////////////////////////////////////////////////////////
 // Purpose -> Helper to find 1 available unit of Meta (checking Channel pool first,
 //            then Main pool) and prepare the change object for decrementing it.
@@ -1019,6 +968,70 @@ async function fSpendOneMeta(metaColor, pendingChangesMap) {
     return { success: false }; // Indicate failure
 
 } // END fSpendOneMeta
+
+
+
+
+// fFocus_VerifyAndProcessCost ///////////////////////////////////////////////////
+// Purpose -> Cost Verification Helper: Checks and prepares the change for the Focus
+//            Meta cost, if specified by a morph setting gUI.roll.resFocus to a valid
+//            Meta color tag ('R'...'B'). Uses fSpendOneMeta to find an available unit,
+//            considering pending changes. Halts if cost cannot be paid.
+// Inputs  -> pendingChangesMap (Object): Map of changes pending from previous cost checks.
+// Outputs -> (Promise<Object>): { success: Boolean, changes: Array, headers: Array }
+//            'success' is false if cost cannot be paid or tag is invalid.
+//            'changes' contains the change object for the Meta cell if successful.
+//            'headers' is always empty.
+async function fFocus_VerifyAndProcessCost(pendingChangesMap) {
+    const focusColorTag = gUI.roll.resFocus; // Get the Focus tag ('R'..'B' or '')
+    const changes = [];
+    const headers = []; // Headers not used by this function
+    const metaColors = gUI.list?.metaColor; // e.g., ['R','O','Y','G','B']
+
+    // === 1. Check if Focus Cost Applies ===
+    if (!focusColorTag || typeof focusColorTag !== 'string') {
+        fMyConsoleLog("   -> Focus Meta Cost: Skipped (No resFocus tag defined).");
+        return { success: true, changes: [], headers: [] }; // No focus cost
+    }
+
+    // === 2. Validate Focus Tag ===
+    // Check against defined meta colors
+    if (!Array.isArray(metaColors) || metaColors.length === 0) {
+        console.error("fFocus_VerifyAndProcessCost: gUI.list.metaColor is not defined or empty.");
+        await fShowMessage("❌ Internal Error: Meta color list not defined.");
+        return { success: false, changes: [], headers: [] };
+    }
+    // Ensure tag is one of the allowed colors (case-insensitive check, though stored uppercase)
+    const isValidFocusTag = metaColors.includes(focusColorTag.toUpperCase());
+    if (!isValidFocusTag) {
+        const msg = `Invalid Focus Meta tag specified in morph: '${focusColorTag}'. Allowed: ${metaColors.join(', ')}.`;
+        console.warn(`fFocus_VerifyAndProcessCost: ${msg}`);
+        fMyConsoleLog(`   -> ❌ Focus Meta Cost Failed: ${msg}`);
+        await fShowMessage(`❌ ${msg}`);
+        return { success: false, changes: [], headers: [] }; // Fail due to invalid tag
+    }
+
+    // === 3. Attempt to Spend Meta ===
+    fMyConsoleLog(`   -> Focus Meta Cost: Attempting to spend 1 unit of '${focusColorTag}' (Focus)...`);
+    // Call helper, passing the specific tag and pending changes
+    const spendResult = await fSpendOneMeta(focusColorTag, pendingChangesMap);
+
+    // === 4. Handle Result ===
+    if (spendResult.success) {
+        // Meta unit found, add the prepared change object
+        fMyConsoleLog(`      -> Success: Found 1 unit of Focus Meta (${focusColorTag}) to spend.`);
+        changes.push(spendResult.change);
+        return { success: true, changes: changes, headers: headers };
+    } else {
+        // Failed (fSpendOneMeta handles invalid tag message)
+        fMyConsoleLog(`      -> ❌ Failed: Could not find 1 unit of ${focusColorTag} (or higher) to spend for Focus.`);
+        // Show specific "Not enough" message for Focus cost
+        const errorMsg = `❌ Not enough Meta.<br>In addition to possible ability meta cost,<br>you are also trying to Focus @${focusColorTag}.`;
+        await fShowMessage(errorMsg);
+        return { success: false, changes: [], headers: [] }; // Indicate failure
+    }
+
+} // END fFocus_VerifyAndProcessCost
 
 
 
@@ -1271,6 +1284,7 @@ async function fPerformPlayerAttackRolls(initialLogHtml, initialLogText) {
     fMyConsoleLog("   -> Player Attack Logic Complete.");
     return { logHtml: finalLogHtml, logText: finalLogText, success: true };
 } // END fPerformPlayerAttackRolls
+
 
 
 
@@ -1710,6 +1724,7 @@ async function fPerformPlayerArmorRolls(initialLogHtml, initialLogText) {
 
 
 
+
 // fCalcGUIRollResSk ///////////////////////////////////////////////////////////////
 // Purpose -> Calculates the final resulting skill value (gUI.roll.resSk) before the
 //            die roll, applying various morph modifiers (Combine, Mult, dctMult, Plus,
@@ -1788,7 +1803,6 @@ function fCalcGUIRollResSk() {
 
 
 
-
 // fCalcGUIRollRoll ////////////////////////////////////////////////////////////////
 // Purpose -> Calculates the initial "raw" die roll result (stored in gUI.roll.roll)
 //            based on the calculated resulting skill (gUI.roll.resSk) and the final
@@ -1844,6 +1858,7 @@ function fCalcGUIRollRoll() {
     fMyConsoleLog(`⚙️ Calculated roll (${resTypValue}): ${gUI.roll.roll}`);
 
 } // END fCalcGUIRollRoll
+
 
 
 
@@ -1909,7 +1924,6 @@ function fCalcGUIRollResRoll() {
 
     fMyConsoleLog(`⚙️ Calculated final resRoll: ${gUI.roll.resRoll}`);
 } // END fCalcGUIRollResRoll
-
 
 
 
@@ -2039,11 +2053,11 @@ function fBuildSidebarHTMLAndSimpleText(rollNum, totalRolls, isFirstRoll) {
 } // END fBuildSidebarHTMLAndSimpleText
 
 
-// ==========================================================================
-// === Post Combat Buttons         (End of Die Roll Button ) ===
-// ==========================================================================
 
 
+// ==========================================================================
+// === Post-Combat Preparation Handlers ===
+// ==========================================================================
 
 // fHandlePrepARClick ////////////////////////////////////////////////////////////
 // Purpose -> Handles clicks on the "Prep AR" button in the sidebar. Reads defense
@@ -2371,12 +2385,10 @@ async function fHandlePrepDmgClick(event) {
 
 
 
+
 // ==========================================================================
-// === Nish         (End of Post Combat Buttons ) ===
+// === Nish Turn Logic ===
 // ==========================================================================
-
-
-
 
 // fHandleNishButtonClick //////////////////////////////////////////////////////////
 // Purpose -> Handles the click event specifically for the main 'Nish' button.
@@ -2445,6 +2457,7 @@ async function fHandleNishButtonClick(event) { // Added event parameter to use s
 
 
 
+
 // fExecuteNishSequence ////////////////////////////////////////////////////////////
 // Purpose -> Executes the common sequence of actions required at the start of a Nish
 //            turn. Adds sidebar divider, runs Meta Channeling, sets Max AP, and
@@ -2488,10 +2501,8 @@ async function fExecuteNishSequence() {
 
 
 // ==========================================================================
-// === Grid Roll (Chaos/d,Sk)          (End of Nish ) ===
+// === Grid Interaction & Ad-Hoc Rolls ===
 // ==========================================================================
-
-
 
 // fUpdateMonsterTable ////////////////////////////////////////////////////////
 // Purpose -> Processes monster data received from the GM Screen DB and populates
@@ -2693,12 +2704,6 @@ async function fUpdateMonsterTable(gmDataArray, gmColTags, gmRowTags) {
 
 
 
-// ==========================================================================
-// === Grid Roll (Chaos/d,Sk)          (End of Grid Roll (Chaos/d,Sk)  ) ===
-// ==========================================================================
-
-
-
 
 // fHandleChaosGemClick ////////////////////////////////////////////////////////////
 // Purpose -> Handles Chaos Gem clicks. Decrements uses, logs ability text (with icon) to sidebar.
@@ -2869,9 +2874,12 @@ async function fHandleAdHocRoll(cellText) {
 
 
 
+
 // ==========================================================================
-// === Base Die Rolling          (End of Grid Roll (Chaos/d,Sk)  ) ===
+// === Base Die Rolling Utilities ===
 // ==========================================================================
+
+
 
 
 // fdRoll //////////////////////////////////////////////////////////////////////
@@ -2890,6 +2898,7 @@ function fdRoll(die) {
   // Calculate and return random integer between 1 and numDie (inclusive)
   return Math.floor(Math.random() * numDie) + 1;
 } // END fdRoll
+
 
 
 
@@ -2918,6 +2927,7 @@ function fMetaDieRoll(die) {
   // Calculate result: (die * rand1) / rand2 + 1, floored
   return Math.floor((numDie * rand1) / rand2) + 1;
 } // END fMetaDieRoll
+
 
 
 
@@ -2980,6 +2990,7 @@ function fAtkRoll(die) {
 
 
 
+
 // fDefRoll ////////////////////////////////////////////////////////////////////
 // Purpose -> Performs a MetaScape Defense roll. Based on fMetaDieRoll(die) * 0.75.
 // Inputs  -> die (Number): The base defense value.
@@ -3008,6 +3019,7 @@ function fDmgRoll(pcDmg) {
   // Currently just calls the standard skill roll function
   return fSkRoll(pcDmg);
 } // END fDmgRoll
+
 
 
 
@@ -3088,9 +3100,12 @@ function fRollRPGDieString(dieString) {
 
 
 
+
 // ==========================================================================
-// === Message Box             (End of Base Die Rolling ) ===
+// === Message & Prompt Modals ===
 // ==========================================================================
+
+
 
 
 // fShowMessage ///////////////////////////////////////////////////////////////////
@@ -3217,10 +3232,6 @@ function fSetupMessageModalListeners() {
 
 
 
-// ==========================================================================
-// === Prompt Box              (End of Message Box) ===
-// ==========================================================================
-
 
 // fShowPrompt ///////////////////////////////////////////////////////////////////
 // Purpose -> Displays the prompt modal box with a message and Yes/No buttons. Returns
@@ -3329,8 +3340,6 @@ function fSetupPromptModalListeners() {
 
     fMyConsoleLog("✅ Prompt Modal Listeners Attached.");
 } // END fSetupPromptModalListeners
-
-
 
 
 

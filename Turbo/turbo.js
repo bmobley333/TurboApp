@@ -42,6 +42,66 @@ const gSrv = { // Using gSrv prefix for server-side globals
 //            Populates dynamic sheet IDs (cs, kl) in gSrv.
 //            All based on a specific csID passed in the URL.
 // Inputs  -> e (Event Object): Google Apps Script web app event object containing parameters.
+
+
+// ==========================================================================
+// === Global Constants & Simple Utilities ===
+// ==========================================================================
+
+
+// fSrvConvertIndicesToA1 //////////////////////////////////////////////////////////
+// Purpose -> Converts 0-based row/column indices to standard A1 or 'A1:B2' or 'A1' (if r1=r2 and c1=c2) notation string
+//            on the server-side.
+// Inputs  -> r1, c1, r2, c2 (Number): 0-based start/end row and column indices.
+// Outputs -> (String | null): A1 notation string (e.g., "C5:F10"), or null on invalid input.
+function fSrvConvertIndicesToA1(r1, c1, r2, c2) {
+    // Validate inputs are non-negative numbers
+    if ([r1, c1, r2, c2].some(idx => typeof idx !== 'number' || idx < 0 || isNaN(idx))) {
+        console.error(`fSrvConvertIndicesToA1: Invalid indices provided (${r1},${c1},${r2},${c2})`);
+        return null; // Return null for invalid indices
+    }
+
+    // Convert column indices to A1 letters using the existing helper
+    const startColA1 = fSrvColToA1(c1);
+    const endColA1 = fSrvColToA1(c2);
+
+    // Add 1 to row indices for 1-based A1 notation
+    const startRowA1 = r1 + 1;
+    const endRowA1 = r2 + 1;
+
+    // Determine if it's a single cell or a range
+    if (r1 === r2 && c1 === c2) {
+        // Single cell notation
+        return `${startColA1}${startRowA1}`;
+    } else {
+        // Range notation: Top-left cell : Bottom-right cell
+        return `${startColA1}${startRowA1}:${endColA1}${endRowA1}`;
+    }
+} // END fSrvConvertIndicesToA1
+
+
+// fSrvColToA1 ///////////////////////////////////////////////////////////////////
+// Purpose -> Helper function to convert 0-based column index to A1 notation.
+// Inputs  -> col (Number): The 0-based column index.
+// Outputs -> (String): The A1 notation label (e.g., A, Z, AA).
+function fSrvColToA1(col) {
+    let label = '';
+    let c = col; // Use local variable
+
+    // Loop through column value
+    while (c >= 0) {
+        label = String.fromCharCode((c % 26) + 65) + label;
+        c = Math.floor(c / 26) - 1;
+    }
+    return label;
+} // END fSrvColToA1
+
+
+// ==========================================================================
+// === Initialization / Bootstrapping ===
+// ==========================================================================
+
+
 // Outputs -> (HtmlOutput): The HTML page to be served.
 function doGet(e) {
     let csId = null; // Use let to allow modification in error handling
@@ -98,8 +158,6 @@ function doGet(e) {
 } // END doGet
 
 
-
-
 // fSrvGetMyKlId //////////////////////////////////////////////////////////////////
 // Purpose -> Retrieves the MyKL ID from the player's Character Sheet's <Data> tab.
 // Inputs  -> myCsId (String): The Sheet ID of the player's Character Sheet (mycs).
@@ -147,12 +205,9 @@ function fSrvGetMyKlId(myCsId) {
 } // END fSrvGetMyKlId
 
 
-
-
 // ==========================================================================
-// === Desinger Password  (END of Global Variables & doGet)===
+// === Designer Access ===
 // ==========================================================================
-
 
 
 // fSrvValidateDesignerPassword /////////////////////////////////////////////////
@@ -186,63 +241,9 @@ function fSrvValidateDesignerPassword(passwordAttempt) {
 } // END fSrvValidateDesignerPassword
 
 
-
 // ==========================================================================
-// === Google Sheet/Doc Helper Functions  (END of Desinger Password)===
+// === Low-Level Tag & Range Helpers ===
 // ==========================================================================
-
-
-
-// fSrvConvertIndicesToA1 //////////////////////////////////////////////////////////
-// Purpose -> Converts 0-based row/column indices to standard A1 or 'A1:B2' or 'A1' (if r1=r2 and c1=c2) notation string
-//            on the server-side.
-// Inputs  -> r1, c1, r2, c2 (Number): 0-based start/end row and column indices.
-// Outputs -> (String | null): A1 notation string (e.g., "C5:F10"), or null on invalid input.
-function fSrvConvertIndicesToA1(r1, c1, r2, c2) {
-    // Validate inputs are non-negative numbers
-    if ([r1, c1, r2, c2].some(idx => typeof idx !== 'number' || idx < 0 || isNaN(idx))) {
-        console.error(`fSrvConvertIndicesToA1: Invalid indices provided (${r1},${c1},${r2},${c2})`);
-        return null; // Return null for invalid indices
-    }
-
-    // Convert column indices to A1 letters using the existing helper
-    const startColA1 = fSrvColToA1(c1);
-    const endColA1 = fSrvColToA1(c2);
-
-    // Add 1 to row indices for 1-based A1 notation
-    const startRowA1 = r1 + 1;
-    const endRowA1 = r2 + 1;
-
-    // Determine if it's a single cell or a range
-    if (r1 === r2 && c1 === c2) {
-        // Single cell notation
-        return `${startColA1}${startRowA1}`;
-    } else {
-        // Range notation: Top-left cell : Bottom-right cell
-        return `${startColA1}${startRowA1}:${endColA1}${endRowA1}`;
-    }
-} // END fSrvConvertIndicesToA1
-
-
-
-
-// fSrvColToA1 ///////////////////////////////////////////////////////////////////
-// Purpose -> Helper function to convert 0-based column index to A1 notation.
-// Inputs  -> col (Number): The 0-based column index.
-// Outputs -> (String): The A1 notation label (e.g., A, Z, AA).
-function fSrvColToA1(col) {
-    let label = '';
-    let c = col; // Use local variable
-
-    // Loop through column value
-    while (c >= 0) {
-        label = String.fromCharCode((c % 26) + 65) + label;
-        c = Math.floor(c / 26) - 1;
-    }
-    return label;
-} // END fSrvColToA1
-
-
 
 
 // fSrvBuildTagMaps /////////////////////////////////////////////////////////
@@ -309,8 +310,6 @@ function fSrvBuildTagMaps(fullData) {
 } // END fSrvBuildTagMaps
 
 
-
-
 // fSrvResolveTag ///////////////////////////////////////////////////////////
 // Purpose -> Resolves a single row or column tag/index using the provided tag maps.
 // Inputs  -> tagOrIndex (String | Number): The tag string or 0-based index.
@@ -340,17 +339,9 @@ function fSrvResolveTag(tagOrIndex, tagMap, type = 'unknown') {
 } // END fSrvResolveTag
 
 
-
-
 // ==========================================================================
-// === Get Game Sheet data/styles                          (END of Google Sheet/Doc Helper Functions) ===
+// === Core Sheet Loader – “Game” Tab ===
 // ==========================================================================
-
-
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////// START fCSGetGameSheet and helpers
-
-
 
 
 // fSrvReadCSGameSheet /////////////////////////////////////////////////////////////////////////////////
@@ -398,6 +389,31 @@ function fSrvReadCSGameSheet(targetSheetId) {
 } // END fSrvReadCSGameSheet
 
 
+// fSrvExtractSheetData ////////////////////////////////////////////////////////////////////////////////
+// Reads data, formats, and notes from the sheet and returns structured result.
+function fSrvExtractSheetData(sh) {
+    const rngData = sh.getDataRange();
+    const arr = rngData.getValues();
+
+    if (fSrvIsSheetTrulyEmpty(sh, arr)) {
+        return fSrvBuildReturnObject(
+            [[]],
+            {
+                bg: [[]], fontColorHex: [[]], weight: [[]], fontSize: [[]],
+                fontStyle: [[]], fontFamily: [[]], wrap: [[]], merges: [],
+                colWidths: [], borders: []
+            },
+            [[]]
+        );
+    }
+
+    const numCols = arr[0]?.length || 0;
+    const format = fSrvBuildFormatObject(sh, rngData, numCols);
+    const notesArr = rngData.getNotes();
+
+    return fSrvBuildReturnObject(arr, format, notesArr);
+} // END fSrvExtractSheetData
+
 
 // fSrvIsSheetTrulyEmpty ////////////////////////////////////////////////////////////////////////////////
 // Determines if the sheet has zero real content, returns true if it's blank.
@@ -408,7 +424,6 @@ function fSrvIsSheetTrulyEmpty(sh, arr) {
     return (numRows === 0 || numCols === 0 || onlyEmpty) &&
            (sh.getLastRow() === 0 && sh.getLastColumn() === 0);
 } // END fSrvIsSheetTrulyEmpty
-
 
 
 // fSrvBuildFormatObject ////////////////////////////////////////////////////////////////////////////////
@@ -446,8 +461,6 @@ function fSrvBuildFormatObject(sh, rngData, numCols) {
 } // END fSrvBuildFormatObject
 
 
-
-
 // fSrvBuildReturnObject ////////////////////////////////////////////////////////////////////////////////
 // Combines the final return structure.
 function fSrvBuildReturnObject(arr, format, notesArr) {
@@ -459,47 +472,9 @@ function fSrvBuildReturnObject(arr, format, notesArr) {
 } // END fSrvBuildReturnObject
 
 
-
-
-// fSrvExtractSheetData ////////////////////////////////////////////////////////////////////////////////
-// Reads data, formats, and notes from the sheet and returns structured result.
-function fSrvExtractSheetData(sh) {
-    const rngData = sh.getDataRange();
-    const arr = rngData.getValues();
-
-    if (fSrvIsSheetTrulyEmpty(sh, arr)) {
-        return fSrvBuildReturnObject(
-            [[]],
-            {
-                bg: [[]], fontColorHex: [[]], weight: [[]], fontSize: [[]],
-                fontStyle: [[]], fontFamily: [[]], wrap: [[]], merges: [],
-                colWidths: [], borders: []
-            },
-            [[]]
-        );
-    }
-
-    const numCols = arr[0]?.length || 0;
-    const format = fSrvBuildFormatObject(sh, rngData, numCols);
-    const notesArr = rngData.getNotes();
-
-    return fSrvBuildReturnObject(arr, format, notesArr);
-} // END fSrvExtractSheetData
-
-
-
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////// END fCSGetGameSheet and helpers
-
-
-
-
-
 // ==========================================================================
-// === Read/Write to Google Sheets/Docs                        (End of Get Game Sheet data/styles) ===
+// === Generic Sheet Operations ===
 // ==========================================================================
-
-
 
 
 // fSrvGetSheetRangeDataNTags /////////////////////////////////////////////////////////
@@ -657,8 +632,6 @@ function fSrvGetSheetRangeDataNTags(sheetKeyOrId, sheetName, rangeObject) {
 } // END fSrvGetSheetRangeDataNTags
 
 
-
-
 // fSrvSaveDataToSheetRange /////////////////////////////////////////////////////////
 // Purpose -> Writes data to a specified range in a given Google Sheet,
 //            accepting a sheet key, sheet name, a rangeObject with tags/indices,
@@ -790,6 +763,10 @@ function fSrvSaveDataToSheetRange(sheetKey, sheetName, rangeObject, valueOrValue
 } // END fSrvSaveDataToSheetRange
 
 
+// ==========================================================================
+// === Player / GM Screen Logic ===
+// ==========================================================================
+
 
 // fSrvGetURLToPlayerCharForGMScreen /////////////////////////////////////////////////////
 // Purpose -> Reads specific static data (Race/Class, Level, Player/Char Names, Slot)
@@ -889,7 +866,6 @@ function fSrvGetURLToPlayerCharForGMScreen(csId) {
     }
 
 } // END fSrvGetURLToPlayerCharForGMScreen
-
 
 
 // fSrvSaveURLtoNamesAndLogToDBandPS ////////////////////////////////////////////////////////
@@ -1014,11 +990,9 @@ function fSrvSaveURLtoNamesAndLogToDBandPS(dataBundle) {
 } // END fSrvSaveURLtoNamesAndLogToDBandPS
 
 
-
 // ==========================================================================
-// === Firestore                       (End of Read/Write to Google Sheets/Docs ) ===
+// === Firestore Integration ===
 // ==========================================================================
-
 
 
 // fSrvGetFirestoreInstance ///////////////////////////////////////////////////////
@@ -1090,9 +1064,6 @@ function fSrvGetFirestoreInstance() {
         return null;
     }
 } // END fSrvGetFirestoreInstance
-
-
-
 
 
 // fSrvSaveTurboTextAndURLtoNamesToFirestore ////////////////////////////////////////////////////
@@ -1192,8 +1163,6 @@ function fSrvSaveTurboTextAndURLtoNamesToFirestore(csId, fullArrData, charInfo) 
 } // END fSrvSaveTurboTextAndURLtoNamesToFirestore
 
 
-
-
 // fSrvConvertFirestoreTypesToJS //////////////////////////////////////////////////
 // Purpose -> Recursively converts Firestore's typed value objects (mapValue,
 //            arrayValue, stringValue, etc.) into standard JavaScript types
@@ -1235,7 +1204,6 @@ function fSrvConvertFirestoreTypesToJS(firestoreValue) {
   Logger.log(`fSrvConvertFirestoreTypesToJS: Encountered unexpected value structure: ${JSON.stringify(firestoreValue).substring(0,100)}... Returning as is.`);
   return firestoreValue;
 } // END fSrvConvertFirestoreTypesToJS
-
 
 
 // fSrvUnpackFirestoreArrayTo2D //////////////////////////////////////////////
@@ -1301,7 +1269,6 @@ function fSrvUnpackFirestoreArrayTo2D(firestoreArr) {
 
     return new2DArray;
 } // END fSrvUnpackFirestoreArrayTo2D
-
 
 
 // fSrvCheckAndLoadFirestoreGUIarrAs2D //////////////////////////////////////////////////
@@ -1386,6 +1353,3 @@ function fSrvCheckAndLoadFirestoreGUIarrAs2D(csId) {
         return { success: false, message: safeErrorMessage };
     }
 } // END fSrvCheckAndLoadFirestoreGUIarrAs2D
-
-
-
