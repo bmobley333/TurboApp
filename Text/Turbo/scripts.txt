@@ -152,12 +152,12 @@ const gUI = {
     // { r1: 0, r2: 1 } // Example: Range using indices
   ],
   dropDownBox: [ // Defines ranges for dropdown cells and their choices
+    // NOTE: The dropdown abilityNames are created dynamically by fFetchAndApplyAbilityDropdowns
     { // Is On column
       choices: ['','Y','N',1,2,3,4,5,6,7,8,9,10,'P','I','~','E','*'],
       ranges: [ { r1: 'AbilTblStart_R', c1: 'On', r2: 'AbilTblEnd_R', c2: 'On' } ]
     },
-    { // Monster
-      // # column
+    { // Monster # column
       choices: ['',1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30],
       ranges: [ { r1: 'CustMon', c1: 'NumMon', r2: 'LastMon_R', c2: 'NumMon' } ]
     }
@@ -198,8 +198,11 @@ const gUI = {
       { r1: 'NishAtr_R', c1: 'On', r2: 'AbilTblEnd_R', c2: 'On' },
       { r1: 'GearTblStart_R', c1: 'On', r2: 'GearTblEnd_R', c2: 'On' }
     ],
+    abilName: [
+      { r1: 'NishAtr_R', c1: 'Ability', r2: 'AbilTblEnd_R', c2: 'Ability' },
+      { r1: 'GearTblStart_R', c1: 'Ability', r2: 'GearTblEnd_R', c2: 'Ability' }
+    ],
     sk1sk2CheckBoxes: [ // Defines the Sk1/Sk2 checkbox columns (treated as radio buttons)
-
       { r1: 'NishAtr_R', c1: 'Sk1ChkBox', r2: 'AbilTblEnd_R', c2: 'Sk1ChkBox'},
       { r1: 'NishAtr_R', c1: 'Sk2ChkBox', r2: 'AbilTblEnd_R', c2: 'Sk2ChkBox'},
       { r1: 'GearTblStart_R', c1: 'Sk1ChkBox', r2: 'GearTblEnd_R', c2: 'Sk1ChkBox'},
@@ -224,10 +227,12 @@ const gUI = {
     vitNow: { r1: 'VitTbl', c1: 'vitNow', r2: 'VitTbl', c2: 'vitNow' },
     vitNowPercent: { r1: 'VitTbl', c1: 'VitNowPercent', r2: 'VitTbl', c2: 'VitNowPercent' },
     chaosGems: { r1: 'Chaos1', c1: 'ChaosUses', r2: 'ChaosWrist', c2: 'ChaosAbility' },
-    socketedGear: { r1:
-    'SocketTblStart', c1: 'SocketedGear', r2: 'SocketTblEnd', c2: 'SocketedGems' },
+    socketedGear: { r1: 'SocketTblStart', c1: 'SocketedGear', r2: 'SocketTblEnd', c2: 'SocketedGems' },
     currentEnc: { r1: 'PossEncTot', c1: 'PossEncTot', r2: 'PossEncTot', c2: 'PossEncTot' },
     gearAPTotal: { r1: 'PossAPTot', c1: 'PossGrandAPTot', r2: 'PossAPTot', c2: 'PossGrandAPTot' }
+  },
+  rangeCSList: {
+    abilitiesNameID: { r1: 'TableFirstRow', c1: 'AbilitiesNameID', r2: 'Calc_LastRow', c2: 'AbilitiesNameID' } // Calc_LastRow is a flag not a tag
   },
   rangeDB: {
     monstersDB: { r1: 'MonTblFirst_R', c1: 'ActiveMonTF', r2: 'MonTblLast_R', c2: 'Notes' }
@@ -2211,6 +2216,69 @@ function fApplyDropdownsToGrid() {
     fMyConsoleLog(`✅ Applied ${dropdownsApplied} Dropdowns.`);
 
 } // END fApplyDropdownsToGrid
+
+
+
+
+// fFetchAndApplyAbilityDropdowns //////////////////////////////////////////////
+// Purpose -> Fetches the sorted list of ability names from the server, adds an
+//            empty choice to the top, and applies them as dropdown choices to
+//            the configured ability name cells.
+// Inputs  -> None.
+// Outputs -> None (Modifies gUI.dropDownBox, calls fApplyDropdownsToGrid).
+function fFetchAndApplyAbilityDropdowns() {
+    fMyConsoleLog("⚙️ Fetching Ability List for Dropdowns...");
+
+    if (!gIndexCSID) {
+        const msg = "Cannot fetch ability list: Character Sheet ID (gIndexCSID) is missing on client.";
+        console.error(msg);
+        fMyConsoleLog(`   -> ❌ ${msg}`);
+        fShowMessage(`Error: ${msg} Check the URL parameter.`);
+        return;
+    }
+
+    fMyConsoleLog(`   -> About to call fSrvGetAbilityList with gIndexCSID: "${gIndexCSID}" (Type: ${typeof gIndexCSID})`);
+
+    google.script.run
+        .withSuccessHandler((abilityList) => {
+            if (Array.isArray(abilityList)) {
+                fMyConsoleLog(`   -> Received ${abilityList.length} ability names.`);
+
+                // <<< ADDED: Add an empty string option to the beginning of the list >>>
+                abilityList.unshift('');
+                fMyConsoleLog(`   -> Added empty option. List size now: ${abilityList.length}`);
+
+                // Create a new configuration object for the ability dropdowns
+                const abilityConfig = {
+                    choices: abilityList,        // Use the modified list (with '' at the start)
+                    ranges: gUI.range.abilName   // Use the predefined ranges for ability name cells
+                };
+
+                // Add this new config object to the main dropdownBox array
+                gUI.dropDownBox.push(abilityConfig);
+
+                fMyConsoleLog("   -> Added new config to gUI.dropDownBox for abilities.");
+
+                // Re-apply dropdowns to the grid; this will now include the new ability config
+                fApplyDropdownsToGrid();
+
+            } else {
+                const errMsg = "Received invalid data format for ability list from server.";
+                console.error(`fFetchAndApplyAbilityDropdowns: ${errMsg}`, abilityList);
+                fMyConsoleLog(`   -> ❌ Error: ${errMsg}`);
+                fShowMessage(`Error: ${errMsg}`);
+            }
+        })
+        .withFailureHandler((error) => {
+            const errorMsg = `Failed to fetch ability list: ${error.message || 'Unknown server error'}`;
+            console.error(`fFetchAndApplyAbilityDropdowns Failure:`, error);
+            fMyConsoleLog(`   -> ❌ ${errorMsg}`);
+            fShowMessage(`Error: ${errorMsg}`);
+        })
+        .fSrvGetAbilityList(gIndexCSID,gUI.rangeCSList.abilitiesNameID); // Pass CSID and CS 'List' Tab's range for abilityNames
+
+} // END fFetchAndApplyAbilityDropdowns
+
 
 
 
@@ -6069,27 +6137,30 @@ function fAttachGridListeners(gridElement) {
 //            listeners after the main grid structure has been rendered. This includes
 //            merging cells, adding buttons, applying borders/colors, setting visibility,
 //            handling sticky headers, applying dropdowns, checking for overflow,
-//            and setting up final event listeners.
+//            fetching dynamic dropdown lists, and setting up final event listeners.
 // Inputs  -> None.
 // Outputs -> None (Calls various formatting and setup functions).
 function fRunPostRenderFormatting() {
     fMyConsoleLog("🚀 Applying Post-Render Formatting...");
 
     // === Apply Structural Formatting ===
-    fApplyGridDynamicMerges();     // Handle merged cells first
+    fApplyGridDynamicMerges(); // Handle merged cells first
     fAddGridsHeaderRowButtons();       // Add image buttons to header cells
-    fApplyGridManualBorders();     // Apply borders defined in gUI.manualBorderSections
+    fApplyGridManualBorders(); // Apply borders defined in gUI.manualBorderSections
     fApplyGridColAndRowInitialVisibility(); // Hide initially hidden rows/columns
-    fApplyGridManualColoring();    // Apply font colors defined in gUI.fontColorRange
-    fSetTurbosGridHeaderRows();              // Apply sticky header styling
+    fApplyGridManualColoring(); // Apply font colors defined in gUI.fontColorRange
+    fSetTurbosGridHeaderRows(); // Apply sticky header styling
 
-    // === Apply Interactive Elements ===
-    // Apply dropdowns AFTER merges/visibility might have hidden target cells
+    // === Apply Static Interactive Elements ===
+    // Apply statically defined dropdowns FIRST (e.g., On, NumMon)
     fApplyDropdownsToGrid();
 
+    // === Fetch Dynamic Dropdown Data and Apply ===
+    fFetchAndApplyAbilityDropdowns(); // Fetch ability names and apply those dropdowns
+
     // === Final Adjustments & Listeners ===
-    fMarkGridOverflowingCells();    // Add class to cells with overflow after layout changes
-    fClearSk1Sk2Checkboxes();   // Ensure radio button group starts clean (optional, depending on desired state)
+    fMarkGridOverflowingCells(); // Add class to cells with overflow after layout changes
+    fClearSk1Sk2Checkboxes(); // Ensure radio button group starts clean (optional)
 
     // Attach main grid event listeners
     const gridElement = document.getElementById('grid');
@@ -6099,6 +6170,9 @@ function fRunPostRenderFormatting() {
     if (fModalElementsAvailable()) {
         fSetupModalListeners();
     }
+
+    // --- Calculate MR/Enc AFTER grid is fully rendered and formatted ---
+    fCalculateMovementAndEncumbrance(); // Now called here
 
     fMyConsoleLog("✅ All Post-Render Formatting Done!");
 } // END fRunPostRenderFormatting
