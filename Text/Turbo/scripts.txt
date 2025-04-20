@@ -118,15 +118,13 @@ const gUI = {
     { r1: 'LuckBox', c1: 'ULLuckBox', r2: 'LuckPlus', c2: 'LuckBox', edges: 'r' },
     { r1: 'Act', c1: 'ULAct', r2: 'ActPlus', c2: 'ActTot', edges: 'r' },
     { r1: 'Health', c1: 'vitPlus', r2: 'VitTbl', c2: 'VitNowPercent', edges: 'br' },
-    { r1: 'VerUL', c1:
-      'Ver', r2: 'FrozenHeader', c2: 'Ver', edges: 'r' },
+    { r1: 'VerUL', c1: 'Ver', r2: 'FrozenHeader', c2: 'Ver', edges: 'r' },
     { r1: 'FrozenHeader', c1: 'PermMorph1', r2: 'AbilTblEnd_R', c2: 'Regain', edges: 'br' },
     { r1: 'FrozenHeader', c1: 'PossNum', r2: 'AbilTblEnd_R', c2: 'PossAPTot', edges: 'br' },
     { r1: 'ULMonsterTbl', c1: 'NumMon', r2: 'LastMon_R', c2: 'MonSize', edges: 'br' },
     { r1: 'AstralGauntHeader_R', c1: 'AstralGauntletSlot', r2: 'AstralGauntHeader_R', c2: 'AstralGauntletHeaderEndC', edges: 'r' },
     { r1: 'Chaos2ndHeader', c1: 'AstralGauntletSlot', r2: 'ChaosWrist', c2: 'LastC', edges: 'br' },
     { r1: 'SocketedGearHeader', c1: 'SocketedGearSlot', r2: 'SocketTblEnd', c2: 'LastC', edges: 'br' },
-
     { r1: 'GearTblHeaderStartR', c1: 'PermMorph1', r2: 'GearTblEnd_R', c2: 'Regain', edges: 'br' },
     { r1: 'GearTblHeaderStartR', c1: 'PossNum', r2: 'GearTblEnd_R', c2: 'PossAPTot', edges: 'br' },
     { r1: 'GearSpe', c1: 'SpeedHeader', r2: 'GearStr', c2: 'GearPlusMR', edges: 'br' },
@@ -2109,12 +2107,12 @@ function fHandleDropdownChange(event) {
 
     // === Validate Indices ===
     if (isNaN(r) || isNaN(c) || !gUI.arr?.[r]) {
-         console.warn(`fHandleDropdownChange: Invalid coordinates [${r}, ${c}] from dataset.`);
-         return;
+        console.warn(`fHandleDropdownChange: Invalid coordinates [${r}, ${c}] from dataset.`);
+        return;
     }
 
     // Capture original value *before* determining final type and updating model
-    const oldValue = gUI.arr[r][c];
+    const oldValue = gUI.arr[r][c]; // <<< Capture old value here
 
     // === Determine Final Value Type ===
     // Attempt to find the original choice in the config to infer data type.
@@ -2135,18 +2133,22 @@ function fHandleDropdownChange(event) {
 
     // === Update Data Model (if changed) ===
     if (gUI.arr[r][c] !== finalValue) {
+        // Check if it's an Ability Name Dropdown BEFORE updating gUI.arr
+        const isAbilityNameCell = fIsCellInRangeArray(r, c, gUI.range.abilNameNoNish);
+
+        // Update gUI.arr AFTER checking, but BEFORE calling fProcessAbilityChange
         gUI.arr[r][c] = finalValue;
         fMyConsoleLog(`Dropdown [${r}, ${c}] changed to: "${finalValue}" (Type: ${typeof finalValue})`);
 
-        // === Check if it's an Ability Name Dropdown ===
-        if (fIsCellInRangeArray(r, c, gUI.range.abilNameNoNish)) {
+        // If it was an ability name cell, call the processing function
+        if (isAbilityNameCell) {
             fMyConsoleLog(`   -> Change detected in Ability Name cell [${r}, ${c}]. Triggering processing...`);
-            // Call the handler function for ability changes, passing old and new values
+            // Pass the finalValue (correct type) and the captured oldValue
             fProcessAbilityChange(r, c, finalValue, oldValue);
         }
         // Add calls here if other actions need to be triggered by this change for other dropdown types.
+        fHandleAutoSaveTextToFirestore(); // Save changes
     }
-
 } // END fHandleDropdownChange
 
 
@@ -2155,12 +2157,12 @@ function fHandleDropdownChange(event) {
 // fProcessAbilityChange ///////////////////////////////////////////////////////
 // Purpose -> Handles the logic when an Ability dropdown value changes. If the new
 //            value is empty, clears the relevant cells in the row. If not empty,
-//            initiates the process to look up and populate ability data (Phase 1: Log only).
+//            initiates a server call to look up and populate ability data.
 // Inputs  -> r (Number): Row index of the changed ability cell.
 //         -> c (Number): Column index of the changed ability cell (likely 'Ability' col).
 //         -> newValue (Any): The new value selected in the dropdown.
 //         -> oldValue (Any): The previous value in the cell.
-// Outputs -> None (Modifies grid data/DOM via fSetGridValue or initiates server call later).
+// Outputs -> None (Modifies grid data/DOM via fSetGridValue or initiates server call).
 function fProcessAbilityChange(r, c, newValue, oldValue) {
     const funcName = 'fProcessAbilityChange';
     fMyConsoleLog(`⚙️ ${funcName}: Processing change for Ability at row ${r}.`);
@@ -2200,6 +2202,7 @@ function fProcessAbilityChange(r, c, newValue, oldValue) {
 
         if (clearSuccess) {
             fMyConsoleLog(`   -> Successfully cleared relevant cells for row ${r}.`);
+            fHandleAutoSaveTextToFirestore(); // Save changes after clearing
         } else {
             fMyConsoleLog(`   -> ⚠️ Errors occurred while clearing cells for row ${r}.`);
             // Optional: fShowMessage(`Warning: Failed to clear some data for row ${r + 1}.`);
@@ -2207,14 +2210,78 @@ function fProcessAbilityChange(r, c, newValue, oldValue) {
 
     // --- Scenario 2: New value is not empty ---
     } else {
-        fMyConsoleLog(`   -> New Ability Name/ID selected: "${newValueStr}". Initiating lookup...`);
-        // @@TODO Phase 2: Implement google.script.run call to fSrvGetAbilityDataByNameID(newValueStr)
-        // @@TODO Phase 2: Implement success handler to populate row r using fSetGridValue with returned data.
-        // @@TODO Phase 2: Implement failure handler to show message / clear row.
-        fMyConsoleLog(`      -> (Phase 2 Pending) Server call for "${newValueStr}" lookup would happen here.`);
-        // Placeholder message until Phase 2
-        fShowMessage(`Lookup for "${newValueStr}" not yet implemented.`).catch(e => console.error(e));
+        fMyConsoleLog(`   -> New Ability Name/ID selected: "${newValueStr}". Initiating server lookup...`);
+        // Optionally show a loading indicator for row r
+        fSetGridValue(r, 'Sk1', '⏳'); // Example: Show loading in Sk1 cell
 
+        google.script.run
+            .withSuccessHandler((abilityData) => {
+                fMyConsoleLog(`   -> Received ability data from server for "${newValueStr}".`);
+                // Clear loading indicator
+                fSetGridValue(r, 'Sk1', ''); // Clear temporary indicator
+
+                // Validate response structure
+                if (!abilityData || typeof abilityData !== 'object') {
+                    fMyConsoleLog("      -> ❌ Invalid data structure received from server.");
+                    fShowMessage(`Error: Invalid data received for ability "${newValueStr}".`).catch(e => console.error(e));
+                    // Optionally clear the row again if data is bad
+                    fProcessAbilityChange(r, c, '', newValueStr); // Call recursively to clear
+                    return;
+                }
+
+                // Check for server-side error flag
+                if (abilityData.error) {
+                    fMyConsoleLog(`      -> ❌ Server reported error: ${abilityData.message}`);
+                    fShowMessage(`Error fetching ability "${newValueStr}":<br>${abilityData.message}`).catch(e => console.error(e));
+                    fProcessAbilityChange(r, c, '', newValueStr); // Clear row on error
+                    return;
+                }
+
+                // === Populate Row with Data ===
+                fMyConsoleLog(`      -> Populating row ${r} with received data...`);
+                let populateSuccess = true;
+                // Map server data fields to grid columns using fSetGridValue
+                populateSuccess &&= fSetGridValue(r, 'PermMorph1', abilityData.PermMorph1 ?? '');
+                populateSuccess &&= fSetGridValue(r, 'Morph1', abilityData.Morph1 ?? '');
+                populateSuccess &&= fSetGridValue(r, 'Sk1Typ', abilityData.Sk1Typ ?? '');
+                populateSuccess &&= fSetGridValue(r, 'Sk1', abilityData.Sk1 ?? '');
+                populateSuccess &&= fSetGridValue(r, 'On', abilityData.On ?? '');
+                populateSuccess &&= fSetGridValue(r, 'Sk1ChkBox', abilityData.Sk1ChkBox ?? false);
+                populateSuccess &&= fSetGridValue(r, 'Condition', abilityData.Condition ?? '');
+                populateSuccess &&= fSetGridValue(r, 'Sk2ChkBox', abilityData.Sk2ChkBox ?? false);
+                populateSuccess &&= fSetGridValue(r, 'Sk2', abilityData.Sk2 ?? '');
+                populateSuccess &&= fSetGridValue(r, 'Sk2Typ', abilityData.Sk2Typ ?? '');
+                populateSuccess &&= fSetGridValue(r, 'Morph2', abilityData.Morph2 ?? '');
+                populateSuccess &&= fSetGridValue(r, 'PermMorph2', abilityData.PermMorph2 ?? '');
+                populateSuccess &&= fSetGridValue(r, 'Ver', abilityData.Ver ?? '');
+                populateSuccess &&= fSetGridValue(r, 'Notes', abilityData.Notes ?? '');
+                populateSuccess &&= fSetGridValue(r, 'Pic', abilityData.Pic ?? '');
+                populateSuccess &&= fSetGridValue(r, 'Act', abilityData.Act ?? '');
+                populateSuccess &&= fSetGridValue(r, 'Dur', abilityData.Dur ?? '');
+                populateSuccess &&= fSetGridValue(r, 'Rng', abilityData.Rng ?? '');
+                populateSuccess &&= fSetGridValue(r, 'MetaCost', abilityData.MetaCost ?? '');
+                populateSuccess &&= fSetGridValue(r, 'Uses', abilityData.Uses ?? '');
+                populateSuccess &&= fSetGridValue(r, 'Regain', abilityData.Regain ?? '');
+
+                if (populateSuccess) {
+                    fMyConsoleLog("      -> Successfully populated row.");
+                    fHandleAutoSaveTextToFirestore(); // Save changes after populating
+                } else {
+                    fMyConsoleLog("      -> ⚠️ Errors occurred while populating row.");
+                    fShowMessage(`Warning: Some data for "${newValueStr}" might not have loaded correctly.`).catch(e => console.error(e));
+                }
+            })
+            .withFailureHandler((error) => {
+                // Clear loading indicator on failure
+                fSetGridValue(r, 'Sk1', ''); // Clear temporary indicator
+                const errorMsg = `Failed to communicate with server for ability lookup: ${error.message || 'Unknown server error'}`;
+                console.error(`${funcName} Failure:`, error);
+                fMyConsoleLog(`   -> ❌ ${errorMsg}`);
+                fShowMessage(`Error: ${errorMsg}`).catch(e => console.error(e));
+                // Optionally clear row on communication failure?
+                // fProcessAbilityChange(r, c, '', newValueStr);
+            })
+            .fSrvGetAbilityDataByNameID(gIndexCSID,newValueStr); // Pass the CSID and Name_ID string to the server
     }
 
 } // END fProcessAbilityChange
