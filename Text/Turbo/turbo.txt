@@ -513,6 +513,7 @@ function fSrvBuildReturnObject(arr, format, notesArr) {
 // Purpose -> Retrieves a list of ability names from the 'List' tab of the Character Sheet
 //            using fSrvGetSheetRangeDataNTags and handling 'Calc_LastRow'.
 // Inputs  -> csId (String): The Character Sheet ID passed from the client.
+//         -> rangeconfig - the range of gUI.rangeCSList.abilitiesNameID to work on
 // Outputs -> (Array<String>): An array of unique, non-empty ability names, sorted alphabetically.
 // Throws  -> (Error): If sheet/tab/tags not found or critical values are missing.
 function fSrvGetAbilityList(csId,rangeConfig) {

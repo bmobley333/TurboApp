@@ -198,8 +198,8 @@ const gUI = {
       { r1: 'NishAtr_R', c1: 'On', r2: 'AbilTblEnd_R', c2: 'On' },
       { r1: 'GearTblStart_R', c1: 'On', r2: 'GearTblEnd_R', c2: 'On' }
     ],
-    abilName: [
-      { r1: 'NishAtr_R', c1: 'Ability', r2: 'AbilTblEnd_R', c2: 'Ability' },
+    abilNameNoNish: [
+      { r1: 'AbilityStartBelowNish_R', c1: 'Ability', r2: 'AbilTblEnd_R', c2: 'Ability' },
       { r1: 'GearTblStart_R', c1: 'Ability', r2: 'GearTblEnd_R', c2: 'Ability' }
     ],
     sk1sk2CheckBoxes: [ // Defines the Sk1/Sk2 checkbox columns (treated as radio buttons)
@@ -2244,14 +2244,14 @@ function fFetchAndApplyAbilityDropdowns() {
             if (Array.isArray(abilityList)) {
                 fMyConsoleLog(`   -> Received ${abilityList.length} ability names.`);
 
-                // <<< ADDED: Add an empty string option to the beginning of the list >>>
+                // Add an empty string option to the beginning of the list >>>
                 abilityList.unshift('');
                 fMyConsoleLog(`   -> Added empty option. List size now: ${abilityList.length}`);
 
                 // Create a new configuration object for the ability dropdowns
                 const abilityConfig = {
                     choices: abilityList,        // Use the modified list (with '' at the start)
-                    ranges: gUI.range.abilName   // Use the predefined ranges for ability name cells
+                    ranges: gUI.range.abilNameNoNish   // Use the predefined ranges for ability name cells
                 };
 
                 // Add this new config object to the main dropdownBox array
@@ -5238,7 +5238,7 @@ async function fCalculateMovementAndEncumbrance() {
     const mrColumnTags = ['GearMRCol1', 'GearMRCol2', 'GearMRCol3', 'GearMRCol4', 'GearMRCol5', 'GearMRCol6'];
     const MR_TABLE_ROW = 'GearMRTbl';
     const CARRY_TABLE_ROW = 'GearCarryTbl';
-    const CHECKBOX_ROW = 'GearMRCheckBox_R';
+    const CHECKBOX_ROW = 'GearMRCheckBox';
 
     // === 2. Get Input Values ===
     let errorMsg = '';
