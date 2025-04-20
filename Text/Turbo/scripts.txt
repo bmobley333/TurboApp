@@ -241,9 +241,10 @@ const gUI = {
     skTyp: ['Atr','Sk','Atk','DMG','Def','AR','Str'], // Note free, luck, un, unSk are not skill Types and dealth with elsewhere
     metaColor: ['R','O','Y','G','B'],
     metaFull: [5,4,3,2,1], // Maximums for each meta color
-
     luckBoxMax: 5,
     actMax: 5,
+    clearAbilityColTags_EmptyString: ['PermMorph1','Morph1','Sk1Typ','Sk1','On','Condition','Sk2','Sk2Typ','Morph2','PermMorph2','Ver','Notes','Pic','Act','Dur','Rng','MetaCost','Uses','Regain'],
+    clearAbilityColTags_False: ['Sk1ChkBox','Sk2ChkBox']
   },
 
   // === UI Element References ===
@@ -2096,8 +2097,9 @@ function fCreateDropdownElement(r, c, choices, currentValue) {
 // Purpose -> Handles the 'change' event delegated from grid dropdowns (<select>).
 //            Updates the corresponding value in gUI.arr, attempting to preserve
 //            the original data type (Number or String) if possible.
+//            If the change occurs in an Ability Name cell, triggers fProcessAbilityChange.
 // Inputs  -> event (Event): The change event object from the select element.
-// Outputs -> None (Modifies gUI.arr).
+// Outputs -> None (Modifies gUI.arr, potentially triggers ability processing).
 function fHandleDropdownChange(event) {
     // === Get Data from Event ===
     const select = event.target;
@@ -2110,6 +2112,9 @@ function fHandleDropdownChange(event) {
          console.warn(`fHandleDropdownChange: Invalid coordinates [${r}, ${c}] from dataset.`);
          return;
     }
+
+    // Capture original value *before* determining final type and updating model
+    const oldValue = gUI.arr[r][c];
 
     // === Determine Final Value Type ===
     // Attempt to find the original choice in the config to infer data type.
@@ -2128,17 +2133,91 @@ function fHandleDropdownChange(event) {
     // If the original choice was a number, convert the newValue back to a number
     const finalValue = (typeof originalChoice === 'number') ? Number(newValue) : newValue;
 
-    // === Update Data Model ===
-    // Update gUI.arr only if the value has actually changed
+    // === Update Data Model (if changed) ===
     if (gUI.arr[r][c] !== finalValue) {
         gUI.arr[r][c] = finalValue;
         fMyConsoleLog(`Dropdown [${r}, ${c}] changed to: "${finalValue}" (Type: ${typeof finalValue})`);
-        // Note: The <select> element in the DOM is already updated visually by the browser.
-        // Add calls here if other actions need to be triggered by this change.
+
+        // === Check if it's an Ability Name Dropdown ===
+        if (fIsCellInRangeArray(r, c, gUI.range.abilNameNoNish)) {
+            fMyConsoleLog(`   -> Change detected in Ability Name cell [${r}, ${c}]. Triggering processing...`);
+            // Call the handler function for ability changes, passing old and new values
+            fProcessAbilityChange(r, c, finalValue, oldValue);
+        }
+        // Add calls here if other actions need to be triggered by this change for other dropdown types.
     }
 
 } // END fHandleDropdownChange
 
+
+
+
+// fProcessAbilityChange ///////////////////////////////////////////////////////
+// Purpose -> Handles the logic when an Ability dropdown value changes. If the new
+//            value is empty, clears the relevant cells in the row. If not empty,
+//            initiates the process to look up and populate ability data (Phase 1: Log only).
+// Inputs  -> r (Number): Row index of the changed ability cell.
+//         -> c (Number): Column index of the changed ability cell (likely 'Ability' col).
+//         -> newValue (Any): The new value selected in the dropdown.
+//         -> oldValue (Any): The previous value in the cell.
+// Outputs -> None (Modifies grid data/DOM via fSetGridValue or initiates server call later).
+function fProcessAbilityChange(r, c, newValue, oldValue) {
+    const funcName = 'fProcessAbilityChange';
+    fMyConsoleLog(`⚙️ ${funcName}: Processing change for Ability at row ${r}.`);
+
+    // Ensure values are strings for comparison, trimming whitespace
+    const newValueStr = String(newValue ?? '').trim();
+    const oldValueStr = String(oldValue ?? '').trim();
+
+    // Exit if the trimmed value hasn't actually changed
+    if (newValueStr === oldValueStr) {
+        fMyConsoleLog(`   -> No significant change detected ('${oldValueStr}' -> '${newValueStr}'). Exiting.`);
+        return;
+    }
+
+    // --- Scenario 1: New value is empty ---
+    if (newValueStr === '') {
+        fMyConsoleLog(`   -> New value is empty. Clearing row ${r}...`);
+        let clearSuccess = true;
+
+        // Clear cells needing empty string
+        const colsToClearEmpty = gUI.list?.clearAbilityColTags_EmptyString || [];
+        colsToClearEmpty.forEach(tag => {
+            if (!fSetGridValue(r, tag, '')) { // Set to empty string
+                fMyConsoleLog(`      -> Failed to clear column '${tag}' for row ${r}.`);
+                clearSuccess = false;
+            }
+        });
+
+        // Clear cells needing false
+        const colsToClearFalse = gUI.list?.clearAbilityColTags_False || [];
+        colsToClearFalse.forEach(tag => {
+            if (!fSetGridValue(r, tag, false)) { // Set to boolean false
+                fMyConsoleLog(`      -> Failed to clear column '${tag}' for row ${r}.`);
+                clearSuccess = false;
+            }
+        });
+
+        if (clearSuccess) {
+            fMyConsoleLog(`   -> Successfully cleared relevant cells for row ${r}.`);
+        } else {
+            fMyConsoleLog(`   -> ⚠️ Errors occurred while clearing cells for row ${r}.`);
+            // Optional: fShowMessage(`Warning: Failed to clear some data for row ${r + 1}.`);
+        }
+
+    // --- Scenario 2: New value is not empty ---
+    } else {
+        fMyConsoleLog(`   -> New Ability Name/ID selected: "${newValueStr}". Initiating lookup...`);
+        // @@TODO Phase 2: Implement google.script.run call to fSrvGetAbilityDataByNameID(newValueStr)
+        // @@TODO Phase 2: Implement success handler to populate row r using fSetGridValue with returned data.
+        // @@TODO Phase 2: Implement failure handler to show message / clear row.
+        fMyConsoleLog(`      -> (Phase 2 Pending) Server call for "${newValueStr}" lookup would happen here.`);
+        // Placeholder message until Phase 2
+        fShowMessage(`Lookup for "${newValueStr}" not yet implemented.`).catch(e => console.error(e));
+
+    }
+
+} // END fProcessAbilityChange
 
 
 
