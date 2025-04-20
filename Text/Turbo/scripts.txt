@@ -535,9 +535,6 @@ function fMakeCorrectCheckBoxType(r, c) {
 // ==========================================================================
 
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////// START fCreateAndFormatCell and helpers
-
-
 
 
 // fCreateAndFormatCell //////////////////////////////////////////////////////////////
@@ -812,15 +809,6 @@ function fApplyCellFormatting(cell, c, bgColor, rowFormat, isUrl) {
 
 
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////// END fCreateAndFormatCell and helpers
-
-
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////// START fRenderTurbosFullGrid and helpers
-
-
-
-
 // fRenderTurbosFullGrid /////////////////////////////////////////////////////////////////
 // Purpose -> Main controller function to render the entire grid dynamically.
 //            Initializes grid, sets up columns/tags, then renders cells in chunks
@@ -1005,12 +993,6 @@ function fRenderChunkFactory(grid, gameArr, format, chunkSize, callback) {
         }
     }; // END renderChunk (inner function)
 } // END fRenderChunkFactory
-
-
-
-
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////// END fRenderTurbosFullGrid and helpers
 
 
 
@@ -1449,10 +1431,6 @@ function fApplyGridManualColoring() {
 
 
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////// START fAddGridsHeaderRowButtons and helpers
-
-
-
 
 // fAddGridsHeaderRowButtons ///////////////////////////////////////////////////////////////
 // Purpose -> Finds specific cells designated by tags in headerButtonConfigs, clears
@@ -1607,15 +1585,6 @@ function fApplyGridButtonToCell(cell, img) {
 } // END fApplyGridButtonToCell
 
 
-
-
-
-
-
-
-
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////// END fAddGridsHeaderRowButtons and helpers
 
 
 // fMarkGridOverflowingCells ///////////////////////////////////////////////////////////
@@ -1903,10 +1872,6 @@ function fConfineNotesTooltipBox(tooltip, event) {
 
 
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////// START fHandleCellHover and helpers
-
-
-
 
 // fHandleCellHover ////////////////////////////////////////////////////////////////
 // Purpose -> Delegated mouseenter/mouseover handler for grid cells. Starts a timer
@@ -2015,6 +1980,8 @@ function fBuildsTooltipBoxesContent(r, c, cell) {
 } // END fBuildsTooltipBoxesContent
 
 
+
+
 // fStartTooltipBoxDelayTimer //////////////////////////////////////////////////////////////
 // Purpose -> Sets a timeout (`gUI.HOVER_DELAY_MS`) before attempting to show the
 //            tooltip for a hovered cell. Clears any previous timeout.
@@ -2051,10 +2018,6 @@ function fStartTooltipBoxDelayTimer(cell, event) {
 
     }, gUI.HOVER_DELAY_MS); // Use configured delay
 } // END fStartTooltipBoxDelayTimer
-
-
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////// END fHandleCellHover and helpers
 
 
 
@@ -2258,11 +2221,6 @@ function fApplyDropdownsToGrid() {
 
 
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////// START fHandleGridCheckboxClick and helpers
-
-
-
-
 // fHandleGridCheckboxClick ////////////////////////////////////////////////////////
 // Purpose -> Handles delegated click events specifically for checkboxes within the grid.
 //            Updates the data model (gUI.arr) and handles radio-button logic for
@@ -2301,6 +2259,8 @@ function fHandleGridCheckboxClick(event) {
 } // END fHandleGridCheckboxClick
 
 
+
+
 // fIsValidGridCheckbox ////////////////////////////////////////////////////////////
 // Purpose -> Checks if a given HTML element is a valid, enabled checkbox
 //            located within a grid cell (.cell).
@@ -2313,6 +2273,8 @@ function fIsValidGridCheckbox(checkbox) {
            checkbox.closest('.cell') && // Ensure it's within a grid cell
            !checkbox.disabled;          // Ensure it's not disabled
 } // END fIsValidGridCheckbox
+
+
 
 
 // fIsValidGridCoords //////////////////////////////////////////////////////////////
@@ -2384,15 +2346,6 @@ function fUncheckOldSkGroupBox(oldR, oldC) {
         console.warn(`Radio group: Could not find previous checkbox element at [${oldR}, ${oldC}] to uncheck.`);
     }
 } // END fUncheckOldSkGroupBox
-
-
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////// END fHandleGridCheckboxClick and helpers
-
-
-
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////// START fHandleGridClick and helpers
 
 
 
@@ -2606,11 +2559,6 @@ function fHandleUrlClick(cellDiv) {
 
 
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////// END fHandleGridClick and helpers
-
-
-
-
 // fHandleGridCellEdit /////////////////////////////////////////////////////////////
 // Purpose -> Handles the 'blur' event delegated from the grid for contenteditable cells.
 //            Updates the underlying data model (gUI.arr) if the cell's text content
@@ -2653,11 +2601,6 @@ function fHandleGridCellEdit(event) {
 
 
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////// START fClearCheckboxesInGridRange and helpers
-
-
-
-
 // fDoesObjectHaveR1C1R2C2Properties /////////////////////////////////////////////////////////////
 // Purpose -> Checks if a given object has the required properties (r1, c1, r2, c2)
 //            to be considered a valid range definition object.
@@ -2686,10 +2629,6 @@ function fConvertsR1C1R2C2TagOrNumToIndices(range) {
     const c2 = fResolveCol(range.c2);
     return { r1, c1, r2, c2 };
 } // END fConvertsR1C1R2C2TagOrNumToIndices
-
-
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////// END fClearCheckboxesInGridRange and helpers
 
 
 
@@ -3356,6 +3295,8 @@ async function fHandleGetRaceClassInfo() {
 } // END fHandleGetRaceClassInfo
 
 
+
+
 // ==========================================================================
 // === Menu Bar Setup                 (End of Sidebar) ===
 // ==========================================================================
@@ -3572,11 +3513,6 @@ function fSetupWindowClickListener() {
 
 
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////// START fSetupSubMenuHover and helpers
-
-
-
-
 // fSetupSubMenuHover //////////////////////////////////////////////////////////////
 // Purpose -> Sets up hover event listeners for all submenu items within a given
 //            menu bar to handle showing/hiding nested dropdown menus with delays.
@@ -3611,6 +3547,7 @@ function fClearSubMenuHideTimeout(panel) {
         panel.dataset.hideTimeoutId = ''; // Reset dataset property
     }
 } // END fClearSubMenuHideTimeout
+
 
 
 
@@ -3721,11 +3658,6 @@ function fSetupSingleSubMenuItem(item, index) {
 
 
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////// End fSetupSubMenuHover and helpers
-
-
-
-
 // fSendLogToGMScreenAndPS ////////////////////////////////////////////////////////////
 // Purpose -> Sends bundled log and header data (dynamic + static) sequentially to
 //            the GMScreen sheet ('db') and the PartyLog sheet ('ps') via the
@@ -3814,6 +3746,7 @@ function fSendLogToGMScreenAndPS() {
         .fSrvSaveURLtoNamesAndLogToDBandPS(dataBundle);
 
 } // END fSendLogToGMScreenAndPS
+
 
 
 
@@ -4024,7 +3957,7 @@ function fToggleSidebar() {
 
 
 
-// fMetaFlood //////////////////////////////////////////////////////////////////////
+// fMetaFlood ///////////////////////////////////////////////////////////////////
 // Purpose -> Handles <Game><Meta><Flood>. Selects Meta col, increases values, caps,
 //            updates grid, logs action to sidebar, and triggers GMScreen update.
 // Inputs  -> None.
@@ -4368,6 +4301,7 @@ async function fHealAllWounds() {
 
 
 
+
 // fHandleRestTimeRest /////////////////////////////////////////////////////////////
 // Purpose -> Handles <Game><Rest> or <Time><Rest>. Runs Meta Flood, logs action,
 //            and sends update.
@@ -4414,6 +4348,7 @@ async function fHandleRestTimeNewSession() {
     setTimeout(() => fSendLogToGMScreenAndPS(), 0);
 
 } // END fHandleRestTimeNewSession
+
 
 
 
@@ -4511,6 +4446,7 @@ async function fLuck_SetToMax() {
         setTimeout(() => fSendLogToGMScreenAndPS(), 0);
     }
 } // END fLuck_SetToMax
+
 
 
 
@@ -4837,6 +4773,7 @@ function fClearChanneledMeta() {
 
 
 
+
 // fClearSk1Sk2Checkboxes ////////////////////////////////////////////////////////
 // Purpose -> Handles the <Game><Clear><All Check Boxes...> menu action. Clears
 //            (sets to false) all checkboxes within the ranges defined in
@@ -4929,7 +4866,6 @@ function fClearMonsters() {
         fMyConsoleLog("✅ Monsters Range Cleared.");
     }
 } // END fClearMonsters
-
 
 
 
@@ -5176,6 +5112,7 @@ async function fPromptForDesignerPassword() {
 
 
 
+
 // fHandleDesignerPasswordResult ///////////////////////////////////////////////
 // Purpose -> Handles the boolean result from the server-side password validation.
 //            Shows/hides the Designer button and updates state accordingly.
@@ -5212,6 +5149,7 @@ function fHandleDesignerPasswordResult(isValid) {
 // ==========================================================================
 // === MENU BAR "LIKE"     (End of Menu Bar Click) ===
 // ==========================================================================
+
 
 
 
@@ -5328,9 +5266,11 @@ async function fCalculateMovementAndEncumbrance() {
 
 
 
+
 // ==========================================================================
 // === Grid Button Click     (End of MENU BAR "LIKE") ===
 // ==========================================================================
+
 
 
 
@@ -5529,9 +5469,11 @@ async function fRefreshMonsterData() {
 
 
 
+
 // ==========================================================================
 // === Firestore Text Read/Write     (End of Header Button Click) ===
 // ==========================================================================
+
 
 
 
@@ -5588,6 +5530,7 @@ function fHandleAutoSaveToFirestoreSuccess(result) {
     // --- REMOVED Subtle UI Feedback (Flash icon) ---
 
 } // END fHandleAutoSaveToFirestoreSuccess
+
 
 
 
@@ -5858,11 +5801,6 @@ function fSetupMenuInteractivity() {
 
 
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////// START fOnCSGameDataLoaded and helpers
-
-
-
-
 // fOnCSGameDataLoaded ///////////////////////////////////////////////////////////////////
 // Purpose -> Callback function executed upon successful data retrieval from the
 //            server (fSrvReadCSGameSheet). Validates data, stores it in gUI, checks
@@ -5923,6 +5861,7 @@ function fOnCSGameDataLoaded(data) {
         .fSrvCheckAndLoadFirestoreGUIarrAs2D(gIndexCSID); // Call the new server function
 
 } // END fOnCSGameDataLoaded
+
 
 
 
@@ -6083,6 +6022,7 @@ function fSetupTooltipAndModal() {
 
 
 
+
 // fModalElementsAvailable /////////////////////////////////////////////////////////
 // Purpose -> Helper function to check if all required image modal DOM element
 //            references have been successfully cached in the gUI object.
@@ -6163,10 +6103,6 @@ function fRunPostRenderFormatting() {
     fMyConsoleLog("✅ All Post-Render Formatting Done!");
 } // END fRunPostRenderFormatting
 
-
-
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////// END fOnCSGameDataLoaded and helpers
 
 
 

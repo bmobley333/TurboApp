@@ -6,21 +6,6 @@
 
 
 // ==========================================================================
-// === Die Roll Button         (End of N/A) ===
-// ==========================================================================
-
-
-
-
-// fMain_AbilityRoll ///////////////////////////////////////////////////////////
-// Purpose -> Top-level handler for initiating an ability/gear roll. Coordinates
-//            validation, data population, morphs, costs, roll logic branching,
-//            cost application, Nish update, and final logging (HTML & plain text)
-//            to sidebar and GMScreen.
-// Inputs  -> None (Relies on gUI state).
-// Outputs -> None (Orchestrates updates to gUI, DOM, sidebar, GMScreen).
-
-// ==========================================================================
 // === Core Ability Roll Logic ===
 // ==========================================================================
 

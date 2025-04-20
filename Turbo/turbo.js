@@ -80,6 +80,8 @@ function fSrvConvertIndicesToA1(r1, c1, r2, c2) {
 } // END fSrvConvertIndicesToA1
 
 
+
+
 // fSrvColToA1 ///////////////////////////////////////////////////////////////////
 // Purpose -> Helper function to convert 0-based column index to A1 notation.
 // Inputs  -> col (Number): The 0-based column index.
@@ -95,6 +97,8 @@ function fSrvColToA1(col) {
     }
     return label;
 } // END fSrvColToA1
+
+
 
 
 // ==========================================================================
@@ -158,6 +162,8 @@ function doGet(e) {
 } // END doGet
 
 
+
+
 // fSrvGetMyKlId //////////////////////////////////////////////////////////////////
 // Purpose -> Retrieves the MyKL ID from the player's Character Sheet's <Data> tab.
 // Inputs  -> myCsId (String): The Sheet ID of the player's Character Sheet (mycs).
@@ -205,9 +211,13 @@ function fSrvGetMyKlId(myCsId) {
 } // END fSrvGetMyKlId
 
 
+
+
 // ==========================================================================
 // === Designer Access ===
 // ==========================================================================
+
+
 
 
 // fSrvValidateDesignerPassword /////////////////////////////////////////////////
@@ -241,9 +251,13 @@ function fSrvValidateDesignerPassword(passwordAttempt) {
 } // END fSrvValidateDesignerPassword
 
 
+
+
 // ==========================================================================
 // === Low-Level Tag & Range Helpers ===
 // ==========================================================================
+
+
 
 
 // fSrvBuildTagMaps /////////////////////////////////////////////////////////
@@ -310,6 +324,8 @@ function fSrvBuildTagMaps(fullData) {
 } // END fSrvBuildTagMaps
 
 
+
+
 // fSrvResolveTag ///////////////////////////////////////////////////////////
 // Purpose -> Resolves a single row or column tag/index using the provided tag maps.
 // Inputs  -> tagOrIndex (String | Number): The tag string or 0-based index.
@@ -339,9 +355,13 @@ function fSrvResolveTag(tagOrIndex, tagMap, type = 'unknown') {
 } // END fSrvResolveTag
 
 
+
+
 // ==========================================================================
 // === Core Sheet Loader – “Game” Tab ===
 // ==========================================================================
+
+
 
 
 // fSrvReadCSGameSheet /////////////////////////////////////////////////////////////////////////////////
@@ -389,6 +409,8 @@ function fSrvReadCSGameSheet(targetSheetId) {
 } // END fSrvReadCSGameSheet
 
 
+
+
 // fSrvExtractSheetData ////////////////////////////////////////////////////////////////////////////////
 // Reads data, formats, and notes from the sheet and returns structured result.
 function fSrvExtractSheetData(sh) {
@@ -415,6 +437,8 @@ function fSrvExtractSheetData(sh) {
 } // END fSrvExtractSheetData
 
 
+
+
 // fSrvIsSheetTrulyEmpty ////////////////////////////////////////////////////////////////////////////////
 // Determines if the sheet has zero real content, returns true if it's blank.
 function fSrvIsSheetTrulyEmpty(sh, arr) {
@@ -424,6 +448,8 @@ function fSrvIsSheetTrulyEmpty(sh, arr) {
     return (numRows === 0 || numCols === 0 || onlyEmpty) &&
            (sh.getLastRow() === 0 && sh.getLastColumn() === 0);
 } // END fSrvIsSheetTrulyEmpty
+
+
 
 
 // fSrvBuildFormatObject ////////////////////////////////////////////////////////////////////////////////
@@ -461,6 +487,8 @@ function fSrvBuildFormatObject(sh, rngData, numCols) {
 } // END fSrvBuildFormatObject
 
 
+
+
 // fSrvBuildReturnObject ////////////////////////////////////////////////////////////////////////////////
 // Combines the final return structure.
 function fSrvBuildReturnObject(arr, format, notesArr) {
@@ -472,9 +500,13 @@ function fSrvBuildReturnObject(arr, format, notesArr) {
 } // END fSrvBuildReturnObject
 
 
+
+
 // ==========================================================================
 // === Generic Sheet Operations ===
 // ==========================================================================
+
+
 
 
 // fSrvGetSheetRangeDataNTags /////////////////////////////////////////////////////////
@@ -632,6 +664,8 @@ function fSrvGetSheetRangeDataNTags(sheetKeyOrId, sheetName, rangeObject) {
 } // END fSrvGetSheetRangeDataNTags
 
 
+
+
 // fSrvSaveDataToSheetRange /////////////////////////////////////////////////////////
 // Purpose -> Writes data to a specified range in a given Google Sheet,
 //            accepting a sheet key, sheet name, a rangeObject with tags/indices,
@@ -763,9 +797,13 @@ function fSrvSaveDataToSheetRange(sheetKey, sheetName, rangeObject, valueOrValue
 } // END fSrvSaveDataToSheetRange
 
 
+
+
 // ==========================================================================
 // === Player / GM Screen Logic ===
 // ==========================================================================
+
+
 
 
 // fSrvGetURLToPlayerCharForGMScreen /////////////////////////////////////////////////////
@@ -866,6 +904,8 @@ function fSrvGetURLToPlayerCharForGMScreen(csId) {
     }
 
 } // END fSrvGetURLToPlayerCharForGMScreen
+
+
 
 
 // fSrvSaveURLtoNamesAndLogToDBandPS ////////////////////////////////////////////////////////
@@ -990,9 +1030,13 @@ function fSrvSaveURLtoNamesAndLogToDBandPS(dataBundle) {
 } // END fSrvSaveURLtoNamesAndLogToDBandPS
 
 
+
+
 // ==========================================================================
 // === Firestore Integration ===
 // ==========================================================================
+
+
 
 
 // fSrvGetFirestoreInstance ///////////////////////////////////////////////////////
@@ -1064,6 +1108,8 @@ function fSrvGetFirestoreInstance() {
         return null;
     }
 } // END fSrvGetFirestoreInstance
+
+
 
 
 // fSrvSaveTurboTextAndURLtoNamesToFirestore ////////////////////////////////////////////////////
@@ -1163,6 +1209,8 @@ function fSrvSaveTurboTextAndURLtoNamesToFirestore(csId, fullArrData, charInfo) 
 } // END fSrvSaveTurboTextAndURLtoNamesToFirestore
 
 
+
+
 // fSrvConvertFirestoreTypesToJS //////////////////////////////////////////////////
 // Purpose -> Recursively converts Firestore's typed value objects (mapValue,
 //            arrayValue, stringValue, etc.) into standard JavaScript types
@@ -1204,6 +1252,8 @@ function fSrvConvertFirestoreTypesToJS(firestoreValue) {
   Logger.log(`fSrvConvertFirestoreTypesToJS: Encountered unexpected value structure: ${JSON.stringify(firestoreValue).substring(0,100)}... Returning as is.`);
   return firestoreValue;
 } // END fSrvConvertFirestoreTypesToJS
+
+
 
 
 // fSrvUnpackFirestoreArrayTo2D //////////////////////////////////////////////
@@ -1269,6 +1319,8 @@ function fSrvUnpackFirestoreArrayTo2D(firestoreArr) {
 
     return new2DArray;
 } // END fSrvUnpackFirestoreArrayTo2D
+
+
 
 
 // fSrvCheckAndLoadFirestoreGUIarrAs2D //////////////////////////////////////////////////
