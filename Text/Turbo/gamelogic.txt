@@ -2493,15 +2493,14 @@ async function fExecuteNishSequence() {
 // Purpose -> Processes monster data received from the GM Screen DB and populates
 //            the client-side Turbo monster table (gUI.range.monsters), *skipping the
 //            first row (CustMon)*. Handles active monster filtering, custom monster
-//            naming/skipping (trims "Mon: " prefix), data mapping, SIZE parsing,
-//            and overflow warnings.
+//            naming/skipping (trims "Mon: " prefix, removes trailing ' _'/'   '),
+//            data mapping, SIZE parsing, and overflow warnings.
 // Inputs  -> gmDataArray (Array[][]): 2D array of monster data from the GM Screen.
 //         -> gmColTags (Object): Map of GM Screen column tags to indices { tagName: index }.
 //         -> gmRowTags (Object): Map of GM Screen row tags to indices { tagName: index }.
 // Outputs -> None (Modifies Turbo grid data/DOM via fSetGridValue, potentially calls fShowMessage).
 async function fUpdateMonsterTable(gmDataArray, gmColTags, gmRowTags) {
     fMyConsoleLog("🧬 Processing GM Monster Data for Turbo Table...");
-
     // === 1. Validate Inputs ===
     if (!Array.isArray(gmDataArray)) {
         fMyConsoleLog("❌ fUpdateMonsterTable Error: gmDataArray is not an array.");
@@ -2530,7 +2529,6 @@ async function fUpdateMonsterTable(gmDataArray, gmColTags, gmRowTags) {
     const turboMon_R_end = fResolveRow(turboRangeDef.r2);   // The 'LastMon_R' row index
     const turbo_c1 = fResolveCol(turboRangeDef.c1);
     const turbo_c2 = fResolveCol(turboRangeDef.c2);
-
     if ([turboMon_R_start, turboMon_R_end, turbo_c1, turbo_c2].some(isNaN)) {
         fMyConsoleLog("❌ fUpdateMonsterTable Error: Could not resolve Turbo monster range boundaries.");
         await fShowMessage("Error: Could not resolve Turbo monster table boundaries.");
@@ -2540,7 +2538,6 @@ async function fUpdateMonsterTable(gmDataArray, gmColTags, gmRowTags) {
     const turboFill_R_start = turboMon_R_start + 1;
     fMyConsoleLog(`   -> Turbo Table: CustMon Row=${turboMon_R_start}, LastMon Row=${turboMon_R_end}.`);
     fMyConsoleLog(`   -> Filling starts at row ${turboFill_R_start}. Available Rows for DB monsters: ${turboTableAvailableRows}.`);
-
 
     // === 3. Resolve Necessary GM Screen Tags (Columns & Rows) ===
     // --- Column Tags ---
@@ -2554,7 +2551,7 @@ async function fUpdateMonsterTable(gmDataArray, gmColTags, gmRowTags) {
         } else {
              if (gmColTags?.hasOwnProperty(tag)) {
                  fMyConsoleLog(`   -> Warning: GM Column tag '${tag}' exists but index is invalid: ${index}`);
-            }
+             }
             missingColTag = tag;
             break;
         }
@@ -2614,10 +2611,30 @@ async function fUpdateMonsterTable(gmDataArray, gmColTags, gmRowTags) {
         }
         let finalMonsterName = monCustName || monName || `Unnamed Monster ${db_idx + 1}`; // Use custom, fallback to standard, then generic
 
-        // ** NEW: Trim "Mon: " prefix **
+        // Trim "Mon: " prefix
         const prefix = "Mon: ";
         if (finalMonsterName.startsWith(prefix)) {
             finalMonsterName = finalMonsterName.substring(prefix.length);
+        }
+
+        // Find the index of the first occurrence of " _" or "   "and delete from there to end of finalMonsterName
+        const indexOfUnderscore = finalMonsterName.indexOf(" _");
+        const indexOfSpaces = finalMonsterName.indexOf("   ");
+        let trimIndex = -1;
+        // Determine which pattern occurs first, if any
+        if (indexOfUnderscore !== -1 && indexOfSpaces !== -1) {
+            // Both patterns found, find the one that appears earlier
+            trimIndex = Math.min(indexOfUnderscore, indexOfSpaces);
+        } else if (indexOfUnderscore !== -1) {
+            // Only underscore pattern found
+            trimIndex = indexOfUnderscore;
+        } else if (indexOfSpaces !== -1) {
+            // Only spaces pattern found
+            trimIndex = indexOfSpaces;
+        }
+        // If one of the patterns was found, trim the string from that index onwards
+        if (trimIndex !== -1) {
+            finalMonsterName = finalMonsterName.substring(0, trimIndex);
         }
 
         // --- Check Turbo Table Capacity ---
@@ -2650,7 +2667,6 @@ async function fUpdateMonsterTable(gmDataArray, gmColTags, gmRowTags) {
         }
          if (isCustomMonsterRow) size = '';
 
-
         // --- Set Values in Turbo Grid ---
         let rowUpdateSuccess = true;
         rowUpdateSuccess &&= fSetGridValue(turboMon_R, 'MonName', finalMonsterName);
@@ -2672,19 +2688,17 @@ async function fUpdateMonsterTable(gmDataArray, gmColTags, gmRowTags) {
 
         // Increment Turbo row pointer
         turboMon_R++;
-
     } // End loop through gmDataArray
 
     // === 5. Show Overflow Message if Needed ===
     if (isOverflowing) {
         const message = `⚠️ Too many active monsters on GM Screen!
-                       <br>Only the first ${turboTableAvailableRows} could be loaded. Please ask the GM to reduce active monsters.`;
+ <br>Only the first ${turboTableAvailableRows} could be loaded. Please ask the GM to reduce active monsters.`;
         fMyConsoleLog(`   -> ${message.replace('<br>', ' ')}`);
         await fShowMessage(message);
     }
 
     fMyConsoleLog(`✅ Monster Table Update Complete. Added: ${monstersAdded} monsters.${errorsSettingValue > 0 ? ` (${errorsSettingValue} errors setting values)` : ''}${isOverflowing ? ' (Overflow occurred)' : ''}`);
-
 } // END fUpdateMonsterTable
 
 
