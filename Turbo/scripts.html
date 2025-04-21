@@ -5785,22 +5785,40 @@ function fHandleAutoSaveToFirestoreFailure(error) {
 
 // fHandleSaveDBSheetVer ///////////////////////////////////////////////////////
 // Purpose -> Handles the "Designer" -> "Save DB Sheet & Ver" menu action. Prompts
-//            user for sheet name, calls server to load data/tags, then calls server
-//            to save the data to Firestore in the 'DB' collection.
+//            user for Workbook abbreviation and sheet name, calls server to load
+//            data/tags from the specified sheet, then calls server to save the
+//            data to Firestore in the 'DB' collection.
 // Inputs  -> None.
 // Outputs -> (Promise<void>): Resolves after completing actions or handling errors.
 async function fHandleSaveDBSheetVer() {
     const funcName = "fHandleSaveDBSheetVer";
     fMyConsoleLog(`⚙️ Menu Action: ${funcName} Triggered...`);
+    const validWorkbooks = ['db', 'mastercs', 'masterkl', 'mycs', 'mykl'];
 
-    // --- 1. Check Designer Mode (Optional but recommended) ---
+    // --- 1. Check Designer Mode ---
     if (!gUI.isDesignerMode) {
         fMyConsoleLog("   -> Action blocked: Designer mode is not active.");
         await fShowMessage("❌ This action requires Designer Mode to be enabled.");
         return;
     }
 
-    // --- 2. Prompt for Sheet Name ---
+    // --- 2. Prompt for Workbook Name ---
+    const workbookPromptText = "Please choose a Google Workbook from 'DB', 'MasterCS', 'MasterKL', 'MyCS', 'MyKL'";
+    let workbookAbr = window.prompt(workbookPromptText);
+    if (!workbookAbr) {
+        fMyConsoleLog("   -> User cancelled workbook name prompt.");
+        return; // Exit if user cancelled
+    }
+    workbookAbr = workbookAbr.trim().toLowerCase(); // Standardize to lowercase
+    if (!validWorkbooks.includes(workbookAbr)) {
+        fMyConsoleLog(`   -> User entered invalid workbook: "${workbookAbr}"`);
+        await fShowMessage(`❌ Invalid Workbook. Must be one of: ${validWorkbooks.join(', ')}`);
+        return;
+    }
+    fMyConsoleLog(`   -> User selected Workbook Abr: "${workbookAbr}"`);
+
+
+    // --- 3. Prompt for Sheet Name ---
     const sheetName = window.prompt("Enter Google Workbook Sheet (Tab) Name:");
     if (!sheetName) {
         fMyConsoleLog("   -> User cancelled sheet name prompt.");
@@ -5814,53 +5832,59 @@ async function fHandleSaveDBSheetVer() {
     }
     fMyConsoleLog(`   -> User entered Sheet Name: "${trimmedSheetName}"`);
 
-    // --- 3. Validate Game Version ---
+
+    // --- 4. Validate Game Version & CSID (needed for some lookups) ---
     if (!gIndexGameVer || typeof gIndexGameVer !== 'string' || gIndexGameVer.trim() === '') {
         fMyConsoleLog("   -> Cannot proceed: gIndexGameVer is missing or invalid on client.");
         await fShowMessage("❌ Error: Game Version is missing. Cannot construct Firestore document name.");
         return;
     }
+     if (!gIndexCSID || typeof gIndexCSID !== 'string') {
+         fMyConsoleLog("   -> Cannot proceed: gIndexCSID is missing or invalid on client (required for 'MyCS'/'MyKL' lookups).");
+         await fShowMessage("❌ Error: Character Sheet ID is missing.");
+         return;
+    }
     fMyConsoleLog(`   -> Using Game Version: ${gIndexGameVer}`);
+    fMyConsoleLog(`   -> Using CSID: ${gIndexCSID}`);
 
 
-    // --- 4. Call Server to Load Data & Tags ---
-    fMyConsoleLog(`   -> Calling fSrvLoadDBTabAndTags for sheet: "${trimmedSheetName}"...`);
-    // Optional: Show loading indicator
-    const loadingMsg = fShowMessage(`⏳ Loading data for sheet "${trimmedSheetName}"...`);
+    // --- 5. Call Server to Load Data & Tags (Renamed Function) ---
+    fMyConsoleLog(`   -> Calling fSrvLoadFullSheetAndTags for workbook: "${workbookAbr}", sheet: "${trimmedSheetName}"...`);
+    const loadingMsg = fShowMessage(`⏳ Loading data for ${workbookAbr} -> "${trimmedSheetName}"...`);
 
     try {
-        const dbData = await new Promise((resolve, reject) => {
+        const loadedData = await new Promise((resolve, reject) => {
             google.script.run
                 .withSuccessHandler(resolve)
                 .withFailureHandler(reject)
-                .fSrvLoadDBTabAndTags(trimmedSheetName);
+                .fSrvLoadFullSheetAndTags(workbookAbr, trimmedSheetName, gIndexCSID); // Pass workbookAbr, sheetName, csId
         });
 
-        // --- 5. Handle Load Success ---
+        // --- 6. Handle Load Success ---
         fHideMessage(); // Hide loading message
-        fMyConsoleLog(`   -> Successfully loaded data from sheet "${trimmedSheetName}".`);
-        // Basic validation of returned object (more robust validation server-side)
-        if (!dbData || typeof dbData !== 'object' || !dbData.ColTags || !dbData.RowTags || !dbData.sheetText2D) {
-            console.error("Invalid data structure received from fSrvLoadDBTabAndTags:", dbData);
-            throw new Error("Received invalid data structure from server after loading sheet."); // Throw to be caught below
+        fMyConsoleLog(`   -> Successfully loaded data from sheet "${trimmedSheetName}" in workbook "${workbookAbr}".`);
+        // Basic validation of returned object
+        if (!loadedData || typeof loadedData !== 'object' || !loadedData.ColTags || !loadedData.RowTags || !loadedData.sheetText2D) {
+            console.error("Invalid data structure received from fSrvLoadFullSheetAndTags:", loadedData);
+            throw new Error("Received invalid data structure from server after loading sheet.");
         }
 
-        // --- 6. Call Server to Save Data to Firestore ---
-        fMyConsoleLog(`   -> Calling fSrvSaveDBTabAndTagsToFirestore for v${gIndexGameVer} ${trimmedSheetName}...`);
+        // --- 7. Call Server to Save Data to Firestore (Renamed Function) ---
+        fMyConsoleLog(`   -> Calling fSrvSaveFullSheetTextAndTagsToFirestore for v${gIndexGameVer} ${trimmedSheetName}...`);
         const savingMsg = fShowMessage(`💾 Saving data for v${gIndexGameVer} ${trimmedSheetName} to Firestore...`);
 
         const saveResult = await new Promise((resolve, reject) => {
             google.script.run
                 .withSuccessHandler(resolve)
                 .withFailureHandler(reject)
-                .fSrvSaveDBTabAndTagsToFirestore(gIndexGameVer, trimmedSheetName, dbData);
+                .fSrvSaveFullSheetTextAndTagsToFirestore(gIndexGameVer, workbookAbr, trimmedSheetName, loadedData); // Pass gameVer, workbookAbr, sheetName, data
         });
 
-        // --- 7. Handle Save Result ---
+        // --- 8. Handle Save Result ---
         fHideMessage(); // Hide saving message
         if (saveResult && saveResult.success) {
-            fMyConsoleLog("   -> ✅ Successfully saved DB sheet data to Firestore.");
-            await fShowMessage(`✅ Successfully saved data for sheet "${trimmedSheetName}" (Version ${gIndexGameVer}) to Firestore.`);
+            fMyConsoleLog("   -> ✅ Successfully saved sheet data to Firestore.");
+            await fShowMessage(`✅ Successfully saved data for ${workbookAbr} -> "${trimmedSheetName}" (Version ${gIndexGameVer}) to Firestore.`);
         } else {
             const saveErrorMsg = saveResult?.message || "Unknown error saving to Firestore.";
             fMyConsoleLog(`   -> ❌ Firestore Save Failed: ${saveErrorMsg}`);
@@ -5868,9 +5892,9 @@ async function fHandleSaveDBSheetVer() {
         }
 
     } catch (error) {
-        // --- 8. Handle Load or Save Errors ---
+        // --- 9. Handle Load or Save Errors ---
         fHideMessage(); // Hide any lingering loading/saving message
-        const errorMsg = `Error during DB Sheet & Ver process: ${error?.message || error}`;
+        const errorMsg = `Error during Full Sheet Save process: ${error?.message || error}`;
         console.error(`${funcName} Error:`, error);
         fMyConsoleLog(`   -> ❌ ${errorMsg}`);
         await fShowMessage(`❌ ${errorMsg}`);

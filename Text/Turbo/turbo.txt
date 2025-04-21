@@ -1885,58 +1885,87 @@ function fSrvLoadCharacterInfoFromFirestore(userEmail, csId) {
 
 
 
-// fSrvLoadDBTabAndTags /////////////////////////////////////////////////////////
+// fSrvLoadFullSheetAndTags /////////////////////////////////////////////////////
 // Purpose -> Loads column tags (Row 0), row tags (Col 0), and all cell text values
-//            from a specified sheet within the 'db' Google Sheet. Validates tag
-//            uniqueness (case-insensitive).
-// Inputs  -> sheetName (String): The name of the specific sheet (tab) to read from.
+//            from a specified sheet within a specified Google Workbook (DB, MasterCS, etc.).
+//            Validates tag uniqueness (case-insensitive).
+// Inputs  -> workbookAbr (String): Abbreviation ('db', 'mastercs', 'masterkl', 'mycs', 'mykl').
+//         -> sheetName (String): The name of the specific sheet (tab) to read from.
+//         -> csId (String): The Character Sheet ID (used for 'mycs', and to find 'mykl').
 // Outputs -> (Object): { ColTags: Object, RowTags: Object, sheetText2D: Array[][] } on success.
-// Throws  -> (Error): If sheetName is invalid, sheet not found, sheet is empty,
-//                     or duplicate tags are found (case-insensitive).
-function fSrvLoadDBTabAndTags(sheetName) {
-    const funcName = "fSrvLoadDBTabAndTags";
-    Logger.log(`${funcName}: Loading Tags & Data for Sheet: "${sheetName}" in DB.`);
+// Throws  -> (Error): If inputs are invalid, workbook ID not found/derived, sheet not found,
+//                     sheet is empty, or duplicate tags are found (case-insensitive).
+function fSrvLoadFullSheetAndTags(workbookAbr, sheetName, csId) {
+    const funcName = "fSrvLoadFullSheetAndTags";
+    Logger.log(`${funcName}: Loading Tags & Data for Workbook: "${workbookAbr}", Sheet: "${sheetName}", CSID: "${csId}".`);
 
-    // --- 1. Validate Input ---
+    // --- 1. Validate Inputs ---
+    if (!workbookAbr || typeof workbookAbr !== 'string') {
+        throw new Error(`${funcName}: Invalid or missing workbookAbr provided.`);
+    }
     if (!sheetName || typeof sheetName !== 'string' || sheetName.trim() === '') {
         throw new Error(`${funcName}: Invalid or empty sheetName provided.`);
     }
     const trimmedSheetName = sheetName.trim();
+    const lowerWorkbookAbr = workbookAbr.toLowerCase();
 
-    // --- 2. Open DB Sheet & Get Target Tab ---
-    const dbFileId = gSrv.ids.sheets.db;
-    if (!dbFileId) { throw new Error(`${funcName}: Database Sheet ID ('db') not found in gSrv.`); }
-
-    let ss, sh;
+    // --- 2. Determine Workbook ID ---
+    let workbookID = null;
     try {
-        ss = SpreadsheetApp.openById(dbFileId);
-        sh = ss.getSheetByName(trimmedSheetName);
-        if (!sh) {
-            throw new Error(`Sheet named "${trimmedSheetName}" not found in DB Sheet (ID: ${dbFileId}).`);
+        switch (lowerWorkbookAbr) {
+            case 'db':       workbookID = gSrv.ids.sheets.db; break;
+            case 'mastercs': workbookID = gSrv.ids.sheets.mastercs; break;
+            case 'masterkl': workbookID = gSrv.ids.sheets.masterkl; break;
+            case 'mycs':
+                if (!csId) { throw new Error("CSID is required to identify 'MyCS' workbook."); }
+                workbookID = csId; // MyCS ID is the CSID itself
+                break;
+            case 'mykl':
+                if (!csId) { throw new Error("CSID is required to look up 'MyKL' workbook ID."); }
+                workbookID = fSrvGetMyKlId(csId); // Get MyKL ID using helper
+                if (!workbookID) { throw new Error(`Could not find linked 'MyKL' workbook ID for CSID: ${csId}`); }
+                break;
+            default:
+                throw new Error(`Unsupported workbook abbreviation: "${workbookAbr}"`);
         }
-        Logger.log(`   -> Successfully opened sheet "${trimmedSheetName}".`);
+        if (!workbookID) { throw new Error(`Workbook ID for "${workbookAbr}" resolved to null or empty.`); }
+        Logger.log(`   -> Resolved Workbook ID for "${workbookAbr}": ${workbookID}`);
     } catch (e) {
-        console.error(`Error accessing sheet "${trimmedSheetName}" in DB: ${e.message}`);
-        throw new Error(`Failed to access sheet "${trimmedSheetName}": ${e.message}`); // Re-throw
+         console.error(`${funcName} Error resolving Workbook ID: ${e.message}`);
+         throw new Error(`Failed to resolve Workbook ID for "${workbookAbr}": ${e.message}`); // Re-throw
     }
 
-    // --- 3. Get Full Data Range & Check if Empty ---
+
+    // --- 3. Open Target Workbook & Get Target Tab ---
+    let ss, sh;
+    try {
+        ss = SpreadsheetApp.openById(workbookID);
+        sh = ss.getSheetByName(trimmedSheetName);
+        if (!sh) {
+            throw new Error(`Sheet named "${trimmedSheetName}" not found in Workbook ID: ${workbookID} (Abr: ${workbookAbr}).`);
+        }
+        Logger.log(`   -> Successfully opened sheet "${trimmedSheetName}" in Workbook "${workbookAbr}".`);
+    } catch (e) {
+        console.error(`Error accessing sheet "${trimmedSheetName}" in Workbook "${workbookAbr}" (ID: ${workbookID}): ${e.message}`);
+        throw new Error(`Failed to access sheet "${trimmedSheetName}" in Workbook "${workbookAbr}": ${e.message}`);
+    }
+
+    // --- 4. Get Full Data Range & Check if Empty ---
     const dataRange = sh.getDataRange();
     const sheetText2D = dataRange.getValues();
     const numRows = sheetText2D.length;
     const numCols = numRows > 0 ? (sheetText2D[0]?.length || 0) : 0;
 
     if (numRows === 0 || numCols === 0 || (numRows === 1 && numCols === 1 && sheetText2D[0][0] === '')) {
-        // Check if sheet is effectively empty (based on user confirmation)
-        throw new Error(`${funcName}: Sheet "${trimmedSheetName}" exists but appears to be empty. Cannot process.`);
+        throw new Error(`${funcName}: Sheet "${trimmedSheetName}" in Workbook "${workbookAbr}" exists but appears empty.`);
     }
     Logger.log(`   -> Read ${numRows}x${numCols} cells from "${trimmedSheetName}".`);
 
 
-    // --- 4. Process Column Tags (Row 0) ---
+    // --- 5. Process Column Tags (Row 0) ---
     const colTagsMap = {};
-    const colTagsSeen = new Set(); // For case-insensitive uniqueness check
-    const headerRow = sheetText2D[0]; // Row 0
+    const colTagsSeen = new Set();
+    const headerRow = sheetText2D[0];
 
     for (let c = 0; c < numCols; c++) {
         const cellValue = headerRow[c];
@@ -1945,38 +1974,35 @@ function fSrvLoadDBTabAndTags(sheetName) {
             for (const tag of tags) {
                 const lowerTag = tag.toLowerCase();
                 if (colTagsSeen.has(lowerTag)) {
-                    throw new Error(`${funcName}: Duplicate Column Tag found (case-insensitive): "${tag}" in Row 0, Column ${c + 1}.`);
+                    throw new Error(`${funcName}: Duplicate Column Tag found (case-insensitive): "${tag}" in Row 0, Column ${c + 1}. Sheet: "${trimmedSheetName}", Workbook: "${workbookAbr}".`);
                 }
                 if (colTagsMap.hasOwnProperty(tag)) {
                      Logger.log(`   -> WARNING: Column Tag "${tag}" reused in Row 0. Mapping to last occurrence (Col ${c}).`);
-                    // Allow overwrite but log - standard behavior is last one wins
                 }
-                colTagsMap[tag] = c; // Use original case for key
+                colTagsMap[tag] = c;
                 colTagsSeen.add(lowerTag);
             }
         }
     }
     Logger.log(`   -> Processed ${Object.keys(colTagsMap).length} unique column tags.`);
 
-    // --- 5. Process Row Tags (Col 0) ---
+    // --- 6. Process Row Tags (Col 0) ---
     const rowTagsMap = {};
-    const rowTagsSeen = new Set(); // For case-insensitive uniqueness check
+    const rowTagsSeen = new Set();
 
     for (let r = 0; r < numRows; r++) {
-        // Ensure row exists and has a first element before accessing
         const cellValue = (sheetText2D[r] && sheetText2D[r].length > 0) ? sheetText2D[r][0] : undefined;
         if (typeof cellValue === 'string' && cellValue.trim() !== '') {
             const tags = cellValue.split(',').map(tag => tag.trim()).filter(Boolean);
             for (const tag of tags) {
                 const lowerTag = tag.toLowerCase();
                 if (rowTagsSeen.has(lowerTag)) {
-                    throw new Error(`${funcName}: Duplicate Row Tag found (case-insensitive): "${tag}" in Column 0, Row ${r + 1}.`);
+                    throw new Error(`${funcName}: Duplicate Row Tag found (case-insensitive): "${tag}" in Column 0, Row ${r + 1}. Sheet: "${trimmedSheetName}", Workbook: "${workbookAbr}".`);
                 }
                  if (rowTagsMap.hasOwnProperty(tag)) {
                      Logger.log(`   -> WARNING: Row Tag "${tag}" reused in Col 0. Mapping to last occurrence (Row ${r}).`);
-                    // Allow overwrite but log
                 }
-                rowTagsMap[tag] = r; // Use original case for key
+                rowTagsMap[tag] = r;
                 rowTagsSeen.add(lowerTag);
             }
         }
@@ -1984,41 +2010,47 @@ function fSrvLoadDBTabAndTags(sheetName) {
     Logger.log(`   -> Processed ${Object.keys(rowTagsMap).length} unique row tags.`);
 
 
-    // --- 6. Return Result ---
-    Logger.log(`${funcName}: Successfully loaded tags and data for sheet "${trimmedSheetName}".`);
+    // --- 7. Return Result ---
+    Logger.log(`${funcName}: Successfully loaded tags and data for Workbook "${workbookAbr}", Sheet "${trimmedSheetName}".`);
     return {
         ColTags: colTagsMap,
         RowTags: rowTagsMap,
         sheetText2D: sheetText2D
     };
 
-} // END fSrvLoadDBTabAndTags
+} // END fSrvLoadFullSheetAndTags
 
 
 
 
-// fSrvSaveDBTabAndTagsToFirestore //////////////////////////////////////////////////
-// Purpose -> Saves loaded DB sheet tags (ColTags, RowTags) and the full sheet text data
+// fSrvSaveFullSheetTextAndTagsToFirestore //////////////////////////////////////
+// Purpose -> Saves loaded sheet tags (ColTags, RowTags) and the full sheet text data
 //            (sheetText2D, converted to array-of-row-objects) to Firestore.
 //            Uses the 'DB' collection and a document name based on game version and sheet name.
 // Inputs  -> gameVer (String): The game version (e.g., "28.3").
-//         -> sheetName (String): The name of the DB sheet that was loaded.
-//         -> dbData (Object): The object returned by fSrvLoadDBTabAndTags, containing
+//         -> workbookAbr (String): Abbreviation ('db', 'mastercs', 'masterkl', 'mycs', 'mykl'). (Currently unused internally).
+//         -> sheetName (String): The name of the sheet that was loaded.
+//         -> data (Object): The object returned by fSrvLoadFullSheetAndTags, containing
 //                             { ColTags, RowTags, sheetText2D }.
 // Outputs -> (Object): { success: Boolean, message?: String }
-function fSrvSaveDBTabAndTagsToFirestore(gameVer, sheetName, dbData) {
-    const funcName = "fSrvSaveDBTabAndTagsToFirestore";
-    Logger.log(`${funcName}: Saving data for DB Sheet: "${sheetName}", Version: ${gameVer}...`);
+function fSrvSaveFullSheetTextAndTagsToFirestore(gameVer, workbookAbr, sheetName, data) {
+    const funcName = "fSrvSaveFullSheetTextAndTagsToFirestore";
+    // Log including workbookAbr for context, even if not used for path yet
+    Logger.log(`${funcName}: Saving data for Workbook: "${workbookAbr}", Sheet: "${sheetName}", Version: ${gameVer}...`);
 
     // --- 1. Validate Inputs ---
     if (!gameVer || typeof gameVer !== 'string' || gameVer.trim() === '') {
         return { success: false, message: "Invalid Game Version provided." };
     }
+     if (!workbookAbr || typeof workbookAbr !== 'string' || workbookAbr.trim() === '') {
+        // Validate workbookAbr even if unused internally for now
+        return { success: false, message: "Invalid Workbook Abbreviation provided." };
+    }
     if (!sheetName || typeof sheetName !== 'string' || sheetName.trim() === '') {
         return { success: false, message: "Invalid Sheet Name provided." };
     }
-    if (!dbData || typeof dbData !== 'object' || !dbData.ColTags || !dbData.RowTags || !dbData.sheetText2D || !Array.isArray(dbData.sheetText2D)) {
-        return { success: false, message: "Invalid dbData object provided (missing ColTags, RowTags, or sheetText2D array)." };
+    if (!data || typeof data !== 'object' || !data.ColTags || !data.RowTags || !data.sheetText2D || !Array.isArray(data.sheetText2D)) {
+        return { success: false, message: "Invalid data object provided (missing ColTags, RowTags, or sheetText2D array)." };
     }
     const trimmedSheetName = sheetName.trim(); // Use trimmed name for document ID
 
@@ -2030,14 +2062,14 @@ function fSrvSaveDBTabAndTagsToFirestore(gameVer, sheetName, dbData) {
         return { success: false, message: "Server configuration error (Firestore)." };
     }
 
-    // --- 3. Construct Firestore Path ---
-    const collectionName = 'DB'; // Target collection
+    // --- 3. Construct Firestore Path (Still uses DB collection) ---
+    const collectionName = 'DB'; // Target collection remains 'DB' for now
     const documentId = `v${gameVer} ${trimmedSheetName}`; // Format: vVERSION SHEETNAME
     const documentPath = `${collectionName}/${documentId}`;
     Logger.log(`   -> Target Firestore Path: ${documentPath}`);
 
     // --- 4. Convert sheetText2D to Array of Row Objects ---
-    const sheetTextArray = dbData.sheetText2D;
+    const sheetTextArray = data.sheetText2D;
     const arrayOfRowObjects = [];
     const numRows = sheetTextArray.length;
     for (let r = 0; r < numRows; r++) {
@@ -2051,10 +2083,10 @@ function fSrvSaveDBTabAndTagsToFirestore(gameVer, sheetName, dbData) {
 
     // --- 5. Prepare Final Data Payload ---
     const dataToSave = {
-        ColTags: dbData.ColTags,             // Save the column tags map
-        RowTags: dbData.RowTags,             // Save the row tags map
+        ColTags: data.ColTags,                  // Save the column tags map
+        RowTags: data.RowTags,                  // Save the row tags map
         sheetText2D_rowObjects: arrayOfRowObjects, // Save the data in the new format
-        _lastUpdated: new Date()             // Timestamp the save operation
+        _lastUpdated: new Date()                // Timestamp the save operation
     };
 
     // --- 6. Save to Firestore (Update/Overwrite) ---
@@ -2073,7 +2105,7 @@ function fSrvSaveDBTabAndTagsToFirestore(gameVer, sheetName, dbData) {
         return { success: false, message: safeErrorMessage };
     }
 
-} // END fSrvSaveDBTabAndTagsToFirestore
+} // END fSrvSaveFullSheetTextAndTagsToFirestore
 
 
 
