@@ -2253,7 +2253,7 @@ function fProcessAbilityChange(r, c, newValue, oldValue) {
                 populateSuccess &&= fSetGridValue(r, 'Sk2Typ', abilityData.Sk2Typ ?? '');
                 populateSuccess &&= fSetGridValue(r, 'Morph2', abilityData.Morph2 ?? '');
                 populateSuccess &&= fSetGridValue(r, 'PermMorph2', abilityData.PermMorph2 ?? '');
-                populateSuccess &&= fSetGridValue(r, 'Ver', abilityData.Ver ?? '');
+                populateSuccess &&= fSetGridValue(r, 'Ver', `v${abilityData.Ver}` ?? '');
                 populateSuccess &&= fSetGridValue(r, 'Notes', abilityData.Notes ?? '');
                 populateSuccess &&= fSetGridValue(r, 'Pic', abilityData.Pic ?? '');
                 populateSuccess &&= fSetGridValue(r, 'Act', abilityData.Act ?? '');
