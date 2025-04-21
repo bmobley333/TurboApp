@@ -4009,41 +4009,41 @@ function fSetupMenuActionClickListener() {
             // Game Menu Actions
             case 'game-nishStartEnd':       fHandleNishStartOrEnd(); break;
             case 'game-toggleSidebar':      fToggleSidebar(); break;
-            case 'game-updateHeaderInfo':   fHandleGetRaceClassInfo(); break; // Corrected name
-            case 'game-gmAward':            /* fHandleGMAwardAction(); */ fShowMessage(`Action "${action}" is not yet implemented.`); break; // Placeholder
-            case 'game-metaFlood':          fMetaFlood(); break; // Correct function call
-            case 'game-healingNatural':     fCalc_NaturalHealing(); break; // Correct function call
-            case 'game-healingAll':         fHealAllWounds(); break; // Added case
-            case 'game-restTimeRest':       fHandleRestTimeRest(); break; // Added case
-            case 'game-restTimeSleep':      fHandleRestTimeSleep(); break; // Added case
-            case 'game-restTimeNewSession': fHandleRestTimeNewSession(); break; // Added case
-            case 'game-clearChanneled':     fClearChanneledMeta(); break; // Added case
-            case 'game-clearCheckboxes':    fClearSk1Sk2Checkboxes(); break; // Added case
-            case 'game-clearMonsters':      fClearMonsters(); break; // Added case
-            case 'game-clearMorphs':        fClearMorphs(); break; // Added case
-            case 'game-clearNish':          fClearCurrentNish(); break; // Added case
-            case 'game-clearRollLog':       fClearRollLog(); break; // Added case
-            case 'game-setMaxLuck':         fLuck_SetToMax(); break; // Added case
-            case 'game-setMaxMeta':         fMeta_SetToMax(); break; // Added case
-            case 'game-setMaxVit':          fCalc_VitMaxNowPerc(); break; // Added case
-            case 'game-setMaxAll':          fHandleResetAllToMax(); break; // Added case
+            case 'game-updateHeaderInfo':   fHandleGetRaceClassInfo(); break;
+            case 'game-gmAward':            fShowMessage(`Action "${action}" is not yet implemented.`); break; // Placeholder
+            case 'game-metaFlood':          fMetaFlood(); break;
+            case 'game-healingNatural':     fCalc_NaturalHealing(); break;
+            case 'game-healingAll':         fHealAllWounds(); break;
+            case 'game-restTimeRest':       fHandleRestTimeRest(); break;
+            case 'game-restTimeSleep':      fHandleRestTimeSleep(); break;
+            case 'game-restTimeNewSession': fHandleRestTimeNewSession(); break;
+            case 'game-clearChanneled':     fClearChanneledMeta(); break;
+            case 'game-clearCheckboxes':    fClearSk1Sk2Checkboxes(); break;
+            case 'game-clearMonsters':      fClearMonsters(); break;
+            case 'game-clearMorphs':        fClearMorphs(); break;
+            case 'game-clearNish':          fClearCurrentNish(); break;
+            case 'game-clearRollLog':       fClearRollLog(); break;
+            case 'game-setMaxLuck':         fLuck_SetToMax(); break;
+            case 'game-setMaxMeta':         fMeta_SetToMax(); break;
+            case 'game-setMaxVit':          fCalc_VitMaxNowPerc(); break;
+            case 'game-setMaxAll':          fHandleResetAllToMax(); break;
 
             // Gear Menu Actions
-            case 'gear-toggleGear':         fToggleGearColumns(); break; // Added case
-            case 'gear-loot':               /* fHandleLootAction('Add'); */ fShowMessage(`Action "${action}" is not yet implemented.`); break; // Placeholder
-            case 'gear-lootArtifact':       /* fHandleLootAction('Artifact'); */ fShowMessage(`Action "${action}" is not yet implemented.`); break; // Placeholder
-            case 'gear-lootChaosCrystal':   /* fHandleLootAction('ChaosCrystal'); */ fShowMessage(`Action "${action}" is not yet implemented.`); break; // Placeholder
-            case 'gear-lootGear':           /* fHandleLootAction('Gear'); */ fShowMessage(`Action "${action}" is not yet implemented.`); break; // Placeholder
-            case 'gear-lootGem':            /* fHandleLootAction('Gem'); */ fShowMessage(`Action "${action}" is not yet implemented.`); break; // Placeholder
-            case 'gear-lootSocketed':       /* fHandleLootAction('Socketed'); */ fShowMessage(`Action "${action}" is not yet implemented.`); break; // Placeholder
-            case 'gear-lootValuables':      /* fHandleLootAction('Valuables'); */ fShowMessage(`Action "${action}" is not yet implemented.`); break; // Placeholder
+            case 'gear-toggleGear':         fToggleGearColumns(); break;
+            case 'gear-loot':               fShowMessage(`Action "${action}" is not yet implemented.`); break; // Placeholder
+            case 'gear-lootArtifact':       fShowMessage(`Action "${action}" is not yet implemented.`); break; // Placeholder
+            case 'gear-lootChaosCrystal':   fShowMessage(`Action "${action}" is not yet implemented.`); break; // Placeholder
+            case 'gear-lootGear':           fShowMessage(`Action "${action}" is not yet implemented.`); break; // Placeholder
+            case 'gear-lootGem':            fShowMessage(`Action "${action}" is not yet implemented.`); break; // Placeholder
+            case 'gear-lootSocketed':       fShowMessage(`Action "${action}" is not yet implemented.`); break; // Placeholder
+            case 'gear-lootValuables':      fShowMessage(`Action "${action}" is not yet implemented.`); break; // Placeholder
 
             // Data Menu Actions
             case 'data-saveNow':            fHandleAutoSaveTextToFirestore(); break;
-            case 'data-designerOnly':       fHandleDesignerOnlyClick(); break; // Keep reference
+            case 'data-designerOnly':       fHandleDesignerOnlyClick(); break;
 
-            // Placeholder/Legacy Actions (can be removed if not needed)
-            // case 'view-toggleTester': fToggleTesterVisibility(); break;
+            // Designer Menu Actions
+            case 'designer-saveDbSheetVer': fHandleSaveDBSheetVer(); break; // <-- ADDED CASE
 
             // Default case for unhandled actions
             default:
@@ -5780,6 +5780,103 @@ function fHandleAutoSaveToFirestoreFailure(error) {
 
 } // END fHandleAutoSaveToFirestoreFailure
 
+
+
+
+// fHandleSaveDBSheetVer ///////////////////////////////////////////////////////
+// Purpose -> Handles the "Designer" -> "Save DB Sheet & Ver" menu action. Prompts
+//            user for sheet name, calls server to load data/tags, then calls server
+//            to save the data to Firestore in the 'DB' collection.
+// Inputs  -> None.
+// Outputs -> (Promise<void>): Resolves after completing actions or handling errors.
+async function fHandleSaveDBSheetVer() {
+    const funcName = "fHandleSaveDBSheetVer";
+    fMyConsoleLog(`⚙️ Menu Action: ${funcName} Triggered...`);
+
+    // --- 1. Check Designer Mode (Optional but recommended) ---
+    if (!gUI.isDesignerMode) {
+        fMyConsoleLog("   -> Action blocked: Designer mode is not active.");
+        await fShowMessage("❌ This action requires Designer Mode to be enabled.");
+        return;
+    }
+
+    // --- 2. Prompt for Sheet Name ---
+    const sheetName = window.prompt("Enter Google Workbook Sheet (Tab) Name:");
+    if (!sheetName) {
+        fMyConsoleLog("   -> User cancelled sheet name prompt.");
+        return; // Exit if user cancelled
+    }
+    const trimmedSheetName = sheetName.trim();
+    if (!trimmedSheetName) {
+        fMyConsoleLog("   -> User entered an empty sheet name.");
+        await fShowMessage("❌ Sheet name cannot be empty.");
+        return;
+    }
+    fMyConsoleLog(`   -> User entered Sheet Name: "${trimmedSheetName}"`);
+
+    // --- 3. Validate Game Version ---
+    if (!gIndexGameVer || typeof gIndexGameVer !== 'string' || gIndexGameVer.trim() === '') {
+        fMyConsoleLog("   -> Cannot proceed: gIndexGameVer is missing or invalid on client.");
+        await fShowMessage("❌ Error: Game Version is missing. Cannot construct Firestore document name.");
+        return;
+    }
+    fMyConsoleLog(`   -> Using Game Version: ${gIndexGameVer}`);
+
+
+    // --- 4. Call Server to Load Data & Tags ---
+    fMyConsoleLog(`   -> Calling fSrvLoadDBTabAndTags for sheet: "${trimmedSheetName}"...`);
+    // Optional: Show loading indicator
+    const loadingMsg = fShowMessage(`⏳ Loading data for sheet "${trimmedSheetName}"...`);
+
+    try {
+        const dbData = await new Promise((resolve, reject) => {
+            google.script.run
+                .withSuccessHandler(resolve)
+                .withFailureHandler(reject)
+                .fSrvLoadDBTabAndTags(trimmedSheetName);
+        });
+
+        // --- 5. Handle Load Success ---
+        fHideMessage(); // Hide loading message
+        fMyConsoleLog(`   -> Successfully loaded data from sheet "${trimmedSheetName}".`);
+        // Basic validation of returned object (more robust validation server-side)
+        if (!dbData || typeof dbData !== 'object' || !dbData.ColTags || !dbData.RowTags || !dbData.sheetText2D) {
+            console.error("Invalid data structure received from fSrvLoadDBTabAndTags:", dbData);
+            throw new Error("Received invalid data structure from server after loading sheet."); // Throw to be caught below
+        }
+
+        // --- 6. Call Server to Save Data to Firestore ---
+        fMyConsoleLog(`   -> Calling fSrvSaveDBTabAndTagsToFirestore for v${gIndexGameVer} ${trimmedSheetName}...`);
+        const savingMsg = fShowMessage(`💾 Saving data for v${gIndexGameVer} ${trimmedSheetName} to Firestore...`);
+
+        const saveResult = await new Promise((resolve, reject) => {
+            google.script.run
+                .withSuccessHandler(resolve)
+                .withFailureHandler(reject)
+                .fSrvSaveDBTabAndTagsToFirestore(gIndexGameVer, trimmedSheetName, dbData);
+        });
+
+        // --- 7. Handle Save Result ---
+        fHideMessage(); // Hide saving message
+        if (saveResult && saveResult.success) {
+            fMyConsoleLog("   -> ✅ Successfully saved DB sheet data to Firestore.");
+            await fShowMessage(`✅ Successfully saved data for sheet "${trimmedSheetName}" (Version ${gIndexGameVer}) to Firestore.`);
+        } else {
+            const saveErrorMsg = saveResult?.message || "Unknown error saving to Firestore.";
+            fMyConsoleLog(`   -> ❌ Firestore Save Failed: ${saveErrorMsg}`);
+            await fShowMessage(`❌ Failed to save data to Firestore: ${saveErrorMsg}`);
+        }
+
+    } catch (error) {
+        // --- 8. Handle Load or Save Errors ---
+        fHideMessage(); // Hide any lingering loading/saving message
+        const errorMsg = `Error during DB Sheet & Ver process: ${error?.message || error}`;
+        console.error(`${funcName} Error:`, error);
+        fMyConsoleLog(`   -> ❌ ${errorMsg}`);
+        await fShowMessage(`❌ ${errorMsg}`);
+    }
+
+} // END fHandleSaveDBSheetVer
 
 
 

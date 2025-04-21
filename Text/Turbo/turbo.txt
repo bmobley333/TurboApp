@@ -1885,3 +1885,196 @@ function fSrvLoadCharacterInfoFromFirestore(userEmail, csId) {
 } // END fSrvLoadCharacterInfoFromFirestore
 
 
+
+// fSrvLoadDBTabAndTags /////////////////////////////////////////////////////////
+// Purpose -> Loads column tags (Row 0), row tags (Col 0), and all cell text values
+//            from a specified sheet within the 'db' Google Sheet. Validates tag
+//            uniqueness (case-insensitive).
+// Inputs  -> sheetName (String): The name of the specific sheet (tab) to read from.
+// Outputs -> (Object): { ColTags: Object, RowTags: Object, sheetText2D: Array[][] } on success.
+// Throws  -> (Error): If sheetName is invalid, sheet not found, sheet is empty,
+//                     or duplicate tags are found (case-insensitive).
+function fSrvLoadDBTabAndTags(sheetName) {
+    const funcName = "fSrvLoadDBTabAndTags";
+    Logger.log(`${funcName}: Loading Tags & Data for Sheet: "${sheetName}" in DB.`);
+
+    // --- 1. Validate Input ---
+    if (!sheetName || typeof sheetName !== 'string' || sheetName.trim() === '') {
+        throw new Error(`${funcName}: Invalid or empty sheetName provided.`);
+    }
+    const trimmedSheetName = sheetName.trim();
+
+    // --- 2. Open DB Sheet & Get Target Tab ---
+    const dbFileId = gSrv.ids.sheets.db;
+    if (!dbFileId) { throw new Error(`${funcName}: Database Sheet ID ('db') not found in gSrv.`); }
+
+    let ss, sh;
+    try {
+        ss = SpreadsheetApp.openById(dbFileId);
+        sh = ss.getSheetByName(trimmedSheetName);
+        if (!sh) {
+            throw new Error(`Sheet named "${trimmedSheetName}" not found in DB Sheet (ID: ${dbFileId}).`);
+        }
+        Logger.log(`   -> Successfully opened sheet "${trimmedSheetName}".`);
+    } catch (e) {
+        console.error(`Error accessing sheet "${trimmedSheetName}" in DB: ${e.message}`);
+        throw new Error(`Failed to access sheet "${trimmedSheetName}": ${e.message}`); // Re-throw
+    }
+
+    // --- 3. Get Full Data Range & Check if Empty ---
+    const dataRange = sh.getDataRange();
+    const sheetText2D = dataRange.getValues();
+    const numRows = sheetText2D.length;
+    const numCols = numRows > 0 ? (sheetText2D[0]?.length || 0) : 0;
+
+    if (numRows === 0 || numCols === 0 || (numRows === 1 && numCols === 1 && sheetText2D[0][0] === '')) {
+        // Check if sheet is effectively empty (based on user confirmation)
+        throw new Error(`${funcName}: Sheet "${trimmedSheetName}" exists but appears to be empty. Cannot process.`);
+    }
+    Logger.log(`   -> Read ${numRows}x${numCols} cells from "${trimmedSheetName}".`);
+
+
+    // --- 4. Process Column Tags (Row 0) ---
+    const colTagsMap = {};
+    const colTagsSeen = new Set(); // For case-insensitive uniqueness check
+    const headerRow = sheetText2D[0]; // Row 0
+
+    for (let c = 0; c < numCols; c++) {
+        const cellValue = headerRow[c];
+        if (typeof cellValue === 'string' && cellValue.trim() !== '') {
+            const tags = cellValue.split(',').map(tag => tag.trim()).filter(Boolean);
+            for (const tag of tags) {
+                const lowerTag = tag.toLowerCase();
+                if (colTagsSeen.has(lowerTag)) {
+                    throw new Error(`${funcName}: Duplicate Column Tag found (case-insensitive): "${tag}" in Row 0, Column ${c + 1}.`);
+                }
+                if (colTagsMap.hasOwnProperty(tag)) {
+                     Logger.log(`   -> WARNING: Column Tag "${tag}" reused in Row 0. Mapping to last occurrence (Col ${c}).`);
+                    // Allow overwrite but log - standard behavior is last one wins
+                }
+                colTagsMap[tag] = c; // Use original case for key
+                colTagsSeen.add(lowerTag);
+            }
+        }
+    }
+    Logger.log(`   -> Processed ${Object.keys(colTagsMap).length} unique column tags.`);
+
+    // --- 5. Process Row Tags (Col 0) ---
+    const rowTagsMap = {};
+    const rowTagsSeen = new Set(); // For case-insensitive uniqueness check
+
+    for (let r = 0; r < numRows; r++) {
+        // Ensure row exists and has a first element before accessing
+        const cellValue = (sheetText2D[r] && sheetText2D[r].length > 0) ? sheetText2D[r][0] : undefined;
+        if (typeof cellValue === 'string' && cellValue.trim() !== '') {
+            const tags = cellValue.split(',').map(tag => tag.trim()).filter(Boolean);
+            for (const tag of tags) {
+                const lowerTag = tag.toLowerCase();
+                if (rowTagsSeen.has(lowerTag)) {
+                    throw new Error(`${funcName}: Duplicate Row Tag found (case-insensitive): "${tag}" in Column 0, Row ${r + 1}.`);
+                }
+                 if (rowTagsMap.hasOwnProperty(tag)) {
+                     Logger.log(`   -> WARNING: Row Tag "${tag}" reused in Col 0. Mapping to last occurrence (Row ${r}).`);
+                    // Allow overwrite but log
+                }
+                rowTagsMap[tag] = r; // Use original case for key
+                rowTagsSeen.add(lowerTag);
+            }
+        }
+    }
+    Logger.log(`   -> Processed ${Object.keys(rowTagsMap).length} unique row tags.`);
+
+
+    // --- 6. Return Result ---
+    Logger.log(`${funcName}: Successfully loaded tags and data for sheet "${trimmedSheetName}".`);
+    return {
+        ColTags: colTagsMap,
+        RowTags: rowTagsMap,
+        sheetText2D: sheetText2D
+    };
+
+} // END fSrvLoadDBTabAndTags
+
+
+
+
+// fSrvSaveDBTabAndTagsToFirestore //////////////////////////////////////////////////
+// Purpose -> Saves loaded DB sheet tags (ColTags, RowTags) and the full sheet text data
+//            (sheetText2D, converted to array-of-row-objects) to Firestore.
+//            Uses the 'DB' collection and a document name based on game version and sheet name.
+// Inputs  -> gameVer (String): The game version (e.g., "28.3").
+//         -> sheetName (String): The name of the DB sheet that was loaded.
+//         -> dbData (Object): The object returned by fSrvLoadDBTabAndTags, containing
+//                             { ColTags, RowTags, sheetText2D }.
+// Outputs -> (Object): { success: Boolean, message?: String }
+function fSrvSaveDBTabAndTagsToFirestore(gameVer, sheetName, dbData) {
+    const funcName = "fSrvSaveDBTabAndTagsToFirestore";
+    Logger.log(`${funcName}: Saving data for DB Sheet: "${sheetName}", Version: ${gameVer}...`);
+
+    // --- 1. Validate Inputs ---
+    if (!gameVer || typeof gameVer !== 'string' || gameVer.trim() === '') {
+        return { success: false, message: "Invalid Game Version provided." };
+    }
+    if (!sheetName || typeof sheetName !== 'string' || sheetName.trim() === '') {
+        return { success: false, message: "Invalid Sheet Name provided." };
+    }
+    if (!dbData || typeof dbData !== 'object' || !dbData.ColTags || !dbData.RowTags || !dbData.sheetText2D || !Array.isArray(dbData.sheetText2D)) {
+        return { success: false, message: "Invalid dbData object provided (missing ColTags, RowTags, or sheetText2D array)." };
+    }
+    const trimmedSheetName = sheetName.trim(); // Use trimmed name for document ID
+
+    // --- 2. Get Firestore Instance ---
+    const firestore = fSrvGetFirestoreInstance();
+    if (!firestore) {
+        const msg = "Failed to initialize Firestore instance.";
+        Logger.log(`${funcName} Error: ${msg}`);
+        return { success: false, message: "Server configuration error (Firestore)." };
+    }
+
+    // --- 3. Construct Firestore Path ---
+    const collectionName = 'DB'; // Target collection
+    const documentId = `v${gameVer} ${trimmedSheetName}`; // Format: vVERSION SHEETNAME
+    const documentPath = `${collectionName}/${documentId}`;
+    Logger.log(`   -> Target Firestore Path: ${documentPath}`);
+
+    // --- 4. Convert sheetText2D to Array of Row Objects ---
+    const sheetTextArray = dbData.sheetText2D;
+    const arrayOfRowObjects = [];
+    const numRows = sheetTextArray.length;
+    for (let r = 0; r < numRows; r++) {
+        const rowData = sheetTextArray[r] || [];
+        const rowKey = `row${r}`;
+        const rowObject = {};
+        rowObject[rowKey] = rowData;
+        arrayOfRowObjects.push(rowObject);
+    }
+    Logger.log(`   -> Converted ${numRows} rows to array-of-row-objects format.`);
+
+    // --- 5. Prepare Final Data Payload ---
+    const dataToSave = {
+        ColTags: dbData.ColTags,             // Save the column tags map
+        RowTags: dbData.RowTags,             // Save the row tags map
+        sheetText2D_rowObjects: arrayOfRowObjects, // Save the data in the new format
+        _lastUpdated: new Date()             // Timestamp the save operation
+    };
+
+    // --- 6. Save to Firestore (Update/Overwrite) ---
+    try {
+        Logger.log(`   -> Calling firestore.updateDocument for ${documentPath}...`);
+        firestore.updateDocument(documentPath, dataToSave, false); // mask=false overwrites/creates
+        Logger.log(`   -> ✅ Successfully saved data for "${trimmedSheetName}" (v${gameVer}) to Firestore.`);
+        return { success: true };
+
+    } catch (e) {
+        console.error(`Exception caught in ${funcName} saving to path ${documentPath}: ${e.message}\nStack: ${e.stack}`);
+        Logger.log(`   -> ❌ Exception during Firestore save for "${trimmedSheetName}" (v${gameVer}): ${e.message}`);
+        const safeErrorMessage = e.message.includes("permission") ? "Permission denied."
+                               : e.message.includes("Nested arrays") ? "Nested arrays error (check data format)."
+                               : "Server error during Firestore save.";
+        return { success: false, message: safeErrorMessage };
+    }
+
+} // END fSrvSaveDBTabAndTagsToFirestore
+
+
+

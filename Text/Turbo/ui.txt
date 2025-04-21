@@ -99,7 +99,8 @@
         <span class="button-icon">⚙️</span> Designer
       </button>
       <div id="dropdown-designer" class="dropdown-content">
-        </div>
+        <a href="#" data-action="designer-saveDbSheetVer">Save DB Sheet & Ver</a>
+      </div>
   </div>
   </div> <div id="grid"></div>
 <div id="cell-tooltip"></div>
