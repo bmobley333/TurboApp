@@ -1388,7 +1388,7 @@ function fSrvSaveURLtoNamesAndLogToDBandPS(dataBundle) {
 // Outputs -> (Object | null): Authenticated Firestore instance or null on error.
 function fSrvGetFirestoreInstance() {
     const funcName = "fSrvGetFirestoreInstance";
-    Logger.log(`${funcName}: Attempting to initialize Firestore...`);
+    Logger.log(`${funcName}: Attempting to initialize Firestore...`); // <<< KEPT: Entry point log
     let clientEmail, privateKeyRaw, projectId, processedKey; // Declare vars
     try {
         // Retrieve credentials from Script Properties
@@ -1398,55 +1398,46 @@ function fSrvGetFirestoreInstance() {
         projectId = scriptProperties.getProperty('FIRESTORE_PROJECT_ID');
 
         // Validate credentials & Log Status
-        if (!clientEmail) Logger.log(`   -> ${funcName} Error: FIRESTORE_CLIENT_EMAIL not found or empty.`);
-        if (!privateKeyRaw) Logger.log(`   -> ${funcName} Error: FIRESTORE_PRIVATE_KEY not found or empty.`);
-        if (!projectId) Logger.log(`   -> ${funcName} Error: FIRESTORE_PROJECT_ID not found or empty.`);
+        let missingCred = false;
+        if (!clientEmail) { Logger.log(`   -> ${funcName} Error: FIRESTORE_CLIENT_EMAIL not found or empty.`); missingCred = true; } // <<< KEPT: Critical error
+        if (!privateKeyRaw) { Logger.log(`   -> ${funcName} Error: FIRESTORE_PRIVATE_KEY not found or empty.`); missingCred = true; } // <<< KEPT: Critical error
+        if (!projectId) { Logger.log(`   -> ${funcName} Error: FIRESTORE_PROJECT_ID not found or empty.`); missingCred = true; } // <<< KEPT: Critical error
 
-        if (!clientEmail || !privateKeyRaw || !projectId) {
+        if (missingCred) {
             console.error(`${funcName} Error: Missing Firestore credentials in Script Properties.`);
             return null; // Exit if any credential is fundamentally missing
         }
 
         // --- Process the Private Key String ---
-        Logger.log(`   -> Raw Private Key from Props (Snippet): ${privateKeyRaw.substring(0, 20)}...${privateKeyRaw.substring(privateKeyRaw.length - 20)}`);
         processedKey = privateKeyRaw;
         // 1. Remove surrounding quotes if present (handle copy-paste variations)
         if (processedKey.startsWith('"') && processedKey.endsWith('"')) {
             processedKey = processedKey.substring(1, processedKey.length - 1);
-            Logger.log(`   -> Removed surrounding quotes from key.`);
         }
         // 2. Replace literal "\\n" sequences with actual newline characters "\n"
-        //    (Important: Use double backslash in replaceAll to match the literal sequence)
         processedKey = processedKey.replaceAll('\\n', '\n');
-        Logger.log(`   -> Replaced \\\\n with \\n in key.`);
-        Logger.log(`   -> Processed Private Key (Snippet): ${processedKey.substring(0, 40)}...${processedKey.substring(processedKey.length - 40)}`);
         // --- End Key Processing ---
 
-        // Log other retrieved values
-        Logger.log(`   -> Project ID: ${projectId}`);
-        Logger.log(`   -> Client Email: ${clientEmail}`);
-
-
         // Initialize Firestore using the library and *processed* key
-        Logger.log(`   -> Calling FirestoreApp.getFirestore with processed credentials...`);
+        Logger.log(`   -> Calling FirestoreApp.getFirestore for project ${projectId}...`); // <<< KEPT: Status log
         const firestore = FirestoreApp.getFirestore(clientEmail, processedKey, projectId); // Use processedKey here
 
         // Check if firestore object was created
         if (!firestore) {
-           Logger.log(`   -> ${funcName} Error: FirestoreApp.getFirestore returned null/undefined after processing key.`);
+           Logger.log(`   -> ${funcName} Error: FirestoreApp.getFirestore returned null/undefined.`); // <<< KEPT: Critical error
            console.error(`${funcName} Error: FirestoreApp.getFirestore failed to return an instance.`);
            return null;
         }
 
-        Logger.log(`${funcName}: Firestore instance appears initialized successfully for project ${projectId}.`);
+        Logger.log(`${funcName}: Firestore instance initialized successfully for project ${projectId}.`); // <<< KEPT: Success log
         return firestore;
 
     } catch (e) {
         // Catch errors during property retrieval or initialization
         console.error(`Error caught in ${funcName}: ${e.message}\nStack: ${e.stack}`);
-        Logger.log(`   -> ❌ Exception during Firestore initialization: ${e.message}`);
-        // Log potentially relevant details if available before the error
-        Logger.log(`   -> Details at time of error: ProjectID=${projectId || 'N/A'}, Email=${clientEmail || 'N/A'}, Key Raw loaded=${!!privateKeyRaw}, Key Processed Snippet=${processedKey ? processedKey.substring(0,20) + '...' : 'N/A'}`);
+        Logger.log(`   -> ❌ Exception during Firestore initialization: ${e.message}`); // <<< KEPT: Exception log
+        // Log potentially relevant details if available before the error (AVOID logging key)
+        Logger.log(`   -> Details at time of error: ProjectID=${projectId || 'N/A'}, Email=${clientEmail || 'N/A'}`); // <<< MODIFIED: Removed key snippet
         return null;
     }
 } // END fSrvGetFirestoreInstance
@@ -1466,82 +1457,76 @@ function fSrvGetFirestoreInstance() {
 // Outputs -> (Object): { success: Boolean, message?: String }
 function fSrvSaveTurboTextAndURLtoNamesToFirestore(csId, fullArrData, charInfo) {
     const funcName = "fSrvSaveTurboTextAndURLtoNamesToFirestore";
-    Logger.log(`${funcName}: Saving array-of-row-objects data for CS ID: ${csId}...`);
+    Logger.log(`${funcName}: Saving data for CS ID: ${csId}...`); // <<< KEPT: Entry point log
 
     // === 1. Validate Inputs ===
     if (!csId || typeof csId !== 'string') {
         return { success: false, message: "Invalid Character Sheet ID provided." };
     }
-    // Validate fullArrData is a 2D array (basic check)
     if (!Array.isArray(fullArrData) || (fullArrData.length > 0 && !Array.isArray(fullArrData[0]))) {
          return { success: false, message: "Invalid fullArrData provided (must be 2D array)." };
     }
-     // Validate characterInfo and specifically playerName needed for document ID (still needed for metadata part)
-     if (!charInfo || typeof charInfo !== 'object' || !charInfo.playerName || typeof charInfo.playerName !== 'string' || charInfo.playerName.trim() === '') {
+    if (!charInfo || typeof charInfo !== 'object' || !charInfo.playerName || typeof charInfo.playerName !== 'string' || charInfo.playerName.trim() === '') {
         const msg = "Invalid or missing characterInfo.playerName for Firestore document metadata.";
-        Logger.log(`   -> ${funcName} Error: ${msg}`);
+        Logger.log(`   -> ${funcName} Error: ${msg}`); // <<< KEPT: Critical input error
         return { success: false, message: msg };
     }
-    Logger.log(`   -> Received fullArrData with dimensions: ${fullArrData.length}x${fullArrData[0]?.length || 0}`);
-    Logger.log(`   -> Received charInfo: ${JSON.stringify(charInfo)}`);
 
     // === 2. Process Array into Array of Row Objects ===
     const arrayOfRowObjects = [];
     const numRows = fullArrData.length;
-    Logger.log(`   -> Processing ${numRows} rows into array-of-row-objects format...`);
+    // Logger.log(`   -> Processing ${numRows} rows into array-of-row-objects format...`); // <<< REMOVED: Too granular
     for (let r = 0; r < numRows; r++) {
-        const rowData = fullArrData[r] || []; // Get the row array or an empty array if row doesn't exist
+        const rowData = fullArrData[r] || [];
         const rowKey = `row${r}`;
         const rowObject = {};
-        rowObject[rowKey] = rowData; // Create object like {"row0": [val, val, ...]}
+        rowObject[rowKey] = rowData;
         arrayOfRowObjects.push(rowObject);
     }
-    Logger.log(`   -> Created arrayOfRowObjects with ${arrayOfRowObjects.length} entries.`);
-
+    // Logger.log(`   -> Created arrayOfRowObjects with ${arrayOfRowObjects.length} entries.`); // <<< REMOVED: Too granular
 
     // === 3. Get Firestore Instance ===
-    const firestore = fSrvGetFirestoreInstance();
+    const firestore = fSrvGetFirestoreInstance(); // Relies on its own logging
     if (!firestore) {
         const msg = "Failed to initialize Firestore instance (check previous logs).";
-        Logger.log(`${funcName} Error: ${msg}`);
+        Logger.log(`${funcName} Error: ${msg}`); // <<< KEPT: Critical dependency error
         return { success: false, message: "Server configuration error (Firestore)." };
     }
-    Logger.log(`   -> Firestore instance obtained.`);
+    // Logger.log(`   -> Firestore instance obtained.`); // <<< REMOVED: Redundant if init log exists
 
     // === 4. Define Path and Data ===
     const documentId = `GSID_${csId}`;
     const collectionName = 'GameTextData';
     const documentPath = `${collectionName}/${documentId}`;
+    Logger.log(`   -> Target Firestore Path: ${documentPath}`); // <<< KEPT: Useful context
 
     const dataToSave = {
-        gUIcharacterInfo: charInfo,       // Store character metadata
-        gUIarr: arrayOfRowObjects,        // Stores gUI.arr as an array of row objects
-        _lastUpdated: new Date()           // Add a server-side timestamp
+        gUIcharacterInfo: charInfo,
+        gUIarr: arrayOfRowObjects,
+        _lastUpdated: new Date()
     };
-    Logger.log(`   -> Target Firestore Path: ${documentPath}`);
-    // Logger.log(`   -> Data to Save (Snippet): ${JSON.stringify(dataToSave).substring(0, 200)}...`);
+    // Logger.log(`   -> Data to Save (Snippet): ${JSON.stringify(dataToSave).substring(0, 200)}...`); // <<< REMOVED: Verbose/Already commented
 
     // === 5. Save to Firestore ===
     try {
-        Logger.log(`   -> Calling firestore.updateDocument...`);
+        Logger.log(`   -> Calling firestore.updateDocument for ${documentPath}...`); // <<< KEPT: Action log
         // Use updateDocument with mask=false to overwrite the entire document or create if needed.
         const writeResult = firestore.updateDocument(documentPath, dataToSave, false);
-        Logger.log(`   -> Firestore write result: ${JSON.stringify(writeResult)}`); // Log raw result
+        // Logger.log(`   -> Firestore write result: ${JSON.stringify(writeResult)}`); // <<< REMOVED: Verbose raw result
 
         // Basic check on writeResult (can be adapted based on library specifics)
         if (writeResult && typeof writeResult === 'object') {
-             Logger.log(`   -> ✅ Successfully saved array-of-row-objects data for ${csId} to ${documentPath}.`);
+             Logger.log(`   -> ✅ Successfully saved data for ${csId} to ${documentPath}.`); // <<< KEPT: Success log
              return { success: true };
         } else {
              const msg = `Firestore updateDocument returned unexpected result.`;
-             Logger.log(`   -> ❌ ${funcName} Error: ${msg}`);
+             Logger.log(`   -> ❌ ${funcName} Error: ${msg}`); // <<< KEPT: Unexpected result error
              return { success: false, message: `Firestore write returned unexpected result: ${JSON.stringify(writeResult)}` };
         }
 
     } catch (e) {
         console.error(`Exception caught in ${funcName} saving to path ${documentPath}: ${e.message}\nStack: ${e.stack}`);
-        Logger.log(`   -> ❌ Exception during Firestore save for ${csId}: ${e.message}`);
-        // Check if the error is the nested array error again
+        Logger.log(`   -> ❌ Exception during Firestore save for ${csId}: ${e.message}`); // <<< KEPT: Exception log
         const nestedArrayError = "Nested arrays are not allowed";
         const safeErrorMessage = e.message.includes("permission") ? "Permission denied."
                                : e.message.includes(nestedArrayError) ? nestedArrayError + " (even with Array of Row Objects format)."
@@ -1674,30 +1659,29 @@ function fSrvUnpackFirestoreArrayTo2D(firestoreArr) {
 //            'firestoreArr' is the standard 2D array if success is true.
 function fSrvCheckAndLoadFirestoreGUIarrAs2D(csId) {
     const funcName = "fSrvCheckAndLoadFirestoreGUIarrAs2D";
-    Logger.log(`${funcName}: Checking Firestore for data for CS ID: ${csId}...`);
+    Logger.log(`${funcName}: Checking Firestore for data for CS ID: ${csId}...`); // <<< KEPT: Entry point log
 
     // === 1. Validate Input ===
     if (!csId || typeof csId !== 'string') {
         const msg = "Invalid Character Sheet ID provided.";
-        Logger.log(`${funcName} Error: ${msg}`);
-        // Note: Don't throw, return failure object for client handling
+        Logger.log(`${funcName} Error: ${msg}`); // <<< KEPT: Critical input error
         return { success: false, message: msg };
     }
 
     // === 2. Get Firestore Instance ===
-    const firestore = fSrvGetFirestoreInstance();
+    const firestore = fSrvGetFirestoreInstance(); // Relies on its own logging
     if (!firestore) {
         const msg = "Failed to initialize Firestore instance.";
-        Logger.log(`${funcName} Error: ${msg}`);
+        Logger.log(`${funcName} Error: ${msg}`); // <<< KEPT: Critical dependency error
         return { success: false, message: "Server configuration error (Firestore)." };
     }
-    Logger.log(`   -> Firestore instance obtained.`);
+    // Logger.log(`   -> Firestore instance obtained.`); // <<< REMOVED: Redundant
 
     // === 3. Define Path and Fetch Data ===
     const documentId = `GSID_${csId}`;
     const collectionName = 'GameTextData';
     const documentPath = `${collectionName}/${documentId}`;
-    Logger.log(`   -> Target Firestore Path: ${documentPath}`);
+    Logger.log(`   -> Target Firestore Path: ${documentPath}`); // <<< KEPT: Useful context
 
     try {
         // Attempt to get the document
@@ -1706,10 +1690,10 @@ function fSrvCheckAndLoadFirestoreGUIarrAs2D(csId) {
         // === 4. Check if Document Exists & Has Data ===
         if (!doc || !doc.fields || !doc.fields.gUIarr) {
             const msg = `Document not found or missing 'gUIarr' field at path: ${documentPath}.`;
-            Logger.log(`   -> ${funcName}: ${msg}`);
+            Logger.log(`   -> ${funcName}: ${msg}`); // <<< KEPT: Informational, common case
             return { success: false, message: "No saved Firestore data found for this character." };
         }
-        Logger.log(`   -> Document found. Processing 'gUIarr' field...`);
+        Logger.log(`   -> Document found. Processing 'gUIarr' field...`); // <<< KEPT: Status log
 
         // === 5. Convert Firestore Types for gUIarr ===
         const arrDataRaw = doc.fields.gUIarr;
@@ -1718,17 +1702,17 @@ function fSrvCheckAndLoadFirestoreGUIarrAs2D(csId) {
         // === 6. Validate Converted Data (Should be Array of Objects) ===
         if (!Array.isArray(arrDataConverted)) {
             const msg = `Invalid data type for gUIarr after conversion. Expected array, got ${typeof arrDataConverted}. Path: ${documentPath}`;
-            Logger.log(`   -> ${funcName} Error: ${msg}`);
+            Logger.log(`   -> ${funcName} Error: ${msg}`); // <<< KEPT: Data integrity error
             return { success: false, message: "Invalid grid data format retrieved from Firestore." };
         }
 
         // === 7. Unpack Array of Objects into 2D Array ===
-        Logger.log(`   -> Unpacking Firestore array data server-side...`);
+        // Logger.log(`   -> Unpacking Firestore array data server-side...`); // <<< REMOVED: Granular
         const unpackedArr = fSrvUnpackFirestoreArrayTo2D(arrDataConverted);
-        Logger.log(`   -> Unpacked into ${unpackedArr.length}x${unpackedArr[0]?.length || 0} array.`);
+        // Logger.log(`   -> Unpacked into ${unpackedArr.length}x${unpackedArr[0]?.length || 0} array.`); // <<< REMOVED: Granular
 
         // === 8. Return Success with Unpacked Data ===
-        Logger.log(`   -> ✅ Successfully fetched and unpacked Firestore data for ${csId}.`);
+        Logger.log(`   -> ✅ Successfully fetched and unpacked Firestore data for ${csId}.`); // <<< KEPT: Success log
         return {
             success: true,
             firestoreArr: unpackedArr // Return the standard 2D array
@@ -1743,7 +1727,10 @@ function fSrvCheckAndLoadFirestoreGUIarrAs2D(csId) {
                                : `Server error during Firestore read: ${e.message || e}`;
 
         console.error(`Exception caught in ${funcName} fetching from path ${documentPath}: ${e.message}\nStack: ${e.stack}`);
-        Logger.log(`   -> ❌ Exception during Firestore read for ${csId}: ${safeErrorMessage}`);
+        Logger.log(`   -> ❌ Exception during Firestore read for ${csId}: ${safeErrorMessage}`); // <<< KEPT: Exception log
         return { success: false, message: safeErrorMessage };
     }
 } // END fSrvCheckAndLoadFirestoreGUIarrAs2D
+
+
+
