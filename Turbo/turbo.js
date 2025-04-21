@@ -1484,37 +1484,57 @@ function fSrvGetFirestoreInstance() {
 
 
 
-// fSrvSaveTurboTextAndURLtoNamesToFirestore ////////////////////////////////////////////////////
-// Purpose -> Saves grid text data and character metadata to a Firestore document
-//            in the 'GameTextData' collection. Document ID is GSID_<csId>.
-//            Processes the incoming 2D array into an Array of Row Objects format
-//            [ {"row0": [...]}, {"row1": [...]}, ... ] for Firestore compatibility.
+// fSrvSaveTurboDataToFirestore ////////////////////////////////////////////////////
+// Purpose -> Saves grid text data (gUI.arr) and character metadata (gUI.characterInfo)
+//            to separate Firestore documents within the user's email collection.
+//            Documents: Collection = userEmail, Docs = Turbo_Game_<csId>, Turbo_CharacterInfo_<csId>.
+//            Processes gUI.arr into Array of Row Objects format for Firestore compatibility.
 //            Uses updateDocument which creates if not exists.
-// Inputs  -> csId (String): The Character Sheet ID (used for document path).
+// Inputs  -> userEmail (String): The user's email address (used as the collection name).
+//         -> csId (String): The Character Sheet ID (used for document naming).
 //         -> fullArrData (Array[][]): The complete gUI.arr from the client.
 //         -> charInfo (Object): Character metadata { slotNum, raceClass, playerName, etc. }.
 // Outputs -> (Object): { success: Boolean, message?: String }
-function fSrvSaveTurboTextAndURLtoNamesToFirestore(csId, fullArrData, charInfo) {
-    const funcName = "fSrvSaveTurboTextAndURLtoNamesToFirestore";
-    Logger.log(`${funcName}: Saving data for CS ID: ${csId}...`); // <<< KEPT: Entry point log
+function fSrvSaveTurboDataToFirestore(userEmail, csId, fullArrData, charInfo) {
+    const funcName = "fSrvSaveTurboDataToFirestore";
+    Logger.log(`${funcName}: Saving data for User: ${userEmail}, CS ID: ${csId}...`);
 
     // === 1. Validate Inputs ===
+    if (!userEmail || typeof userEmail !== 'string' || userEmail.indexOf('@') === -1) { // Basic email check
+        return { success: false, message: "Invalid User Email provided." };
+    }
     if (!csId || typeof csId !== 'string') {
         return { success: false, message: "Invalid Character Sheet ID provided." };
     }
     if (!Array.isArray(fullArrData) || (fullArrData.length > 0 && !Array.isArray(fullArrData[0]))) {
          return { success: false, message: "Invalid fullArrData provided (must be 2D array)." };
     }
-    if (!charInfo || typeof charInfo !== 'object' || !charInfo.playerName || typeof charInfo.playerName !== 'string' || charInfo.playerName.trim() === '') {
-        const msg = "Invalid or missing characterInfo.playerName for Firestore document metadata.";
-        Logger.log(`   -> ${funcName} Error: ${msg}`); // <<< KEPT: Critical input error
-        return { success: false, message: msg };
+    if (!charInfo || typeof charInfo !== 'object') { // Allow empty charInfo for now, maybe just arr needs saving?
+        Logger.log(`   -> ${funcName} Warning: charInfo is missing or not an object.`);
+        // Proceed, but only save arr if charInfo is bad? Or save empty object? Let's allow saving arr.
+        charInfo = {}; // Use empty object if invalid to avoid errors accessing it later
     }
 
-    // === 2. Process Array into Array of Row Objects ===
+    // === 2. Get Firestore Instance ===
+    const firestore = fSrvGetFirestoreInstance();
+    if (!firestore) {
+        const msg = "Failed to initialize Firestore instance.";
+        Logger.log(`${funcName} Error: ${msg}`);
+        return { success: false, message: "Server configuration error (Firestore)." };
+    }
+
+    // === 3. Define Paths ===
+    const collectionPath = userEmail; // User's email is the collection
+    const gameDocId = `Turbo_Game_${csId}`;
+    const charInfoDocId = `Turbo_CharacterInfo_${csId}`;
+    const gameDocPath = `${collectionPath}/${gameDocId}`;
+    const charInfoDocPath = `${collectionPath}/${charInfoDocId}`;
+    Logger.log(`   -> Target Firestore Game Path: ${gameDocPath}`);
+    Logger.log(`   -> Target Firestore CharInfo Path: ${charInfoDocPath}`);
+
+    // === 4. Process Array into Array of Row Objects ===
     const arrayOfRowObjects = [];
     const numRows = fullArrData.length;
-    // Logger.log(`   -> Processing ${numRows} rows into array-of-row-objects format...`); // <<< REMOVED: Too granular
     for (let r = 0; r < numRows; r++) {
         const rowData = fullArrData[r] || [];
         const rowKey = `row${r}`;
@@ -1522,57 +1542,60 @@ function fSrvSaveTurboTextAndURLtoNamesToFirestore(csId, fullArrData, charInfo) 
         rowObject[rowKey] = rowData;
         arrayOfRowObjects.push(rowObject);
     }
-    // Logger.log(`   -> Created arrayOfRowObjects with ${arrayOfRowObjects.length} entries.`); // <<< REMOVED: Too granular
 
-    // === 3. Get Firestore Instance ===
-    const firestore = fSrvGetFirestoreInstance(); // Relies on its own logging
-    if (!firestore) {
-        const msg = "Failed to initialize Firestore instance (check previous logs).";
-        Logger.log(`${funcName} Error: ${msg}`); // <<< KEPT: Critical dependency error
-        return { success: false, message: "Server configuration error (Firestore)." };
-    }
-    // Logger.log(`   -> Firestore instance obtained.`); // <<< REMOVED: Redundant if init log exists
-
-    // === 4. Define Path and Data ===
-    const documentId = `GSID_${csId}`;
-    const collectionName = 'GameTextData';
-    const documentPath = `${collectionName}/${documentId}`;
-    Logger.log(`   -> Target Firestore Path: ${documentPath}`); // <<< KEPT: Useful context
-
-    const dataToSave = {
-        gUIcharacterInfo: charInfo,
+    // === 5. Prepare Data Payloads ===
+    const gameDataToSave = {
         gUIarr: arrayOfRowObjects,
         _lastUpdated: new Date()
+        // Removed gUIcharacterInfo from here
     };
-    // Logger.log(`   -> Data to Save (Snippet): ${JSON.stringify(dataToSave).substring(0, 200)}...`); // <<< REMOVED: Verbose/Already commented
+    const charInfoDataToSave = {
+        gUIcharacterInfo: charInfo, // Save the actual charInfo object here
+        _lastUpdated: new Date()
+    };
 
-    // === 5. Save to Firestore ===
+    // === 6. Save to Firestore (Attempt both) ===
+    let gameSaveSuccess = false;
+    let charInfoSaveSuccess = false;
+    let gameSaveError = null;
+    let charInfoError = null;
+
     try {
-        Logger.log(`   -> Calling firestore.updateDocument for ${documentPath}...`); // <<< KEPT: Action log
-        // Use updateDocument with mask=false to overwrite the entire document or create if needed.
-        const writeResult = firestore.updateDocument(documentPath, dataToSave, false);
-        // Logger.log(`   -> Firestore write result: ${JSON.stringify(writeResult)}`); // <<< REMOVED: Verbose raw result
-
-        // Basic check on writeResult (can be adapted based on library specifics)
-        if (writeResult && typeof writeResult === 'object') {
-             Logger.log(`   -> ✅ Successfully saved data for ${csId} to ${documentPath}.`); // <<< KEPT: Success log
-             return { success: true };
-        } else {
-             const msg = `Firestore updateDocument returned unexpected result.`;
-             Logger.log(`   -> ❌ ${funcName} Error: ${msg}`); // <<< KEPT: Unexpected result error
-             return { success: false, message: `Firestore write returned unexpected result: ${JSON.stringify(writeResult)}` };
-        }
-
+        Logger.log(`   -> Calling firestore.updateDocument for Game Data: ${gameDocPath}...`);
+        firestore.updateDocument(gameDocPath, gameDataToSave, false); // update/create
+        gameSaveSuccess = true;
+        Logger.log(`      -> ✅ Successfully saved Game Data.`);
     } catch (e) {
-        console.error(`Exception caught in ${funcName} saving to path ${documentPath}: ${e.message}\nStack: ${e.stack}`);
-        Logger.log(`   -> ❌ Exception during Firestore save for ${csId}: ${e.message}`); // <<< KEPT: Exception log
-        const nestedArrayError = "Nested arrays are not allowed";
-        const safeErrorMessage = e.message.includes("permission") ? "Permission denied."
-                               : e.message.includes(nestedArrayError) ? nestedArrayError + " (even with Array of Row Objects format)."
-                               : "Server error during Firestore save.";
-        return { success: false, message: safeErrorMessage };
+        gameSaveError = e;
+        console.error(`Exception saving Game Data to ${gameDocPath}: ${e.message}\nStack: ${e.stack}`);
+        Logger.log(`   -> ❌ Exception during Game Data save: ${e.message}`);
     }
-} // END fSrvSaveTurboTextAndURLtoNamesToFirestore
+
+    try {
+        Logger.log(`   -> Calling firestore.updateDocument for Char Info: ${charInfoDocPath}...`);
+        firestore.updateDocument(charInfoDocPath, charInfoDataToSave, false); // update/create
+        charInfoSaveSuccess = true;
+        Logger.log(`      -> ✅ Successfully saved Character Info.`);
+    } catch (e) {
+        charInfoError = e;
+        console.error(`Exception saving Char Info to ${charInfoDocPath}: ${e.message}\nStack: ${e.stack}`);
+        Logger.log(`   -> ❌ Exception during Character Info save: ${e.message}`);
+    }
+
+    // === 7. Return Overall Result ===
+    if (gameSaveSuccess && charInfoSaveSuccess) {
+        Logger.log(`   -> ✅ Successfully saved both documents for ${csId} to collection ${userEmail}.`);
+        return { success: true };
+    } else {
+        // Construct detailed error message
+        let finalMessage = "Firestore save failed. ";
+        if (!gameSaveSuccess) finalMessage += `Game Data Error: ${gameSaveError?.message || 'Unknown'}. `;
+        if (!charInfoSaveSuccess) finalMessage += `Char Info Error: ${charInfoError?.message || 'Unknown'}.`;
+        Logger.log(`   -> ❌ Firestore save failed for one or both documents.`);
+        return { success: false, message: finalMessage.trim() };
+    }
+
+} // END fSrvSaveTurboDataToFirestore
 
 
 
@@ -1690,49 +1713,56 @@ function fSrvUnpackFirestoreArrayTo2D(firestoreArr) {
 
 
 // fSrvCheckAndLoadFirestoreGUIarrAs2D //////////////////////////////////////////////////
-// Purpose -> Checks Firestore for a document based on CS ID. If found, extracts
-//            the gUIarr field, converts types, unpacks it into a 2D array,
-//            and returns it. Handles document not found and errors gracefully.
-// Inputs  -> csId (String): The Character Sheet ID.
+// Purpose -> Checks Firestore for a document containing saved gUI.arr data based on CS ID
+//            within the specified user's email collection. If found, extracts the gUIarr
+//            field, converts types, unpacks it into a 2D array, and returns it.
+//            Handles document not found and errors gracefully.
+// Inputs  -> userEmail (String): The user's email (Firestore collection name).
+//         -> csId (String): The Character Sheet ID (part of document name).
 // Outputs -> (Object): { success: Boolean, firestoreArr?: Array[][], message?: String }
 //            'firestoreArr' is the standard 2D array if success is true.
-function fSrvCheckAndLoadFirestoreGUIarrAs2D(csId) {
+function fSrvCheckAndLoadFirestoreGUIarrAs2D(userEmail, csId) {
     const funcName = "fSrvCheckAndLoadFirestoreGUIarrAs2D";
-    Logger.log(`${funcName}: Checking Firestore for data for CS ID: ${csId}...`); // <<< KEPT: Entry point log
+    Logger.log(`${funcName}: Checking Firestore for gUI.arr data for User: ${userEmail}, CS ID: ${csId}...`);
 
-    // === 1. Validate Input ===
+    // === 1. Validate Inputs ===
+    if (!userEmail || typeof userEmail !== 'string' || userEmail.indexOf('@') === -1) {
+        const msg = "Invalid User Email provided.";
+        Logger.log(`${funcName} Error: ${msg}`);
+        return { success: false, message: msg };
+    }
     if (!csId || typeof csId !== 'string') {
         const msg = "Invalid Character Sheet ID provided.";
-        Logger.log(`${funcName} Error: ${msg}`); // <<< KEPT: Critical input error
+        Logger.log(`${funcName} Error: ${msg}`);
         return { success: false, message: msg };
     }
 
     // === 2. Get Firestore Instance ===
-    const firestore = fSrvGetFirestoreInstance(); // Relies on its own logging
+    const firestore = fSrvGetFirestoreInstance();
     if (!firestore) {
         const msg = "Failed to initialize Firestore instance.";
-        Logger.log(`${funcName} Error: ${msg}`); // <<< KEPT: Critical dependency error
+        Logger.log(`${funcName} Error: ${msg}`);
         return { success: false, message: "Server configuration error (Firestore)." };
     }
-    // Logger.log(`   -> Firestore instance obtained.`); // <<< REMOVED: Redundant
 
     // === 3. Define Path and Fetch Data ===
-    const documentId = `GSID_${csId}`;
-    const collectionName = 'GameTextData';
-    const documentPath = `${collectionName}/${documentId}`;
-    Logger.log(`   -> Target Firestore Path: ${documentPath}`); // <<< KEPT: Useful context
+    const collectionPath = userEmail;
+    const documentId = `Turbo_Game_${csId}`; // Specific document for gUI.arr
+    const documentPath = `${collectionPath}/${documentId}`;
+    Logger.log(`   -> Target Firestore Path: ${documentPath}`);
 
     try {
         // Attempt to get the document
         const doc = firestore.getDocument(documentPath);
 
         // === 4. Check if Document Exists & Has Data ===
+        // Check specifically for the gUIarr field within fields
         if (!doc || !doc.fields || !doc.fields.gUIarr) {
             const msg = `Document not found or missing 'gUIarr' field at path: ${documentPath}.`;
-            Logger.log(`   -> ${funcName}: ${msg}`); // <<< KEPT: Informational, common case
-            return { success: false, message: "No saved Firestore data found for this character." };
+            Logger.log(`   -> ${funcName}: ${msg}`);
+            return { success: false, message: "No saved grid data found in Firestore for this character." };
         }
-        Logger.log(`   -> Document found. Processing 'gUIarr' field...`); // <<< KEPT: Status log
+        Logger.log(`   -> Document found. Processing 'gUIarr' field...`);
 
         // === 5. Convert Firestore Types for gUIarr ===
         const arrDataRaw = doc.fields.gUIarr;
@@ -1741,35 +1771,117 @@ function fSrvCheckAndLoadFirestoreGUIarrAs2D(csId) {
         // === 6. Validate Converted Data (Should be Array of Objects) ===
         if (!Array.isArray(arrDataConverted)) {
             const msg = `Invalid data type for gUIarr after conversion. Expected array, got ${typeof arrDataConverted}. Path: ${documentPath}`;
-            Logger.log(`   -> ${funcName} Error: ${msg}`); // <<< KEPT: Data integrity error
+            Logger.log(`   -> ${funcName} Error: ${msg}`);
             return { success: false, message: "Invalid grid data format retrieved from Firestore." };
         }
 
         // === 7. Unpack Array of Objects into 2D Array ===
-        // Logger.log(`   -> Unpacking Firestore array data server-side...`); // <<< REMOVED: Granular
         const unpackedArr = fSrvUnpackFirestoreArrayTo2D(arrDataConverted);
-        // Logger.log(`   -> Unpacked into ${unpackedArr.length}x${unpackedArr[0]?.length || 0} array.`); // <<< REMOVED: Granular
 
         // === 8. Return Success with Unpacked Data ===
-        Logger.log(`   -> ✅ Successfully fetched and unpacked Firestore data for ${csId}.`); // <<< KEPT: Success log
+        Logger.log(`   -> ✅ Successfully fetched and unpacked Firestore gUI.arr data for ${csId}.`);
         return {
             success: true,
             firestoreArr: unpackedArr // Return the standard 2D array
         };
 
     } catch (e) {
-        // Handle potential errors during Firestore operations (e.g., permissions)
+        // Handle potential errors during Firestore operations
         const safeErrorMessage = e.message?.includes("permission")
                                ? "Permission denied accessing Firestore."
                                : e.message?.includes("NOT_FOUND")
-                               ? "No saved Firestore data found for this character." // More specific not found
+                               ? "No saved grid data found in Firestore for this character."
                                : `Server error during Firestore read: ${e.message || e}`;
 
         console.error(`Exception caught in ${funcName} fetching from path ${documentPath}: ${e.message}\nStack: ${e.stack}`);
-        Logger.log(`   -> ❌ Exception during Firestore read for ${csId}: ${safeErrorMessage}`); // <<< KEPT: Exception log
+        Logger.log(`   -> ❌ Exception during Firestore read for ${csId}: ${safeErrorMessage}`);
         return { success: false, message: safeErrorMessage };
     }
 } // END fSrvCheckAndLoadFirestoreGUIarrAs2D
 
+
+
+
+// fSrvLoadCharacterInfoFromFirestore //////////////////////////////////////////////////
+// Purpose -> Loads the gUI.characterInfo object from Firestore based on CS ID
+//            within the specified user's email collection.
+// Inputs  -> userEmail (String): The user's email (Firestore collection name).
+//         -> csId (String): The Character Sheet ID (part of document name).
+// Outputs -> (Object): { success: Boolean, characterInfo?: Object, message?: String }
+//            'characterInfo' contains the object from Firestore if success is true.
+function fSrvLoadCharacterInfoFromFirestore(userEmail, csId) {
+    const funcName = "fSrvLoadCharacterInfoFromFirestore";
+    Logger.log(`${funcName}: Checking Firestore for gUI.characterInfo data for User: ${userEmail}, CS ID: ${csId}...`);
+
+    // === 1. Validate Inputs ===
+    if (!userEmail || typeof userEmail !== 'string' || userEmail.indexOf('@') === -1) {
+        const msg = "Invalid User Email provided.";
+        Logger.log(`${funcName} Error: ${msg}`);
+        return { success: false, message: msg };
+    }
+    if (!csId || typeof csId !== 'string') {
+        const msg = "Invalid Character Sheet ID provided.";
+        Logger.log(`${funcName} Error: ${msg}`);
+        return { success: false, message: msg };
+    }
+
+    // === 2. Get Firestore Instance ===
+    const firestore = fSrvGetFirestoreInstance();
+    if (!firestore) {
+        const msg = "Failed to initialize Firestore instance.";
+        Logger.log(`${funcName} Error: ${msg}`);
+        return { success: false, message: "Server configuration error (Firestore)." };
+    }
+
+    // === 3. Define Path and Fetch Data ===
+    const collectionPath = userEmail;
+    const documentId = `Turbo_CharacterInfo_${csId}`; // Specific document for character info
+    const documentPath = `${collectionPath}/${documentId}`;
+    Logger.log(`   -> Target Firestore Path: ${documentPath}`);
+
+    try {
+        // Attempt to get the document
+        const doc = firestore.getDocument(documentPath);
+
+        // === 4. Check if Document Exists & Has Data ===
+        // Check specifically for the gUIcharacterInfo field within fields
+        if (!doc || !doc.fields || !doc.fields.gUIcharacterInfo) {
+            const msg = `Document not found or missing 'gUIcharacterInfo' field at path: ${documentPath}.`;
+            Logger.log(`   -> ${funcName}: ${msg}`);
+            return { success: false, message: "No saved character info found in Firestore for this character." };
+        }
+        Logger.log(`   -> Document found. Processing 'gUIcharacterInfo' field...`);
+
+        // === 5. Convert Firestore Types for gUIcharacterInfo ===
+        const charInfoRaw = doc.fields.gUIcharacterInfo;
+        const charInfoConverted = fSrvConvertFirestoreTypesToJS(charInfoRaw); // Should return a JS object
+
+        // === 6. Validate Converted Data (Should be an Object) ===
+        if (typeof charInfoConverted !== 'object' || charInfoConverted === null || Array.isArray(charInfoConverted)) {
+            const msg = `Invalid data type for gUIcharacterInfo after conversion. Expected object, got ${typeof charInfoConverted}. Path: ${documentPath}`;
+            Logger.log(`   -> ${funcName} Error: ${msg}`);
+            return { success: false, message: "Invalid character info format retrieved from Firestore." };
+        }
+
+        // === 7. Return Success with Converted Data ===
+        Logger.log(`   -> ✅ Successfully fetched and converted Firestore gUI.characterInfo for ${csId}.`);
+        return {
+            success: true,
+            characterInfo: charInfoConverted // Return the standard JS object
+        };
+
+    } catch (e) {
+        // Handle potential errors during Firestore operations
+        const safeErrorMessage = e.message?.includes("permission")
+                               ? "Permission denied accessing Firestore."
+                               : e.message?.includes("NOT_FOUND")
+                               ? "No saved character info found in Firestore for this character."
+                               : `Server error during Firestore read: ${e.message || e}`;
+
+        console.error(`Exception caught in ${funcName} fetching from path ${documentPath}: ${e.message}\nStack: ${e.stack}`);
+        Logger.log(`   -> ❌ Exception during Firestore read for ${csId}: ${safeErrorMessage}`);
+        return { success: false, message: safeErrorMessage };
+    }
+} // END fSrvLoadCharacterInfoFromFirestore
 
 

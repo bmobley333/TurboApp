@@ -5694,34 +5694,41 @@ async function fRefreshMonsterData() {
 
 
 // fHandleAutoSaveTextToFirestore /////////////////////////////////////////////////////
-// Purpose -> Orchestrates the background auto-saving of the entire gUI.arr to Firestore.
-//            Checks if data exists and initiates server call.
+// Purpose -> Orchestrates the background auto-saving of gUI.arr and gUI.characterInfo
+//            to Firestore within the user's email collection.
+//            Initiates server call to fSrvSaveTurboDataToFirestore.
 // Inputs  -> None.
 // Outputs -> None (Initiates async server call).
 function fHandleAutoSaveTextToFirestore() {
-    fMyConsoleLog("💾 Handling Auto-Save Data (Full Array)...");
+    fMyConsoleLog("💾 Handling Auto-Save Data (Grid & CharInfo)...");
 
-    // === 1. Check if gUI.arr exists and has data ===
+    // === 1. Check if essential data exists ===
     if (!gUI.arr || !Array.isArray(gUI.arr) || gUI.arr.length === 0) {
         fMyConsoleLog("   -> No grid data (gUI.arr) found to save. Skipping server call.");
-        return; // Nothing to save
+        return; // Nothing to save if grid is empty
     }
-
-    // === 2. Validate character info needed for metadata ===
-    if (!gUI.characterInfo || !gIndexCSID) {
-         console.error("fHandleAutoSaveTextToFirestore: Missing gIndexCSID or gUI.characterInfo needed for saving.");
-         fMyConsoleLog("   -> ❌ Auto-save aborted: Missing CS ID or character info.");
-         // Optionally show a non-disruptive warning? Maybe only after repeated fails?
+    if (!gUI.characterInfo || typeof gUI.characterInfo !== 'object') {
+         fMyConsoleLog("   -> No character info (gUI.characterInfo) found to save. Skipping server call.");
+         // Optional: Consider if saving should proceed with just arr if charInfo is missing
+         return;
+    }
+    if (!gIndexCSID || typeof gIndexCSID !== 'string') {
+         console.error("fHandleAutoSaveTextToFirestore: Missing gIndexCSID on client.");
+         fMyConsoleLog("   -> ❌ Auto-save aborted: Missing CS ID.");
+         return;
+    }
+    if (!gIndexEmail || typeof gIndexEmail !== 'string') {
+         console.error("fHandleAutoSaveTextToFirestore: Missing gIndexEmail on client.");
+         fMyConsoleLog("   -> ❌ Auto-save aborted: Missing User Email.");
          return;
     }
 
-    // === 3. Call Server Function ===
-    fMyConsoleLog("   -> Calling server function fSrvSaveTurboTextAndURLtoNamesToFirestore with full gUI.arr...");
-    // Pass gUI.arr directly instead of textData
+    // === 2. Call Server Function ===
+    fMyConsoleLog("   -> Calling server function fSrvSaveTurboDataToFirestore...");
     google.script.run
         .withSuccessHandler(fHandleAutoSaveToFirestoreSuccess)
         .withFailureHandler(fHandleAutoSaveToFirestoreFailure)
-        .fSrvSaveTurboTextAndURLtoNamesToFirestore(gIndexCSID, gUI.arr, gUI.characterInfo); // Pass gUI.arr
+        .fSrvSaveTurboDataToFirestore(gIndexEmail, gIndexCSID, gUI.arr, gUI.characterInfo); // Pass email, csId, arr, charInfo
 
 } // END fHandleAutoSaveTextToFirestore
 
@@ -6018,12 +6025,12 @@ function fSetupMenuInteractivity() {
 
 
 // fOnCSGameDataLoaded ///////////////////////////////////////////////////////////////////
-// Purpose -> Callback function executed upon successful data retrieval from the
-//            server (fSrvReadCSGameSheet). Validates data, stores it in gUI, checks
-//            Firestore for overriding data, fetches static header data, and
-//            initiates grid rendering using the final data source.
+// Purpose -> Callback executed after initial Sheet data retrieval (fSrvReadCSGameSheet).
+//            Validates sheet data, checks Firestore for overriding gUI.arr data,
+//            then initiates the fetching of character info (with Firestore override)
+//            and subsequent grid rendering.
 // Inputs  -> data (Object): The structured data object from the server { arr, format, notesArr }.
-// Outputs -> None (Initiates UI rendering and setup).
+// Outputs -> None (Initiates subsequent data loading and UI rendering).
 function fOnCSGameDataLoaded(data) {
     fMyConsoleLog("✅ Initial Sheet Data received from server");
 
@@ -6036,45 +6043,48 @@ function fOnCSGameDataLoaded(data) {
     }
     fMyConsoleLog("   -> Stored initial data from Sheet into gUI.");
 
-    // === 2. Check Firestore for Overriding Data ===
-    fMyConsoleLog("⚙️ Checking Firestore for saved data...");
+    // === 2. Check Firestore for Overriding gUI.arr Data ===
+    fMyConsoleLog("⚙️ Checking Firestore for saved Grid (gUI.arr) data...");
+    if (!gIndexEmail || !gIndexCSID) {
+        fMyConsoleLog("   -> ⚠️ Skipping Firestore gUI.arr check: Missing Email or CSID.");
+        // Proceed using Sheet data, then fetch Character Info
+        fSetupTooltipAndModal();
+        fFetchRaceClassInfoAndRenderGrid(); // Fetch char info (will use sheet data as base)
+        return;
+    }
+
     google.script.run
         .withSuccessHandler((firestoreResponse) => {
-            let useFirestoreData = false;
-            if (firestoreResponse && firestoreResponse.success === true) {
-                // Firestore data exists and was retrieved successfully
-                if (firestoreResponse.firestoreArr && Array.isArray(firestoreResponse.firestoreArr)) {
-                    fMyConsoleLog("   -> ✅ Firestore data found. Overwriting gUI.arr.");
-                    gUI.arr = firestoreResponse.firestoreArr; // Use unpacked 2D array from server
-                    // gUI.notes remains untouched, preserving Sheet notes
-                    useFirestoreData = true;
-                } else {
-                    fMyConsoleLog("   -> ⚠️ Firestore check successful, but returned invalid 'firestoreArr'. Using Sheet data.");
-                    // Optional: Show a warning message?
-                }
+            let usingFirestoreArr = false;
+            if (firestoreResponse && firestoreResponse.success === true && firestoreResponse.firestoreArr) {
+                // Firestore data exists and is valid
+                fMyConsoleLog("   -> ✅ Firestore Grid data found. Overwriting gUI.arr.");
+                gUI.arr = firestoreResponse.firestoreArr; // Use unpacked 2D array
+                usingFirestoreArr = true;
             } else {
                 // Firestore data not found or error during check
                 const reason = firestoreResponse?.message || "Reason unknown.";
-                fMyConsoleLog(`   -> ℹ️ Firestore check returned false (${reason}). Using Sheet data.`);
-                // No changes needed, gUI.arr/gUI.notes retain Sheet data
+                fMyConsoleLog(`   -> ℹ️ Firestore Grid check returned false (${reason}). Using Sheet data for gUI.arr.`);
+                // gUI.arr already contains Sheet data, no action needed
             }
 
-            // === 3. Proceed with Header Fetch & Grid Render (using final data) ===
-            // This section now runs *after* the Firestore check completes.
-            fSetupTooltipAndModal(); // Cache tooltip/modal elements (can be done earlier if needed)
-            fFetchRaceClassInfoAndRenderGrid(); // New function to group next steps
+            // === 3. Proceed with Character Info Fetch & Grid Render ===
+            // This now runs *after* the Firestore check for gUI.arr completes.
+            fSetupTooltipAndModal();
+            fFetchRaceClassInfoAndRenderGrid(); // Fetch char info (will check Firestore for override)
 
         })
         .withFailureHandler((error) => {
             // Handle transport errors calling fSrvCheckAndLoadFirestoreGUIarrAs2D
-            const errorMsg = `Error checking Firestore: ${error.message}`;
+            const errorMsg = `Error checking Firestore for Grid data: ${error.message}`;
             console.error(errorMsg, error);
-            fMyConsoleLog(`   -> ❌ ${errorMsg}. Using Sheet data as fallback.`);
+            fMyConsoleLog(`   -> ❌ ${errorMsg}. Using Sheet data for gUI.arr as fallback.`);
+
             // Proceed using Sheet data despite the check failure
             fSetupTooltipAndModal();
-            fFetchRaceClassInfoAndRenderGrid(); // Proceed with rendering
+            fFetchRaceClassInfoAndRenderGrid(); // Fetch char info (will use sheet data as base)
         })
-        .fSrvCheckAndLoadFirestoreGUIarrAs2D(gIndexCSID); // Call the new server function
+        .fSrvCheckAndLoadFirestoreGUIarrAs2D(gIndexEmail, gIndexCSID); // Pass Email and CSID
 
 } // END fOnCSGameDataLoaded
 
@@ -6082,74 +6092,130 @@ function fOnCSGameDataLoaded(data) {
 
 
 // fFetchRaceClassInfoAndRenderGrid //////////////////////////////////////////
-// Purpose -> Fetches static character header data (Race/Class, Level, Names, Slot)
-//            and then initiates the main grid rendering process. Called after
-//            initial data load and Firestore check.
+// Purpose -> Fetches initial character header data from the Sheet, then checks
+//            Firestore for potentially overriding character info data. Finally,
+//            initiates the main grid rendering process using the determined
+//            gUI.arr and the final gUI.characterInfo.
 // Inputs  -> None.
-// Outputs -> None (Initiates server call, then rendering).
+// Outputs -> None (Initiates server calls, then rendering).
 function fFetchRaceClassInfoAndRenderGrid() {
-    fMyConsoleLog("⚙️ Requesting Static Character Header Data...");
+    fMyConsoleLog("⚙️ Requesting Initial Character Header Data from Sheet...");
+
+    // --- 1. Fetch Initial Header Data from Sheet ---
     google.script.run
-        .withSuccessHandler((headerData) => {
-            fMyConsoleLog("✅ Static Character Header Data received.");
-            let proceedWithRender = true; // Flag to control rendering
+        .withSuccessHandler((sheetHeaderData) => {
+            fMyConsoleLog("✅ Initial Character Header Data received from Sheet.");
 
-            if (headerData && typeof headerData === 'object' && !headerData.error) {
-                // Store the received data
+            // --- Store Initial Sheet Data (or defaults) ---
+            if (sheetHeaderData && typeof sheetHeaderData === 'object' && !sheetHeaderData.error) {
                 gUI.characterInfo = {
-                    slotNum: headerData.slotNum ?? null, // Use null coalesce for safety
-                    raceClass: headerData.raceClass ?? '',
-                    level: headerData.level ?? '',
-                    playerName: headerData.playerName ?? '',
-                    charName: headerData.charName ?? ''
+                    slotNum: sheetHeaderData.slotNum ?? null,
+                    raceClass: sheetHeaderData.raceClass ?? '',
+                    level: sheetHeaderData.level ?? '',
+                    playerName: sheetHeaderData.playerName ?? '',
+                    charName: sheetHeaderData.charName ?? ''
                 };
-                fMyConsoleLog(`   -> Stored Header Data: ${JSON.stringify(gUI.characterInfo)}`);
-
-                // Validate Slot Number - Prevent rendering if invalid? (Currently just warns)
+                fMyConsoleLog(`   -> Stored Initial Sheet Header Data: ${JSON.stringify(gUI.characterInfo)}`);
+                // Initial validation of Slot# from Sheet (warn but don't block yet)
                 if (!gUI.characterInfo.slotNum) {
-                    const slotErrorMsg = "Error: Invalid or missing Slot # found on RaceClass tab. Log updates might fail.";
-                    fMyConsoleLog(`   -> ⚠️ ${slotErrorMsg}`);
-                    // Show message, but still allow rendering to proceed for now
+                    const slotErrorMsg = "⚠️ Warning: Invalid or missing Slot # found on RaceClass tab (Sheet data).";
+                    fMyConsoleLog(`   -> ${slotErrorMsg}`);
+                    // Show non-blocking message
                     fShowMessage(slotErrorMsg).catch(e => console.error("Error showing message:", e));
-                    // If a valid slot is absolutely required, set proceedWithRender = false;
                 }
-
             } else {
-                // Handle error case from server function
-                const errMsg = headerData?.message || "Invalid header data structure received.";
-                console.error("Error fetching header data:", errMsg, headerData);
-                fMyConsoleLog(`❌ Failed to fetch/store header data: ${errMsg}`);
-                fShowMessage(`Error fetching character header data: ${errMsg}`).catch(e => console.error("Error showing message:", e));
-                // Proceed with blank header info
-                gUI.characterInfo = { slotNum: null, raceClass: '', level: '', playerName: '', charName: '' }; // Reset
+                // Handle error case from server function fetching Sheet data
+                const errMsg = sheetHeaderData?.message || "Invalid header data structure received from Sheet.";
+                console.error("Error fetching sheet header data:", errMsg, sheetHeaderData);
+                fMyConsoleLog(`❌ Failed to fetch/store initial header data from Sheet: ${errMsg}`);
+                fShowMessage(`Error fetching character header data from Sheet: ${errMsg}`).catch(e => console.error("Error showing message:", e));
+                // Set default blank info
+                gUI.characterInfo = { slotNum: null, raceClass: '', level: '', playerName: '', charName: '' };
             }
 
-            // === Render Grid & Apply Post-Processing ===
-            if (proceedWithRender) {
-                fRenderTurbosFullGrid(() => {
-                    fRunPostRenderFormatting(); // Apply merges, borders, listeners, etc.
-                });
-            } else {
-                fMyConsoleLog("❌ Halting grid rendering due to critical error (e.g., invalid Slot #).");
-                const gridDiv = document.getElementById('grid');
-                if(gridDiv) gridDiv.innerHTML = '<p style="color:red;">Critical error loading character data. Please check configuration.</p>';
+            // --- 2. Check Firestore for Overriding Character Info ---
+            fMyConsoleLog("⚙️ Checking Firestore for saved Character Info data...");
+            if (!gIndexEmail || !gIndexCSID) {
+                fMyConsoleLog("   -> ⚠️ Skipping Firestore Character Info check: Missing Email or CSID.");
+                // Proceed to render with Sheet/default data
+                fRenderGridWithFinalData();
+                return;
             }
+
+            google.script.run
+                .withSuccessHandler((firestoreResponse) => {
+                    if (firestoreResponse && firestoreResponse.success === true && firestoreResponse.characterInfo) {
+                        // Firestore character info exists and is valid
+                        fMyConsoleLog("   -> ✅ Firestore Character Info found. Overwriting gUI.characterInfo.");
+                        gUI.characterInfo = firestoreResponse.characterInfo; // Use Firestore data
+                        // Re-validate Slot# from Firestore data
+                        if (!gUI.characterInfo.slotNum) {
+                            const slotErrorMsg = "⚠️ Warning: Invalid or missing Slot # found in Firestore Character Info data.";
+                            fMyConsoleLog(`   -> ${slotErrorMsg}`);
+                             fShowMessage(slotErrorMsg).catch(e => console.error("Error showing message:", e));
+                        }
+                        fMyConsoleLog(`   -> Final Character Info (from Firestore): ${JSON.stringify(gUI.characterInfo)}`);
+                    } else {
+                        // Firestore data not found or error
+                        const reason = firestoreResponse?.message || "Reason unknown.";
+                        fMyConsoleLog(`   -> ℹ️ Firestore Character Info check returned false (${reason}). Using Sheet data.`);
+                        // gUI.characterInfo already holds Sheet data, no action needed
+                        fMyConsoleLog(`   -> Final Character Info (from Sheet): ${JSON.stringify(gUI.characterInfo)}`);
+                    }
+
+                    // --- 3. Render Grid (Finally!) ---
+                    fRenderGridWithFinalData(); // Call helper to render
+
+                })
+                .withFailureHandler((error) => {
+                    // Handle transport errors calling fSrvLoadCharacterInfoFromFirestore
+                    const errorMsg = `Error checking Firestore for Character Info: ${error.message}`;
+                    console.error(errorMsg, error);
+                    fMyConsoleLog(`   -> ❌ ${errorMsg}. Using Sheet data for Character Info as fallback.`);
+
+                    // Proceed using Sheet data despite the check failure
+                    fRenderGridWithFinalData(); // Call helper to render
+                })
+                .fSrvLoadCharacterInfoFromFirestore(gIndexEmail, gIndexCSID); // Pass Email and CSID
+
         })
         .withFailureHandler((error) => {
-            // Handle transport errors fetching header data
-            const errorMsg = `Failed to call server for header data: ${error.message}`;
+            // Handle transport errors fetching INITIAL Sheet header data
+            const errorMsg = `Failed to call server for initial Sheet header data: ${error.message}`;
             console.error(errorMsg, error);
             fMyConsoleLog(`❌ ${errorMsg}`);
-            fShowMessage(`Error fetching character header data: ${error.message}`).catch(e => console.error("Error showing message:", e));
-            // Proceed with grid rendering without header data
-            gUI.characterInfo = { slotNum: null, raceClass: '', level: '', playerName: '', charName: '' }; // Reset
-            fRenderTurbosFullGrid(() => {
-                fRunPostRenderFormatting();
-            });
+            fShowMessage(`Error fetching character header data from Sheet: ${error.message}`).catch(e => console.error("Error showing message:", e));
+
+            // Set default blank info and proceed to render (skip Firestore check for char info)
+            gUI.characterInfo = { slotNum: null, raceClass: '', level: '', playerName: '', charName: '' };
+            fRenderGridWithFinalData(); // Call helper to render
         })
-        .fSrvGetURLToPlayerCharForGMScreen(gIndexCSID);
+        .fSrvGetURLToPlayerCharForGMScreen(gIndexCSID); // Fetch initial data from Sheet
 
 } // END fFetchRaceClassInfoAndRenderGrid
+
+
+// fRenderGridWithFinalData /////////////////////////////////////////////////
+// Purpose -> Helper function to initiate the actual grid rendering process.
+//            Called after both gUI.arr and gUI.characterInfo have been finalized
+//            (either from Sheet or Firestore).
+// Inputs -> None (Uses final gUI.arr).
+// Outputs -> None (Starts rendering process).
+function fRenderGridWithFinalData() {
+    fMyConsoleLog("🚀 Initiating Final Grid Render...");
+    // Ensure we have valid gUI.arr data before rendering
+    if (!gUI.arr || gUI.arr.length === 0) {
+         fMyConsoleLog("❌ Cannot render grid: gUI.arr is empty or invalid.");
+         const gridDiv = document.getElementById('grid');
+         if (gridDiv) gridDiv.innerHTML = '<p style="color:red;">Critical error loading grid data. Please check configuration or reload.</p>';
+         return;
+    }
+
+    // Trigger the rendering with the post-render callback
+    fRenderTurbosFullGrid(() => {
+        fRunPostRenderFormatting(); // Apply merges, borders, listeners, etc.
+    });
+} // END fRenderGridWithFinalData
 
 
 
