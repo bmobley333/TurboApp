@@ -99,49 +99,88 @@ function fSrvColToA1(col) {
 // ==========================================================================
 
 
-// Outputs -> (HtmlOutput): The HTML page to be served.
+
+
+// doGet ///////////////////////////////////////////////////////////////////////////
+// Purpose -> Standard Apps Script function triggered when the web app URL is accessed.
+//            Serves as the main server-side entry point.
+// Process -> 1. Receives the request event object 'e', containing URL parameters.
+//            2. Extracts and validates 'csID' (e.parameter.csID), 'userEmail' (e.parameter.userEmail), and 'gameVer' (e.parameter.gameVer).
+//            3. Stores 'csID' in the server-side global gSrv.ids.sheets.cs. (Others not stored server-side).
+//            4. Calls fSrvGetMyKlId(csID) to retrieve the associated KL ID ('klId') and store it in gSrv.ids.sheets.kl.
+//            5. Creates an HTML template object from the 'index.html' file.
+//            6. **Injects Data**: Assigns 'csID' to template.csID, 'userEmail' to template.userEmail,and 'gameVer' to template.gameVer.
+//            7. Evaluates the 'index.html' template. During this evaluation:
+//               - The scriptlet '<?= csID ?>' assigns the csID value to the client-side global variable 'gIndexCSID'.
+//               - The scriptlet '<?= userEmail ?>' assigns the userEmail value to the client-side global variable 'gIndexEmail'.
+//               - The scriptlet '<?= gameVer ?>' assigns the gameVer value to the client-side global variable 'gIndexGameVer'.
+//               - All globals are then available to all .html files BUT NOT to turbo.gs.
+//            8. Sets the browser window title to "MetaScape".
+//            9. Returns the fully rendered HTML page to the client's browser.
+// Inputs  -> e (Event Object): Contains request details, including URL parameters (e.g., e.parameter.csID, e.parameter.userEmail, e.parameter.gameVer).
+// Outputs -> (HtmlOutput): The fully rendered HTML page to be displayed in the user's browser.
+// Side Effects -> Populates gSrv.ids.sheets.cs and gSrv.ids.sheets.kl on the server-side.
+//            -> Causes creation of gIndexCSID, gIndexEmail, and gIndexGameVer client-side globals.
+// Availability -> 'gIndexCSID', 'gIndexEmail', 'gIndexGameVer' become available to *all* client-side JavaScript code
+//                 (e.g. within index.html, scripts.html, gamelogic.html).
+//            -> They are *not* directly accessible by server-side .gs code (like this function) but can be passed
+//               from .html to .gs via parameters of google.script.run.
 function doGet(e) {
     let csId = null; // Use let to allow modification in error handling
     let klId = null; // Use let for KL ID
+    let userEmail = null; // Variable for user email
+    let gameVer = null; // Variable for game version
 
     try {
-        // --- 1. Get and Validate CS ID ---
+        // --- 1. Get and Validate Parameters ---
         csId = e?.parameter?.csID; // Use optional chaining
+        userEmail = e?.parameter?.userEmail; // Get userEmail parameter
+        gameVer = e?.parameter?.gameVer; // Get gameVer parameter
+
         if (!csId || typeof csId !== 'string') {
             console.error("doGet Error: csID parameter not provided or invalid in URL.");
             return HtmlService.createHtmlOutput("❌ csID parameter missing or invalid in URL.");
         }
-        Logger.log(`doGet: Received CS ID: ${csId}`);
+        // Optional: Validate userEmail format if necessary, but allow it to be potentially empty/null if not critical
+        if (!userEmail || typeof userEmail !== 'string') {
+            console.warn("doGet Warning: userEmail parameter not provided or invalid in URL.");
+            userEmail = ''; // Default to empty string if missing or invalid
+        }
+        // Allow gameVer to be empty/null
+        if (gameVer === null || gameVer === undefined) {
+             console.warn("doGet Warning: gameVer parameter not provided in URL.");
+             gameVer = ''; // Default to empty string if missing
+        } else if (typeof gameVer !== 'string'){
+             gameVer = String(gameVer); // Ensure it's a string
+        }
+        Logger.log(`doGet: Received CS ID: ${csId}, User Email: ${userEmail}, Game Ver: ${gameVer}`);
 
         // --- 2. Populate gSrv with CS ID ---
-        // Note: Modifying properties of a top-level const (gSrv). This works per execution instance.
         gSrv.ids.sheets.cs = csId;
         Logger.log(`doGet: Assigned gSrv.ids.sheets.cs = ${gSrv.ids.sheets.cs}`);
 
         // --- 3. Get and Populate KL ID ---
-        // Call fSrvGetMyKlId to retrieve the KL ID associated with this CS ID
         klId = fSrvGetMyKlId(csId); // This function handles its own internal errors/throws
         gSrv.ids.sheets.kl = klId;
         Logger.log(`doGet: Assigned gSrv.ids.sheets.kl = ${gSrv.ids.sheets.kl}`);
 
         // --- 4. Serve HTML ---
-        // Attempt to load and serve the main HTML template
-        // Optional: Verify csID is valid before rendering (can be slow)
-        // SpreadsheetApp.openById(csId);
-
         const template = HtmlService.createTemplateFromFile("index");
-        template.csID = csId; // Pass csId to the template client-side (remains gIndexCSID there)
+        template.csID = csId; // Pass csId to the template client-side (becomes gIndexCSID)
+        template.userEmail = userEmail; // Pass userEmail to the template client-side (becomes gIndexEmail)
+        template.gameVer = gameVer; // Pass gameVer to the template client-side (becomes gIndexGameVer)
 
         // Evaluate and return the HTML
         return template.evaluate()
-            .setTitle("Turbo")
+            .setTitle("MetaScape") // Updated Title
             .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 
     } catch (error) {
         // Log detailed error and return user-friendly error message
-        const errorContext = `CS ID: ${csId || 'Unknown'}, KL ID Fetch Attempted: ${klId !== null || 'No (failed before KL fetch)'}`;
+        const errorContext = `CS ID: ${csId || 'Unknown'}, Email: ${userEmail || 'Unknown'}, GameVer: ${gameVer || 'Unknown'}, KL ID Fetch Attempted: ${klId !== null || 'No (failed before KL fetch)'}`; // Added GameVer to context
         console.error(`doGet Error (${errorContext}): ${error.message}${error.stack ? '\n' + error.stack : ''}`);
-        // Provide specific feedback based on whether the error likely came from fSrvGetMyKlId or elsewhere
+
+        // Provide specific feedback based on error type
         let userErrorMessage = `❌ Error loading app: ${error.message}.`;
         if (error.message.includes("getMyKlId")) {
              userErrorMessage += ` Could not retrieve KL ID from CS ID '${csId}'. Check Data tab setup.`;

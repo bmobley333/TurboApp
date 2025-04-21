@@ -2,19 +2,19 @@
 // scripts.html //
 
 
-// ==========================================================================
-// === Global Variables ===
-// ==========================================================================
-
-
-
-
-// scripts.html //
 
 
 // ==========================================================================
 // === Global Variables ===
 // ==========================================================================
+
+
+
+
+// Global Variables from doGet and index.html - scope is all client side code (but not turbo.gs)
+// gIndexCSID     --> User's Character Sheet ID
+// gIndexEmail    --> User's gmail address
+// gIndexGameVer  --> Game version from CS 'Game' such as 28.3
 
 
 

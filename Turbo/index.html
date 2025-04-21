@@ -6,10 +6,15 @@
     <base target="_top">
 
     <script>
-      // Inject the csID from server-side doGet into global client-side scope
-      const gIndexCSID = "<?= csID ?>"; // csID is passed in the calling URL due to fOpenTurbo in the Character Sheet and gIndexCSID is a global variable to all Turbo .html (BUT NOT .gs)
+      // Inject csID, userEmail, and gameVer from server-side doGet into global client-side scope
+      const gIndexCSID = "<?= csID ?>";       // Passed from doGet based on URL parameter
+      const gIndexEmail = "<?= userEmail ?>"; // Passed from doGet based on URL parameter
+      const gIndexGameVer = "<?= gameVer ?>"; // Passed from doGet based on URL parameter
+
       console.log("✅ INDEX LOADED: " + new Date().toLocaleTimeString());
       console.log("🧪 gIndexCSID param:", gIndexCSID);
+      console.log("✉️ gIndexEmail param:", gIndexEmail);
+      console.log("🎮 gIndexGameVer param:", gIndexGameVer); // Log the game version
     </script>
 
     <style>
