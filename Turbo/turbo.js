@@ -786,7 +786,7 @@ function fSrvGetAbilityDataByNameID(myCSId,abilityNameID) {
 //            colTags/rowTags contain mappings relative to 'data' (absolute if full sheet returned).
 //            Returns null for 'data' on critical errors (though usually throws).
 // Throws  -> (Error): If inputs are invalid (except optional rangeObject), sheet/range access fails, etc.
-function fSrvGetSheetRangeDataNTags(sheetKeyOrId, sheetName, rangeObject) {
+function fSrvGetSheetRangeDataNTags(sheetKeyOrId, sheetName, rangeObject = null) {
     // Log received parameters, handling optional rangeObject
     const rangeLog = rangeObject ? JSON.stringify(rangeObject) : 'Not Provided (Full Sheet)';
     Logger.log(`fSrvGetSheetRangeDataNTags: Request received. Key/ID: "${sheetKeyOrId}", Sheet: "${sheetName}", Range: ${rangeLog}`);
