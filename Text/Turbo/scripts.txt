@@ -5784,10 +5784,10 @@ function fHandleAutoSaveToFirestoreFailure(error) {
 
 
 // fHandleSaveDBSheetVer ///////////////////////////////////////////////////////
-// Purpose -> Handles the "Designer" -> "Save DB Sheet & Ver" menu action. Prompts
+// Purpose -> Handles the "Designer" -> "Save SS Sheet & Ver" menu action. Prompts
 //            user for Workbook abbreviation and sheet name, calls server to load
 //            data/tags from the specified sheet, then calls server to save the
-//            data to Firestore in the 'DB' collection.
+//            data to Firestore using appropriate collection/document paths.
 // Inputs  -> None.
 // Outputs -> (Promise<void>): Resolves after completing actions or handling errors.
 async function fHandleSaveDBSheetVer() {
@@ -5833,23 +5833,29 @@ async function fHandleSaveDBSheetVer() {
     fMyConsoleLog(`   -> User entered Sheet Name: "${trimmedSheetName}"`);
 
 
-    // --- 4. Validate Game Version & CSID (needed for some lookups) ---
+    // --- 4. Validate Game Version, Email, & CSID (needed for lookups/paths) ---
     if (!gIndexGameVer || typeof gIndexGameVer !== 'string' || gIndexGameVer.trim() === '') {
         fMyConsoleLog("   -> Cannot proceed: gIndexGameVer is missing or invalid on client.");
-        await fShowMessage("❌ Error: Game Version is missing. Cannot construct Firestore document name.");
+        await fShowMessage("❌ Error: Game Version is missing.");
         return;
     }
      if (!gIndexCSID || typeof gIndexCSID !== 'string') {
-         fMyConsoleLog("   -> Cannot proceed: gIndexCSID is missing or invalid on client (required for 'MyCS'/'MyKL' lookups).");
+         fMyConsoleLog("   -> Cannot proceed: gIndexCSID is missing or invalid on client.");
          await fShowMessage("❌ Error: Character Sheet ID is missing.");
+         return;
+    }
+     if (!gIndexEmail || typeof gIndexEmail !== 'string') {
+         fMyConsoleLog("   -> Cannot proceed: gIndexEmail is missing or invalid on client.");
+         await fShowMessage("❌ Error: User Email is missing.");
          return;
     }
     fMyConsoleLog(`   -> Using Game Version: ${gIndexGameVer}`);
     fMyConsoleLog(`   -> Using CSID: ${gIndexCSID}`);
+    fMyConsoleLog(`   -> Using Email: ${gIndexEmail}`);
 
 
-    // --- 5. Call Server to Load Data & Tags (Renamed Function) ---
-    fMyConsoleLog(`   -> Calling fSrvLoadFullSheetAndTags for workbook: "${workbookAbr}", sheet: "${trimmedSheetName}"...`);
+    // --- 5. Call Server to Load Data & Tags ---
+    fMyConsoleLog(`   -> Calling fSrvLoadFullGoogleSheetAndTags for workbook: "${workbookAbr}", sheet: "${trimmedSheetName}"...`);
     const loadingMsg = fShowMessage(`⏳ Loading data for ${workbookAbr} -> "${trimmedSheetName}"...`);
 
     try {
@@ -5857,31 +5863,37 @@ async function fHandleSaveDBSheetVer() {
             google.script.run
                 .withSuccessHandler(resolve)
                 .withFailureHandler(reject)
-                .fSrvLoadFullSheetAndTags(workbookAbr, trimmedSheetName, gIndexCSID); // Pass workbookAbr, sheetName, csId
+                .fSrvLoadFullGoogleSheetAndTags(workbookAbr, trimmedSheetName, gIndexCSID);
         });
 
         // --- 6. Handle Load Success ---
-        fHideMessage(); // Hide loading message
+        fHideMessage();
         fMyConsoleLog(`   -> Successfully loaded data from sheet "${trimmedSheetName}" in workbook "${workbookAbr}".`);
-        // Basic validation of returned object
         if (!loadedData || typeof loadedData !== 'object' || !loadedData.ColTags || !loadedData.RowTags || !loadedData.sheetText2D) {
-            console.error("Invalid data structure received from fSrvLoadFullSheetAndTags:", loadedData);
+            console.error("Invalid data structure received from fSrvLoadFullGoogleSheetAndTags:", loadedData);
             throw new Error("Received invalid data structure from server after loading sheet.");
         }
 
-        // --- 7. Call Server to Save Data to Firestore (Renamed Function) ---
-        fMyConsoleLog(`   -> Calling fSrvSaveFullSheetTextAndTagsToFirestore for v${gIndexGameVer} ${trimmedSheetName}...`);
-        const savingMsg = fShowMessage(`💾 Saving data for v${gIndexGameVer} ${trimmedSheetName} to Firestore...`);
+        // --- 7. Call Server to Save Data to Firestore ---
+        fMyConsoleLog(`   -> Calling fSrvSaveFullSheetTextAndTagsToFirestore for ${workbookAbr} -> ${trimmedSheetName}...`);
+        const savingMsg = fShowMessage(`💾 Saving data for ${workbookAbr} -> ${trimmedSheetName} to Firestore...`);
 
         const saveResult = await new Promise((resolve, reject) => {
             google.script.run
                 .withSuccessHandler(resolve)
                 .withFailureHandler(reject)
-                .fSrvSaveFullSheetTextAndTagsToFirestore(gIndexGameVer, workbookAbr, trimmedSheetName, loadedData); // Pass gameVer, workbookAbr, sheetName, data
+                .fSrvSaveFullSheetTextAndTagsToFirestore(
+                    gIndexGameVer,      // gameVer
+                    workbookAbr,        // workbookAbr
+                    trimmedSheetName,   // sheetName
+                    loadedData,         // data
+                    gIndexEmail,        // email
+                    gIndexCSID          // csId
+                );
         });
 
         // --- 8. Handle Save Result ---
-        fHideMessage(); // Hide saving message
+        fHideMessage();
         if (saveResult && saveResult.success) {
             fMyConsoleLog("   -> ✅ Successfully saved sheet data to Firestore.");
             await fShowMessage(`✅ Successfully saved data for ${workbookAbr} -> "${trimmedSheetName}" (Version ${gIndexGameVer}) to Firestore.`);
@@ -5893,7 +5905,7 @@ async function fHandleSaveDBSheetVer() {
 
     } catch (error) {
         // --- 9. Handle Load or Save Errors ---
-        fHideMessage(); // Hide any lingering loading/saving message
+        fHideMessage();
         const errorMsg = `Error during Full Sheet Save process: ${error?.message || error}`;
         console.error(`${funcName} Error:`, error);
         fMyConsoleLog(`   -> ❌ ${errorMsg}`);
