@@ -12,7 +12,7 @@
 
       <a href="#" data-action="game-nishStartEnd">Nish Start or End</a>
       <a href="#" data-action="game-toggleSidebar">Sidebar (Show/Hide)</a>
-      <a href="#" data-action="game-updateHeaderInfo">Update (Level, Slot, Names)</a>
+      <a href="#" data-action="game-updateLevelSlotName">Update (Level, Slot, Names)</a>
       <a href="#" data-action="game-gmAward">GM Award</a>
 
       <div class="sub-menu-item">

@@ -16,7 +16,6 @@ const gSrv = { // Using gSrv prefix for server-side globals
       mastercs: '1zVjGg2KKzEAdX6WezkatGPV0cahWXGIdlZASIUlhf_o',
       masterkl: '1Gcbnggc9UnQrzAcGwSkKdb_jtwxF3u8x1Fb-BdsECZ0',
       ps: '1cu4tsBeQg4l2czraYDjdVpn1zsIKPhYi5czbGf9ZeZg',
-      sg: '190vk3Dcqdux_pFjuryvmMx2dWTnJyl23cZvTGhM3kgU',
       // Player-specific cs/kl will be handled dynamically via functions below
       cs: '',  // this is equal to the old myCS and is the ID from the player's CS (loaded via doGet)
       kl: ''  // this is equal to the old myKL and is the ID from the player's KL (loaded via doGet's call to fSrvGetMyKlId)

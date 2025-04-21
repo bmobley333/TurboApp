@@ -3440,13 +3440,13 @@ function fSetupSidebarActionListeners() {
 
 
 
-// fHandleGetRaceClassInfo ///////////////////////////////////////////////////////
+// fHandleNewLevelSlotName ///////////////////////////////////////////////////////
 // Purpose -> Handles the "Update (Level, Slot, Names)" menu action. Fetches fresh
 //            header data, validates it (especially slotNum), updates gUI.characterInfo,
 //            and triggers a log refresh if successful.
 // Inputs  -> None.
 // Outputs -> (Promise<void>): Resolves after completing actions or handling errors.
-async function fHandleGetRaceClassInfo() {
+async function fHandleNewLevelSlotName() {
     fMyConsoleLog("⚙️ Menu Action: Update Header Info Triggered...");
 
     // Add visual feedback maybe? (e.g., temporary button text change?)
@@ -3459,7 +3459,7 @@ async function fHandleGetRaceClassInfo() {
             // Validate the response structure
             if (!headerData || typeof headerData !== 'object' || headerData.error) {
                 const errMsg = headerData?.message || "Invalid header data structure received during update.";
-                console.error("fHandleGetRaceClassInfo Error:", errMsg, headerData);
+                console.error("fHandleNewLevelSlotName Error:", errMsg, headerData);
                 fMyConsoleLog(`   -> ❌ Update failed: ${errMsg}`);
                 fShowMessage(`Error updating header data: ${errMsg}`).catch(e => console.error("Error showing message:", e));
                 return; // Stop processing on invalid data structure
@@ -3508,7 +3508,7 @@ async function fHandleGetRaceClassInfo() {
         })
         .fSrvGetURLToPlayerCharForGMScreen(gIndexCSID); // Call the existing server function
 
-} // END fHandleGetRaceClassInfo
+} // END fHandleNewLevelSlotName
 
 
 
@@ -4009,7 +4009,7 @@ function fSetupMenuActionClickListener() {
             // Game Menu Actions
             case 'game-nishStartEnd':       fHandleNishStartOrEnd(); break;
             case 'game-toggleSidebar':      fToggleSidebar(); break;
-            case 'game-updateHeaderInfo':   fHandleGetRaceClassInfo(); break;
+            case 'game-updateLevelSlotName':   fHandleNewLevelSlotName(); break;
             case 'game-gmAward':            fShowMessage(`Action "${action}" is not yet implemented.`); break; // Placeholder
             case 'game-metaFlood':          fMetaFlood(); break;
             case 'game-healingNatural':     fCalc_NaturalHealing(); break;
