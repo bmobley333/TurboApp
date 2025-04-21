@@ -118,7 +118,7 @@ const gUI = {
     { r1: 'LuckBox', c1: 'ULLuckBox', r2: 'LuckPlus', c2: 'LuckBox', edges: 'r' },
     { r1: 'Act', c1: 'ULAct', r2: 'ActPlus', c2: 'ActTot', edges: 'r' },
     { r1: 'Health', c1: 'vitPlus', r2: 'VitTbl', c2: 'VitNowPercent', edges: 'br' },
-    { r1: 'VerUL', c1: 'Ver', r2: 'FrozenHeader', c2: 'Ver', edges: 'r' },
+    { r1: 'VerUL', c1: 'CodeVer', r2: 'FrozenHeader', c2: 'CodeVer', edges: 'r' },
     { r1: 'FrozenHeader', c1: 'PermMorph1', r2: 'AbilTblEnd_R', c2: 'Regain', edges: 'br' },
     { r1: 'FrozenHeader', c1: 'PossNum', r2: 'AbilTblEnd_R', c2: 'PossAPTot', edges: 'br' },
     { r1: 'ULMonsterTbl', c1: 'NumMon', r2: 'LastMon_R', c2: 'MonSize', edges: 'br' },
@@ -2270,6 +2270,7 @@ function fProcessAbilityChange(r, c, newValue, oldValue) {
                     fMyConsoleLog("      -> ⚠️ Errors occurred while populating row.");
                     fShowMessage(`Warning: Some data for "${newValueStr}" might not have loaded correctly.`).catch(e => console.error(e));
                 }
+
             })
             .withFailureHandler((error) => {
                 // Clear loading indicator on failure
