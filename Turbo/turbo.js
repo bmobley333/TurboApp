@@ -2040,28 +2040,15 @@ function fSrvSaveFullSheetTextAndTagsToFirestore(gameVer, workbookAbr, sheetName
     Logger.log(`${funcName}: Saving data for Workbook: "${workbookAbr}", Sheet: "${sheetName}", Version: ${gameVer}, Email: ${email}, CSID: ${csId}...`);
 
     // --- 1. Validate Inputs ---
-    if (!gameVer || typeof gameVer !== 'string' || gameVer.trim() === '') {
-        return { success: false, message: "Invalid Game Version provided." };
-    }
+    // Moved path-specific validation (gameVer, email, csId) to fSrvCalcFirestorePath
     const lowerWorkbookAbr = workbookAbr?.toLowerCase() || '';
-    const validWorkbooks = ['db', 'mastercs', 'masterkl', 'mycs', 'mykl'];
-    if (!validWorkbooks.includes(lowerWorkbookAbr)) {
-        return { success: false, message: `Invalid Workbook Abbreviation provided: "${workbookAbr}"` };
-    }
-    if (!sheetName || typeof sheetName !== 'string' || sheetName.trim() === '') {
-        return { success: false, message: "Invalid Sheet Name provided." };
-    }
+    const trimmedSheetName = sheetName?.trim() || '';
     if (!data || typeof data !== 'object' || !data.ColTags || !data.RowTags || !data.sheetText2D || !Array.isArray(data.sheetText2D)) {
         return { success: false, message: "Invalid data object provided (missing ColTags, RowTags, or sheetText2D array)." };
     }
-    // Validate email and csId only if needed for the path
-    if ((lowerWorkbookAbr === 'mycs' || lowerWorkbookAbr === 'mykl') && (!email || typeof email !== 'string' || email.indexOf('@') === -1)) {
-         return { success: false, message: "Invalid or missing User Email provided (required for 'mycs'/'mykl')." };
+    if (!trimmedSheetName) {
+        return { success: false, message: "Invalid or empty sheetName provided." };
     }
-     if ((lowerWorkbookAbr === 'mycs' || lowerWorkbookAbr === 'mykl') && (!csId || typeof csId !== 'string')) {
-         return { success: false, message: "Invalid or missing Character Sheet ID provided (required for 'mycs'/'mykl')." };
-    }
-    const trimmedSheetName = sheetName.trim(); // Use trimmed name for document ID
 
 
     // --- 2. Get Firestore Instance ---
@@ -2073,38 +2060,16 @@ function fSrvSaveFullSheetTextAndTagsToFirestore(gameVer, workbookAbr, sheetName
     }
 
 
-    // --- 3. Determine Firestore Collection & Document Path ---
-    let collectionName = '';
-    let documentId = '';
-
-    switch (lowerWorkbookAbr) {
-        case 'db':
-            collectionName = 'DB';
-            documentId = `v${gameVer} ${trimmedSheetName}`; // Format: vVERSION SHEETNAME
-            break;
-        case 'mastercs':
-            collectionName = 'MasterCS';
-            documentId = `v${gameVer} ${trimmedSheetName}`; // Format: vVERSION SHEETNAME
-            break;
-        case 'masterkl':
-            collectionName = 'MasterKL';
-            documentId = `v${gameVer} ${trimmedSheetName}`; // Format: vVERSION SHEETNAME
-            break;
-        case 'mycs':
-            collectionName = email; // User's email is the collection
-            documentId = `MyCS_${trimmedSheetName}_${csId}`;
-            break;
-        case 'mykl':
-            collectionName = email; // User's email is the collection
-            documentId = `MyKL_${trimmedSheetName}_OfMyCS_${csId}`;
-            break;
-        default:
-             // Should have been caught by validation, but belt-and-suspenders
-             return { success: false, message: `Internal error: Unhandled workbook abbreviation: "${workbookAbr}"` };
+    // --- 3. Determine Firestore Path using Helper ---
+    let documentPath;
+    try {
+        const { collectionName, documentId } = fSrvCalcFirestorePath(workbookAbr, trimmedSheetName, gameVer, email, csId);
+        documentPath = `${collectionName}/${documentId}`;
+        Logger.log(`   -> Target Firestore Path: ${documentPath}`);
+    } catch (pathError) {
+        Logger.log(`   -> ❌ Error determining Firestore path: ${pathError.message}`);
+        return { success: false, message: pathError.message }; // Return error from helper
     }
-
-    const documentPath = `${collectionName}/${documentId}`;
-    Logger.log(`   -> Target Firestore Path: ${documentPath}`);
 
 
     // --- 4. Convert sheetText2D to Array of Row Objects ---
@@ -2147,6 +2112,83 @@ function fSrvSaveFullSheetTextAndTagsToFirestore(gameVer, workbookAbr, sheetName
     }
 
 } // END fSrvSaveFullSheetTextAndTagsToFirestore
+
+
+
+
+// fSrvCalcFirestorePath //////////////////////////////////////////////////////////
+// Purpose -> Determines the Firestore collection and document ID based on the
+//            workbook type and other parameters.
+// Inputs  -> workbookAbr (String): Abbreviation ('db', 'mastercs', 'masterkl', 'mycs', 'mykl').
+//         -> sheetName (String): The name of the sheet.
+//         -> gameVer (String): The game version (e.g., "28.3"), required for 'db'/'master*' types.
+//         -> email (String): The user's email, required for 'mycs'/'mykl' types.
+//         -> csId (String): The Character Sheet ID, required for 'mycs'/'mykl' types.
+// Outputs -> (Object): { collectionName: String, documentId: String } on success.
+// Throws  -> (Error): If inputs are invalid or workbook abbreviation is unsupported.
+function fSrvCalcFirestorePath(workbookAbr, sheetName, gameVer, email, csId) {
+    const funcName = "fSrvCalcFirestorePath";
+
+    // --- 1. Validate Inputs ---
+    if (!workbookAbr || typeof workbookAbr !== 'string') {
+        throw new Error(`${funcName}: Invalid or missing workbookAbr provided.`);
+    }
+    if (!sheetName || typeof sheetName !== 'string' || sheetName.trim() === '') {
+        throw new Error(`${funcName}: Invalid or empty sheetName provided.`);
+    }
+    const lowerWorkbookAbr = workbookAbr.toLowerCase();
+    const trimmedSheetName = sheetName.trim();
+    const validWorkbooks = ['db', 'mastercs', 'masterkl', 'mycs', 'mykl'];
+    if (!validWorkbooks.includes(lowerWorkbookAbr)) {
+        throw new Error(`${funcName}: Unsupported workbook abbreviation: "${workbookAbr}"`);
+    }
+
+    // --- 2. Initialize Variables ---
+    let collectionName = '';
+    let documentId = '';
+
+    // --- 3. Determine Collection and Document ID ---
+    switch (lowerWorkbookAbr) {
+        case 'db':
+        case 'mastercs':
+        case 'masterkl':
+            if (!gameVer || typeof gameVer !== 'string' || gameVer.trim() === '') {
+                throw new Error(`${funcName}: Game Version is required for workbook type '${workbookAbr}'.`);
+            }
+            // Assign collection name based on abbreviation, ensuring proper casing
+            if (lowerWorkbookAbr === 'db') collectionName = 'DB';
+            else if (lowerWorkbookAbr === 'mastercs') collectionName = 'MasterCS';
+            else collectionName = 'MasterKL'; // Must be masterkl
+            documentId = `v${gameVer.trim()} ${trimmedSheetName}`; // Format: vVERSION SHEETNAME
+            break;
+        case 'mycs':
+        case 'mykl':
+            if (!email || typeof email !== 'string' || email.indexOf('@') === -1) {
+                throw new Error(`${funcName}: User Email is required and must be valid for workbook type '${workbookAbr}'.`);
+            }
+            if (!csId || typeof csId !== 'string') {
+                throw new Error(`${funcName}: Character Sheet ID is required for workbook type '${workbookAbr}'.`);
+            }
+            collectionName = email; // User's email is the collection
+            if (lowerWorkbookAbr === 'mycs') {
+                documentId = `MyCS_${trimmedSheetName}_${csId}`;
+            } else { // Must be 'mykl'
+                documentId = `MyKL_${trimmedSheetName}_OfMyCS_${csId}`;
+            }
+            break;
+        // Default case is handled by the initial validation check for validWorkbooks
+    }
+
+    // --- 4. Final Validation and Return ---
+    if (!collectionName || !documentId) {
+        // This should theoretically not happen if logic above is correct, but as a safeguard:
+        throw new Error(`${funcName}: Failed to determine collectionName or documentId for workbook '${workbookAbr}'.`);
+    }
+
+    // Logger.log(`${funcName}: Determined Path - Collection: "${collectionName}", Document: "${documentId}"`); // Optional log
+    return { collectionName, documentId };
+
+} // END fSrvCalcFirestorePath
 
 
 
