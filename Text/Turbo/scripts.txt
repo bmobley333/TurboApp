@@ -4172,6 +4172,78 @@ function fToggleSidebar() {
 
 
 
+// fHandleNewLevelSlotName ///////////////////////////////////////////////////////
+// Purpose -> Handles the "Update (Level, Slot, Names)" menu action. Fetches fresh
+//            header data, validates it (especially slotNum), updates gUI.characterInfo,
+//            and triggers a log refresh if successful.
+// Inputs  -> None.
+// Outputs -> (Promise<void>): Resolves after completing actions or handling errors.
+async function fHandleNewLevelSlotName() {
+    fMyConsoleLog("⚙️ Menu Action: Update Header Info Triggered...");
+
+    // Add visual feedback maybe? (e.g., temporary button text change?)
+
+    fMyConsoleLog("   -> Requesting fresh Character Header Data...");
+    google.script.run
+        .withSuccessHandler((headerData) => {
+            fMyConsoleLog("   -> Received fresh Character Header Data.");
+
+            // Validate the response structure
+            if (!headerData || typeof headerData !== 'object' || headerData.error) {
+                const errMsg = headerData?.message || "Invalid header data structure received during update.";
+                console.error("fHandleNewLevelSlotName Error:", errMsg, headerData);
+                fMyConsoleLog(`   -> ❌ Update failed: ${errMsg}`);
+                fShowMessage(`Error updating header data: ${errMsg}`).catch(e => console.error("Error showing message:", e));
+                return; // Stop processing on invalid data structure
+            }
+
+            // Validate Slot Number specifically
+            const receivedSlotNum = headerData.slotNum ?? null;
+            if (!receivedSlotNum || typeof receivedSlotNum !== 'string' || !receivedSlotNum.startsWith('Slot')) {
+                 const slotErrorMsg = "Error: Invalid or missing Slot # found on RaceClass tab. Cannot save log updates.";
+                 fMyConsoleLog(`   -> ❌ Update failed: ${slotErrorMsg}`);
+                 fShowMessage(slotErrorMsg).catch(e => console.error("Error showing message:", e));
+                 return; // Stop processing if Slot Number is invalid
+            }
+
+            // --- Update Successful & Valid ---
+            // Update the global character info object
+            gUI.characterInfo = {
+                slotNum: receivedSlotNum, // Store validated slot number
+                raceClass: headerData.raceClass ?? '',
+                level: headerData.level ?? '',
+                playerName: headerData.playerName ?? '',
+                charName: headerData.charName ?? ''
+            };
+            fMyConsoleLog(`   -> gUI.characterInfo updated: ${JSON.stringify(gUI.characterInfo)}`);
+
+            // Find and click the sidebar refresh button
+            const refreshButton = document.getElementById('sidebar-refresh-log-btn');
+            if (refreshButton) {
+                fMyConsoleLog("   -> Simulating click on sidebar refresh button...");
+                refreshButton.click(); // Trigger the log send with updated info
+            } else {
+                 fMyConsoleLog("   -> ⚠️ Could not find sidebar refresh button (#sidebar-refresh-log-btn) to click.");
+                 // Optionally show a message that refresh couldn't be triggered automatically
+            }
+
+            // Show success message to the user
+            fShowMessage("✅ Header Info Updated.").catch(e => console.error("Error showing message:", e));
+
+        })
+        .withFailureHandler((error) => {
+            // Handle transport errors
+            const errorMsg = `Failed to call server for header update: ${error.message}`;
+            console.error(errorMsg, error);
+            fMyConsoleLog(`   -> ❌ ${errorMsg}`);
+            fShowMessage(`Error updating header data: ${error.message}`).catch(e => console.error("Error showing message:", e));
+        })
+        .fSrvGetURLToPlayerCharForGMScreen(gIndexCSID); // Call the existing server function
+
+} // END fHandleNewLevelSlotName
+
+
+
 
 // fMetaFlood ///////////////////////////////////////////////////////////////////
 // Purpose -> Handles <Game><Meta><Flood>. Selects Meta col, increases values, caps,
