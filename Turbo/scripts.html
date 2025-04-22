@@ -3439,80 +3439,6 @@ function fSetupSidebarActionListeners() {
 
 
 
-
-// fHandleNewLevelSlotName ///////////////////////////////////////////////////////
-// Purpose -> Handles the "Update (Level, Slot, Names)" menu action. Fetches fresh
-//            header data, validates it (especially slotNum), updates gUI.characterInfo,
-//            and triggers a log refresh if successful.
-// Inputs  -> None.
-// Outputs -> (Promise<void>): Resolves after completing actions or handling errors.
-async function fHandleNewLevelSlotName() {
-    fMyConsoleLog("⚙️ Menu Action: Update Header Info Triggered...");
-
-    // Add visual feedback maybe? (e.g., temporary button text change?)
-
-    fMyConsoleLog("   -> Requesting fresh Character Header Data...");
-    google.script.run
-        .withSuccessHandler((headerData) => {
-            fMyConsoleLog("   -> Received fresh Character Header Data.");
-
-            // Validate the response structure
-            if (!headerData || typeof headerData !== 'object' || headerData.error) {
-                const errMsg = headerData?.message || "Invalid header data structure received during update.";
-                console.error("fHandleNewLevelSlotName Error:", errMsg, headerData);
-                fMyConsoleLog(`   -> ❌ Update failed: ${errMsg}`);
-                fShowMessage(`Error updating header data: ${errMsg}`).catch(e => console.error("Error showing message:", e));
-                return; // Stop processing on invalid data structure
-            }
-
-            // Validate Slot Number specifically
-            const receivedSlotNum = headerData.slotNum ?? null;
-            if (!receivedSlotNum || typeof receivedSlotNum !== 'string' || !receivedSlotNum.startsWith('Slot')) {
-                 const slotErrorMsg = "Error: Invalid or missing Slot # found on RaceClass tab. Cannot save log updates.";
-                 fMyConsoleLog(`   -> ❌ Update failed: ${slotErrorMsg}`);
-                 fShowMessage(slotErrorMsg).catch(e => console.error("Error showing message:", e));
-                 return; // Stop processing if Slot Number is invalid
-            }
-
-            // --- Update Successful & Valid ---
-            // Update the global character info object
-            gUI.characterInfo = {
-                slotNum: receivedSlotNum, // Store validated slot number
-                raceClass: headerData.raceClass ?? '',
-                level: headerData.level ?? '',
-                playerName: headerData.playerName ?? '',
-                charName: headerData.charName ?? ''
-            };
-            fMyConsoleLog(`   -> gUI.characterInfo updated: ${JSON.stringify(gUI.characterInfo)}`);
-
-            // Find and click the sidebar refresh button
-            const refreshButton = document.getElementById('sidebar-refresh-log-btn');
-            if (refreshButton) {
-                fMyConsoleLog("   -> Simulating click on sidebar refresh button...");
-                refreshButton.click(); // Trigger the log send with updated info
-            } else {
-                 fMyConsoleLog("   -> ⚠️ Could not find sidebar refresh button (#sidebar-refresh-log-btn) to click.");
-                 // Optionally show a message that refresh couldn't be triggered automatically
-            }
-
-            // Show success message to the user
-            fShowMessage("✅ Header Info Updated.").catch(e => console.error("Error showing message:", e));
-
-        })
-        .withFailureHandler((error) => {
-            // Handle transport errors
-            const errorMsg = `Failed to call server for header update: ${error.message}`;
-            console.error(errorMsg, error);
-            fMyConsoleLog(`   -> ❌ ${errorMsg}`);
-            fShowMessage(`Error updating header data: ${error.message}`).catch(e => console.error("Error showing message:", e));
-        })
-        .fSrvGetURLToPlayerCharForGMScreen(gIndexCSID); // Call the existing server function
-
-} // END fHandleNewLevelSlotName
-
-
-
-
 // ==========================================================================
 // === Menu Bar Setup                 (End of Sidebar) ===
 // ==========================================================================
@@ -3879,87 +3805,97 @@ function fSetupSingleSubMenuItem(item, index) {
 //            the GMScreen sheet ('db') and the PartyLog sheet ('ps') via the
 //            server-side fSrvSaveURLtoNamesAndLogToDBandPS function. Uses a lock.
 // Inputs  -> None (Uses gUI state: plainTextLogEntries, arr, characterInfo, isSendingLog).
-// Outputs -> None (Calls google.script.run if not already sending and slotNum is valid).
-function fSendLogToGMScreenAndPS() {
+// Outputs -> (Promise<Boolean>): Resolves with true if both writes succeeded, false otherwise.
+//                                Rejects on critical validation errors before server call.
+async function fSendLogToGMScreenAndPS() { // Made async to return a Promise implicitly via await
     // === 1. Check Lock ===
     if (gUI.isSendingLog) {
         fMyConsoleLog("📤 Log & Header send already in progress, skipping.");
-        return;
+        return false; // Indicate skip / potential failure due to lock
     }
 
-    // === 1a. Validate Slot Number === <<< NEW SECTION
+    // === 1a. Validate Slot Number ===
     const slotNum = gUI.characterInfo?.slotNum;
     if (!slotNum || typeof slotNum !== 'string' || !slotNum.startsWith('Slot')) {
-        // Only log this warning once perhaps, or make it less prominent?
-        // For now, we log it every time the send is blocked.
-        fMyConsoleLog(`📤 Cannot send Log & Headers: Invalid or missing slotNum ('${slotNum}').`);
-        // Do not set the lock, just return.
-        // Optionally show a message the first time?
-        // fShowMessage("Cannot send log updates: Invalid player Slot #.").catch(e=>console.error(e));
-        return;
+        const msg = `Cannot send Log & Headers: Invalid or missing slotNum ('${slotNum}').`;
+        fMyConsoleLog(`📤 ${msg}`);
+        // Consider if this should reject or just return false. Returning false for now.
+        // Optionally show message: fShowMessage(msg).catch(e=>console.error(e));
+        return false; // Indicate failure due to invalid slot
     }
-    // === END NEW SECTION ===
 
     // === 2. Set Lock ===
     gUI.isSendingLog = true;
     fMyConsoleLog(`📤 Preparing to send Log & Header data for ${slotNum} (Lock Acquired)...`);
 
-    // === 3. Prepare Log Content ===
-    const logEntriesSnapshot = [...gUI.plainTextLogEntries];
-    const reversedLogEntries = logEntriesSnapshot.reverse();
-    const combinedLog = reversedLogEntries.join('\n\n\n');
-    const truncatedLog = combinedLog.substring(0, gUI.GMSCREEN_LOG_MAX_CHARS);
-    fMyConsoleLog(`   -> Log Content Prepared (Entries: ${logEntriesSnapshot.length}, Length: ${truncatedLog.length})`);
+    // Wrap the core logic in a Promise
+    return new Promise((resolve, reject) => {
+        try {
+            // === 3. Prepare Log Content ===
+            const logEntriesSnapshot = [...gUI.plainTextLogEntries];
+            const reversedLogEntries = logEntriesSnapshot.reverse();
+            const combinedLog = reversedLogEntries.join('\n\n\n');
+            const truncatedLog = combinedLog.substring(0, gUI.GMSCREEN_LOG_MAX_CHARS);
+            fMyConsoleLog(`   -> Log Content Prepared (Entries: ${logEntriesSnapshot.length}, Length: ${truncatedLog.length})`);
 
-    // === 4. Prepare Header Data ===
-    // --- Dynamic Data (from gUI.arr) ---
-    const vitMax = fGetGridValue('VitTbl', 'vitMax') ?? '?';
-    const vitNow = fGetGridValue('VitTbl', 'vitNow') ?? '?';
-    const vitPercent = fGetGridValue('VitTbl', 'VitNowPercent') ?? '?%';
-    const vitString = `${vitNow} of ${vitMax} (${vitPercent})`;
-    const nishValue = fGetGridValue('Nish', 'Nish') ?? '';
-    fMyConsoleLog(`   -> Dynamic Header Data: Vit='${vitString}', Nish='${nishValue}'`);
+            // === 4. Prepare Header Data ===
+            const vitMax = fGetGridValue('VitTbl', 'vitMax') ?? '?';
+            const vitNow = fGetGridValue('VitTbl', 'vitNow') ?? '?';
+            const vitPercent = fGetGridValue('VitTbl', 'VitNowPercent') ?? '?%';
+            const vitString = `${vitNow} of ${vitMax} (${vitPercent})`;
+            const nishValue = fGetGridValue('Nish', 'Nish') ?? '';
+            fMyConsoleLog(`   -> Dynamic Header Data: Vit='${vitString}', Nish='${nishValue}'`);
+            const { raceClass, level, playerName, charName } = gUI.characterInfo || {};
+            const playerCharString = `${playerName || '?'} (${charName || '?'})`;
+            const characterUrl = "https://docs.google.com/spreadsheets/d/" + gIndexCSID + "/";
+            fMyConsoleLog(`   -> Static Header Data: URL='${characterUrl}', RaceClass='${raceClass}', Level='${level}', PlayerChar='${playerCharString}', Slot='${slotNum}'`);
 
-    // --- Static/Constructed Data (from gUI.characterInfo / gIndexCSID) ---
-    const { raceClass, level, playerName, charName } = gUI.characterInfo || {};
-    const playerCharString = `${playerName || '?'} (${charName || '?'})`;
-    const characterUrl = "https://docs.google.com/spreadsheets/d/" + gIndexCSID + "/";
-    fMyConsoleLog(`   -> Static Header Data: URL='${characterUrl}', RaceClass='${raceClass}', Level='${level}', PlayerChar='${playerCharString}', Slot='${slotNum}'`); // Added Slot here
+            // === 5. Create Data Bundle ===
+            const dataBundle = {
+                log: truncatedLog,
+                vit: vitString,
+                nish: nishValue,
+                url: characterUrl,
+                raceClass: raceClass || '',
+                level: level || '',
+                playerChar: playerCharString,
+                slotNum: slotNum
+            };
 
-    // === 5. Create Data Bundle ===
-    const dataBundle = {
-        log: truncatedLog,
-        vit: vitString,
-        nish: nishValue,
-        url: characterUrl,
-        raceClass: raceClass || '',
-        level: level || '',
-        playerChar: playerCharString,
-        slotNum: slotNum 
-    };
+            // === 6. Call Server Function ===
+            fMyConsoleLog(`   -> Calling fSrvSaveURLtoNamesAndLogToDBandPS with bundled data...`);
+            google.script.run
+                .withSuccessHandler((success) => {
+                    if (success) {
+                        fMyConsoleLog("   -> ✅ Log & Headers updated successfully on server targets.");
+                    } else {
+                        fMyConsoleLog("   -> ⚠️ Log & Headers update partially failed on server. Check server logs.");
+                        fShowMessage("Warning: Update failed for one or more target sheets.").catch(e => console.error("Error showing message:", e));
+                    }
+                    gUI.isSendingLog = false; // Release Lock
+                    fMyConsoleLog("   -> Lock Released.");
+                    resolve(success); // Resolve the promise with the success status
+                })
+                .withFailureHandler((error) => {
+                    const errorMsg = error?.message || "Unknown server error";
+                    console.error(`fSendLogToGMScreenAndPS Failure: ${errorMsg}`, error);
+                    fMyConsoleLog(`   -> ❌ Error sending Log & Headers: ${errorMsg}`);
+                    gUI.isSendingLog = false; // Release Lock
+                    fMyConsoleLog("   -> Lock Released due to error.");
+                    fShowMessage(`Error: Could not send updates: ${errorMsg}`).catch(e => console.error("Error showing message:", e));
+                    resolve(false); // Resolve false on failure to allow sequence to continue if needed, or reject? Resolve false for now.
+                })
+                .fSrvSaveURLtoNamesAndLogToDBandPS(dataBundle);
 
-    // === 6. Call Server Function ===
-    fMyConsoleLog(`   -> Calling fSrvSaveURLtoNamesAndLogToDBandPS with bundled data...`);
-    google.script.run
-        .withSuccessHandler((success) => {
-            if (success) {
-                fMyConsoleLog("   -> ✅ Log & Headers updated successfully on server targets.");
-            } else {
-                fMyConsoleLog("   -> ⚠️ Log & Headers update partially failed on server. Check server logs.");
-                fShowMessage("Warning: Update failed for one or more target sheets.").catch(e => console.error("Error showing message:", e));
-            }
-            gUI.isSendingLog = false; // Release Lock
-            fMyConsoleLog("   -> Lock Released.");
-        })
-        .withFailureHandler((error) => {
-            const errorMsg = error?.message || "Unknown server error";
-            console.error(`fSendLogToGMScreenAndPS Failure: ${errorMsg}`, error);
-            fMyConsoleLog(`   -> ❌ Error sending Log & Headers: ${errorMsg}`);
-            gUI.isSendingLog = false; // Release Lock
-            fMyConsoleLog("   -> Lock Released due to error.");
-            fShowMessage(`Error: Could not send updates: ${errorMsg}`).catch(e => console.error("Error showing message:", e));
-        })
-        .fSrvSaveURLtoNamesAndLogToDBandPS(dataBundle);
+        } catch (err) {
+            // Catch synchronous errors during preparation
+            console.error("Synchronous error in fSendLogToGMScreenAndPS preparation:", err);
+            fMyConsoleLog(`   -> ❌ Synchronous error preparing log send: ${err.message}`);
+            gUI.isSendingLog = false; // Release lock
+            fMyConsoleLog("   -> Lock Released due to synchronous error.");
+            reject(err); // Reject the promise on synchronous error
+        }
+    });
 
 } // END fSendLogToGMScreenAndPS
 
@@ -4174,74 +4110,148 @@ function fToggleSidebar() {
 
 // fHandleNewLevelSlotName ///////////////////////////////////////////////////////
 // Purpose -> Handles the "Update (Level, Slot, Names)" menu action. Fetches fresh
-//            header data, validates it (especially slotNum), updates gUI.characterInfo,
-//            and triggers a log refresh if successful.
+//            CS RaceClass data, validates it (especially slotNum), updates gUI.characterInfo,
+//            triggers a log refresh, and then saves MyCS/List and MyKL/MyAbilities to Firestore.
 // Inputs  -> None.
 // Outputs -> (Promise<void>): Resolves after completing actions or handling errors.
 async function fHandleNewLevelSlotName() {
-    fMyConsoleLog("⚙️ Menu Action: Update Header Info Triggered...");
+    const funcName = "fHandleNewLevelSlotName"; // Added for clarity
+    fMyConsoleLog(`⚙️ Menu Action: ${funcName} Triggered...`);
 
-    // Add visual feedback maybe? (e.g., temporary button text change?)
+    // === Show Initial Loading Message ===
+    const updatingMsg = fShowMessage("⏳ Updating Level/Slot/Names & Saving Key Sheets...<br><br>This may take up to a minute.<br><br>Do NOT Close unless program freezes.");
 
-    fMyConsoleLog("   -> Requesting fresh Character Header Data...");
-    google.script.run
-        .withSuccessHandler((headerData) => {
-            fMyConsoleLog("   -> Received fresh Character Header Data.");
+    try { // Wrap the entire sequence in a try block for better error handling
 
-            // Validate the response structure
-            if (!headerData || typeof headerData !== 'object' || headerData.error) {
-                const errMsg = headerData?.message || "Invalid header data structure received during update.";
-                console.error("fHandleNewLevelSlotName Error:", errMsg, headerData);
-                fMyConsoleLog(`   -> ❌ Update failed: ${errMsg}`);
-                fShowMessage(`Error updating header data: ${errMsg}`).catch(e => console.error("Error showing message:", e));
-                return; // Stop processing on invalid data structure
-            }
+        // === 1. Fetch and Update Character Header Data ===
+        fMyConsoleLog("   -> Requesting fresh Character Header Data...");
+        const headerData = await new Promise((resolve, reject) => {
+            google.script.run
+                .withSuccessHandler(resolve)
+                .withFailureHandler(reject)
+                .fSrvGetURLToPlayerCharForGMScreen(gIndexCSID);
+        });
 
-            // Validate Slot Number specifically
-            const receivedSlotNum = headerData.slotNum ?? null;
-            if (!receivedSlotNum || typeof receivedSlotNum !== 'string' || !receivedSlotNum.startsWith('Slot')) {
-                 const slotErrorMsg = "Error: Invalid or missing Slot # found on RaceClass tab. Cannot save log updates.";
-                 fMyConsoleLog(`   -> ❌ Update failed: ${slotErrorMsg}`);
-                 fShowMessage(slotErrorMsg).catch(e => console.error("Error showing message:", e));
-                 return; // Stop processing if Slot Number is invalid
-            }
+        fMyConsoleLog("   -> Received fresh Level, Slot, Names Data.");
+        // Validate the response structure
+        if (!headerData || typeof headerData !== 'object' || headerData.error) {
+            const errMsg = headerData?.message || "Invalid Level, Slot, Names data structure received during update.";
+            console.error(`${funcName} Error:`, errMsg, headerData);
+            throw new Error(`Error updating Level, Slot, Names data: ${errMsg}`);
+        }
 
-            // --- Update Successful & Valid ---
-            // Update the global character info object
-            gUI.characterInfo = {
-                slotNum: receivedSlotNum, // Store validated slot number
-                raceClass: headerData.raceClass ?? '',
-                level: headerData.level ?? '',
-                playerName: headerData.playerName ?? '',
-                charName: headerData.charName ?? ''
-            };
-            fMyConsoleLog(`   -> gUI.characterInfo updated: ${JSON.stringify(gUI.characterInfo)}`);
+        // Validate Slot Number specifically
+        const receivedSlotNum = headerData.slotNum ?? null;
+        if (!receivedSlotNum || typeof receivedSlotNum !== 'string' || !receivedSlotNum.startsWith('Slot')) {
+            const slotErrorMsg = "Error: Invalid or missing Slot # found on RaceClass tab. Cannot save log updates or related sheets.";
+            fMyConsoleLog(`   -> ❌ Update failed: ${slotErrorMsg}`);
+            throw new Error(slotErrorMsg);
+        }
 
-            // Find and click the sidebar refresh button
-            const refreshButton = document.getElementById('sidebar-refresh-log-btn');
-            if (refreshButton) {
-                fMyConsoleLog("   -> Simulating click on sidebar refresh button...");
-                refreshButton.click(); // Trigger the log send with updated info
-            } else {
-                 fMyConsoleLog("   -> ⚠️ Could not find sidebar refresh button (#sidebar-refresh-log-btn) to click.");
-                 // Optionally show a message that refresh couldn't be triggered automatically
-            }
+        // --- Update Successful & Valid ---
+        gUI.characterInfo = {
+            slotNum: receivedSlotNum,
+            raceClass: headerData.raceClass ?? '',
+            level: headerData.level ?? '',
+            playerName: headerData.playerName ?? '',
+            charName: headerData.charName ?? ''
+        };
+        fMyConsoleLog(`   -> gUI.characterInfo updated: ${JSON.stringify(gUI.characterInfo)}`);
 
-            // Show success message to the user
-            fShowMessage("✅ Header Info Updated.").catch(e => console.error("Error showing message:", e));
+        // Trigger GMScreen/PS Log update and AWAIT its completion
+        fMyConsoleLog("   -> Triggering GMScreen/PS Log Update...");
+        const logSendSuccess = await fSendLogToGMScreenAndPS(); // <<< AWAIT ADDED
+        if (!logSendSuccess) {
+             fMyConsoleLog("   -> ⚠️ Log send failed or was skipped. Aborting subsequent Firestore saves.");
+             // Optionally throw an error or show a message if log send failure should halt the process
+             // throw new Error("Failed to send initial log update to GM/Party.");
+        } else {
+             fMyConsoleLog("   -> Log send completed successfully.");
+        }
 
-        })
-        .withFailureHandler((error) => {
-            // Handle transport errors
-            const errorMsg = `Failed to call server for header update: ${error.message}`;
-            console.error(errorMsg, error);
-            fMyConsoleLog(`   -> ❌ ${errorMsg}`);
-            fShowMessage(`Error updating header data: ${error.message}`).catch(e => console.error("Error showing message:", e));
-        })
-        .fSrvGetURLToPlayerCharForGMScreen(gIndexCSID); // Call the existing server function
+
+        // === 2. Load and Save 'MyCS' -> 'List' (Only if log send was successful or wasn't critical) ===
+        // You might add a check here: if (logSendSuccess) { ... } if it's critical
+        await fLoadAndSaveAbilityLevelUpdatesToFirestore('MyCS', 'List', gIndexCSID, gIndexGameVer, gIndexEmail);
+
+        // === 3. Load and Save 'MyKL' -> 'MyAbilities' ===
+        await fLoadAndSaveAbilityLevelUpdatesToFirestore('MyKL', 'MyAbilities', gIndexCSID, gIndexGameVer, gIndexEmail);
+
+        // === 4. Final Success Message ===
+        fHideMessage(); // Hide the initial "Updating..." message
+        await fShowMessage("✅ Level/Slot/Names Info Updated & Key Sheets Saved to Firestore.");
+        fMyConsoleLog(`✅ ${funcName} Completed Successfully.`);
+
+    } catch (error) {
+        // === Catch All Errors from the Sequence ===
+        fHideMessage(); // Ensure loading message is hidden on error
+        const errorMsg = `Error during '${funcName}': ${error?.message || error}`;
+        console.error(errorMsg, error);
+        fMyConsoleLog(`   -> ❌ ${errorMsg}`);
+        await fShowMessage(`❌ ${errorMsg}`); // Show the final error to the user
+    }
 
 } // END fHandleNewLevelSlotName
 
+
+
+
+// fLoadAndSaveAbilityLevelUpdatesToFirestore ///////////////////////////////////////////////////
+// Purpose -> Helper function to load data/tags from a specific Google Sheet and
+//            then save it to Firestore. Used by fHandleNewLevelSlotName.
+// Inputs  -> workbookAbr (String): 'MyCS' or 'MyKL'.
+//         -> sheetName (String): The sheet name (e.g., 'List', 'MyAbilities').
+//         -> csId (String): The user's Character Sheet ID.
+//         -> gameVer (String): The game version string.
+//         -> email (String): The user's email address.
+// Outputs -> (Promise<void>): Resolves on successful save, rejects on error.
+// Throws  -> (Error): Propagates errors from server calls or validation.
+async function fLoadAndSaveAbilityLevelUpdatesToFirestore(workbookAbr, sheetName, csId, gameVer, email) {
+    const funcName = "fLoadAndSaveAbilityLevelUpdatesToFirestore";
+    fMyConsoleLog(`   -> ${funcName}: Starting process for ${workbookAbr} -> ${sheetName}...`);
+
+    // --- 1. Load Data & Tags ---
+    fMyConsoleLog(`      -> Calling fSrvLoadFullGoogleSheetAndTags...`);
+    const loadedData = await new Promise((resolve, reject) => {
+        google.script.run
+            .withSuccessHandler(resolve)
+            .withFailureHandler(reject)
+            .fSrvLoadFullGoogleSheetAndTags(workbookAbr, sheetName, csId);
+    });
+
+    // Validate loaded data structure
+    if (!loadedData || typeof loadedData !== 'object' || !loadedData.ColTags || !loadedData.RowTags || !loadedData.sheetText2D || !Array.isArray(loadedData.sheetText2D)) {
+        console.error(`${funcName}: Invalid data structure received from fSrvLoadFullGoogleSheetAndTags for ${workbookAbr}/${sheetName}:`, loadedData);
+        throw new Error(`Received invalid data structure when loading ${workbookAbr}/${sheetName}.`);
+    }
+    fMyConsoleLog(`      -> Successfully loaded data for ${workbookAbr}/${sheetName}.`);
+
+    // --- 2. Save Data to Firestore ---
+    fMyConsoleLog(`      -> Calling fSrvSaveFullSheetTextAndTagsToFirestore...`);
+    const saveResult = await new Promise((resolve, reject) => {
+        google.script.run
+            .withSuccessHandler(resolve)
+            .withFailureHandler(reject)
+            .fSrvSaveFullSheetTextAndTagsToFirestore(
+                gameVer,
+                workbookAbr,
+                sheetName,
+                loadedData,
+                email,
+                csId
+            );
+    });
+
+    // Validate save result
+    if (!saveResult || !saveResult.success) {
+        const saveErrorMsg = saveResult?.message || `Unknown error saving ${workbookAbr}/${sheetName} to Firestore.`;
+        console.error(`${funcName}: Firestore save failed for ${workbookAbr}/${sheetName}: ${saveErrorMsg}`);
+        throw new Error(`Failed to save ${workbookAbr}/${sheetName} to Firestore: ${saveErrorMsg}`);
+    }
+
+    fMyConsoleLog(`   -> ✅ Successfully saved ${workbookAbr}/${sheetName} to Firestore.`);
+
+} // END fLoadAndSaveAbilityLevelUpdatesToFirestore
 
 
 
