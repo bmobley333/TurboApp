@@ -12,9 +12,9 @@
 
 
 // Global Variables from doGet and index.html - scope is all client side code (but not turbo.gs)
-// gIndexCSID     --> User's Character Sheet ID
-// gIndexEmail    --> User's gmail address
-// gIndexGameVer  --> Game version from CS 'Game' such as 28.3
+// gIndex.CSID     --> User's Character Sheet ID
+// gIndex.Email    --> User's gmail address
+// gIndex.GameVer  --> Game version from CS 'Game' such as 28.3
 
 
 
@@ -2283,7 +2283,7 @@ function fProcessAbilityChange(r, c, newValue, oldValue) {
                 // Optionally clear row on communication failure?
                 // fProcessAbilityChange(r, c, '', newValueStr);
             })
-            .fSrvGetAbilityDataByNameID(gIndexCSID,newValueStr); // Pass the CSID and Name_ID string to the server
+            .fSrvGetAbilityDataByNameID(gIndex.CSID,newValueStr); // Pass the CSID and Name_ID string to the server
     }
 
 } // END fProcessAbilityChange
@@ -2379,11 +2379,11 @@ function fFetchAndApplyAbilityDropdowns() {
     fMyConsoleLog(`⚙️ ${funcName}: Checking Firestore/Sheet for Ability List...`);
 
     // --- 1. Validate Prerequisites ---
-    if (!gIndexCSID || !gIndexGameVer || !gIndexEmail) {
+    if (!gIndex.CSID || !gIndex.GameVer || !gIndex.Email) {
         const missing = [
-            !gIndexCSID ? 'CS ID' : null,
-            !gIndexGameVer ? 'Game Version' : null,
-            !gIndexEmail ? 'User Email' : null
+            !gIndex.CSID ? 'CS ID' : null,
+            !gIndex.GameVer ? 'Game Version' : null,
+            !gIndex.Email ? 'User Email' : null
         ].filter(Boolean).join(', ');
         const msg = `Cannot fetch ability list: Missing required parameters (${missing}).`;
         console.error(`${funcName}: ${msg}`);
@@ -2395,7 +2395,7 @@ function fFetchAndApplyAbilityDropdowns() {
     // --- 2. Check if Firestore Document Exists ---
     const workbookAbr = 'MyCS';
     const sheetName = 'List';
-    fMyConsoleLog(`   -> Calling fVerifyFirestorePathExists for ${workbookAbr}/${sheetName}...`);
+    fMyConsoleLog(`   -> Calling fSrvVerifyFirestorePathExists for ${workbookAbr}/${sheetName}...`);
 
     google.script.run
         .withSuccessHandler((exists) => {
@@ -2445,7 +2445,7 @@ function fFetchAndApplyAbilityDropdowns() {
                                 fMyConsoleLog(`      -> ❌ ${funcName} Error: ${saveError}`);
                                 fShowMessage(`Error: ${saveError}`).catch(e => console.error("ShowMessage Error:", e));
                             })
-                            .fSrvSaveFullSheetTextAndTagsToFirestore(gIndexGameVer, workbookAbr, sheetName, sheetData, gIndexEmail, gIndexCSID);
+                            .fSrvSaveFullSheetTextAndTagsToFirestore(gIndex, workbookAbr, sheetName, sheetData);
 
                     })
                     .withFailureHandler((error) => {
@@ -2455,7 +2455,7 @@ function fFetchAndApplyAbilityDropdowns() {
                         fMyConsoleLog(`   -> ❌ ${funcName} Error: ${sheetLoadError}`);
                         fShowMessage(`Error: ${sheetLoadError}`).catch(e => console.error("ShowMessage Error:", e));
                     })
-                    .fSrvLoadFullGoogleSheetAndTags(workbookAbr, sheetName, gIndexCSID);
+                    .fSrvLoadFullGoogleSheetAndTags(workbookAbr, sheetName, gIndex.CSID);
 
             } else {
                 // --- 2b. Firestore Doc Found: Fetch Directly ---
@@ -2463,14 +2463,14 @@ function fFetchAndApplyAbilityDropdowns() {
             }
         })
         .withFailureHandler((error) => {
-            // Handle failure for fVerifyFirestorePathExists call
+            // Handle failure for fSrvVerifyFirestorePathExists call
             const verifyError = `Failed server communication checking Firestore path for ${workbookAbr}/${sheetName}: ${error.message || 'Unknown error'}`;
             console.error(`${funcName}: ${verifyError}`, error);
             fMyConsoleLog(`   -> ❌ ${funcName} Error: ${verifyError}`);
             fShowMessage(`Error: ${verifyError}`).catch(e => console.error("ShowMessage Error:", e));
             // Cannot proceed without knowing if Firestore data exists
         })
-        .fVerifyFirestorePathExists(workbookAbr, sheetName, gIndexGameVer, gIndexEmail, gIndexCSID); // Pass all necessary args
+        .fSrvVerifyFirestorePathExists(workbookAbr, sheetName, gIndex); // Pass all necessary args
 
 } // END fFetchAndApplyAbilityDropdowns
 
@@ -2537,7 +2537,7 @@ function fFetchAbilityListFromFirestore(workbookAbr, sheetName) {
             fMyConsoleLog(`      -> ❌ ${funcName} Error: ${readError}`);
             fShowMessage(`Error: ${readError}`).catch(e => console.error("ShowMessage Error:", e));
         })
-        .fSrvReadFirestoreRange(rangeObject, workbookAbr, sheetName, gIndexCSID, gIndexGameVer, gIndexEmail);
+        .fSrvReadFirestoreRange(rangeObject, workbookAbr, sheetName, gIndex);
 
 } // END fFetchAbilityListFromFirestore
 
@@ -3961,7 +3961,7 @@ async function fSendLogToGMScreenAndPS() { // Made async to return a Promise imp
             fMyConsoleLog(`   -> Dynamic Header Data: Vit='${vitString}', Nish='${nishValue}'`);
             const { raceClass, level, playerName, charName } = gUI.characterInfo || {};
             const playerCharString = `${playerName || '?'} (${charName || '?'})`;
-            const characterUrl = "https://docs.google.com/spreadsheets/d/" + gIndexCSID + "/";
+            const characterUrl = "https://docs.google.com/spreadsheets/d/" + gIndex.CSID + "/";
             fMyConsoleLog(`   -> Static Header Data: URL='${characterUrl}', RaceClass='${raceClass}', Level='${level}', PlayerChar='${playerCharString}', Slot='${slotNum}'`);
 
             // === 5. Create Data Bundle ===
@@ -4243,7 +4243,7 @@ async function fHandleNewLevelSlotName() {
             google.script.run
                 .withSuccessHandler(resolve)
                 .withFailureHandler(reject)
-                .fSrvGetURLToPlayerCharForGMScreen(gIndexCSID);
+                .fSrvGetURLToPlayerCharForGMScreen(gIndex.CSID);
         });
 
         fMyConsoleLog("   -> Received fresh Level, Slot, Names Data.");
@@ -4286,10 +4286,10 @@ async function fHandleNewLevelSlotName() {
 
         // === 2. Load and Save 'MyCS' -> 'List' (Only if log send was successful or wasn't critical) ===
         // You might add a check here: if (logSendSuccess) { ... } if it's critical
-        await fLoadAndSaveAbilityLevelUpdatesToFirestore('MyCS', 'List', gIndexCSID, gIndexGameVer, gIndexEmail);
+        await fLoadAndSaveAbilityLevelUpdatesToFirestore('MyCS', 'List');
 
         // === 3. Load and Save 'MyKL' -> 'MyAbilities' ===
-        await fLoadAndSaveAbilityLevelUpdatesToFirestore('MyKL', 'MyAbilities', gIndexCSID, gIndexGameVer, gIndexEmail);
+        await fLoadAndSaveAbilityLevelUpdatesToFirestore('MyKL', 'MyAbilities');
 
         // === 4. Final Success Message ===
         fHideMessage(); // Hide the initial "Updating..." message
@@ -4315,12 +4315,12 @@ async function fHandleNewLevelSlotName() {
 //            then save it to Firestore. Used by fHandleNewLevelSlotName.
 // Inputs  -> workbookAbr (String): 'MyCS' or 'MyKL'.
 //         -> sheetName (String): The sheet name (e.g., 'List', 'MyAbilities').
-//         -> csId (String): The user's Character Sheet ID.
-//         -> gameVer (String): The game version string.
-//         -> email (String): The user's email address.
+//         -> gIndex.CSID (String): The user's Character Sheet ID.
+//         -> gIndex.GameVer (String): The game version string.
+//         -> gIndex.Email (String): The user's email address.
 // Outputs -> (Promise<void>): Resolves on successful save, rejects on error.
 // Throws  -> (Error): Propagates errors from server calls or validation.
-async function fLoadAndSaveAbilityLevelUpdatesToFirestore(workbookAbr, sheetName, csId, gameVer, email) {
+async function fLoadAndSaveAbilityLevelUpdatesToFirestore(workbookAbr, sheetName) {
     const funcName = "fLoadAndSaveAbilityLevelUpdatesToFirestore";
     fMyConsoleLog(`   -> ${funcName}: Starting process for ${workbookAbr} -> ${sheetName}...`);
 
@@ -4330,7 +4330,7 @@ async function fLoadAndSaveAbilityLevelUpdatesToFirestore(workbookAbr, sheetName
         google.script.run
             .withSuccessHandler(resolve)
             .withFailureHandler(reject)
-            .fSrvLoadFullGoogleSheetAndTags(workbookAbr, sheetName, csId);
+            .fSrvLoadFullGoogleSheetAndTags(workbookAbr, sheetName, gIndex.CSID);
     });
 
     // Validate loaded data structure
@@ -4347,12 +4347,10 @@ async function fLoadAndSaveAbilityLevelUpdatesToFirestore(workbookAbr, sheetName
             .withSuccessHandler(resolve)
             .withFailureHandler(reject)
             .fSrvSaveFullSheetTextAndTagsToFirestore(
-                gameVer,
+                gIndex,
                 workbookAbr,
                 sheetName,
-                loadedData,
-                email,
-                csId
+                loadedData
             );
     });
 
@@ -5908,13 +5906,13 @@ function fHandleAutoSaveTextToFirestore() {
          // Optional: Consider if saving should proceed with just arr if charInfo is missing
          return;
     }
-    if (!gIndexCSID || typeof gIndexCSID !== 'string') {
-         console.error("fHandleAutoSaveTextToFirestore: Missing gIndexCSID on client.");
+    if (!gIndex.CSID || typeof gIndex.CSID !== 'string') {
+         console.error("fHandleAutoSaveTextToFirestore: Missing gIndex.CSID on client.");
          fMyConsoleLog("   -> ❌ Auto-save aborted: Missing CS ID.");
          return;
     }
-    if (!gIndexEmail || typeof gIndexEmail !== 'string') {
-         console.error("fHandleAutoSaveTextToFirestore: Missing gIndexEmail on client.");
+    if (!gIndex.Email || typeof gIndex.Email !== 'string') {
+         console.error("fHandleAutoSaveTextToFirestore: Missing gIndex.Email on client.");
          fMyConsoleLog("   -> ❌ Auto-save aborted: Missing User Email.");
          return;
     }
@@ -5924,7 +5922,7 @@ function fHandleAutoSaveTextToFirestore() {
     google.script.run
         .withSuccessHandler(fHandleAutoSaveToFirestoreSuccess)
         .withFailureHandler(fHandleAutoSaveToFirestoreFailure)
-        .fSrvSaveTurboDataToFirestore(gIndexEmail, gIndexCSID, gUI.arr, gUI.characterInfo); // Pass email, csId, arr, charInfo
+        .fSrvSaveTurboDataToFirestore(gIndex, gUI.arr, gUI.characterInfo); // Pass email, csId, arr, charInfo
 
 } // END fHandleAutoSaveTextToFirestore
 
@@ -6030,24 +6028,24 @@ async function fHandleSaveDBSheetVer() {
 
 
     // --- 4. Validate Game Version, Email, & CSID (needed for lookups/paths) ---
-    if (!gIndexGameVer || typeof gIndexGameVer !== 'string' || gIndexGameVer.trim() === '') {
-        fMyConsoleLog("   -> Cannot proceed: gIndexGameVer is missing or invalid on client.");
+    if (!gIndex.GameVer || typeof gIndex.GameVer !== 'string' || gIndex.GameVer.trim() === '') {
+        fMyConsoleLog("   -> Cannot proceed: gIndex.GameVer is missing or invalid on client.");
         await fShowMessage("❌ Error: Game Version is missing.");
         return;
     }
-     if (!gIndexCSID || typeof gIndexCSID !== 'string') {
-         fMyConsoleLog("   -> Cannot proceed: gIndexCSID is missing or invalid on client.");
+     if (!gIndex.CSID || typeof gIndex.CSID !== 'string') {
+         fMyConsoleLog("   -> Cannot proceed: gIndex.CSID is missing or invalid on client.");
          await fShowMessage("❌ Error: Character Sheet ID is missing.");
          return;
     }
-     if (!gIndexEmail || typeof gIndexEmail !== 'string') {
-         fMyConsoleLog("   -> Cannot proceed: gIndexEmail is missing or invalid on client.");
+     if (!gIndex.Email || typeof gIndex.Email !== 'string') {
+         fMyConsoleLog("   -> Cannot proceed: gIndex.Email is missing or invalid on client.");
          await fShowMessage("❌ Error: User Email is missing.");
          return;
     }
-    fMyConsoleLog(`   -> Using Game Version: ${gIndexGameVer}`);
-    fMyConsoleLog(`   -> Using CSID: ${gIndexCSID}`);
-    fMyConsoleLog(`   -> Using Email: ${gIndexEmail}`);
+    fMyConsoleLog(`   -> Using Game Version: ${gIndex.GameVer}`);
+    fMyConsoleLog(`   -> Using CSID: ${gIndex.CSID}`);
+    fMyConsoleLog(`   -> Using Email: ${gIndex.Email}`);
 
 
     // --- 5. Call Server to Load Data & Tags ---
@@ -6059,7 +6057,7 @@ async function fHandleSaveDBSheetVer() {
             google.script.run
                 .withSuccessHandler(resolve)
                 .withFailureHandler(reject)
-                .fSrvLoadFullGoogleSheetAndTags(workbookAbr, trimmedSheetName, gIndexCSID);
+                .fSrvLoadFullGoogleSheetAndTags(workbookAbr, trimmedSheetName, gIndex.CSID);
         });
 
         // --- 6. Handle Load Success ---
@@ -6079,12 +6077,10 @@ async function fHandleSaveDBSheetVer() {
                 .withSuccessHandler(resolve)
                 .withFailureHandler(reject)
                 .fSrvSaveFullSheetTextAndTagsToFirestore(
-                    gIndexGameVer,      // gameVer
+                    gIndex,             // gIndex
                     workbookAbr,        // workbookAbr
                     trimmedSheetName,   // sheetName
-                    loadedData,         // data
-                    gIndexEmail,        // email
-                    gIndexCSID          // csId
+                    loadedData          // data
                 );
         });
 
@@ -6092,7 +6088,7 @@ async function fHandleSaveDBSheetVer() {
         fHideMessage();
         if (saveResult && saveResult.success) {
             fMyConsoleLog("   -> ✅ Successfully saved sheet data to Firestore.");
-            await fShowMessage(`✅ Successfully saved data for ${workbookAbr} -> "${trimmedSheetName}" (Version ${gIndexGameVer}) to Firestore.`);
+            await fShowMessage(`✅ Successfully saved data for ${workbookAbr} -> "${trimmedSheetName}" (Version ${gIndex.GameVer}) to Firestore.`);
         } else {
             const saveErrorMsg = saveResult?.message || "Unknown error saving to Firestore.";
             fMyConsoleLog(`   -> ❌ Firestore Save Failed: ${saveErrorMsg}`);
@@ -6505,7 +6501,7 @@ function fOnCSGameDataLoaded(data) {
 
     // === 2. Check Firestore for Overriding gUI.arr Data ===
     fMyConsoleLog("⚙️ Checking Firestore for saved Grid (gUI.arr) data...");
-    if (!gIndexEmail || !gIndexCSID) {
+    if (!gIndex.Email || !gIndex.CSID) {
         fMyConsoleLog("   -> ⚠️ Skipping Firestore gUI.arr check: Missing Email or CSID.");
         // Proceed using Sheet data, then fetch Character Info
         fSetupTooltipAndModal();
@@ -6544,7 +6540,7 @@ function fOnCSGameDataLoaded(data) {
             fSetupTooltipAndModal();
             fFetchRaceClassInfoAndRenderGrid(); // Fetch char info (will use sheet data as base)
         })
-        .fSrvCheckAndLoadFirestoreGUIarrAs2D(gIndexEmail, gIndexCSID); // Pass Email and CSID
+        .fSrvCheckAndLoadFirestoreGUIarrAs2D(gIndex); // Pass Email and CSID
 
 } // END fOnCSGameDataLoaded
 
@@ -6595,7 +6591,7 @@ function fFetchRaceClassInfoAndRenderGrid() {
 
             // --- 2. Check Firestore for Overriding Character Info ---
             fMyConsoleLog("⚙️ Checking Firestore for saved Character Info data...");
-            if (!gIndexEmail || !gIndexCSID) {
+            if (!gIndex.Email || !gIndex.CSID) {
                 fMyConsoleLog("   -> ⚠️ Skipping Firestore Character Info check: Missing Email or CSID.");
                 // Proceed to render with Sheet/default data
                 fRenderGridWithFinalData();
@@ -6636,7 +6632,7 @@ function fFetchRaceClassInfoAndRenderGrid() {
                     // Proceed using Sheet data despite the check failure
                     fRenderGridWithFinalData(); // Call helper to render
                 })
-                .fSrvLoadCharacterInfoFromFirestore(gIndexEmail, gIndexCSID); // Pass Email and CSID
+                .fSrvLoadCharacterInfoFromFirestore(gIndex); // Pass Email and CSID
 
         })
         .withFailureHandler((error) => {
@@ -6650,7 +6646,7 @@ function fFetchRaceClassInfoAndRenderGrid() {
             gUI.characterInfo = { slotNum: null, raceClass: '', level: '', playerName: '', charName: '' };
             fRenderGridWithFinalData(); // Call helper to render
         })
-        .fSrvGetURLToPlayerCharForGMScreen(gIndexCSID); // Fetch initial data from Sheet
+        .fSrvGetURLToPlayerCharForGMScreen(gIndex.CSID); // Fetch initial data from Sheet
 
 } // END fFetchRaceClassInfoAndRenderGrid
 
@@ -6856,19 +6852,19 @@ function fRunPostRenderFormatting() {
 
 // fLoadGameSheet //////////////////////////////////////////////////////////////////
 // Purpose -> Initiates the process of loading and displaying the game sheet data.
-//            Sets up timing, validates gIndexCSID, and calls the server-side
+//            Sets up timing, validates gIndex.CSID, and calls the server-side
 //            function (fSrvReadCSGameSheet) to retrieve data, handling success and failure cases.
-// Inputs  -> None (Uses global gIndexCSID).
+// Inputs  -> None (Uses global gIndex.CSID).
 // Outputs -> None (Initiates server call).
 function fLoadGameSheet() {
     // === Initialize Timers ===
     gUI.startTime = performance.now(); // Record start time for performance logging
     gUI.lastLogTime = gUI.startTime;   // Initialize last log time
     fMyConsoleLog("🚀 Requesting GSheet Data...");
-    console.log("Sheet ID:", gIndexCSID); // Log the sheet ID being used
+    console.log("Sheet ID:", gIndex.CSID); // Log the sheet ID being used
 
     // === Validate Sheet ID ===
-    if (!gIndexCSID) {
+    if (!gIndex.CSID) {
         const errorMsg = "❌ No Sheet ID found. Cannot load data.";
         console.error(errorMsg);
         fMyConsoleLog(errorMsg);
@@ -6890,7 +6886,7 @@ function fLoadGameSheet() {
             const gridDiv = document.getElementById('grid');
             if(gridDiv) gridDiv.innerHTML = `<p style="color:red;">${errorMsg}</p>`;
         })
-        .fSrvReadCSGameSheet(gIndexCSID); // The server-side function to call in Turbo.gs
+        .fSrvReadCSGameSheet(gIndex); // The server-side function to call in Turbo.gs
 
 } // END fLoadGameSheet
 

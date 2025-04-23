@@ -5,17 +5,20 @@
   <head>
     <base target="_top">
 
-    <script>
-      // Inject csID, userEmail, and gameVer from server-side doGet into global client-side scope
-      const gIndexCSID = "<?= csID ?>";       // Passed from doGet based on URL parameter
-      const gIndexEmail = "<?= userEmail ?>"; // Passed from doGet based on URL parameter
-      const gIndexGameVer = "<?= gameVer ?>"; // Passed from doGet based on URL parameter
+<script>
+   // Inject csID, userEmail, and gameVer into a client-side object
+   const gIndex = {
+     CSID: "<?= csID ?>",      
+     Email: "<?= userEmail ?>", 
+     GameVer: "<?= gameVer ?>" 
+   }; // Note the commas and no trailing semicolon after the closing brace
 
-      console.log("✅ INDEX LOADED: " + new Date().toLocaleTimeString());
-      console.log("🧪 gIndexCSID param:", gIndexCSID);
-      console.log("✉️ gIndexEmail param:", gIndexEmail);
-      console.log("🎮 gIndexGameVer param:", gIndexGameVer); // Log the game version
-    </script>
+   console.log("✅ INDEX LOADED: " + new Date().toLocaleTimeString());
+   // Now access properties like gIndex.CSID, gIndex.Email, gIndex.GameVer
+   console.log("🧪 gIndex.CSID param:", gIndex.CSID);
+   console.log("✉️ gIndex.Email param:", gIndex.Email);
+   console.log("🎮 gIndex.GameVer param:", gIndex.GameVer);
+ </script>
 
     <style>
       <?!= HtmlService.createHtmlOutputFromFile('style').getContent(); ?>

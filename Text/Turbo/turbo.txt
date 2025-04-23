@@ -8,6 +8,8 @@
 // ==========================================================================
 
 
+// NOTE gIndex must be passed into Turbo.gs from client side
+
 
 const gSrv = { // Using gSrv prefix for server-side globals
   ids: {
@@ -397,30 +399,30 @@ function fSrvResolveTag(tagOrIndex, tagMap, type = 'unknown') {
 
 // fSrvReadCSGameSheet /////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Loads full data, format, and notes from the 'Game' sheet of a given spreadsheet ID.
-// Inputs  -> targetSheetId (String): The ID of the spreadsheet to read from.
+// Inputs  -> gIndex.CSID (String): The ID of the spreadsheet to read from.
 // Outputs -> (Object): Structured object { arr, format, notesArr } containing sheet data.
 // Throws  -> (Error): If sheet ID is invalid, spreadsheet/sheet cannot be opened, or data extraction fails.
-function fSrvReadCSGameSheet(targetSheetId) {
+function fSrvReadCSGameSheet(gIndex) {
     const funcName = 'fSrvReadCSGameSheet'; // Added funcName for better logging/errors
     try {
-        // Validate targetSheetId
-        if (!targetSheetId || typeof targetSheetId !== 'string') {
+        // Validate gIndex.CSID
+        if (!gIndex.CSID || typeof gIndex.CSID !== 'string') {
             throw new Error("Invalid or missing Sheet ID provided.");
         }
-        Logger.log(`${funcName}: Opening Spreadsheet ID: ${targetSheetId}`); // Log opening attempt
+        Logger.log(`${funcName}: Opening Spreadsheet ID: ${gIndex.CSID}`); // Log opening attempt
 
         // Open Spreadsheet
-        const ss = SpreadsheetApp.openById(targetSheetId);
+        const ss = SpreadsheetApp.openById(gIndex.CSID);
         if (!ss) { // Check if spreadsheet opened successfully
-             throw new Error(`Could not open Spreadsheet with ID: ${targetSheetId}. Check permissions and ID validity.`);
+             throw new Error(`Could not open Spreadsheet with ID: ${gIndex.CSID}. Check permissions and ID validity.`);
         }
 
         // Get "Game" Sheet
         const sh = ss.getSheetByName("Game");
         if (!sh) { // Check if sheet was found
-            throw new Error(`Sheet named "Game" not found in Spreadsheet ID: ${targetSheetId}.`);
+            throw new Error(`Sheet named "Game" not found in Spreadsheet ID: ${gIndex.CSID}.`);
         }
-        Logger.log(`${funcName}: Successfully opened sheet "Game" in ID: ${targetSheetId}`);
+        Logger.log(`${funcName}: Successfully opened sheet "Game" in ID: ${gIndex.CSID}`);
 
         // Call fSrvExtractSheetData with the obtained sheet object
         Logger.log(`${funcName}: Extracting data from sheet "Game"...`);
@@ -1627,20 +1629,20 @@ function fSrvGetFirestoreInstance() {
 //            Documents: Collection = userEmail, Docs = Turbo_Game_<csId>, Turbo_CharacterInfo_<csId>.
 //            Processes gUI.arr into Array of Row Objects format for Firestore compatibility.
 //            Uses updateDocument which creates if not exists.
-// Inputs  -> userEmail (String): The user's email address (used as the collection name).
-//         -> csId (String): The Character Sheet ID (used for document naming).
+// Inputs  -> gIndex.Email (String): The user's email address (used as the collection name).
+//         -> gIndex.CSID (String): The Character Sheet ID (used for document naming).
 //         -> fullArrData (Array[][]): The complete gUI.arr from the client.
 //         -> charInfo (Object): Character metadata { slotNum, raceClass, playerName, etc. }.
 // Outputs -> (Object): { success: Boolean, message?: String }
-function fSrvSaveTurboDataToFirestore(userEmail, csId, fullArrData, charInfo) {
+function fSrvSaveTurboDataToFirestore(gIndex, fullArrData, charInfo) {
     const funcName = "fSrvSaveTurboDataToFirestore";
-    Logger.log(`${funcName}: Saving data for User: ${userEmail}, CS ID: ${csId}...`);
+    Logger.log(`${funcName}: Saving data for User: ${gIndex.Email}, CS ID: ${gIndex.CSID}...`);
 
     // === 1. Validate Inputs ===
-    if (!userEmail || typeof userEmail !== 'string' || userEmail.indexOf('@') === -1) { // Basic email check
+    if (!gIndex.Email || typeof gIndex.Email !== 'string' || gIndex.Email.indexOf('@') === -1) { // Basic email check
         return { success: false, message: "Invalid User Email provided." };
     }
-    if (!csId || typeof csId !== 'string') {
+    if (!gIndex.CSID || typeof gIndex.CSID !== 'string') {
         return { success: false, message: "Invalid Character Sheet ID provided." };
     }
     if (!Array.isArray(fullArrData) || (fullArrData.length > 0 && !Array.isArray(fullArrData[0]))) {
@@ -1661,9 +1663,9 @@ function fSrvSaveTurboDataToFirestore(userEmail, csId, fullArrData, charInfo) {
     }
 
     // === 3. Define Paths ===
-    const collectionPath = userEmail; // User's email is the collection
-    const gameDocId = `Turbo_Game_${csId}`;
-    const charInfoDocId = `Turbo_CharacterInfo_${csId}`;
+    const collectionPath = gIndex.Email; // User's email is the collection
+    const gameDocId = `Turbo_Game_${gIndex.CSID}`;
+    const charInfoDocId = `Turbo_CharacterInfo_${gIndex.CSID}`;
     const gameDocPath = `${collectionPath}/${gameDocId}`;
     const charInfoDocPath = `${collectionPath}/${charInfoDocId}`;
     Logger.log(`   -> Target Firestore Game Path: ${gameDocPath}`);
@@ -1721,7 +1723,7 @@ function fSrvSaveTurboDataToFirestore(userEmail, csId, fullArrData, charInfo) {
 
     // === 7. Return Overall Result ===
     if (gameSaveSuccess && charInfoSaveSuccess) {
-        Logger.log(`   -> ✅ Successfully saved both documents for ${csId} to collection ${userEmail}.`);
+        Logger.log(`   -> ✅ Successfully saved both documents for ${gIndex.CSID} to collection ${gIndex.Email}.`);
         return { success: true };
     } else {
         // Construct detailed error message
@@ -1854,21 +1856,21 @@ function fSrvUnpackFirestoreArrayTo2D(firestoreArr) {
 //            within the specified user's email collection. If found, extracts the gUIarr
 //            field, converts types, unpacks it into a 2D array, and returns it.
 //            Handles document not found and errors gracefully.
-// Inputs  -> userEmail (String): The user's email (Firestore collection name).
-//         -> csId (String): The Character Sheet ID (part of document name).
+// Inputs  -> gIndex.Email (String): The user's email (Firestore collection name).
+//         -> gIndex.CSID (String): The Character Sheet ID (part of document name).
 // Outputs -> (Object): { success: Boolean, firestoreArr?: Array[][], message?: String }
 //            'firestoreArr' is the standard 2D array if success is true.
-function fSrvCheckAndLoadFirestoreGUIarrAs2D(userEmail, csId) {
+function fSrvCheckAndLoadFirestoreGUIarrAs2D(gIndex) {
     const funcName = "fSrvCheckAndLoadFirestoreGUIarrAs2D";
-    Logger.log(`${funcName}: Checking Firestore for gUI.arr data for User: ${userEmail}, CS ID: ${csId}...`);
+    Logger.log(`${funcName}: Checking Firestore for gUI.arr data for User: ${gIndex.Email}, CS ID: ${gIndex.CSID}...`);
 
     // === 1. Validate Inputs ===
-    if (!userEmail || typeof userEmail !== 'string' || userEmail.indexOf('@') === -1) {
+    if (!gIndex.Email || typeof gIndex.Email !== 'string' || gIndex.Email.indexOf('@') === -1) {
         const msg = "Invalid User Email provided.";
         Logger.log(`${funcName} Error: ${msg}`);
         return { success: false, message: msg };
     }
-    if (!csId || typeof csId !== 'string') {
+    if (!gIndex.CSID || typeof gIndex.CSID !== 'string') {
         const msg = "Invalid Character Sheet ID provided.";
         Logger.log(`${funcName} Error: ${msg}`);
         return { success: false, message: msg };
@@ -1883,8 +1885,8 @@ function fSrvCheckAndLoadFirestoreGUIarrAs2D(userEmail, csId) {
     }
 
     // === 3. Define Path and Fetch Data ===
-    const collectionPath = userEmail;
-    const documentId = `Turbo_Game_${csId}`; // Specific document for gUI.arr
+    const collectionPath = gIndex.Email;
+    const documentId = `Turbo_Game_${gIndex.CSID}`; // Specific document for gUI.arr
     const documentPath = `${collectionPath}/${documentId}`;
     Logger.log(`   -> Target Firestore Path: ${documentPath}`);
 
@@ -1916,7 +1918,7 @@ function fSrvCheckAndLoadFirestoreGUIarrAs2D(userEmail, csId) {
         const unpackedArr = fSrvUnpackFirestoreArrayTo2D(arrDataConverted);
 
         // === 8. Return Success with Unpacked Data ===
-        Logger.log(`   -> ✅ Successfully fetched and unpacked Firestore gUI.arr data for ${csId}.`);
+        Logger.log(`   -> ✅ Successfully fetched and unpacked Firestore gUI.arr data for ${gIndex.CSID}.`);
         return {
             success: true,
             firestoreArr: unpackedArr // Return the standard 2D array
@@ -1931,7 +1933,7 @@ function fSrvCheckAndLoadFirestoreGUIarrAs2D(userEmail, csId) {
                                : `Server error during Firestore read: ${e.message || e}`;
 
         console.error(`Exception caught in ${funcName} fetching from path ${documentPath}: ${e.message}\nStack: ${e.stack}`);
-        Logger.log(`   -> ❌ Exception during Firestore read for ${csId}: ${safeErrorMessage}`);
+        Logger.log(`   -> ❌ Exception during Firestore read for ${gIndex.CSID}: ${safeErrorMessage}`);
         return { success: false, message: safeErrorMessage };
     }
 } // END fSrvCheckAndLoadFirestoreGUIarrAs2D
@@ -1942,21 +1944,21 @@ function fSrvCheckAndLoadFirestoreGUIarrAs2D(userEmail, csId) {
 // fSrvLoadCharacterInfoFromFirestore //////////////////////////////////////////////////
 // Purpose -> Loads the gUI.characterInfo object from Firestore based on CS ID
 //            within the specified user's email collection.
-// Inputs  -> userEmail (String): The user's email (Firestore collection name).
-//         -> csId (String): The Character Sheet ID (part of document name).
+// Inputs  -> gIndex.Email (String): The user's email (Firestore collection name).
+//         -> gIndex.CSID (String): The Character Sheet ID (part of document name).
 // Outputs -> (Object): { success: Boolean, characterInfo?: Object, message?: String }
 //            'characterInfo' contains the object from Firestore if success is true.
-function fSrvLoadCharacterInfoFromFirestore(userEmail, csId) {
+function fSrvLoadCharacterInfoFromFirestore(gIndex) {
     const funcName = "fSrvLoadCharacterInfoFromFirestore";
-    Logger.log(`${funcName}: Checking Firestore for gUI.characterInfo data for User: ${userEmail}, CS ID: ${csId}...`);
+    Logger.log(`${funcName}: Checking Firestore for gUI.characterInfo data for User: ${gIndex.Email}, CS ID: ${gIndex.CSID}...`);
 
     // === 1. Validate Inputs ===
-    if (!userEmail || typeof userEmail !== 'string' || userEmail.indexOf('@') === -1) {
+    if (!gIndex.Email || typeof gIndex.Email !== 'string' || gIndex.Email.indexOf('@') === -1) {
         const msg = "Invalid User Email provided.";
         Logger.log(`${funcName} Error: ${msg}`);
         return { success: false, message: msg };
     }
-    if (!csId || typeof csId !== 'string') {
+    if (!gIndex.CSID || typeof gIndex.CSID !== 'string') {
         const msg = "Invalid Character Sheet ID provided.";
         Logger.log(`${funcName} Error: ${msg}`);
         return { success: false, message: msg };
@@ -1971,8 +1973,8 @@ function fSrvLoadCharacterInfoFromFirestore(userEmail, csId) {
     }
 
     // === 3. Define Path and Fetch Data ===
-    const collectionPath = userEmail;
-    const documentId = `Turbo_CharacterInfo_${csId}`; // Specific document for character info
+    const collectionPath = gIndex.Email;
+    const documentId = `Turbo_CharacterInfo_${gIndex.CSID}`; // Specific document for character info
     const documentPath = `${collectionPath}/${documentId}`;
     Logger.log(`   -> Target Firestore Path: ${documentPath}`);
 
@@ -2001,7 +2003,7 @@ function fSrvLoadCharacterInfoFromFirestore(userEmail, csId) {
         }
 
         // === 7. Return Success with Converted Data ===
-        Logger.log(`   -> ✅ Successfully fetched and converted Firestore gUI.characterInfo for ${csId}.`);
+        Logger.log(`   -> ✅ Successfully fetched and converted Firestore gUI.characterInfo for ${gIndex.CSID}.`);
         return {
             success: true,
             characterInfo: charInfoConverted // Return the standard JS object
@@ -2016,7 +2018,7 @@ function fSrvLoadCharacterInfoFromFirestore(userEmail, csId) {
                                : `Server error during Firestore read: ${e.message || e}`;
 
         console.error(`Exception caught in ${funcName} fetching from path ${documentPath}: ${e.message}\nStack: ${e.stack}`);
-        Logger.log(`   -> ❌ Exception during Firestore read for ${csId}: ${safeErrorMessage}`);
+        Logger.log(`   -> ❌ Exception during Firestore read for ${gIndex.CSID}: ${safeErrorMessage}`);
         return { success: false, message: safeErrorMessage };
     }
 } // END fSrvLoadCharacterInfoFromFirestore
@@ -2028,20 +2030,20 @@ function fSrvLoadCharacterInfoFromFirestore(userEmail, csId) {
 // Purpose -> Saves loaded sheet tags (ColTags, RowTags) and the full sheet text data
 //            (sheetText2D, converted to array-of-row-objects) to Firestore.
 //            Determines the target collection and document based on the workbook type.
-// Inputs  -> gameVer (String): The game version (e.g., "28.3").
+// Inputs  -> gIndex.GameVer (String): The game version (e.g., "28.3").
 //         -> workbookAbr (String): Abbreviation ('db', 'mastercs', 'masterkl', 'mycs', 'mykl').
 //         -> sheetName (String): The name of the sheet that was loaded.
 //         -> data (Object): The object returned by fSrvLoadFullGoogleSheetAndTags, containing
 //                             { ColTags, RowTags, sheetText2D }.
-//         -> email (String): The user's email (for 'mycs'/'mykl' collections).
-//         -> csId (String): The Character Sheet ID (for 'mycs'/'mykl' document names).
+//         -> gIndex.Email (String): The user's Email (for 'mycs'/'mykl' collections).
+//         -> gIndex.CSID (String): The Character Sheet ID (for 'mycs'/'mykl' document names).
 // Outputs -> (Object): { success: Boolean, message?: String }
-function fSrvSaveFullSheetTextAndTagsToFirestore(gameVer, workbookAbr, sheetName, data, email, csId) {
+function fSrvSaveFullSheetTextAndTagsToFirestore(gIndex, workbookAbr, sheetName, data) {
     const funcName = "fSrvSaveFullSheetTextAndTagsToFirestore";
-    Logger.log(`${funcName}: Saving data for Workbook: "${workbookAbr}", Sheet: "${sheetName}", Version: ${gameVer}, Email: ${email}, CSID: ${csId}...`);
+    Logger.log(`${funcName}: Saving data for Workbook: "${workbookAbr}", Sheet: "${sheetName}", Version: ${gIndex.GameVer}, Email: ${gIndex.Email}, gIndex.CSID: ${gIndex.CSID}...`);
 
     // --- 1. Validate Inputs ---
-    // Moved path-specific validation (gameVer, email, csId) to fSrvCalcFirestorePath
+    // Moved path-specific validation (gIndex.GameVer, gIndex.Email, gIndex.CSID) to fSrvCalcFirestorePath
     const lowerWorkbookAbr = workbookAbr?.toLowerCase() || '';
     const trimmedSheetName = sheetName?.trim() || '';
     if (!data || typeof data !== 'object' || !data.ColTags || !data.RowTags || !data.sheetText2D || !Array.isArray(data.sheetText2D)) {
@@ -2064,7 +2066,7 @@ function fSrvSaveFullSheetTextAndTagsToFirestore(gameVer, workbookAbr, sheetName
     // --- 3. Determine Firestore Path using Helper ---
     let documentPath;
     try {
-        const { collectionName, documentId } = fSrvCalcFirestorePath(workbookAbr, trimmedSheetName, gameVer, email, csId);
+        const { collectionName, documentId } = fSrvCalcFirestorePath(workbookAbr, trimmedSheetName, gIndex);
         documentPath = `${collectionName}/${documentId}`;
         Logger.log(`   -> Target Firestore Path: ${documentPath}`);
     } catch (pathError) {
@@ -2122,12 +2124,12 @@ function fSrvSaveFullSheetTextAndTagsToFirestore(gameVer, workbookAbr, sheetName
 //            workbook type and other parameters.
 // Inputs  -> workbookAbr (String): Abbreviation ('db', 'mastercs', 'masterkl', 'mycs', 'mykl').
 //         -> sheetName (String): The name of the sheet.
-//         -> gameVer (String): The game version (e.g., "28.3"), required for 'db'/'master*' types.
-//         -> email (String): The user's email, required for 'mycs'/'mykl' types.
-//         -> csId (String): The Character Sheet ID, required for 'mycs'/'mykl' types.
+//         -> gIndex.GameVer (String): The game version (e.g., "28.3"), required for 'db'/'master*' types.
+//         -> gIndex.Email (String): The user's Email, required for 'mycs'/'mykl' types.
+//         -> gIndex.CSID (String): The Character Sheet ID, required for 'mycs'/'mykl' types.
 // Outputs -> (Object): { collectionName: String, documentId: String } on success.
 // Throws  -> (Error): If inputs are invalid or workbook abbreviation is unsupported.
-function fSrvCalcFirestorePath(workbookAbr, sheetName, gameVer, email, csId) {
+function fSrvCalcFirestorePath(workbookAbr, sheetName, gIndex) {
     const funcName = "fSrvCalcFirestorePath";
 
     // --- 1. Validate Inputs ---
@@ -2153,28 +2155,28 @@ function fSrvCalcFirestorePath(workbookAbr, sheetName, gameVer, email, csId) {
         case 'db':
         case 'mastercs':
         case 'masterkl':
-            if (!gameVer || typeof gameVer !== 'string' || gameVer.trim() === '') {
+            if (!gIndex.GameVer || typeof gIndex.GameVer !== 'string' || gIndex.GameVer.trim() === '') {
                 throw new Error(`${funcName}: Game Version is required for workbook type '${workbookAbr}'.`);
             }
             // Assign collection name based on abbreviation, ensuring proper casing
             if (lowerWorkbookAbr === 'db') collectionName = 'DB';
             else if (lowerWorkbookAbr === 'mastercs') collectionName = 'MasterCS';
             else collectionName = 'MasterKL'; // Must be masterkl
-            documentId = `v${gameVer.trim()} ${trimmedSheetName}`; // Format: vVERSION SHEETNAME
+            documentId = `v${gIndex.GameVer.trim()} ${trimmedSheetName}`; // Format: vVERSION SHEETNAME
             break;
         case 'mycs':
         case 'mykl':
-            if (!email || typeof email !== 'string' || email.indexOf('@') === -1) {
+            if (!gIndex.Email || typeof gIndex.Email !== 'string' || gIndex.Email.indexOf('@') === -1) {
                 throw new Error(`${funcName}: User Email is required and must be valid for workbook type '${workbookAbr}'.`);
             }
-            if (!csId || typeof csId !== 'string') {
+            if (!gIndex.CSID || typeof gIndex.CSID !== 'string') {
                 throw new Error(`${funcName}: Character Sheet ID is required for workbook type '${workbookAbr}'.`);
             }
-            collectionName = email; // User's email is the collection
+            collectionName = gIndex.Email; // User's gIndex.Email is the collection
             if (lowerWorkbookAbr === 'mycs') {
-                documentId = `MyCS_${trimmedSheetName}_${csId}`;
+                documentId = `MyCS_${trimmedSheetName}_${gIndex.CSID}`;
             } else { // Must be 'mykl'
-                documentId = `MyKL_${trimmedSheetName}_OfMyCS_${csId}`;
+                documentId = `MyKL_${trimmedSheetName}_OfMyCS_${gIndex.CSID}`;
             }
             break;
         // Default case is handled by the initial validation check for validWorkbooks
@@ -2202,14 +2204,14 @@ function fSrvCalcFirestorePath(workbookAbr, sheetName, gameVer, email, csId) {
 // Inputs  -> rangeObject (Object): The range { r1, c1, r2, c2 } using tags, indices, or -1 for r2/c2 end of row or col.
 //         -> workbookAbr (String): Workbook abbreviation ('db', 'mycs', etc.).
 //         -> sheetName (String): The sheet name associated with the data.
-//         -> csId (String): Character Sheet ID (required for 'mycs'/'mykl').
-//         -> gameVer (String): Game version (required for 'db'/'master*').
-//         -> email (String): User email (required for 'mycs'/'mykl').
+//         -> gIndex.CSID (String): Character Sheet ID (required for 'mycs'/'mykl').
+//         -> gIndex.GameVer (String): Game version (required for 'db'/'master*').
+//         -> gIndex.Email (String): User Email (required for 'mycs'/'mykl').
 // Outputs -> (Object): On success: { success: true, FSData: { r1, c1, colTagsMap, rowTagsMap, text } }
 //                     On failure: { success: false, message: String }
-function fSrvReadFirestoreRange(rangeObject, workbookAbr, sheetName, csId, gameVer, email) {
+function fSrvReadFirestoreRange(rangeObject, workbookAbr, sheetName, gIndex) {
     const funcName = "fSrvReadFirestoreRange";
-    Logger.log(`${funcName}: Reading range ${JSON.stringify(rangeObject)} for Workbook: "${workbookAbr}", Sheet: "${sheetName}", Ver: ${gameVer}, Email: ${email}, CSID: ${csId}...`);
+    Logger.log(`${funcName}: Reading range ${JSON.stringify(rangeObject)} for Workbook: "${workbookAbr}", Sheet: "${sheetName}", Ver: ${gIndex.GameVer}, Email: ${gIndex.Email}, gIndex.CSID: ${gIndex.CSID}...`);
 
     let firestore;
     let documentPath;
@@ -2225,7 +2227,7 @@ function fSrvReadFirestoreRange(rangeObject, workbookAbr, sheetName, csId, gameV
         }
 
         // --- 2. Calculate Firestore Path ---
-        const { collectionName, documentId } = fSrvCalcFirestorePath(workbookAbr, sheetName, gameVer, email, csId);
+        const { collectionName, documentId } = fSrvCalcFirestorePath(workbookAbr, sheetName, gIndex);
         documentPath = `${collectionName}/${documentId}`;
         Logger.log(`   -> Target Firestore Path: ${documentPath}`);
 
@@ -2454,17 +2456,17 @@ function fSrvResolveRangeTagsForFirestore(rangeObject, rowTagMap, colTagMap) {
 
 
 
-// fVerifyFirestorePathExists ////////////////////////////////////////////////////
+// fSrvVerifyFirestorePathExists ////////////////////////////////////////////////////
 // Purpose -> Checks if a specific Firestore document exists based on calculated path.
 // Inputs  -> workbookAbr (String): Workbook abbreviation ('db', 'mycs', etc.).
 //         -> sheetName (String): The sheet name associated with the data.
-//         -> gameVer (String): Game version (required for 'db'/'master*').
-//         -> email (String): User email (required for 'mycs'/'mykl').
-//         -> csId (String): Character Sheet ID (required for 'mycs'/'mykl').
+//         -> gIndex.GameVer (String): Game version (required for 'db'/'master*').
+//         -> gIndex.Email (String): User Email (required for 'mycs'/'mykl').
+//         -> gIndex.CSID (String): Character Sheet ID (required for 'mycs'/'mykl').
 // Outputs -> (Boolean): True if the document exists, false otherwise (or on error).
-function fVerifyFirestorePathExists(workbookAbr, sheetName, gameVer, email, csId) {
-    const funcName = "fVerifyFirestorePathExists";
-    Logger.log(`${funcName}: Verifying path for Workbook: "${workbookAbr}", Sheet: "${sheetName}", Version: ${gameVer}, Email: ${email}, CSID: ${csId}...`);
+function fSrvVerifyFirestorePathExists(workbookAbr, sheetName, gIndex) {
+    const funcName = "fSrvVerifyFirestorePathExists";
+    Logger.log(`${funcName}: Verifying path for Workbook: "${workbookAbr}", Sheet: "${sheetName}", Version: ${gIndex.GameVer}, gIndex.Email: ${gIndex.Email}, gIndex.CSID: ${gIndex.CSID}...`);
 
     let firestore;
     let documentPath;
@@ -2480,7 +2482,7 @@ function fVerifyFirestorePathExists(workbookAbr, sheetName, gameVer, email, csId
         // --- 2. Calculate Firestore Path ---
         // Use try-catch here as fSrvCalcFirestorePath throws errors on invalid inputs
         try {
-            const { collectionName, documentId } = fSrvCalcFirestorePath(workbookAbr, sheetName, gameVer, email, csId);
+            const { collectionName, documentId } = fSrvCalcFirestorePath(workbookAbr, sheetName, gIndex);
             documentPath = `${collectionName}/${documentId}`;
             Logger.log(`   -> Calculated Firestore Path: ${documentPath}`);
         } catch (pathError) {
@@ -2516,4 +2518,4 @@ function fVerifyFirestorePathExists(workbookAbr, sheetName, gameVer, email, csId
         }
     }
 
-} // END fVerifyFirestorePathExists
+} // END fSrvVerifyFirestorePathExists
