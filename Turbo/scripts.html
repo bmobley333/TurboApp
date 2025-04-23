@@ -2369,63 +2369,177 @@ function fApplyDropdownsToGrid() {
 
 
 // fFetchAndApplyAbilityDropdowns //////////////////////////////////////////////
-// Purpose -> Fetches the sorted list of ability names from the server, adds an
-//            empty choice to the top, and applies them as dropdown choices to
-//            the configured ability name cells.
+// Purpose -> Ensures the ability list ('MyCS'/'List') exists in Firestore (creating
+//            it from the Sheet if necessary), then fetches the list, processes it
+//            (sorts, adds empty option), and applies it to the grid dropdowns.
 // Inputs  -> None.
-// Outputs -> None (Modifies gUI.dropDownBox, calls fApplyDropdownsToGrid).
+// Outputs -> None (Modifies gUI.dropDownBox, calls fApplyDropdownsToGrid, may trigger server saves).
 function fFetchAndApplyAbilityDropdowns() {
-    fMyConsoleLog("⚙️ Fetching Ability List for Dropdowns...");
+    const funcName = "fFetchAndApplyAbilityDropdowns";
+    fMyConsoleLog(`⚙️ ${funcName}: Checking Firestore/Sheet for Ability List...`);
 
-    if (!gIndexCSID) {
-        const msg = "Cannot fetch ability list: Character Sheet ID (gIndexCSID) is missing on client.";
-        console.error(msg);
-        fMyConsoleLog(`   -> ❌ ${msg}`);
-        fShowMessage(`Error: ${msg} Check the URL parameter.`);
+    // --- 1. Validate Prerequisites ---
+    if (!gIndexCSID || !gIndexGameVer || !gIndexEmail) {
+        const missing = [
+            !gIndexCSID ? 'CS ID' : null,
+            !gIndexGameVer ? 'Game Version' : null,
+            !gIndexEmail ? 'User Email' : null
+        ].filter(Boolean).join(', ');
+        const msg = `Cannot fetch ability list: Missing required parameters (${missing}).`;
+        console.error(`${funcName}: ${msg}`);
+        fMyConsoleLog(`   -> ❌ ${funcName} Error: ${msg}`);
+        fShowMessage(`Error: ${msg}`).catch(e => console.error("ShowMessage Error:", e));
         return;
     }
 
-    fMyConsoleLog(`   -> About to call fSrvGetAbilityList with gIndexCSID: "${gIndexCSID}" (Type: ${typeof gIndexCSID})`);
+    // --- 2. Check if Firestore Document Exists ---
+    const workbookAbr = 'MyCS';
+    const sheetName = 'List';
+    fMyConsoleLog(`   -> Calling fVerifyFirestorePathExists for ${workbookAbr}/${sheetName}...`);
 
     google.script.run
-        .withSuccessHandler((abilityList) => {
-            if (Array.isArray(abilityList)) {
-                fMyConsoleLog(`   -> Received ${abilityList.length} ability names.`);
+        .withSuccessHandler((exists) => {
+            fMyConsoleLog(`   -> Firestore check result for ${workbookAbr}/${sheetName}: ${exists}`);
+            if (!exists) {
+                // --- 2a. Firestore Doc NOT Found: Load from Sheet & Save ---
+                fMyConsoleLog(`   -> Firestore data for ${workbookAbr}/${sheetName} not found. Loading from Sheet...`);
+                const loadingMsg = fShowMessage(`⏳ Reading Ability List from Character Sheet<br><br>This may take up to a minute<br><br> Do not close this message.`); // Show loading
 
-                // Add an empty string option to the beginning of the list >>>
-                abilityList.unshift('');
-                fMyConsoleLog(`   -> Added empty option. List size now: ${abilityList.length}`);
+                google.script.run
+                    .withSuccessHandler((sheetData) => {
+                        fHideMessage(); // Hide loading message
+                        fMyConsoleLog(`   -> Successfully loaded data from ${workbookAbr}/${sheetName} Sheet.`);
+                        // Validate loaded sheet data structure
+                        if (!sheetData || typeof sheetData !== 'object' || !sheetData.ColTags || !sheetData.RowTags || !sheetData.sheetText2D) {
+                            const sheetLoadError = "Invalid data structure received when loading sheet data.";
+                            console.error(`${funcName}: ${sheetLoadError}`, sheetData);
+                            fMyConsoleLog(`   -> ❌ ${funcName} Error: ${sheetLoadError}`);
+                            fShowMessage(`Error: ${sheetLoadError}`).catch(e => console.error("ShowMessage Error:", e));
+                            return; // Stop if sheet load was bad
+                        }
 
-                // Create a new configuration object for the ability dropdowns
-                const abilityConfig = {
-                    choices: abilityList,        // Use the modified list (with '' at the start)
-                    ranges: gUI.range.abilNameNoNish   // Use the predefined ranges for ability name cells
-                };
+                        // Now save this sheet data to Firestore
+                        fMyConsoleLog(`      -> Saving loaded Sheet data to Firestore...`);
+                        const savingMsg = fShowMessage(`💾 Saving Ability List to database...`); // Show saving message
 
-                // Add this new config object to the main dropdownBox array
-                gUI.dropDownBox.push(abilityConfig);
+                        google.script.run
+                            .withSuccessHandler((saveResult) => {
+                                fHideMessage(); // Hide saving message
+                                if (saveResult && saveResult.success) {
+                                    fMyConsoleLog(`      -> ✅ Successfully saved ${workbookAbr}/${sheetName} to Firestore.`);
+                                    // Now that it's saved, fetch it back to ensure consistency
+                                    fFetchAbilityListFromFirestore(workbookAbr, sheetName);
+                                } else {
+                                    const saveErrorMsg = saveResult?.message || `Unknown error saving ${workbookAbr}/${sheetName} to Firestore.`;
+                                    console.error(`${funcName}: Firestore save failed: ${saveErrorMsg}`);
+                                    fMyConsoleLog(`      -> ❌ ${funcName} Error: ${saveErrorMsg}`);
+                                    fShowMessage(`Error saving Ability List: ${saveErrorMsg}`).catch(e => console.error("ShowMessage Error:", e));
+                                    // Decide if we should proceed using the sheetData directly here as a fallback?
+                                    // For now, we stop on save failure.
+                                }
+                            })
+                            .withFailureHandler((error) => {
+                                fHideMessage(); // Hide saving message
+                                const saveError = `Failed server communication during Firestore save for ${workbookAbr}/${sheetName}: ${error.message || 'Unknown error'}`;
+                                console.error(`${funcName}: ${saveError}`, error);
+                                fMyConsoleLog(`      -> ❌ ${funcName} Error: ${saveError}`);
+                                fShowMessage(`Error: ${saveError}`).catch(e => console.error("ShowMessage Error:", e));
+                            })
+                            .fSrvSaveFullSheetTextAndTagsToFirestore(gIndexGameVer, workbookAbr, sheetName, sheetData, gIndexEmail, gIndexCSID);
 
-                fMyConsoleLog("   -> Added new config to gUI.dropDownBox for abilities.");
-
-                // Re-apply dropdowns to the grid; this will now include the new ability config
-                fApplyDropdownsToGrid();
+                    })
+                    .withFailureHandler((error) => {
+                        fHideMessage(); // Hide loading message
+                        const sheetLoadError = `Failed server communication loading sheet ${workbookAbr}/${sheetName}: ${error.message || 'Unknown error'}`;
+                        console.error(`${funcName}: ${sheetLoadError}`, error);
+                        fMyConsoleLog(`   -> ❌ ${funcName} Error: ${sheetLoadError}`);
+                        fShowMessage(`Error: ${sheetLoadError}`).catch(e => console.error("ShowMessage Error:", e));
+                    })
+                    .fSrvLoadFullGoogleSheetAndTags(workbookAbr, sheetName, gIndexCSID);
 
             } else {
-                const errMsg = "Received invalid data format for ability list from server.";
-                console.error(`fFetchAndApplyAbilityDropdowns: ${errMsg}`, abilityList);
-                fMyConsoleLog(`   -> ❌ Error: ${errMsg}`);
-                fShowMessage(`Error: ${errMsg}`);
+                // --- 2b. Firestore Doc Found: Fetch Directly ---
+                fFetchAbilityListFromFirestore(workbookAbr, sheetName);
             }
         })
         .withFailureHandler((error) => {
-            const errorMsg = `Failed to fetch ability list: ${error.message || 'Unknown server error'}`;
-            console.error(`fFetchAndApplyAbilityDropdowns Failure:`, error);
-            fMyConsoleLog(`   -> ❌ ${errorMsg}`);
-            fShowMessage(`Error: ${errorMsg}`);
+            // Handle failure for fVerifyFirestorePathExists call
+            const verifyError = `Failed server communication checking Firestore path for ${workbookAbr}/${sheetName}: ${error.message || 'Unknown error'}`;
+            console.error(`${funcName}: ${verifyError}`, error);
+            fMyConsoleLog(`   -> ❌ ${funcName} Error: ${verifyError}`);
+            fShowMessage(`Error: ${verifyError}`).catch(e => console.error("ShowMessage Error:", e));
+            // Cannot proceed without knowing if Firestore data exists
         })
-        .fSrvGetAbilityList(gIndexCSID,gUI.rangeCSList.abilitiesNameID); // Pass CSID and CS 'List' Tab's range for abilityNames
+        .fVerifyFirestorePathExists(workbookAbr, sheetName, gIndexGameVer, gIndexEmail, gIndexCSID); // Pass all necessary args
 
 } // END fFetchAndApplyAbilityDropdowns
+
+
+
+
+// fFetchAbilityListFromFirestore ///////////////////////////////////////////////
+// Purpose -> Helper function to fetch the ability list column from Firestore using
+//            fSrvReadFirestoreRange, process the list (filter, sort, add empty),
+//            and apply it to the grid dropdowns.
+// Inputs  -> workbookAbr (String): The workbook abbreviation (e.g., 'MyCS').
+//         -> sheetName (String): The sheet name (e.g., 'List').
+// Outputs -> None (Modifies gUI.dropDownBox, calls fApplyDropdownsToGrid).
+function fFetchAbilityListFromFirestore(workbookAbr, sheetName) {
+    const funcName = "fFetchAbilityListFromFirestore";
+    fMyConsoleLog(`   -> ${funcName}: Fetching Ability List from Firestore (${workbookAbr}/${sheetName})...`);
+
+    // Define the range object for the AbilitiesNameID column
+    const rangeObject = {
+        r1: 'TableFirstRow',   // Start tag
+        c1: 'AbilitiesNameID', // Column tag
+        r2: -1,                // Read to the last row
+        c2: 'AbilitiesNameID'  // Same column tag
+    };
+
+    google.script.run
+        .withSuccessHandler((response) => {
+            if (response && response.success && response.FSData && Array.isArray(response.FSData.text)) {
+                const abilityListRaw = response.FSData.text; // Should be 1D array
+                fMyConsoleLog(`      -> Received ${abilityListRaw.length} raw ability names from Firestore.`);
+
+                // Process the list: filter empty, sort, add empty option at start
+                const abilityListFiltered = abilityListRaw.filter(name => name && String(name).trim() !== '');
+                abilityListFiltered.sort((a, b) => String(a).localeCompare(String(b))); // Alphabetical sort
+                abilityListFiltered.unshift(''); // Add empty option to the beginning
+
+                fMyConsoleLog(`      -> Processed list size: ${abilityListFiltered.length} (after filter, sort, unshift).`);
+
+                // Create the config object
+                const abilityConfig = {
+                    choices: abilityListFiltered,
+                    ranges: gUI.range.abilNameNoNish // Target ranges for dropdowns
+                };
+
+                // Add config to gUI.dropDownBox
+                gUI.dropDownBox.push(abilityConfig);
+                fMyConsoleLog("      -> Added Ability config to gUI.dropDownBox.");
+
+                // Apply the dropdowns to the grid UI
+                fApplyDropdownsToGrid();
+
+            } else {
+                // Handle cases where server call succeeded but returned invalid data structure
+                const errMsg = response?.message || "Received invalid FSData structure for ability list from Firestore.";
+                console.error(`${funcName}: ${errMsg}`, response);
+                fMyConsoleLog(`      -> ❌ ${funcName} Error: ${errMsg}`);
+                fShowMessage(`Error: ${errMsg}`).catch(e => console.error("ShowMessage Error:", e));
+            }
+        })
+        .withFailureHandler((error) => {
+            // Handle transport errors for fSrvReadFirestoreRange call
+            const readError = `Failed server communication fetching ability list from Firestore: ${error.message || 'Unknown error'}`;
+            console.error(`${funcName}: ${readError}`, error);
+            fMyConsoleLog(`      -> ❌ ${funcName} Error: ${readError}`);
+            fShowMessage(`Error: ${readError}`).catch(e => console.error("ShowMessage Error:", e));
+        })
+        .fSrvReadFirestoreRange(rangeObject, workbookAbr, sheetName, gIndexCSID, gIndexGameVer, gIndexEmail);
+
+} // END fFetchAbilityListFromFirestore
 
 
 
@@ -5995,6 +6109,137 @@ async function fHandleSaveDBSheetVer() {
     }
 
 } // END fHandleSaveDBSheetVer
+
+
+
+
+// fGetVal_FSData //////////////////////////////////////////////////////////////////
+// Purpose -> Retrieves a value from an FSData object's text property using original
+//            sheet tags or absolute indices. Handles index adjustment based on
+//            FSData.r1/c1 and tag lookup using FSData.rowTagsMap/colTagsMap.
+// Inputs  -> rRef (String|Number): Row tag or 0-based absolute index from original sheet.
+//         -> cRef (String|Number): Column tag or 0-based absolute index from original sheet.
+//         -> FSData (Object): The object returned by fSrvReadFirestoreRange, structured as
+//                             { r1, c1, colTagsMap, rowTagsMap, text }.
+// Outputs -> (Any | undefined): The value found at the resolved relative position within
+//                              FSData.text, or undefined if not found or on error.
+function fGetVal_FSData(rRef, cRef, FSData) {
+    const funcName = "fGetVal_FSData";
+
+    // === 1. Validate FSData Object ===
+    if (!FSData || typeof FSData !== 'object' ||
+        typeof FSData.r1 !== 'number' || typeof FSData.c1 !== 'number' ||
+        typeof FSData.rowTagsMap !== 'object' || typeof FSData.colTagsMap !== 'object' ||
+        !FSData.hasOwnProperty('text')) // Check if 'text' property exists
+    {
+        console.warn(`${funcName}: Invalid or incomplete FSData object provided.`);
+        fMyConsoleLog(`⚠️ ${funcName}: Invalid FSData input.`);
+        return undefined;
+    }
+
+    const { r1, c1, rowTagsMap, colTagsMap, text } = FSData;
+    let relative_r = NaN;
+    let relative_c = NaN;
+
+    // === 2. Resolve Row Reference to Relative Index ===
+    if (typeof rRef === 'string') {
+        if (rowTagsMap.hasOwnProperty(rRef)) {
+            relative_r = rowTagsMap[rRef];
+        } else {
+            // console.warn(`${funcName}: Row tag "${rRef}" not found in FSData.rowTagsMap.`);
+            // fMyConsoleLog(`⚠️ ${funcName}: Row tag "${rRef}" not found.`); // Can be noisy
+            return undefined; // Tag not found in the relative map
+        }
+    } else if (typeof rRef === 'number' && rRef >= r1) {
+        relative_r = rRef - r1; // Adjust absolute index to relative
+    } else {
+        // console.warn(`${funcName}: Invalid row reference provided: ${rRef}.`);
+        // fMyConsoleLog(`⚠️ ${funcName}: Invalid row reference: ${rRef}.`); // Can be noisy
+        return undefined; // Invalid input type or index below start row
+    }
+
+    // === 3. Resolve Column Reference to Relative Index ===
+    if (typeof cRef === 'string') {
+        if (colTagsMap.hasOwnProperty(cRef)) {
+            relative_c = colTagsMap[cRef];
+        } else {
+            // console.warn(`${funcName}: Col tag "${cRef}" not found in FSData.colTagsMap.`);
+            // fMyConsoleLog(`⚠️ ${funcName}: Col tag "${cRef}" not found.`); // Can be noisy
+            return undefined; // Tag not found
+        }
+    } else if (typeof cRef === 'number' && cRef >= c1) {
+        relative_c = cRef - c1; // Adjust absolute index to relative
+    } else {
+        // console.warn(`${funcName}: Invalid col reference provided: ${cRef}.`);
+        // fMyConsoleLog(`⚠️ ${funcName}: Invalid col reference: ${cRef}.`); // Can be noisy
+        return undefined; // Invalid input type or index below start col
+    }
+
+    // === 4. Validate Resolved Relative Indices ===
+    if (isNaN(relative_r) || isNaN(relative_c) || relative_r < 0 || relative_c < 0) {
+        console.warn(`${funcName}: Failed to resolve valid relative indices for (${rRef}, ${cRef}). Resolved to: r=${relative_r}, c=${relative_c}.`);
+        fMyConsoleLog(`⚠️ ${funcName}: Failed to resolve valid relative indices.`);
+        return undefined;
+    }
+
+    // === 5. Retrieve Value from FSData.text based on its structure ===
+    let value = undefined;
+    const dataType = Array.isArray(text)
+                   ? (Array.isArray(text[0]) ? '2D' : '1D')
+                   : '0D'; // 0D for single value
+
+    // fMyConsoleLog(`   -> ${funcName}: Ref=(${rRef}, ${cRef}), Rel=(${relative_r}, ${relative_c}), DataType=${dataType}`); // Debugging
+
+    try {
+        switch (dataType) {
+            case '0D': // Single value result
+                // Only valid if relative indices are both 0
+                if (relative_r === 0 && relative_c === 0) {
+                    value = text;
+                } else {
+                    fMyConsoleLog(`   -> ${funcName}: Indices (${relative_r}, ${relative_c}) out of bounds for 0D data.`);
+                }
+                break;
+
+            case '1D': // Single row or single column
+                // Determine if it's effectively a row (r1=r2) or col (c1=c2) based on maps/indices
+                // We infer based on whether relative_r OR relative_c must be 0.
+                if (relative_r === 0 && relative_c >= 0 && relative_c < text.length) {
+                    // Treat as single row data, relative_c is the index
+                    value = text[relative_c];
+                } else if (relative_c === 0 && relative_r >= 0 && relative_r < text.length) {
+                    // Treat as single column data, relative_r is the index
+                    value = text[relative_r];
+                } else {
+                    fMyConsoleLog(`   -> ${funcName}: Indices (${relative_r}, ${relative_c}) out of bounds for 1D data (length ${text.length}).`);
+                }
+                break;
+
+            case '2D': // Standard 2D array
+                if (relative_r >= 0 && relative_r < text.length && // Check row bounds
+                    text[relative_r] &&                             // Check if row exists
+                    relative_c >= 0 && relative_c < text[relative_r].length) // Check col bounds
+                {
+                    value = text[relative_r][relative_c];
+                } else {
+                     fMyConsoleLog(`   -> ${funcName}: Indices (${relative_r}, ${relative_c}) out of bounds for 2D data (max [${text.length - 1}, ${text[0]?.length - 1}]).`);
+                }
+                break;
+
+            default: // Should not happen
+                fMyConsoleLog(`   -> ${funcName}: Unknown data type encountered.`);
+        }
+    } catch (e) {
+        console.error(`${funcName}: Error accessing FSData.text at [${relative_r}][${relative_c}]`, e);
+        fMyConsoleLog(`⚠️ ${funcName}: Error accessing text data.`);
+        value = undefined;
+    }
+
+    // fMyConsoleLog(`   -> ${funcName}: Returning value: ${value}`); // Debugging
+    return value;
+
+} // END fGetVal_FSData
+
 
 
 

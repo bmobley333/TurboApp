@@ -946,6 +946,7 @@ function fSrvLoadFullGoogleSheetAndTags(workbookAbr, sheetName, csId) {
 
 
 
+
 // fSrvGetSheetRangeDataNTags /////////////////////////////////////////////////////////
 // Purpose -> Reads data from a specified sheet, accepting a sheet key OR fileId.
 //            Optionally accepts a rangeObject to extract a slice; otherwise returns full sheet.
@@ -2192,3 +2193,327 @@ function fSrvCalcFirestorePath(workbookAbr, sheetName, gameVer, email, csId) {
 
 
 
+
+// fSrvReadFirestoreRange ///////////////////////////////////////////////////////////
+// Purpose -> Reads data from a Firestore document previously saved by
+//            fSrvSaveFullSheetTextAndTagsToFirestore, resolving tags (including -1 for end of row or col)
+//            and returning data in the object format of FSData: { r1, c1, colTagsMap, rowTagsMap, text }.
+//            Returns colTagsMap and rowTagsMap already index adjusted for the actual range of FSData:text returned and trims out all bogus rowTags and colTags that no longer apply.
+// Inputs  -> rangeObject (Object): The range { r1, c1, r2, c2 } using tags, indices, or -1 for r2/c2 end of row or col.
+//         -> workbookAbr (String): Workbook abbreviation ('db', 'mycs', etc.).
+//         -> sheetName (String): The sheet name associated with the data.
+//         -> csId (String): Character Sheet ID (required for 'mycs'/'mykl').
+//         -> gameVer (String): Game version (required for 'db'/'master*').
+//         -> email (String): User email (required for 'mycs'/'mykl').
+// Outputs -> (Object): On success: { success: true, FSData: { r1, c1, colTagsMap, rowTagsMap, text } }
+//                     On failure: { success: false, message: String }
+function fSrvReadFirestoreRange(rangeObject, workbookAbr, sheetName, csId, gameVer, email) {
+    const funcName = "fSrvReadFirestoreRange";
+    Logger.log(`${funcName}: Reading range ${JSON.stringify(rangeObject)} for Workbook: "${workbookAbr}", Sheet: "${sheetName}", Ver: ${gameVer}, Email: ${email}, CSID: ${csId}...`);
+
+    let firestore;
+    let documentPath;
+    let colTagsMap; // Will hold relative tags for the slice
+    let rowTagsMap; // Will hold relative tags for the slice
+
+    try {
+        // --- 1. Get Firestore Instance ---
+        firestore = fSrvGetFirestoreInstance();
+        if (!firestore) {
+            // Logged within the helper
+            return { success: false, message: "Server configuration error (Firestore)." };
+        }
+
+        // --- 2. Calculate Firestore Path ---
+        const { collectionName, documentId } = fSrvCalcFirestorePath(workbookAbr, sheetName, gameVer, email, csId);
+        documentPath = `${collectionName}/${documentId}`;
+        Logger.log(`   -> Target Firestore Path: ${documentPath}`);
+
+        // --- 3. Read Document ---
+        const doc = firestore.getDocument(documentPath);
+
+        // --- 4. Verification & Data Extraction ---
+        if (!doc || !doc.fields) {
+            const msg = `Document not found or empty at path: ${documentPath}.`;
+            Logger.log(`   -> ${funcName}: ${msg}`);
+            return { success: false, message: "No saved data found in Firestore for this sheet/character." };
+        }
+
+        const colTagsRaw = doc.fields.ColTags;
+        const rowTagsRaw = doc.fields.RowTags;
+        const sheetDataRaw = doc.fields.sheetText2D_rowObjects;
+
+        if (!colTagsRaw || typeof colTagsRaw.mapValue === 'undefined') {
+            return { success: false, message: "Invalid document structure: Missing or invalid 'ColTags'." };
+        }
+        if (!rowTagsRaw || typeof rowTagsRaw.mapValue === 'undefined') {
+            return { success: false, message: "Invalid document structure: Missing or invalid 'RowTags'." };
+        }
+        if (!sheetDataRaw || typeof sheetDataRaw.arrayValue === 'undefined') {
+            return { success: false, message: "Invalid document structure: Missing or invalid 'sheetText2D_rowObjects'." };
+        }
+        Logger.log(`   -> Document found. Processing fields...`);
+
+        // --- 5. Convert Firestore Types & Unpack ---
+        const absoluteColTagMap = fSrvConvertFirestoreTypesToJS(colTagsRaw);
+        const absoluteRowTagMap = fSrvConvertFirestoreTypesToJS(rowTagsRaw);
+        const sheetDataConverted = fSrvConvertFirestoreTypesToJS(sheetDataRaw);
+
+        // Validate conversion results
+        if (typeof absoluteColTagMap !== 'object' || absoluteColTagMap === null || Array.isArray(absoluteColTagMap)) {
+             return { success: false, message: "Invalid data type for ColTags after conversion." };
+        }
+         if (typeof absoluteRowTagMap !== 'object' || absoluteRowTagMap === null || Array.isArray(absoluteRowTagMap)) {
+             return { success: false, message: "Invalid data type for RowTags after conversion." };
+        }
+         if (!Array.isArray(sheetDataConverted)) {
+             return { success: false, message: "Invalid data type for sheet data after conversion (expected array)." };
+        }
+
+        const fullData2D = fSrvUnpackFirestoreArrayTo2D(sheetDataConverted);
+        const numRowsInSheet = fullData2D.length;
+        const numColsInSheet = fullData2D[0]?.length || 0;
+        if (numRowsInSheet === 0) {
+            Logger.log(`   -> Warning: Firestore data unpacked into an empty 2D array.`);
+            // Return empty success response
+            return { success: true, FSData: { r1: 0, c1: 0, colTagsMap: {}, rowTagsMap: {}, text: [] } };
+        }
+
+
+        // --- 6. Resolve Input Range using Firestore Tags & Handle -1 ---
+        const r1_abs = fSrvResolveTag(rangeObject.r1, absoluteRowTagMap, 'row');
+        const c1_abs = fSrvResolveTag(rangeObject.c1, absoluteColTagMap, 'col');
+        let r2_abs;
+        let c2_abs;
+
+        // Handle r2 = -1
+        if (rangeObject.r2 === -1) {
+            r2_abs = numRowsInSheet - 1; // Last row index
+            Logger.log(`   -> Resolved r2 = -1 to last row index: ${r2_abs}`);
+        } else {
+            r2_abs = fSrvResolveTag(rangeObject.r2, absoluteRowTagMap, 'row');
+        }
+
+        // Handle c2 = -1
+        if (rangeObject.c2 === -1) {
+            c2_abs = numColsInSheet - 1; // Last column index
+            Logger.log(`   -> Resolved c2 = -1 to last column index: ${c2_abs}`);
+        } else {
+            c2_abs = fSrvResolveTag(rangeObject.c2, absoluteColTagMap, 'col');
+        }
+
+        // Validate ALL resolved indices
+        const errors = [];
+        if (isNaN(r1_abs)) errors.push(`r1 ('${rangeObject.r1}')`);
+        if (isNaN(c1_abs)) errors.push(`c1 ('${rangeObject.c1}')`);
+        if (isNaN(r2_abs)) errors.push(`r2 ('${rangeObject.r2}' resolved to NaN)`);
+        if (isNaN(c2_abs)) errors.push(`c2 ('${rangeObject.c2}' resolved to NaN)`);
+        if (errors.length > 0) {
+            throw new Error(`Failed to resolve the following tags/indices: ${errors.join(', ')}.`);
+        }
+         Logger.log(`   -> Resolved absolute indices: r1=${r1_abs}, c1=${c1_abs}, r2=${r2_abs}, c2=${c2_abs}`);
+
+
+        // --- 7. Slice Data ---
+        const rStart = Math.min(r1_abs, r2_abs);
+        const rEnd = Math.max(r1_abs, r2_abs);
+        const cStart = Math.min(c1_abs, c2_abs);
+        const cEnd = Math.max(c1_abs, c2_abs);
+
+        // Bounds check before slicing
+        if (rStart >= numRowsInSheet || cStart >= numColsInSheet || rStart < 0 || cStart < 0 ) {
+             Logger.log(`   -> Warning: Calculated range start [${rStart}, ${cStart}] is outside the bounds [${numRowsInSheet}x${numColsInSheet}] or negative. Returning empty data.`);
+             return { success: true, FSData: { r1: r1_abs, c1: c1_abs, colTagsMap: {}, rowTagsMap: {}, text: [] } };
+        }
+
+        // Adjust end bounds if they exceed actual data dimensions
+        const rEndClamped = Math.min(rEnd, numRowsInSheet - 1);
+        const cEndClamped = Math.min(cEnd, numColsInSheet - 1);
+
+        const extractedSlice = fullData2D
+            .slice(rStart, rEndClamped + 1)
+            .map(row => row.slice(cStart, cEndClamped + 1));
+
+        const extractedRows = extractedSlice.length;
+        const extractedCols = extractedSlice[0]?.length || 0;
+        Logger.log(`   -> Extracted slice dimensions: ${extractedRows}x${extractedCols}`);
+
+
+        // --- 8. Build Relative Tag Maps for the Slice ---
+        colTagsMap = {};
+        rowTagsMap = {};
+        // Adjust Column Tags
+        for (const tag in absoluteColTagMap) {
+             const absoluteIndex = absoluteColTagMap[tag];
+             if (absoluteIndex >= cStart && absoluteIndex <= cEndClamped) { // Use clamped end
+                 const relativeIndex = absoluteIndex - cStart;
+                 colTagsMap[tag] = relativeIndex;
+             }
+        }
+        // Adjust Row Tags
+        for (const tag in absoluteRowTagMap) {
+             const absoluteIndex = absoluteRowTagMap[tag];
+             if (absoluteIndex >= rStart && absoluteIndex <= rEndClamped) { // Use clamped end
+                 const relativeIndex = absoluteIndex - rStart;
+                 rowTagsMap[tag] = relativeIndex;
+             }
+        }
+         Logger.log(`   -> Built relative tag maps for slice. Rel Rows: ${Object.keys(rowTagsMap).length}, Rel Cols: ${Object.keys(colTagsMap).length}`);
+
+        // --- 9. Format Output Data ---
+        let formattedData;
+        if (extractedRows === 1 && extractedCols === 1) {
+            formattedData = extractedSlice[0][0];
+        } else if (extractedRows === 1) {
+            formattedData = extractedSlice[0];
+        } else if (extractedCols === 1) {
+            formattedData = extractedSlice.map(row => row[0]);
+        } else {
+            formattedData = extractedSlice; // Keep as 2D
+        }
+
+        // --- 10. Return Success with FSData Object ---
+        Logger.log(`   -> ✅ Successfully read and formatted Firestore range data.`);
+        const FSData = {
+            r1: r1_abs,        // Absolute starting row of original request
+            c1: c1_abs,        // Absolute starting column of original request
+            colTagsMap: colTagsMap, // Relative column tags for the text data
+            rowTagsMap: rowTagsMap, // Relative row tags for the text data
+            text: formattedData // The actual data slice
+        };
+
+        return {
+            success: true,
+            FSData: FSData
+        };
+
+    } catch (e) {
+        // Handle errors from Firestore calls, path calculation, tag resolution, etc.
+        const isNotFoundError = e.message?.includes("NOT_FOUND");
+        const safeErrorMessage = e.message?.includes("permission") ? "Permission denied accessing Firestore."
+                               : isNotFoundError ? `Document not found at path: ${documentPath || 'Unknown'}.`
+                               : `Server error during Firestore read/process: ${e.message || e}`;
+
+        console.error(`Exception caught in ${funcName} accessing path ${documentPath || 'Unknown'}: ${e.message}\nStack: ${e.stack}`);
+        Logger.log(`   -> ❌ Exception during Firestore read/process for ${documentPath || 'Unknown'}: ${safeErrorMessage}`);
+        return { success: false, message: safeErrorMessage };
+    }
+
+} // END fSrvReadFirestoreRange
+
+
+
+
+// fSrvResolveRangeTagsForFirestore //////////////////////////////////////////////////
+// Purpose -> Resolve a range object (tags/indices) into absolute 0-based numeric indices
+//            using provided Firestore tag maps.
+// Inputs  -> rangeObject (Object): { r1, c1, r2, c2 } with tag strings or 0-based indices.
+//         -> rowTagMap (Object): Map of row tags to indices from Firestore.
+//         -> colTagMap (Object): Map of column tags to indices from Firestore.
+// Outputs -> (Object): { r1, c1, r2, c2 } with resolved 0-based numeric indices.
+// Throws  -> (Error): If validation fails or tags cannot be resolved.
+function fSrvResolveRangeTagsForFirestore(rangeObject, rowTagMap, colTagMap) {
+    const funcName = "fSrvResolveRangeTagsForFirestore";
+
+    // --- 1. Validate Inputs ---
+    if (!rangeObject || typeof rangeObject !== 'object') {
+        throw new Error(`${funcName}: Invalid rangeObject provided.`);
+    }
+    if (typeof rowTagMap !== 'object' || rowTagMap === null) {
+        throw new Error(`${funcName}: Invalid rowTagMap provided.`);
+    }
+     if (typeof colTagMap !== 'object' || colTagMap === null) {
+        throw new Error(`${funcName}: Invalid colTagMap provided.`);
+    }
+     if (rangeObject.r1 === undefined || rangeObject.c1 === undefined || rangeObject.r2 === undefined || rangeObject.c2 === undefined) {
+         throw new Error(`${funcName}: rangeObject must contain r1, c1, r2, and c2 properties.`);
+    }
+
+    // --- 2. Resolve Tags/Indices using fSrvResolveTag ---
+    const r1 = fSrvResolveTag(rangeObject.r1, rowTagMap, 'row');
+    const c1 = fSrvResolveTag(rangeObject.c1, colTagMap, 'col');
+    const r2 = fSrvResolveTag(rangeObject.r2, rowTagMap, 'row');
+    const c2 = fSrvResolveTag(rangeObject.c2, colTagMap, 'col');
+
+    // --- 3. Check for Resolution Errors ---
+    const errors = [];
+    if (isNaN(r1)) errors.push(`r1 ('${rangeObject.r1}')`);
+    if (isNaN(c1)) errors.push(`c1 ('${rangeObject.c1}')`);
+    if (isNaN(r2)) errors.push(`r2 ('${rangeObject.r2}')`);
+    if (isNaN(c2)) errors.push(`c2 ('${rangeObject.c2}')`);
+
+    if (errors.length > 0) {
+        throw new Error(`${funcName}: Failed to resolve the following tags/indices: ${errors.join(', ')}.`);
+    }
+
+    // --- 4. Return Resolved Indices ---
+    return { r1, c1, r2, c2 };
+
+} // END fSrvResolveRangeTagsForFirestore
+
+
+
+
+// fVerifyFirestorePathExists ////////////////////////////////////////////////////
+// Purpose -> Checks if a specific Firestore document exists based on calculated path.
+// Inputs  -> workbookAbr (String): Workbook abbreviation ('db', 'mycs', etc.).
+//         -> sheetName (String): The sheet name associated with the data.
+//         -> gameVer (String): Game version (required for 'db'/'master*').
+//         -> email (String): User email (required for 'mycs'/'mykl').
+//         -> csId (String): Character Sheet ID (required for 'mycs'/'mykl').
+// Outputs -> (Boolean): True if the document exists, false otherwise (or on error).
+function fVerifyFirestorePathExists(workbookAbr, sheetName, gameVer, email, csId) {
+    const funcName = "fVerifyFirestorePathExists";
+    Logger.log(`${funcName}: Verifying path for Workbook: "${workbookAbr}", Sheet: "${sheetName}", Version: ${gameVer}, Email: ${email}, CSID: ${csId}...`);
+
+    let firestore;
+    let documentPath;
+
+    try {
+        // --- 1. Get Firestore Instance ---
+        firestore = fSrvGetFirestoreInstance();
+        if (!firestore) {
+            Logger.log(`   -> ${funcName}: Firestore initialization failed. Cannot verify path.`);
+            return false; // Cannot verify if Firestore isn't available
+        }
+
+        // --- 2. Calculate Firestore Path ---
+        // Use try-catch here as fSrvCalcFirestorePath throws errors on invalid inputs
+        try {
+            const { collectionName, documentId } = fSrvCalcFirestorePath(workbookAbr, sheetName, gameVer, email, csId);
+            documentPath = `${collectionName}/${documentId}`;
+            Logger.log(`   -> Calculated Firestore Path: ${documentPath}`);
+        } catch (pathError) {
+            Logger.log(`   -> ${funcName}: Error calculating path: ${pathError.message}. Assuming path does not exist.`);
+            return false; // Cannot exist if path is invalid
+        }
+
+        // --- 3. Check Document Existence ---
+        // getDocument does not throw a standard error for non-existent docs,
+        // but returns an object without updateTime/createTime.
+        const doc = firestore.getDocument(documentPath);
+
+        // Check if the document object has an updateTime property (indicates existence)
+        if (doc && doc.updateTime) {
+             Logger.log(`   -> Document found at path: ${documentPath}. Exists: true.`);
+             return true; // Document exists
+        } else {
+             Logger.log(`   -> Document NOT found at path: ${documentPath}. Exists: false.`);
+             return false; // Document does not exist (or has no fields/metadata)
+        }
+
+    } catch (e) {
+        // Catch other potential errors during Firestore getDocument call (e.g., permissions)
+        // Check if the error message indicates "NOT_FOUND" (might occur in some scenarios or future library updates)
+        if (e.message && e.message.toUpperCase().includes("NOT_FOUND")) {
+             Logger.log(`   -> ${funcName}: Explicit NOT_FOUND error for path ${documentPath}. Exists: false.`);
+             return false;
+        } else {
+            // Log other errors but return false as existence couldn't be confirmed
+            console.error(`Exception caught in ${funcName} accessing path ${documentPath || 'Unknown'}: ${e.message}\nStack: ${e.stack}`);
+            Logger.log(`   -> ❌ Exception during Firestore check for ${documentPath || 'Unknown'}: ${e.message}. Assuming path does not exist.`);
+            return false;
+        }
+    }
+
+} // END fVerifyFirestorePathExists
