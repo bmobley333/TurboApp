@@ -241,8 +241,8 @@ const gUI = {
     metaFull: [5,4,3,2,1], // Maximums for each meta color
     luckBoxMax: 5,
     actMax: 5,
-    clearAbilityColTags_EmptyString: ['PermMorph1','Morph1','Sk1Typ','Sk1','On','Condition','Sk2','Sk2Typ','Morph2','PermMorph2','Ver','Notes','Pic','Act','Dur','Rng','MetaCost','Uses','Regain'],
-    clearAbilityColTags_False: ['Sk1ChkBox','Sk2ChkBox']
+    clearAbilityColTags_EmptyString: ['PermMorph1','Morph1','Sk1Typ','Sk1','On','Condition','Sk2','Sk2Typ','Morph2','PermMorph2','Ver','Notes','Pic','Act','Dur','Rng','MetaCost','Uses','Regain','PossNum','PossName','PossEnc','PossCrEa','PossPerOff','PossCrTot','PossAPEa','PossAPTot'],
+    clearAbilityColTags_False: ['Sk1ChkBox','Sk2ChkBox','PossWorn','PossIsArtifact']
   },
 
   // === UI Element References ===
@@ -2157,7 +2157,8 @@ function fHandleDropdownChange(event) {
 // fProcessAbilityChange ///////////////////////////////////////////////////////
 // Purpose -> Handles the logic when an Ability dropdown value changes. Dispatches
 //            to helper functions for clearing or processing the new selection,
-//            using Promises to handle fetching and applying data from DB and KL sources.
+//            using Promises to handle fetching and applying data from DB Abilities,
+//            DB Gear, and KL MyAbilities sources.
 // Inputs  -> r (Number): Row index of the changed ability cell.
 //         -> c (Number): Column index of the changed ability cell (likely 'Ability' col).
 //         -> newValue (Any): The new value selected in the dropdown (expected format 'Name_id').
@@ -2165,7 +2166,7 @@ function fHandleDropdownChange(event) {
 // Outputs -> None (Calls helper functions which modify grid or initiate server calls).
 function fProcessAbilityChange(r, c, newValue, oldValue) {
     const funcName = 'fProcessAbilityChange';
-    fMyConsoleLog(`⚙️ ${funcName}: Processing change for Ability at row ${r}.`);
+    fMyConsoleLog(`⚙️ ${funcName}: Processing change for Ability/Gear at row ${r}.`);
 
     // Ensure values are strings for comparison, trimming whitespace
     const newValueStr = String(newValue ?? '').trim();
@@ -2180,39 +2181,56 @@ function fProcessAbilityChange(r, c, newValue, oldValue) {
     // --- Dispatch based on new value ---
     if (newValueStr === '') {
         // Scenario 1: New value is empty - call helper to clear row
+        // This needs to use the updated gUI.list.clearAbilityColTags_EmptyString
+        // and gUI.list.clearAbilityColTags_False which now include Poss fields.
         fHandleClearAbilityRow(r);
     } else {
-        // Scenario 2: New value is not empty - Fetch data from both DB and MyKL
-        fMyConsoleLog(`   -> ${funcName}: New Ability selected: "${newValueStr}". Initiating fetches...`);
+        // Scenario 2: New value is not empty - Fetch data from all relevant sources
+        fMyConsoleLog(`   -> ${funcName}: New Ability/Gear selected: "${newValueStr}". Initiating fetches...`);
 
-        // Initiate both fetch/process operations - they return promises
-        const promiseDB = fHandleNewAbilitySelection('DB', 'Abilities', r, newValueStr);
-        const promiseKL = fHandleNewAbilitySelection('MyKL', 'MyAbilities', r, newValueStr);
-        // Note: Assumes 'MyKL'/'MyAbilities' uses the same ID suffix logic and rowTagsMap structure.
+        // Initiate all fetch/process operations - they return promises
+        const promiseDBAbility = fHandleNewAbilitySelection('DB', 'Abilities', r, newValueStr);
+        const promiseKLMyAbilities = fHandleNewAbilitySelection('MyKL', 'MyAbilities', r, newValueStr);
+        const promiseDBGear = fHandleNewAbilitySelection('DB', 'Gear', r, newValueStr); // Fetch Gear data
 
-        // Use Promise.all to wait for both operations to complete
-        Promise.all([promiseDB, promiseKL])
-            .then(([dbResult, klResult]) => {
-                // This block runs ONLY after BOTH promises resolve successfully
-                fMyConsoleLog(`--> ${funcName}: Both DB and KL data fetched successfully for row ${r}. Applying data...`);
+        // Use Promise.allSettled to wait for all operations to complete, regardless of individual success/failure
+        Promise.allSettled([promiseDBAbility, promiseKLMyAbilities, promiseDBGear])
+            .then((results) => {
+                // Extract results, checking status
+                const dbAbilityResult = results[0].status === 'fulfilled' ? results[0].value : null;
+                const klMyAbilitiesResult = results[1].status === 'fulfilled' ? results[1].value : null;
+                const dbGearResult = results[2].status === 'fulfilled' ? results[2].value : null;
 
-                 // --- Apply the fetched data using the new helper function ---
-                 fSaveNewAbilityToAbilTbl(r, dbResult, klResult);
+                // Log individual fetch outcomes
+                fMyConsoleLog(`   -> ${funcName}: Fetch Results - DB Ability: ${dbAbilityResult ? 'Success' : 'Failed/Not Found'}, KL MyAbil: ${klMyAbilitiesResult ? 'Success' : 'Failed/Not Found'}, DB Gear: ${dbGearResult ? (dbGearResult.dataRow ? 'Success' : 'Not Found') : 'Failed'}`);
+
+                // Check if we have *at least* Ability OR Gear data to proceed
+                const hasAbilityData = dbAbilityResult?.dataRow || klMyAbilitiesResult?.dataRow;
+                const hasGearData = dbGearResult?.dataRow;
+
+                if (!hasAbilityData && !hasGearData) {
+                    // If neither ability nor gear data was successfully retrieved (and contained dataRow), report error
+                    fMyConsoleLog(`--> ❌ ${funcName}: Failed to retrieve valid data from DB Abilities, MyKL, or DB Gear for row ${r}.`);
+                    console.error(`${funcName}: All fetches failed or returned no data for ${newValueStr}`);
+                    fSetGridValue(r, 'Sk1', 'ERR'); // Indicate general error
+                    // Optionally show a more specific error message based on individual results if needed
+                    // fShowMessage(`Error processing selection: Could not find data in Abilities, MyAbilities, or Gear databases.`).catch(e => console.error("ShowMessage Error:", e));
+                    return; // Stop processing
+                }
+
+                // Proceed to apply data - fSaveNewAbilityToAbilTbl needs to handle potentially null results
+                fMyConsoleLog(`--> ${funcName}: Fetches complete for row ${r}. Applying data...`);
+                fSaveNewAbilityToAbilTbl(r, dbAbilityResult, klMyAbilitiesResult, dbGearResult);
 
             })
-            .catch(error => {
-                // This block runs if ANY of the promises in Promise.all reject
-                const errorMsg = error instanceof Error ? error.message : String(error);
-                fMyConsoleLog(`--> ❌ ${funcName}: Error during fetch/processing for row ${r}: ${errorMsg}`);
-                console.error(`fProcessAbilityChange: Error from Promise.all:`, error);
+             // Note: Promise.allSettled itself doesn't reject unless there's a fundamental issue.
+             // Individual promise rejections are handled within the .then block by checking results[i].status.
+             // We don't need a separate .catch here for the Promise.allSettled itself unless we expect
+             // syntax errors or other non-promise-related issues within the setup.
+             // Individual fetch errors (network, server-side) should have been caught and potentially
+             // resolved to null/error objects within fHandleNewAbilitySelection, allowing allSettled to complete.
 
-                // Ensure loading indicator shows error state (may have been set by helpers already)
-                fSetGridValue(r, 'Sk1', 'ERR');
-
-                // Optionally show user message
-                // fShowMessage(`Error processing ability data: ${errorMsg}`).catch(e => console.error("ShowMessage Error:", e));
-            });
-    }
+    } // End else (newValueStr !== '')
 
 } // END fProcessAbilityChange
 
@@ -2342,88 +2360,179 @@ function fHandleNewAbilitySelection(workbookAbr, sheetName, r, newValueStr) {
 
 
 // fSaveNewAbilityToAbilTbl ////////////////////////////////////////////////////
-// Purpose -> Saves data fetched from DB and KL sources to the appropriate
-//            columns in a specific grid row using fSetGridValue. Also sets
-//            default values for certain columns.
+// Purpose -> Saves data fetched from DB Abilities, DB Gear, and KL MyAbilities sources
+//            to the appropriate columns in a specific grid row using fSetGridValue.
+//            Also sets default values and calculates derived gear properties.
 // Inputs  -> r (Number): The target row index in the grid.
-//         -> dbResult (Object): Result from DB fetch { dataRow, headerRow, colTagsMap }.
-//         -> klResult (Object): Result from KL fetch { dataRow, headerRow, colTagsMap }.
+//         -> dbAbilityResult (Object | null): Result from DB Abilities fetch { dataRow, headerRow, colTagsMap } or null.
+//         -> klMyAbilitiesResult (Object | null): Result from KL MyAbilities fetch { dataRow, headerRow, colTagsMap } or null.
+//         -> dbGearResult (Object | null): Result from DB Gear fetch { dataRow, headerRow, colTagsMap } or null (or might lack dataRow if not found).
 // Outputs -> None (Modifies grid via fSetGridValue, calls auto-save).
-function fSaveNewAbilityToAbilTbl(r, dbResult, klResult) {
+function fSaveNewAbilityToAbilTbl(r, dbAbilityResult, klMyAbilitiesResult, dbGearResult) {
     const funcName = 'fSaveNewAbilityToAbilTbl';
-    fMyConsoleLog(`   -> ${funcName}: Applying fetched DB and KL data to grid row ${r}...`);
+    fMyConsoleLog(`   -> ${funcName}: Applying fetched data to grid row ${r}...`);
 
-    // --- Basic validation of inputs ---
-    if (!dbResult || !dbResult.dataRow || !dbResult.colTagsMap) {
-        console.error(`${funcName}: Invalid dbResult structure provided.`);
-        fMyConsoleLog(`     -> ❌ ${funcName}: Invalid dbResult. Aborting update for row ${r}.`);
-        fSetGridValue(r, 'Sk1', 'ERR'); // Indicate error state
-        return; // Cannot proceed
-    }
-     if (!klResult || !klResult.dataRow || !klResult.colTagsMap) {
-        console.error(`${funcName}: Invalid klResult structure provided.`);
-        fMyConsoleLog(`     -> ❌ ${funcName}: Invalid klResult. Aborting update for row ${r}.`);
-        fSetGridValue(r, 'Sk1', 'ERR'); // Indicate error state
-        return; // Cannot proceed
-    }
+    // --- Extract data and maps safely ---
+    const dbAbilityRow = dbAbilityResult?.dataRow;
+    const dbAbilityColTags = dbAbilityResult?.colTagsMap;
+    const klMyAbilitiesRow = klMyAbilitiesResult?.dataRow;
+    const klMyAbilitiesColTags = klMyAbilitiesResult?.colTagsMap;
+    const dbGearRow = dbGearResult?.dataRow; // This might be undefined/null if not found or fetch failed
+    const dbGearColTags = dbGearResult?.colTagsMap;
 
-    const dbRow = dbResult.dataRow;
-    const dbColTags = dbResult.colTagsMap;
-    const klRow = klResult.dataRow;
-    const klColTags = klResult.colTagsMap;
+    // --- Helper to get value safely from a source row using source tags ---
+    const getValueFromSource = (sourceRow, sourceColTags, sourceTag) => {
+        if (!sourceRow || !sourceColTags) return undefined; // Source data missing
+        const sourceIndex = sourceColTags[sourceTag];
+        if (sourceIndex !== undefined && sourceIndex !== null && sourceIndex < sourceRow.length) {
+            return sourceRow[sourceIndex];
+        }
+        // fMyConsoleLog(`     -> getValueFromSource: Tag '${sourceTag}' not found or index out of bounds.`); // Can be noisy
+        return undefined; // Tag not found or index invalid
+    };
 
-    // --- Define the mapping ---
-    // Structure: { gridTag: targetTag, source: 'db'|'kl', sourceTag: tagInSource }
+    // --- Define the base mappings (Abilities & MyAbilities) ---
     const dataMappings = [
-        // klRow source Data
-        { gridTag: 'Sk1',       source: 'kl', sourceTag: 'TrainedSk1' },
-        { gridTag: 'Sk2',       source: 'kl', sourceTag: 'TrainedSk2' },
-        { gridTag: 'Ver',       source: 'kl', sourceTag: 'Ver' },
-        { gridTag: 'Notes',     source: 'kl', sourceTag: 'Notes' },
-        { gridTag: 'Act',       source: 'kl', sourceTag: 'Act' },
-        { gridTag: 'Dur',       source: 'kl', sourceTag: 'Dur' },
-        { gridTag: 'Rng',       source: 'kl', sourceTag: 'Rng' },
-        { gridTag: 'MetaCost',  source: 'kl', sourceTag: 'Meta' }, // Note gridTag vs sourceTag difference
-        { gridTag: 'Uses',      source: 'kl', sourceTag: 'Uses' },
-        { gridTag: 'Regain',    source: 'kl', sourceTag: 'Regain' },
+        // klMyAbilitiesRow source Data
+        { gridTag: 'Sk1', sourceRow: klMyAbilitiesRow, sourceColTags: klMyAbilitiesColTags, sourceTag: 'TrainedSk1' },
+        { gridTag: 'Sk2', sourceRow: klMyAbilitiesRow, sourceColTags: klMyAbilitiesColTags, sourceTag: 'TrainedSk2' },
+        { gridTag: 'Ver', sourceRow: klMyAbilitiesRow, sourceColTags: klMyAbilitiesColTags, sourceTag: 'Ver' },
+        { gridTag: 'Act', sourceRow: klMyAbilitiesRow, sourceColTags: klMyAbilitiesColTags, sourceTag: 'Act' },
+        { gridTag: 'Dur', sourceRow: klMyAbilitiesRow, sourceColTags: klMyAbilitiesColTags, sourceTag: 'Dur' },
+        { gridTag: 'Rng', sourceRow: klMyAbilitiesRow, sourceColTags: klMyAbilitiesColTags, sourceTag: 'Rng' },
+        { gridTag: 'MetaCost', sourceRow: klMyAbilitiesRow, sourceColTags: klMyAbilitiesColTags, sourceTag: 'Meta' }, // Note gridTag vs sourceTag
+        { gridTag: 'Uses', sourceRow: klMyAbilitiesRow, sourceColTags: klMyAbilitiesColTags, sourceTag: 'Uses' },
+        { gridTag: 'Regain', sourceRow: klMyAbilitiesRow, sourceColTags: klMyAbilitiesColTags, sourceTag: 'Regain' },
 
-        // dbRow Source Data
-        { gridTag: 'Sk1Typ',    source: 'db', sourceTag: 'SkTyp1' },
-        { gridTag: 'Sk2Typ',    source: 'db', sourceTag: 'SkTyp2' },
-        { gridTag: 'Pic',       source: 'db', sourceTag: 'Pic'},
+        // dbAbilityRow Source Data
+        { gridTag: 'Sk1Typ', sourceRow: dbAbilityRow, sourceColTags: dbAbilityColTags, sourceTag: 'SkTyp1' },
+        { gridTag: 'Sk2Typ', sourceRow: dbAbilityRow, sourceColTags: dbAbilityColTags, sourceTag: 'SkTyp2' },
+        { gridTag: 'Notes', sourceRow: dbAbilityRow, sourceColTags: dbAbilityColTags, sourceTag: 'Notes' },
+        { gridTag: 'Pic', sourceRow: dbAbilityRow, sourceColTags: dbAbilityColTags, sourceTag: 'Pic' },
     ];
 
-    // --- Apply mapped data ---
+    // --- Apply mapped data (Abilities & MyAbilities) ---
+    fMyConsoleLog(`     -> Applying Ability/MyAbilities mappings...`);
     dataMappings.forEach(map => {
-        const sourceRow = map.source === 'db' ? dbRow : klRow;
-        const sourceMap = map.source === 'db' ? dbColTags : klColTags;
-        const sourceIndex = sourceMap[map.sourceTag];
-
-        if (sourceIndex !== undefined && sourceIndex !== null && sourceIndex < sourceRow.length) {
-            const value = sourceRow[sourceIndex];
-             fMyConsoleLog(`     -> Mapping: Grid '${map.gridTag}' <- ${map.source.toUpperCase()}['${map.sourceTag}'] (Index ${sourceIndex}), Value: ${value}`);
+        const value = getValueFromSource(map.sourceRow, map.sourceColTags, map.sourceTag);
+        // Set grid value only if source value was found (undefined if not found)
+        if (value !== undefined) {
+            // fMyConsoleLog(`     -> Setting Grid '${map.gridTag}' from source '${map.sourceTag}', Value: ${value}`); // Verbose
             fSetGridValue(r, map.gridTag, value);
         } else {
-            // Log warning if source tag/index is invalid for the mapping
-            fMyConsoleLog(`     -> ⚠️ Warning: Source tag '${map.sourceTag}' not found or index out of bounds in ${map.source.toUpperCase()} data for grid tag '${map.gridTag}'. Skipping.`);
-            console.warn(`${funcName}: Invalid source for mapping:`, map);
+            // If source value is undefined, explicitly clear the grid cell
+            // Ensures fields are cleared if switching from an Ability WITH that field to one WITHOUT it.
+            // fMyConsoleLog(`     -> Clearing Grid '${map.gridTag}' as source '${map.sourceTag}' not found.`); // Verbose
+            fSetGridValue(r, map.gridTag, '');
         }
     });
 
-     // --- Apply Other Defaults ---
-     fMyConsoleLog(`     -> Applying default values...`);
-     fSetGridValue(r, 'PermMorph1', '');
-     fSetGridValue(r, 'Morph1', '');
-     fSetGridValue(r, 'PermMorph2', '');
-     fSetGridValue(r, 'Morph2', '');
-     fSetGridValue(r, 'On', '');
-     fSetGridValue(r, 'Sk1ChkBox', false); // Ensure checkboxes are reset
-     fSetGridValue(r, 'Condition', '');
-     fSetGridValue(r, 'Sk2ChkBox', false); // Ensure checkboxes are reset
+    // --- Apply Gear-Specific Data and Calculations (if found) ---
+    if (dbGearRow && dbGearColTags) {
+        fMyConsoleLog(`     -> Applying Gear mappings and calculations...`);
+        // Get values needed for calculations first
+        const possNumValRaw = fGetGridValue(r, 'PossNum'); // Read existing value
+        const isWornValRaw = fGetGridValue(r, 'PossWorn'); // Read existing value
+        const possNameVal = getValueFromSource(dbGearRow, dbGearColTags, 'Name_ID') ?? '';
+        const isArtifactVal = getValueFromSource(dbGearRow, dbGearColTags, 'IsArtifact');
+        const wornEncValRaw = getValueFromSource(dbGearRow, dbGearColTags, 'WornEnc');
+        const itemEncValRaw = getValueFromSource(dbGearRow, dbGearColTags, 'ItemEnc');
+        const crEachValRaw = getValueFromSource(dbGearRow, dbGearColTags, 'ItemCR');
+        const perOffValRaw = fGetGridValue(r, 'PossPerOff'); // Read existing value
+        const apEachValRaw = getValueFromSource(dbGearRow, dbGearColTags, 'AP');
+
+        // --- Process PossNum ---
+        let possNumVal;
+        // Check if raw value is effectively empty (null, undefined, or '')
+        if (possNumValRaw === null || typeof possNumValRaw === 'undefined' || possNumValRaw === '') {
+             possNumVal = 1; // Default to 1
+             fSetGridValue(r, 'PossNum', 1); // Update grid cell to reflect default
+        } else {
+             // Try parsing the non-empty value
+             const parsedNum = parseInt(possNumValRaw, 10);
+             if (!isNaN(parsedNum) && parsedNum >= 1) {
+                 possNumVal = parsedNum; // Use valid integer >= 1
+                 // No need to update grid cell if it was already valid
+             } else {
+                 // Value was not empty, but not a valid number >= 1
+                 possNumVal = ''; // Treat invalid input as empty for calculations
+                 fSetGridValue(r, 'PossNum', ''); // Clear the invalid value in the grid cell
+             }
+        }
+        fMyConsoleLog(`       -> Processed possNumVal: ${possNumVal} (Type: ${typeof possNumVal})`);
+        // --- End Process PossNum ---
+
+
+        // Process PossWorn (just use the boolean value read from grid)
+        const isWornVal = isWornValRaw === true || String(isWornValRaw).toUpperCase() === 'TRUE';
+        fMyConsoleLog(`       -> Processed isWornVal: ${isWornVal}`);
+
+        // Calculate Encumbrance
+        const wornEnc = Number(wornEncValRaw) || 0;
+        const itemEnc = Number(itemEncValRaw) || 0;
+        const encEachVal = (isWornVal && wornEncValRaw !== '') ? wornEnc : itemEnc;
+        // Use the processed possNumVal here - if it's '', multiplication results in 0
+        const encTotalVal = (possNumVal !== '') ? (possNumVal * encEachVal) : '';
+        fMyConsoleLog(`       -> Enc Calc: Worn=${isWornVal}, WornEnc=${wornEnc}, ItemEnc=${itemEnc} => EncEach=${encEachVal}, TotalEnc=${encTotalVal}`);
+
+        // Calculate Credit Value
+        const crEachVal = Number(crEachValRaw) || 0;
+        let perOffVal = '';
+        const parsedPerOff = parseInt(perOffValRaw, 10);
+        if (!isNaN(parsedPerOff) && parsedPerOff >= 1 && parsedPerOff <= 100) {
+            perOffVal = parsedPerOff;
+        } else if (perOffValRaw !== '') {
+            fSetGridValue(r, 'PossPerOff', ''); // Clear invalid value in grid
+        }
+        // Use the processed possNumVal here
+        const crTotalVal = (possNumVal !== '')
+            ? (perOffVal !== '' ? possNumVal * crEachVal * (1 - perOffVal / 100) : possNumVal * crEachVal)
+            : '';
+        fMyConsoleLog(`       -> CR Calc: CREach=${crEachVal}, Num=${possNumVal}, PerOff=${perOffVal} => CRTotal=${crTotalVal}`);
+
+        // Calculate AP Value
+        const apEachVal = Number(apEachValRaw) || 0;
+        // Use the processed possNumVal here
+        const apTotalVal = (possNumVal !== '') ? (possNumVal * apEachVal) : '';
+        fMyConsoleLog(`       -> AP Calc: APEach=${apEachVal}, Num=${possNumVal} => APTotal=${apTotalVal}`);
+
+        // --- Set Gear Grid Values ---
+        fSetGridValue(r, 'PossName', possNameVal);
+        // PossNum already handled/set above
+        // PossWorn read from grid, assumed unchanged unless user clicks
+        fSetGridValue(r, 'PossEnc', encTotalVal);
+        fSetGridValue(r, 'PossCrEa', crEachVal);
+        // PossPerOff read from grid, cleared if invalid
+        fSetGridValue(r, 'PossCrTot', crTotalVal);
+        fSetGridValue(r, 'PossIsArtifact', isArtifactVal); // Set boolean
+        fSetGridValue(r, 'PossAPEa', apEachVal);
+        fSetGridValue(r, 'PossAPTot', apTotalVal);
+
+    } else {
+        // --- Clear Gear-Specific Fields (if not gear) ---
+        fMyConsoleLog(`     -> Clearing Gear-specific fields as item not found in DB Gear.`);
+        const gearFieldsToClear = ['PossNum', 'PossName', 'PossWorn', 'PossEnc', 'PossCrEa', 'PossPerOff', 'PossCrTot', 'PossIsArtifact', 'PossAPEa', 'PossAPTot'];
+        gearFieldsToClear.forEach(tag => fSetGridValue(r, tag, '')); // Clear with empty string
+        // Set checkboxes to false explicitly
+        fSetGridValue(r, 'PossWorn', false);
+        fSetGridValue(r, 'PossIsArtifact', false);
+
+    }
+
+
+    // --- Apply Other Defaults (General Ability/Gear Row) ---
+    fMyConsoleLog(`     -> Applying general default values...`);
+    fSetGridValue(r, 'PermMorph1', '');
+    fSetGridValue(r, 'Morph1', '');
+    fSetGridValue(r, 'PermMorph2', '');
+    fSetGridValue(r, 'Morph2', '');
+    fSetGridValue(r, 'On', '');
+    fSetGridValue(r, 'Sk1ChkBox', false); // Ensure checkboxes are reset
+    fSetGridValue(r, 'Condition', '');
+    fSetGridValue(r, 'Sk2ChkBox', false); // Ensure checkboxes are reset
 
 
     fMyConsoleLog(`   -> ${funcName}: Finished applying data to grid row ${r}.`);
-
     // --- Save changes ---
     fHandleAutoSaveTextToFirestore();
 
