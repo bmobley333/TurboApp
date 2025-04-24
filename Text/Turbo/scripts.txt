@@ -2289,11 +2289,12 @@ function fHandleClearAbilityRow(r) {
 //            Firestore sheet, finds the row matching the ID suffix in newValueStr
 //            using rowTagsMap. Returns a Promise resolving with an object containing
 //            { dataRow, headerRow, colTagsMap }, or rejecting on error.
+//            Gracefully handles ID not found for MyKL/MyAbilities by resolving with null dataRow.
 // Inputs  -> workbookAbr (String): The workbook abbreviation ('DB' or 'MyKL').
 //         -> sheetName (String): The sheet name ('Abilities' or 'MyAbilities').
 //         -> r (Number): Row index in the grid where the ability was selected.
 //         -> newValueStr (String): The new ability value selected (e.g., 'Name_id').
-// Outputs -> Promise<Object|Error>: Resolves with { dataRow, headerRow, colTagsMap }, rejects with error.
+// Outputs -> Promise<Object|Error>: Resolves with { dataRow, headerRow, colTagsMap, found: boolean }, rejects with error.
 function fHandleNewAbilitySelection(workbookAbr, sheetName, r, newValueStr) {
     const funcName = 'fHandleNewAbilitySelection';
     fMyConsoleLog(`   -> ${funcName}: Processing "${newValueStr}" for ${workbookAbr}/${sheetName}...`);
@@ -2309,13 +2310,17 @@ function fHandleNewAbilitySelection(workbookAbr, sheetName, r, newValueStr) {
             let foundRow = null;
             let headerRow = null;
             let colTagsMap = null;
+            let found = false; // Flag to indicate if data was found
 
             // --- Validate required parts of fsData first ---
-             if (!fsData || !fsData.text || !Array.isArray(fsData.text) || fsData.text.length === 0 || !fsData.rowTagsMap || !fsData.colTagsMap) {
-                 throw new Error(`Received invalid or incomplete FSData structure from ${workbookAbr}/${sheetName} (missing text, rowTagsMap, or colTagsMap).`);
-             }
-             headerRow = fsData.text[0]; // Assume header is row 0
-             colTagsMap = fsData.colTagsMap;
+            if (!fsData || !fsData.text || !Array.isArray(fsData.text) || !fsData.rowTagsMap || !fsData.colTagsMap) {
+                // If data is missing structure BUT it's the expected MyKL case, maybe resolve gracefully?
+                // For now, throw error for fundamentally bad FSData regardless of source.
+                throw new Error(`Received invalid or incomplete FSData structure from ${workbookAbr}/${sheetName}.`);
+            }
+
+            headerRow = (fsData.text.length > 0) ? fsData.text[0] : []; // Get header row safely
+            colTagsMap = fsData.colTagsMap;
 
             // --- Extract Ability ID from newValueStr ---
             const lastUnderscoreIndex = newValueStr.lastIndexOf('_');
@@ -2327,40 +2332,58 @@ function fHandleNewAbilitySelection(workbookAbr, sheetName, r, newValueStr) {
 
             // --- Use FSData object to locate the FSData.text row of abilID ---
             const rowIndex = fsData.rowTagsMap[abilID];
-            if (rowIndex === undefined || rowIndex === null) {
-                 throw new Error(`Ability ID "${abilID}" not found as a key in ${workbookAbr}/${sheetName} FSData.rowTagsMap.`);
-            }
-            fMyConsoleLog(`       -> Found row index for "${abilID}" in ${workbookAbr}/${sheetName} map: ${rowIndex}`);
 
+            if (rowIndex === undefined || rowIndex === null) {
+                // ID not found in rowTagsMap
+                const isMyKLCheck = (workbookAbr.toUpperCase() === 'MYKL' && sheetName === 'MyAbilities');
+                if (isMyKLCheck) {
+                    // It's OK if not found in MyKL/MyAbilities
+                    fMyConsoleLog(`       -> Ability ID "${abilID}" not found in ${workbookAbr}/${sheetName} rowTagsMap. This is expected.`);
+                    // Resolve gracefully, indicating not found
+                    fSetGridValue(r, 'Sk1', ''); // Clear indicator
+                    return {
+                        dataRow: null,
+                        headerRow: headerRow,
+                        colTagsMap: colTagsMap,
+                        found: false
+                    };
+                } else {
+                    // For other sources (DB/Abilities, DB/Gear), throw the error as before
+                    throw new Error(`Ability ID "${abilID}" not found as a key in ${workbookAbr}/${sheetName} FSData.rowTagsMap.`);
+                }
+            }
+
+            // --- Row index found, proceed to validate and extract row ---
+            fMyConsoleLog(`       -> Found row index for "${abilID}" in ${workbookAbr}/${sheetName} map: ${rowIndex}`);
             if (rowIndex >= fsData.text.length) {
                 throw new Error(`Row index ${rowIndex} (for ID "${abilID}") is out of bounds for ${workbookAbr}/${sheetName} FSData.text array (length ${fsData.text.length}).`);
             }
 
             foundRow = fsData.text[rowIndex];
             if (!foundRow || !Array.isArray(foundRow)) {
-                 throw new Error(`FSData.text[${rowIndex}] (for ID "${abilID}" in ${workbookAbr}/${sheetName}) is not a valid row array.`);
+                throw new Error(`FSData.text[${rowIndex}] (for ID "${abilID}" in ${workbookAbr}/${sheetName}) is not a valid row array.`);
             }
 
             fMyConsoleLog(`       -> Successfully found row for "${abilID}" in ${workbookAbr}/${sheetName}.`);
             fSetGridValue(r, 'Sk1', ''); // Clear indicator on success BEFORE resolving
+            found = true; // Mark as found
 
             // --- Resolve with an object containing data and metadata ---
             return {
                 dataRow: foundRow,
                 headerRow: headerRow, // Pass header for context if needed
-                colTagsMap: colTagsMap // Pass map for easy index lookup
+                colTagsMap: colTagsMap, // Pass map for easy index lookup
+                found: found
             };
-
         })
         .catch(error => {
-             // This block runs if fFetchFullSheetFromFirestore rejects OR if an error is thrown in the .then block above
+            // This block runs if fFetchFullSheetFromFirestore rejects OR if an error is explicitly thrown in the .then block above
             fMyConsoleLog(`     -> ❌ ${funcName} Error processing ${workbookAbr}/${sheetName}: ${error.message || error}`);
             console.error(`${funcName} (${workbookAbr}/${sheetName}): Error in promise chain:`, error);
             fSetGridValue(r, 'Sk1', 'ERR'); // Indicate error processing data
             // Reject this function's promise with the error
-            return Promise.reject(error); // Ensure the error propagates to Promise.all
+            return Promise.reject(error); // Ensure the error propagates to Promise.allSettled
         });
-
 } // END fHandleNewAbilitySelection
 
 
