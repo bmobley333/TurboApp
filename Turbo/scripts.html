@@ -206,6 +206,10 @@ const gUI = {
       { r1: 'GearTblStart_R', c1: 'Sk1ChkBox', r2: 'GearTblEnd_R', c2: 'Sk1ChkBox'},
       { r1: 'GearTblStart_R', c1: 'Sk2ChkBox', r2: 'GearTblEnd_R', c2: 'Sk2ChkBox'}
     ],
+    gearEncCol: [
+      { r1: 'AbilityStartBelowNish_R', c1: 'PossEnc', r2: 'AbilTblEnd_R', c2: 'PossEnc' },
+      { r1: 'GearTblStart_R', c1: 'PossEnc', r2: 'GearTblEnd_R', c2: 'PossEnc' }
+    ],
     monsters: { r1: 'CustMon', c1: 'NumMon', r2: 'LastMon_R', c2: 'MonSize' },
     currentNish: { r1: 'Nish', c1: 'Nish', r2: 'Nish', c2: 'Nish' },
     meta: { r1: 'meta', c1: 'R', r2: 'meta', c2: 'B' },
@@ -2158,7 +2162,7 @@ function fHandleDropdownChange(event) {
 // Purpose -> Handles the logic when an Ability dropdown value changes. Dispatches
 //            to helper functions for clearing or processing the new selection,
 //            using Promises to handle fetching and applying data from DB Abilities,
-//            DB Gear, and KL MyAbilities sources.
+//            DB Gear, and KL MyAbilities sources. Recalculates Enc/MR afterwards.
 // Inputs  -> r (Number): Row index of the changed ability cell.
 //         -> c (Number): Column index of the changed ability cell (likely 'Ability' col).
 //         -> newValue (Any): The new value selected in the dropdown (expected format 'Name_id').
@@ -2178,17 +2182,16 @@ function fProcessAbilityChange(r, c, newValue, oldValue) {
         return;
     }
 
-    // ---Clear the entire ability and gear row
-    fHandleClearAbilityRow(r);
-
-
     // --- Dispatch based on new value ---
     if (newValueStr === '') {
-        // Scenario 1: New value is empty then the entire ability/gear row is cleared by above.
+        // Scenario 1: New value is empty - call helper to clear row
+        fHandleClearAbilityRow(r);
+        // Recalculate Enc/MR AFTER clearing the row
+        fCalculateEncAndMR(); 
     } else {
         // Scenario 2: New value is not empty - Fetch data from all relevant sources
+        fHandleClearAbilityRow(r); // Sets the default values for all ability and gear fields. REQUIRED here!
         fMyConsoleLog(`   -> ${funcName}: New Ability/Gear selected: "${newValueStr}". Initiating fetches...`);
-
         // Initiate all fetch/process operations - they return promises
         const promiseDBAbility = fHandleNewAbilitySelection('DB', 'Abilities', r, newValueStr);
         const promiseKLMyAbilities = fHandleNewAbilitySelection('MyKL', 'MyAbilities', r, newValueStr);
@@ -2223,13 +2226,16 @@ function fProcessAbilityChange(r, c, newValue, oldValue) {
                 fMyConsoleLog(`--> ${funcName}: Fetches complete for row ${r}. Applying data...`);
                 fSaveNewAbilityToAbilTbl(r, dbAbilityResult, klMyAbilitiesResult, dbGearResult);
 
-            })
-             // Note: Promise.allSettled itself doesn't reject unless there's a fundamental issue.
-             // Individual promise rejections are handled within the .then block by checking results[i].status.
-             // We don't need a separate .catch here for the Promise.allSettled itself unless we expect
-             // syntax errors or other non-promise-related issues within the setup.
-             // Individual fetch errors (network, server-side) should have been caught and potentially
-             // resolved to null/error objects within fHandleNewAbilitySelection, allowing allSettled to complete.
+                // Recalculate Enc/MR AFTER saving the new data
+                fCalculateEncAndMR(); 
+
+            });
+            // Note: Promise.allSettled itself doesn't reject unless there's a fundamental issue.
+            // Individual promise rejections are handled within the .then block by checking results[i].status.
+            // We don't need a separate .catch here for the Promise.allSettled itself unless we expect
+            // syntax errors or other non-promise-related issues within the setup.
+            // Individual fetch errors (network, server-side) should have been caught and potentially
+            // resolved to null/error objects within fHandleNewAbilitySelection, allowing allSettled to complete.
 
     } // End else (newValueStr !== '')
 
@@ -5777,7 +5783,7 @@ function fHandleDesignerPasswordResult(isValid) {
 
 
 
-// fCalculateMovementAndEncumbrance ///////////////////////////////////////////////////
+// fCalculateEncAndMR ///////////////////////////////////////////////////
 // Purpose -> Calculates Movement Rate (MR) tiers and Carry Capacity tiers based on Agility,
 //            Strength, and bonuses. Determines the character's current MR by comparing
 //            current encumbrance to carry capacity tiers. Updates the MR/Carry table,
@@ -5785,7 +5791,7 @@ function fHandleDesignerPasswordResult(isValid) {
 // Inputs  -> None (Reads values directly from gUI.arr using tags).
 // Outputs -> (Promise<void>): Resolves when calculations and updates are complete. May show
 //                              an alert message if over-encumbered.
-async function fCalculateMovementAndEncumbrance() {
+async function fCalculateEncAndMR() {
     fMyConsoleLog("⚙️ Calculating Movement Rate and Encumbrance...");
 
     // === 1. Define Constants ===
@@ -5802,7 +5808,7 @@ async function fCalculateMovementAndEncumbrance() {
     const strengthValue = fGetGridValue('Str', 'Sk1', true);
     const plusMRValue = fGetGridValue('GearPlusMR', 'GearPlusMR', true) || 0; // Default 0 if NaN/empty
     const plusCarryValue = fGetGridValue('GearPlusCarry', 'GearPlusCarry', true) || 0; // Default 0 if NaN/empty
-    const currentEncumbrance = fGetGridValue('PossEncTot', 'PossEncTot', true) || 0; // Default 0 if NaN/empty
+    const currentEncumbrance = fCalcTotalEnc() || 0; // Default 0 if NaN/empty
 
     // Validate essential inputs
     if (isNaN(agilityValue)) errorMsg += "Agility ('Agi', 'Sk1') is not a valid number. ";
@@ -5810,7 +5816,7 @@ async function fCalculateMovementAndEncumbrance() {
     if (isNaN(currentEncumbrance)) errorMsg += "Current Encumbrance ('PossEncTot', 'PossEncTot') is not a valid number.";
 
     if (errorMsg) {
-        console.error(`fCalculateMovementAndEncumbrance: Input validation failed: ${errorMsg}`);
+        console.error(`fCalculateEncAndMR: Input validation failed: ${errorMsg}`);
         fMyConsoleLog(`❌ MR/Enc Calc Failed: ${errorMsg}`);
         await fShowMessage(`Error calculating MR/Enc: ${errorMsg}`);
         return;
@@ -5886,7 +5892,105 @@ async function fCalculateMovementAndEncumbrance() {
         fMyConsoleLog("✅ MR/Enc Calc Completed successfully.");
     }
 
-} // END fCalculateMovementAndEncumbrance
+} // END fCalculateEncAndMR
+
+
+
+
+// fCalcTotalEnc ///////////////////////////////////////////////////////////////////
+// Purpose -> Sums all Turbo grid values in the ranges defined by gUI.range.gearEncCol,
+//            rounds the result to 2 decimal places (removing trailing zeros), places
+//            the result in the target cell defined by gUI.range.currentEnc, and
+//            returns the calculated total.
+// Inputs  -> None (Uses gUI.range, gUI.arr).
+// Outputs -> (Number): The calculated and rounded total encumbrance, or 0 on error.
+function fCalcTotalEnc() {
+    const funcName = "fCalcTotalEnc";
+    fMyConsoleLog(`⚖️ Calculating Total Encumbrance...`);
+    let totalEnc = 0;
+    let errorsOccurred = false;
+
+    // --- 1. Validate Prerequisite Range Definitions ---
+    const encRangeDefs = gUI.range?.gearEncCol;
+    const targetCellDef = gUI.range?.currentEnc;
+
+    if (!Array.isArray(encRangeDefs) || encRangeDefs.length === 0) {
+        console.error(`${funcName}: Encumbrance source range definition (gUI.range.gearEncCol) is missing or invalid.`);
+        fMyConsoleLog(`❌ ${funcName} Error: Encumbrance source range definition missing.`);
+        errorsOccurred = true;
+    }
+    if (!targetCellDef || typeof targetCellDef.r1 === 'undefined' || typeof targetCellDef.c1 === 'undefined') {
+        console.error(`${funcName}: Target cell definition (gUI.range.currentEnc is "${gUI.range.currentEnc}") is missing or invalid (requires r1, c1).`);
+        fMyConsoleLog(`❌ ${funcName} Error: Target cell definition missing or invalid.`);
+        errorsOccurred = true;
+    }
+    if (errorsOccurred) return 0; // Return 0 if setup is invalid
+
+    // --- 2. Iterate Through Each Encumbrance Source Range ---
+    encRangeDefs.forEach((rangeDef, index) => {
+        // Validate range object structure
+        if (!fDoesObjectHaveR1C1R2C2Properties(rangeDef)) {
+            console.warn(`${funcName}: Skipping invalid range object at index ${index}:`, rangeDef);
+            errorsOccurred = true;
+            return; // Continue to next range definition
+        }
+
+        // Resolve range tags/indices
+        const resolved = fConvertsR1C1R2C2TagOrNumToIndices(rangeDef);
+        if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
+            console.warn(`${funcName}: Skipping range at index ${index} due to unresolved indices:`, rangeDef);
+            errorsOccurred = true;
+            return; // Continue to next range definition
+        }
+
+        // Determine bounds
+        const rMin = Math.min(resolved.r1, resolved.r2);
+        const rMax = Math.max(resolved.r1, resolved.r2);
+        const cMin = Math.min(resolved.c1, resolved.c2);
+        const cMax = Math.max(resolved.c1, resolved.c2);
+
+        // --- 3. Iterate Through Cells and Sum Values ---
+        for (let r = rMin; r <= rMax; r++) {
+            for (let c = cMin; c <= cMax; c++) {
+                const value = fGetGridValue(r, c);
+                const numericValue = Number(value) || 0; // Coerce to number, NaN becomes 0
+                totalEnc += numericValue;
+                // Optional: Log individual values being added
+                // if (numericValue !== 0) fMyConsoleLog(`   -> Adding [${r},${c}]: ${numericValue}`);
+            }
+        }
+    }); // End forEach encRangeDef
+
+    // --- 4. Round the Total ---
+    // Round to nearest hundredth. JavaScript handles trailing zero removal automatically.
+    const roundedTotalEnc = Math.round(totalEnc * 100) / 100;
+    fMyConsoleLog(`   -> Raw Total Enc: ${totalEnc}, Rounded: ${roundedTotalEnc}`);
+
+    // --- 5. Update Target Cell ---
+    // Resolve target cell coordinates
+    const targetR = fResolveRow(targetCellDef.r1);
+    const targetC = fResolveCol(targetCellDef.c1);
+
+    if (isNaN(targetR) || isNaN(targetC)) {
+        console.error(`${funcName}: Could not resolve target cell coordinates from gUI.range.currentEnc:`, targetCellDef);
+        fMyConsoleLog(`❌ ${funcName} Error: Could not resolve target cell coordinates.`);
+        errorsOccurred = true;
+    } else {
+        // Update the target cell
+        if (!fSetGridValue(targetR, targetC, roundedTotalEnc)) {
+            // fSetGridValue logs its own errors
+            fMyConsoleLog(`   -> ⚠️ Warning: Failed to update target cell [${targetR}, ${targetC}] with total encumbrance.`);
+            errorsOccurred = true; // Consider this an error
+        } else {
+            fMyConsoleLog(`   -> Target cell [${targetR}, ${targetC}] updated with: ${roundedTotalEnc}`);
+        }
+    }
+
+    // --- 6. Return Result ---
+    fMyConsoleLog(`✅ ${funcName} finished ${errorsOccurred ? 'with errors' : 'successfully'}. Returning: ${roundedTotalEnc}`);
+    return roundedTotalEnc; // Return the calculated value
+
+} // END fCalcTotalEnc
 
 
 
@@ -7108,7 +7212,7 @@ function fRunPostRenderFormatting() {
     }
 
     // --- Calculate MR/Enc AFTER grid is fully rendered and formatted ---
-    fCalculateMovementAndEncumbrance(); // Now called here
+    fCalculateEncAndMR(); // Now called here
 
     fMyConsoleLog("✅ All Post-Render Formatting Done!");
 } // END fRunPostRenderFormatting
