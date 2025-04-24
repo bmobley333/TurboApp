@@ -2178,12 +2178,13 @@ function fProcessAbilityChange(r, c, newValue, oldValue) {
         return;
     }
 
+    // ---Clear the entire ability and gear row
+    fHandleClearAbilityRow(r);
+
+
     // --- Dispatch based on new value ---
     if (newValueStr === '') {
-        // Scenario 1: New value is empty - call helper to clear row
-        // This needs to use the updated gUI.list.clearAbilityColTags_EmptyString
-        // and gUI.list.clearAbilityColTags_False which now include Poss fields.
-        fHandleClearAbilityRow(r);
+        // Scenario 1: New value is empty then the entire ability/gear row is cleared by above.
     } else {
         // Scenario 2: New value is not empty - Fetch data from all relevant sources
         fMyConsoleLog(`   -> ${funcName}: New Ability/Gear selected: "${newValueStr}". Initiating fetches...`);
@@ -2431,78 +2432,54 @@ function fSaveNewAbilityToAbilTbl(r, dbAbilityResult, klMyAbilitiesResult, dbGea
     if (dbGearRow && dbGearColTags) {
         fMyConsoleLog(`     -> Applying Gear mappings and calculations...`);
         // Get values needed for calculations first
-        const possNumValRaw = fGetGridValue(r, 'PossNum'); // Read existing value
-        const isWornValRaw = fGetGridValue(r, 'PossWorn'); // Read existing value
+        // const isWornValRaw = fGetGridValue(r, 'PossWorn'); // REMOVED - Assume true
         const possNameVal = getValueFromSource(dbGearRow, dbGearColTags, 'Name_ID') ?? '';
         const isArtifactVal = getValueFromSource(dbGearRow, dbGearColTags, 'IsArtifact');
         const wornEncValRaw = getValueFromSource(dbGearRow, dbGearColTags, 'WornEnc');
         const itemEncValRaw = getValueFromSource(dbGearRow, dbGearColTags, 'ItemEnc');
         const crEachValRaw = getValueFromSource(dbGearRow, dbGearColTags, 'ItemCR');
-        const perOffValRaw = fGetGridValue(r, 'PossPerOff'); // Read existing value
+        // const perOffValRaw = fGetGridValue(r, 'PossPerOff'); // REMOVED - Assume ''
         const apEachValRaw = getValueFromSource(dbGearRow, dbGearColTags, 'AP');
 
-        // --- Process PossNum ---
-        let possNumVal;
-        // Check if raw value is effectively empty (null, undefined, or '')
-        if (possNumValRaw === null || typeof possNumValRaw === 'undefined' || possNumValRaw === '') {
-             possNumVal = 1; // Default to 1
-             fSetGridValue(r, 'PossNum', 1); // Update grid cell to reflect default
-        } else {
-             // Try parsing the non-empty value
-             const parsedNum = parseInt(possNumValRaw, 10);
-             if (!isNaN(parsedNum) && parsedNum >= 1) {
-                 possNumVal = parsedNum; // Use valid integer >= 1
-                 // No need to update grid cell if it was already valid
-             } else {
-                 // Value was not empty, but not a valid number >= 1
-                 possNumVal = ''; // Treat invalid input as empty for calculations
-                 fSetGridValue(r, 'PossNum', ''); // Clear the invalid value in the grid cell
-             }
-        }
-        fMyConsoleLog(`       -> Processed possNumVal: ${possNumVal} (Type: ${typeof possNumVal})`);
+        // --- Process PossNum (Simplified) ---
+        const possNumVal = 1; // Always assume 1 for calculations when applying gear
+        fSetGridValue(r, 'PossNum', 1); // Always set the grid cell to 1
+        fMyConsoleLog(`       -> Set possNumVal to: ${possNumVal}`);
         // --- End Process PossNum ---
 
-
-        // Process PossWorn (just use the boolean value read from grid)
-        const isWornVal = isWornValRaw === true || String(isWornValRaw).toUpperCase() === 'TRUE';
-        fMyConsoleLog(`       -> Processed isWornVal: ${isWornVal}`);
+        // Process PossWorn (Simplified - Always true for calc, grid cell not updated here)
+        const isWornVal = true; // Assume true for calculations
+        fSetGridValue(r, 'PossWorn', true); // Explicitly set checkbox to true
+        fMyConsoleLog(`       -> Set isWornVal: ${isWornVal}`);
 
         // Calculate Encumbrance
         const wornEnc = Number(wornEncValRaw) || 0;
         const itemEnc = Number(itemEncValRaw) || 0;
-        const encEachVal = (isWornVal && wornEncValRaw !== '') ? wornEnc : itemEnc;
-        // Use the processed possNumVal here - if it's '', multiplication results in 0
-        const encTotalVal = (possNumVal !== '') ? (possNumVal * encEachVal) : '';
+        const encEachVal = (isWornVal && wornEncValRaw !== '') ? wornEnc : itemEnc; // isWornVal is true
+        const encTotalVal = possNumVal * encEachVal; // possNumVal is 1
         fMyConsoleLog(`       -> Enc Calc: Worn=${isWornVal}, WornEnc=${wornEnc}, ItemEnc=${itemEnc} => EncEach=${encEachVal}, TotalEnc=${encTotalVal}`);
 
         // Calculate Credit Value
         const crEachVal = Number(crEachValRaw) || 0;
-        let perOffVal = '';
-        const parsedPerOff = parseInt(perOffValRaw, 10);
-        if (!isNaN(parsedPerOff) && parsedPerOff >= 1 && parsedPerOff <= 100) {
-            perOffVal = parsedPerOff;
-        } else if (perOffValRaw !== '') {
-            fSetGridValue(r, 'PossPerOff', ''); // Clear invalid value in grid
-        }
-        // Use the processed possNumVal here
-        const crTotalVal = (possNumVal !== '')
-            ? (perOffVal !== '' ? possNumVal * crEachVal * (1 - perOffVal / 100) : possNumVal * crEachVal)
-            : '';
+        const perOffVal = ''; // Assume empty for calculations
+        // Removed parsing logic for perOffValRaw
+        fSetGridValue(r, 'PossPerOff', ''); // Ensure grid cell is empty
+        // Calculation simplifies because perOffVal is always ''
+        const crTotalVal = possNumVal * crEachVal; // possNumVal is 1
         fMyConsoleLog(`       -> CR Calc: CREach=${crEachVal}, Num=${possNumVal}, PerOff=${perOffVal} => CRTotal=${crTotalVal}`);
 
         // Calculate AP Value
         const apEachVal = Number(apEachValRaw) || 0;
-        // Use the processed possNumVal here
-        const apTotalVal = (possNumVal !== '') ? (possNumVal * apEachVal) : '';
+        const apTotalVal = possNumVal * apEachVal; // possNumVal is 1
         fMyConsoleLog(`       -> AP Calc: APEach=${apEachVal}, Num=${possNumVal} => APTotal=${apTotalVal}`);
 
         // --- Set Gear Grid Values ---
         fSetGridValue(r, 'PossName', possNameVal);
         // PossNum already handled/set above
-        // PossWorn read from grid, assumed unchanged unless user clicks
+        // PossWorn explicitly set above
         fSetGridValue(r, 'PossEnc', encTotalVal);
         fSetGridValue(r, 'PossCrEa', crEachVal);
-        // PossPerOff read from grid, cleared if invalid
+        // PossPerOff explicitly set above
         fSetGridValue(r, 'PossCrTot', crTotalVal);
         fSetGridValue(r, 'PossIsArtifact', isArtifactVal); // Set boolean
         fSetGridValue(r, 'PossAPEa', apEachVal);
@@ -2518,19 +2495,6 @@ function fSaveNewAbilityToAbilTbl(r, dbAbilityResult, klMyAbilitiesResult, dbGea
         fSetGridValue(r, 'PossIsArtifact', false);
 
     }
-
-
-    // --- Apply Other Defaults (General Ability/Gear Row) ---
-    fMyConsoleLog(`     -> Applying general default values...`);
-    fSetGridValue(r, 'PermMorph1', '');
-    fSetGridValue(r, 'Morph1', '');
-    fSetGridValue(r, 'PermMorph2', '');
-    fSetGridValue(r, 'Morph2', '');
-    fSetGridValue(r, 'On', '');
-    fSetGridValue(r, 'Sk1ChkBox', false); // Ensure checkboxes are reset
-    fSetGridValue(r, 'Condition', '');
-    fSetGridValue(r, 'Sk2ChkBox', false); // Ensure checkboxes are reset
-
 
     fMyConsoleLog(`   -> ${funcName}: Finished applying data to grid row ${r}.`);
     // --- Save changes ---
