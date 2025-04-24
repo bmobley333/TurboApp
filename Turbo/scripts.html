@@ -2155,14 +2155,14 @@ function fHandleDropdownChange(event) {
 
 
 // fProcessAbilityChange ///////////////////////////////////////////////////////
-// Purpose -> Handles the logic when an Ability dropdown value changes. If the new
-//            value is empty, clears the relevant cells in the row. If not empty,
-//            initiates a server call to look up and populate ability data.
+// Purpose -> Handles the logic when an Ability dropdown value changes. Dispatches
+//            to helper functions for clearing or processing the new selection,
+//            using Promises to handle fetching and applying data from DB and KL sources.
 // Inputs  -> r (Number): Row index of the changed ability cell.
 //         -> c (Number): Column index of the changed ability cell (likely 'Ability' col).
-//         -> newValue (Any): The new value selected in the dropdown.
+//         -> newValue (Any): The new value selected in the dropdown (expected format 'Name_id').
 //         -> oldValue (Any): The previous value in the cell.
-// Outputs -> None (Modifies grid data/DOM via fSetGridValue or initiates server call).
+// Outputs -> None (Calls helper functions which modify grid or initiate server calls).
 function fProcessAbilityChange(r, c, newValue, oldValue) {
     const funcName = 'fProcessAbilityChange';
     fMyConsoleLog(`⚙️ ${funcName}: Processing change for Ability at row ${r}.`);
@@ -2177,116 +2177,257 @@ function fProcessAbilityChange(r, c, newValue, oldValue) {
         return;
     }
 
-    // --- Scenario 1: New value is empty ---
+    // --- Dispatch based on new value ---
     if (newValueStr === '') {
-        fMyConsoleLog(`   -> New value is empty. Clearing row ${r}...`);
-        let clearSuccess = true;
-
-        // Clear cells needing empty string
-        const colsToClearEmpty = gUI.list?.clearAbilityColTags_EmptyString || [];
-        colsToClearEmpty.forEach(tag => {
-            if (!fSetGridValue(r, tag, '')) { // Set to empty string
-                fMyConsoleLog(`      -> Failed to clear column '${tag}' for row ${r}.`);
-                clearSuccess = false;
-            }
-        });
-
-        // Clear cells needing false
-        const colsToClearFalse = gUI.list?.clearAbilityColTags_False || [];
-        colsToClearFalse.forEach(tag => {
-            if (!fSetGridValue(r, tag, false)) { // Set to boolean false
-                fMyConsoleLog(`      -> Failed to clear column '${tag}' for row ${r}.`);
-                clearSuccess = false;
-            }
-        });
-
-        if (clearSuccess) {
-            fMyConsoleLog(`   -> Successfully cleared relevant cells for row ${r}.`);
-            fHandleAutoSaveTextToFirestore(); // Save changes after clearing
-        } else {
-            fMyConsoleLog(`   -> ⚠️ Errors occurred while clearing cells for row ${r}.`);
-            // Optional: fShowMessage(`Warning: Failed to clear some data for row ${r + 1}.`);
-        }
-
-    // --- Scenario 2: New value is not empty ---
+        // Scenario 1: New value is empty - call helper to clear row
+        fHandleClearAbilityRow(r);
     } else {
-        fMyConsoleLog(`   -> New Ability Name/ID selected: "${newValueStr}". Initiating server lookup...`);
-        // Optionally show a loading indicator for row r
-        fSetGridValue(r, 'Sk1', '⏳'); // Example: Show loading in Sk1 cell
+        // Scenario 2: New value is not empty - Fetch data from both DB and MyKL
+        fMyConsoleLog(`   -> ${funcName}: New Ability selected: "${newValueStr}". Initiating fetches...`);
 
-        google.script.run
-            .withSuccessHandler((abilityData) => {
-                fMyConsoleLog(`   -> Received ability data from server for "${newValueStr}".`);
-                // Clear loading indicator
-                fSetGridValue(r, 'Sk1', ''); // Clear temporary indicator
+        // Initiate both fetch/process operations - they return promises
+        const promiseDB = fHandleNewAbilitySelection('DB', 'Abilities', r, newValueStr);
+        const promiseKL = fHandleNewAbilitySelection('MyKL', 'MyAbilities', r, newValueStr);
+        // Note: Assumes 'MyKL'/'MyAbilities' uses the same ID suffix logic and rowTagsMap structure.
 
-                // Validate response structure
-                if (!abilityData || typeof abilityData !== 'object') {
-                    fMyConsoleLog("      -> ❌ Invalid data structure received from server.");
-                    fShowMessage(`Error: Invalid data received for ability "${newValueStr}".`).catch(e => console.error(e));
-                    // Optionally clear the row again if data is bad
-                    fProcessAbilityChange(r, c, '', newValueStr); // Call recursively to clear
-                    return;
-                }
+        // Use Promise.all to wait for both operations to complete
+        Promise.all([promiseDB, promiseKL])
+            .then(([dbResult, klResult]) => {
+                // This block runs ONLY after BOTH promises resolve successfully
+                fMyConsoleLog(`--> ${funcName}: Both DB and KL data fetched successfully for row ${r}. Applying data...`);
 
-                // Check for server-side error flag
-                if (abilityData.error) {
-                    fMyConsoleLog(`      -> ❌ Server reported error: ${abilityData.message}`);
-                    fShowMessage(`Error fetching ability "${newValueStr}":<br>${abilityData.message}`).catch(e => console.error(e));
-                    fProcessAbilityChange(r, c, '', newValueStr); // Clear row on error
-                    return;
-                }
-
-                // === Populate Row with Data ===
-                fMyConsoleLog(`      -> Populating row ${r} with received data...`);
-                let populateSuccess = true;
-                // Map server data fields to grid columns using fSetGridValue
-                populateSuccess &&= fSetGridValue(r, 'PermMorph1', abilityData.PermMorph1 ?? '');
-                populateSuccess &&= fSetGridValue(r, 'Morph1', abilityData.Morph1 ?? '');
-                populateSuccess &&= fSetGridValue(r, 'Sk1Typ', abilityData.Sk1Typ ?? '');
-                populateSuccess &&= fSetGridValue(r, 'Sk1', abilityData.Sk1 ?? '');
-                populateSuccess &&= fSetGridValue(r, 'On', abilityData.On ?? '');
-                populateSuccess &&= fSetGridValue(r, 'Sk1ChkBox', abilityData.Sk1ChkBox ?? false);
-                populateSuccess &&= fSetGridValue(r, 'Condition', abilityData.Condition ?? '');
-                populateSuccess &&= fSetGridValue(r, 'Sk2ChkBox', abilityData.Sk2ChkBox ?? false);
-                populateSuccess &&= fSetGridValue(r, 'Sk2', abilityData.Sk2 ?? '');
-                populateSuccess &&= fSetGridValue(r, 'Sk2Typ', abilityData.Sk2Typ ?? '');
-                populateSuccess &&= fSetGridValue(r, 'Morph2', abilityData.Morph2 ?? '');
-                populateSuccess &&= fSetGridValue(r, 'PermMorph2', abilityData.PermMorph2 ?? '');
-                const properVer = (abilityData.Ver) ? `v${abilityData.Ver}` : '';
-                populateSuccess &&= fSetGridValue(r, 'Ver', `${properVer}` ?? '');
-                populateSuccess &&= fSetGridValue(r, 'Notes', abilityData.Notes ?? '');
-                populateSuccess &&= fSetGridValue(r, 'Pic', abilityData.Pic ?? '');
-                populateSuccess &&= fSetGridValue(r, 'Act', abilityData.Act ?? '');
-                populateSuccess &&= fSetGridValue(r, 'Dur', abilityData.Dur ?? '');
-                populateSuccess &&= fSetGridValue(r, 'Rng', abilityData.Rng ?? '');
-                populateSuccess &&= fSetGridValue(r, 'MetaCost', abilityData.MetaCost ?? '');
-                populateSuccess &&= fSetGridValue(r, 'Uses', abilityData.Uses ?? '');
-                populateSuccess &&= fSetGridValue(r, 'Regain', abilityData.Regain ?? '');
-
-                if (populateSuccess) {
-                    fMyConsoleLog("      -> Successfully populated row.");
-                    fHandleAutoSaveTextToFirestore(); // Save changes after populating
-                } else {
-                    fMyConsoleLog("      -> ⚠️ Errors occurred while populating row.");
-                    fShowMessage(`Warning: Some data for "${newValueStr}" might not have loaded correctly.`).catch(e => console.error(e));
-                }
+                 // --- Apply the fetched data using the new helper function ---
+                 fSaveNewAbilityToAbilTbl(r, dbResult, klResult);
 
             })
-            .withFailureHandler((error) => {
-                // Clear loading indicator on failure
-                fSetGridValue(r, 'Sk1', ''); // Clear temporary indicator
-                const errorMsg = `Failed to communicate with server for ability lookup: ${error.message || 'Unknown server error'}`;
-                console.error(`${funcName} Failure:`, error);
-                fMyConsoleLog(`   -> ❌ ${errorMsg}`);
-                fShowMessage(`Error: ${errorMsg}`).catch(e => console.error(e));
-                // Optionally clear row on communication failure?
-                // fProcessAbilityChange(r, c, '', newValueStr);
-            })
-            .fSrvGetAbilityDataByNameID(gIndex.CSID,newValueStr); // Pass the CSID and Name_ID string to the server
+            .catch(error => {
+                // This block runs if ANY of the promises in Promise.all reject
+                const errorMsg = error instanceof Error ? error.message : String(error);
+                fMyConsoleLog(`--> ❌ ${funcName}: Error during fetch/processing for row ${r}: ${errorMsg}`);
+                console.error(`fProcessAbilityChange: Error from Promise.all:`, error);
+
+                // Ensure loading indicator shows error state (may have been set by helpers already)
+                fSetGridValue(r, 'Sk1', 'ERR');
+
+                // Optionally show user message
+                // fShowMessage(`Error processing ability data: ${errorMsg}`).catch(e => console.error("ShowMessage Error:", e));
+            });
     }
 
 } // END fProcessAbilityChange
+
+
+
+// fHandleClearAbilityRow //////////////////////////////////////////////////////
+// Purpose -> Helper function to clear relevant cells in a grid row when an
+//            Ability selection is removed (set to empty).
+// Inputs  -> r (Number): Row index to clear.
+// Outputs -> None (Modifies grid via fSetGridValue, calls auto-save).
+function fHandleClearAbilityRow(r) {
+    const funcName = 'fHandleClearAbilityRow';
+    fMyConsoleLog(`   -> ${funcName}: Clearing row ${r}...`);
+    let clearSuccess = true; // Note: check based on fSetGridValue return is likely flawed
+
+    // Clear cells needing empty string
+    // Assumes gUI.list.clearAbilityColTags_EmptyString is defined and populated
+    const colsToClearEmpty = gUI.list?.clearAbilityColTags_EmptyString || [];
+    colsToClearEmpty.forEach(tag => {
+        // Note: This check assumes fSetGridValue returns boolean, which it might not.
+        if (!fSetGridValue(r, tag, '')) { // Set to empty string
+            fMyConsoleLog(`     -> (Check Warning) Failed check for clearing column '${tag}' for row ${r}.`);
+            // clearSuccess = false; // Commented out: Unreliable check
+        }
+    });
+
+    // Clear cells needing false
+    // Assumes gUI.list.clearAbilityColTags_False is defined and populated
+    const colsToClearFalse = gUI.list?.clearAbilityColTags_False || [];
+    colsToClearFalse.forEach(tag => {
+        // Note: This check assumes fSetGridValue returns boolean, which it might not.
+        if (!fSetGridValue(r, tag, false)) { // Set to boolean false
+            fMyConsoleLog(`     -> (Check Warning) Failed check for clearing column '${tag}' for row ${r}.`);
+            // clearSuccess = false; // Commented out: Unreliable check
+        }
+    });
+
+    // Original success check logic might be unreliable
+    fMyConsoleLog(`   -> ${funcName}: Finished attempting to clear relevant cells for row ${r}.`);
+    fHandleAutoSaveTextToFirestore(); // Save changes after clearing attempt
+
+} // END fHandleClearAbilityRow
+
+
+
+
+// fHandleNewAbilitySelection //////////////////////////////////////////////////
+// Purpose -> Handles selection of a new ability. Fetches data from the specified
+//            Firestore sheet, finds the row matching the ID suffix in newValueStr
+//            using rowTagsMap. Returns a Promise resolving with an object containing
+//            { dataRow, headerRow, colTagsMap }, or rejecting on error.
+// Inputs  -> workbookAbr (String): The workbook abbreviation ('DB' or 'MyKL').
+//         -> sheetName (String): The sheet name ('Abilities' or 'MyAbilities').
+//         -> r (Number): Row index in the grid where the ability was selected.
+//         -> newValueStr (String): The new ability value selected (e.g., 'Name_id').
+// Outputs -> Promise<Object|Error>: Resolves with { dataRow, headerRow, colTagsMap }, rejects with error.
+function fHandleNewAbilitySelection(workbookAbr, sheetName, r, newValueStr) {
+    const funcName = 'fHandleNewAbilitySelection';
+    fMyConsoleLog(`   -> ${funcName}: Processing "${newValueStr}" for ${workbookAbr}/${sheetName}...`);
+
+    // Set loading indicator (will be cleared before resolving/rejecting)
+    fSetGridValue(r, 'Sk1', '⏳');
+
+    // Return the promise chain
+    return fFetchFullSheetFromFirestore(workbookAbr, sheetName)
+        .then(fsData => {
+            // This block runs if fFetchFullSheetFromFirestore resolves successfully
+            fMyConsoleLog(`     -> ${funcName} (${workbookAbr}/${sheetName}): Received FSData.`);
+            let foundRow = null;
+            let headerRow = null;
+            let colTagsMap = null;
+
+            // --- Validate required parts of fsData first ---
+             if (!fsData || !fsData.text || !Array.isArray(fsData.text) || fsData.text.length === 0 || !fsData.rowTagsMap || !fsData.colTagsMap) {
+                 throw new Error(`Received invalid or incomplete FSData structure from ${workbookAbr}/${sheetName} (missing text, rowTagsMap, or colTagsMap).`);
+             }
+             headerRow = fsData.text[0]; // Assume header is row 0
+             colTagsMap = fsData.colTagsMap;
+
+            // --- Extract Ability ID from newValueStr ---
+            const lastUnderscoreIndex = newValueStr.lastIndexOf('_');
+            if (lastUnderscoreIndex === -1) {
+                throw new Error(`Selected value "${newValueStr}" does not contain '_' needed to extract ID.`);
+            }
+            const abilID = newValueStr.substring(lastUnderscoreIndex + 1);
+            fMyConsoleLog(`       -> Extracted Ability ID: "${abilID}" for ${workbookAbr}/${sheetName}`);
+
+            // --- Use FSData object to locate the FSData.text row of abilID ---
+            const rowIndex = fsData.rowTagsMap[abilID];
+            if (rowIndex === undefined || rowIndex === null) {
+                 throw new Error(`Ability ID "${abilID}" not found as a key in ${workbookAbr}/${sheetName} FSData.rowTagsMap.`);
+            }
+            fMyConsoleLog(`       -> Found row index for "${abilID}" in ${workbookAbr}/${sheetName} map: ${rowIndex}`);
+
+            if (rowIndex >= fsData.text.length) {
+                throw new Error(`Row index ${rowIndex} (for ID "${abilID}") is out of bounds for ${workbookAbr}/${sheetName} FSData.text array (length ${fsData.text.length}).`);
+            }
+
+            foundRow = fsData.text[rowIndex];
+            if (!foundRow || !Array.isArray(foundRow)) {
+                 throw new Error(`FSData.text[${rowIndex}] (for ID "${abilID}" in ${workbookAbr}/${sheetName}) is not a valid row array.`);
+            }
+
+            fMyConsoleLog(`       -> Successfully found row for "${abilID}" in ${workbookAbr}/${sheetName}.`);
+            fSetGridValue(r, 'Sk1', ''); // Clear indicator on success BEFORE resolving
+
+            // --- Resolve with an object containing data and metadata ---
+            return {
+                dataRow: foundRow,
+                headerRow: headerRow, // Pass header for context if needed
+                colTagsMap: colTagsMap // Pass map for easy index lookup
+            };
+
+        })
+        .catch(error => {
+             // This block runs if fFetchFullSheetFromFirestore rejects OR if an error is thrown in the .then block above
+            fMyConsoleLog(`     -> ❌ ${funcName} Error processing ${workbookAbr}/${sheetName}: ${error.message || error}`);
+            console.error(`${funcName} (${workbookAbr}/${sheetName}): Error in promise chain:`, error);
+            fSetGridValue(r, 'Sk1', 'ERR'); // Indicate error processing data
+            // Reject this function's promise with the error
+            return Promise.reject(error); // Ensure the error propagates to Promise.all
+        });
+
+} // END fHandleNewAbilitySelection
+
+
+
+
+// fSaveNewAbilityToAbilTbl ////////////////////////////////////////////////////
+// Purpose -> Saves data fetched from DB and KL sources to the appropriate
+//            columns in a specific grid row using fSetGridValue. Also sets
+//            default values for certain columns.
+// Inputs  -> r (Number): The target row index in the grid.
+//         -> dbResult (Object): Result from DB fetch { dataRow, headerRow, colTagsMap }.
+//         -> klResult (Object): Result from KL fetch { dataRow, headerRow, colTagsMap }.
+// Outputs -> None (Modifies grid via fSetGridValue, calls auto-save).
+function fSaveNewAbilityToAbilTbl(r, dbResult, klResult) {
+    const funcName = 'fSaveNewAbilityToAbilTbl';
+    fMyConsoleLog(`   -> ${funcName}: Applying fetched DB and KL data to grid row ${r}...`);
+
+    // --- Basic validation of inputs ---
+    if (!dbResult || !dbResult.dataRow || !dbResult.colTagsMap) {
+        console.error(`${funcName}: Invalid dbResult structure provided.`);
+        fMyConsoleLog(`     -> ❌ ${funcName}: Invalid dbResult. Aborting update for row ${r}.`);
+        fSetGridValue(r, 'Sk1', 'ERR'); // Indicate error state
+        return; // Cannot proceed
+    }
+     if (!klResult || !klResult.dataRow || !klResult.colTagsMap) {
+        console.error(`${funcName}: Invalid klResult structure provided.`);
+        fMyConsoleLog(`     -> ❌ ${funcName}: Invalid klResult. Aborting update for row ${r}.`);
+        fSetGridValue(r, 'Sk1', 'ERR'); // Indicate error state
+        return; // Cannot proceed
+    }
+
+    const dbRow = dbResult.dataRow;
+    const dbColTags = dbResult.colTagsMap;
+    const klRow = klResult.dataRow;
+    const klColTags = klResult.colTagsMap;
+
+    // --- Define the mapping ---
+    // Structure: { gridTag: targetTag, source: 'db'|'kl', sourceTag: tagInSource }
+    const dataMappings = [
+        // klRow source Data
+        { gridTag: 'Sk1',       source: 'kl', sourceTag: 'TrainedSk1' },
+        { gridTag: 'Sk2',       source: 'kl', sourceTag: 'TrainedSk2' },
+        { gridTag: 'Ver',       source: 'kl', sourceTag: 'Ver' },
+        { gridTag: 'Notes',     source: 'kl', sourceTag: 'Notes' },
+        { gridTag: 'Act',       source: 'kl', sourceTag: 'Act' },
+        { gridTag: 'Dur',       source: 'kl', sourceTag: 'Dur' },
+        { gridTag: 'Rng',       source: 'kl', sourceTag: 'Rng' },
+        { gridTag: 'MetaCost',  source: 'kl', sourceTag: 'Meta' }, // Note gridTag vs sourceTag difference
+        { gridTag: 'Uses',      source: 'kl', sourceTag: 'Uses' },
+        { gridTag: 'Regain',    source: 'kl', sourceTag: 'Regain' },
+
+        // dbRow Source Data
+        { gridTag: 'Sk1Typ',    source: 'db', sourceTag: 'SkTyp1' },
+        { gridTag: 'Sk2Typ',    source: 'db', sourceTag: 'SkTyp2' },
+        { gridTag: 'Pic',       source: 'db', sourceTag: 'Pic'},
+    ];
+
+    // --- Apply mapped data ---
+    dataMappings.forEach(map => {
+        const sourceRow = map.source === 'db' ? dbRow : klRow;
+        const sourceMap = map.source === 'db' ? dbColTags : klColTags;
+        const sourceIndex = sourceMap[map.sourceTag];
+
+        if (sourceIndex !== undefined && sourceIndex !== null && sourceIndex < sourceRow.length) {
+            const value = sourceRow[sourceIndex];
+             fMyConsoleLog(`     -> Mapping: Grid '${map.gridTag}' <- ${map.source.toUpperCase()}['${map.sourceTag}'] (Index ${sourceIndex}), Value: ${value}`);
+            fSetGridValue(r, map.gridTag, value);
+        } else {
+            // Log warning if source tag/index is invalid for the mapping
+            fMyConsoleLog(`     -> ⚠️ Warning: Source tag '${map.sourceTag}' not found or index out of bounds in ${map.source.toUpperCase()} data for grid tag '${map.gridTag}'. Skipping.`);
+            console.warn(`${funcName}: Invalid source for mapping:`, map);
+        }
+    });
+
+     // --- Apply Other Defaults ---
+     fMyConsoleLog(`     -> Applying default values...`);
+     fSetGridValue(r, 'PermMorph1', '');
+     fSetGridValue(r, 'Morph1', '');
+     fSetGridValue(r, 'PermMorph2', '');
+     fSetGridValue(r, 'Morph2', '');
+     fSetGridValue(r, 'On', '');
+     fSetGridValue(r, 'Sk1ChkBox', false); // Ensure checkboxes are reset
+     fSetGridValue(r, 'Condition', '');
+     fSetGridValue(r, 'Sk2ChkBox', false); // Ensure checkboxes are reset
+
+
+    fMyConsoleLog(`   -> ${funcName}: Finished applying data to grid row ${r}.`);
+
+    // --- Save changes ---
+    fHandleAutoSaveTextToFirestore();
+
+} // END fSaveNewAbilityToAbilTbl
 
 
 
@@ -5876,6 +6017,58 @@ async function fRefreshMonsterData() {
         .fSrvGetSheetRangeDataNTags('db', 'GMScreen', gmMonsterRangeDef);
 
 } // END fRefreshMonsterData
+
+
+
+
+// fFetchFullSheetFromFirestore /////////////////////////////////////////////
+// Purpose -> Helper function to fetch the *entire* Firestore FSData object for a
+//            given sheet using fSrvReadFirestoreRange. Returns a Promise that
+//            resolves with the FSData object or rejects with an error message.
+// Inputs  -> workbookAbr (String): The workbook abbreviation (e.g., 'DB', 'MyKL').
+//         -> sheetName (String): The sheet name (e.g., 'Abilities', 'MyAbilities').
+// Outputs -> Promise<Object|Error>: Resolves with FSData object, rejects with error string.
+function fFetchFullSheetFromFirestore(workbookAbr, sheetName) {
+    const funcName = "fFetchFullSheetFromFirestore";
+    fMyConsoleLog(`   -> ${funcName}: Fetching FULL sheet from Firestore (${workbookAbr}/${sheetName})...`);
+
+    // Define the range object for the entire sheet
+    const rangeObject = {
+        r1: 0,  // First row
+        c1: 0,  // First col
+        r2: -1, // Last row
+        c2: -1  // Last col
+    };
+
+    // Return a new Promise
+    return new Promise((resolve, reject) => {
+        google.script.run
+            .withSuccessHandler((response) => {
+                if (response && response.success && response.FSData) {
+                     // Resolve the promise with the FSData object
+                    resolve(response.FSData);
+                } else {
+                    // Handle cases where server call succeeded but returned invalid data structure
+                    const errMsg = response?.message || `Received invalid FSData structure from Firestore for ${workbookAbr}/${sheetName}.`;
+                    console.error(`${funcName} (${workbookAbr}/${sheetName}): ${errMsg}`, response);
+                    fMyConsoleLog(`     -> ❌ ${funcName} Error (${workbookAbr}/${sheetName}): ${errMsg}`);
+                     // Reject the promise with the error message
+                    reject(errMsg);
+                }
+            })
+            .withFailureHandler((error) => {
+                // Handle transport errors for fSrvReadFirestoreRange call
+                const readError = `Failed server communication fetching ${workbookAbr}/${sheetName} from Firestore: ${error.message || 'Unknown error'}`;
+                console.error(`${funcName} (${workbookAbr}/${sheetName}): ${readError}`, error);
+                fMyConsoleLog(`     -> ❌ ${funcName} Error (${workbookAbr}/${sheetName}): ${readError}`);
+                 // Reject the promise with the error message
+                reject(readError);
+            })
+            // gIndex is assumed to be globally available client-side
+            .fSrvReadFirestoreRange(rangeObject, workbookAbr, sheetName, gIndex);
+    }); // End of Promise
+
+} // END fFetchFullSheetFromFirestore
 
 
 
