@@ -445,6 +445,87 @@ function fIsCellInRangeArray(r, c, rangeArray) {
 
 
 
+
+// fGetVal_GUICache ////////////////////////////////////////////////////////////////
+// Purpose -> Retrieves a value from a cached FSData object's text property using
+//            original sheet tags or absolute indices. Handles relative index calculation.
+// Inputs  -> rRef (String|Number): Row tag or 0-based absolute index from original sheet.
+//         -> cRef (String|Number): Column tag or 0-based absolute index from original sheet.
+//         -> dataCacheObject (Object): The cached FSData object, expected to have
+//                                   { text: Array[][], rowTagsMap: Object, colTagsMap: Object }.
+//                                   Note: This cache uses 0-based absolute indices in its maps.
+// Outputs -> (Any | undefined): The value found at the resolved position within
+//                              dataCacheObject.text, or undefined if not found or on error.
+function fGetVal_GUICache(rRef, cRef, dataCacheObject) {
+    const funcName = "fGetVal_GUICache";
+
+    // === 1. Validate Cache Object ===
+    if (!dataCacheObject || typeof dataCacheObject !== 'object' ||
+        !dataCacheObject.text || !Array.isArray(dataCacheObject.text) ||
+        !dataCacheObject.rowTagsMap || typeof dataCacheObject.rowTagsMap !== 'object' ||
+        !dataCacheObject.colTagsMap || typeof dataCacheObject.colTagsMap !== 'object')
+    {
+        console.warn(`${funcName}: Invalid or incomplete dataCacheObject provided.`);
+        fMyConsoleLog(`⚠️ ${funcName}: Invalid dataCacheObject input.`);
+        return undefined;
+    }
+
+    const { text, rowTagsMap, colTagsMap } = dataCacheObject;
+    let absolute_r = NaN;
+    let absolute_c = NaN;
+
+    // === 2. Resolve Row Reference to Absolute Index ===
+    // Cache maps store absolute 0-based indices directly
+    if (typeof rRef === 'string') {
+        absolute_r = rowTagsMap[rRef]; // Direct lookup
+        if (absolute_r === undefined) {
+            // console.warn(`${funcName}: Row tag "${rRef}" not found in cache rowTagsMap.`); // Can be noisy
+            return undefined;
+        }
+    } else if (typeof rRef === 'number' && !isNaN(rRef) && rRef >= 0) {
+        absolute_r = rRef; // Assume direct absolute index
+    } else {
+        // console.warn(`${funcName}: Invalid row reference provided: ${rRef}.`); // Can be noisy
+        return undefined;
+    }
+
+    // === 3. Resolve Column Reference to Absolute Index ===
+    if (typeof cRef === 'string') {
+        absolute_c = colTagsMap[cRef]; // Direct lookup
+        if (absolute_c === undefined) {
+            // console.warn(`${funcName}: Col tag "${cRef}" not found in cache colTagsMap.`); // Can be noisy
+            return undefined;
+        }
+    } else if (typeof cRef === 'number' && !isNaN(cRef) && cRef >= 0) {
+        absolute_c = cRef; // Assume direct absolute index
+    } else {
+        // console.warn(`${funcName}: Invalid col reference provided: ${cRef}.`); // Can be noisy
+        return undefined;
+    }
+
+    // === 4. Validate Resolved Absolute Indices & Retrieve Value ===
+    if (isNaN(absolute_r) || isNaN(absolute_c)) {
+        // Should have been caught earlier, but safeguard
+        // console.warn(`${funcName}: Failed to resolve valid absolute indices for (${rRef}, ${cRef}).`);
+        return undefined;
+    }
+
+    // Access the value from the cached 2D text array
+    const value = text?.[absolute_r]?.[absolute_c];
+
+    // Check if value exists at the resolved index (handles sparse arrays implicitly)
+    if (value === undefined) {
+        // console.warn(`${funcName}: Value not found at resolved index [${absolute_r}, ${absolute_c}] for ref (${rRef}, ${cRef}).`); // Can be noisy
+    }
+
+    // Return the found value (could be anything, including null or '') or undefined
+    return value;
+
+} // END fGetVal_GUICache
+
+
+
+
 // ==========================================================================
 // === Core Cell Creation Helpers       (End of Low-Level Utilities) ===
 // ==========================================================================
@@ -2165,13 +2246,12 @@ function fHandleDropdownChange(event) {
 // fProcessAbilityChange ///////////////////////////////////////////////////////
 // Purpose -> Handles the logic when an Ability dropdown value changes. Dispatches
 //            to helper functions for clearing or processing the new selection,
-//            using Promises to handle fetching and applying data from DB Abilities,
-//            DB Gear, and KL MyAbilities sources. Recalculates Enc/MR afterwards.
+//            using synchronous calls to fHandleNewAbilitySelection which reads from caches.
 // Inputs  -> r (Number): Row index of the changed ability cell.
 //         -> c (Number): Column index of the changed ability cell (likely 'Ability' col).
 //         -> newValue (Any): The new value selected in the dropdown (expected format 'Name_id').
 //         -> oldValue (Any): The previous value in the cell.
-// Outputs -> None (Calls helper functions which modify grid or initiate server calls).
+// Outputs -> None (Calls helper functions which modify grid).
 function fProcessAbilityChange(r, c, newValue, oldValue) {
     const funcName = 'fProcessAbilityChange';
     fMyConsoleLog(`⚙️ ${funcName}: Processing change for Ability/Gear at row ${r}.`);
@@ -2191,55 +2271,50 @@ function fProcessAbilityChange(r, c, newValue, oldValue) {
         // Scenario 1: New value is empty - call helper to clear row
         fHandleClearAbilityRow(r);
         // Recalculate Enc/MR AFTER clearing the row
-        fCalculateEncAndMR(); 
+        fCalculateEncAndMR();
     } else {
-        // Scenario 2: New value is not empty - Fetch data from all relevant sources
-        fHandleClearAbilityRow(r); // Sets the default values for all ability and gear fields. REQUIRED here!
-        fMyConsoleLog(`   -> ${funcName}: New Ability/Gear selected: "${newValueStr}". Initiating fetches...`);
-        // Initiate all fetch/process operations - they return promises
-        const promiseDBAbility = fHandleNewAbilitySelection('DB', 'Abilities', r, newValueStr);
-        const promiseKLMyAbilities = fHandleNewAbilitySelection('MyKL', 'MyAbilities', r, newValueStr);
-        const promiseDBGear = fHandleNewAbilitySelection('DB', 'Gear', r, newValueStr); // Fetch Gear data
+        // Scenario 2: New value is not empty - Process data from relevant sources using caches
+        fHandleClearAbilityRow(r); // Sets defaults. REQUIRED here!
+        fMyConsoleLog(`   -> ${funcName}: New Ability/Gear selected: "${newValueStr}". Processing caches...`);
 
-        // Use Promise.allSettled to wait for all operations to complete, regardless of individual success/failure
-        Promise.allSettled([promiseDBAbility, promiseKLMyAbilities, promiseDBGear])
-            .then((results) => {
-                // Extract results, checking status
-                const dbAbilityResult = results[0].status === 'fulfilled' ? results[0].value : null;
-                const klMyAbilitiesResult = results[1].status === 'fulfilled' ? results[1].value : null;
-                const dbGearResult = results[2].status === 'fulfilled' ? results[2].value : null;
+        // Set loading indicator (will be cleared by fSaveNewAbilityToAbilTbl)
+        fSetGridValue(r, 'Sk1', '⏳');
 
-                // Log individual fetch outcomes
-                fMyConsoleLog(`   -> ${funcName}: Fetch Results - DB Ability: ${dbAbilityResult ? 'Success' : 'Failed/Not Found'}, KL MyAbil: ${klMyAbilitiesResult ? 'Success' : 'Failed/Not Found'}, DB Gear: ${dbGearResult ? (dbGearResult.dataRow ? 'Success' : 'Not Found') : 'Failed'}`);
+        // Call handlers synchronously - they now read from cache
+        const dbAbilityResult = fHandleNewAbilitySelection('DB', 'Abilities', r, newValueStr);
+        const klMyAbilitiesResult = fHandleNewAbilitySelection('MyKL', 'MyAbilities', r, newValueStr);
+        const dbGearResult = fHandleNewAbilitySelection('DB', 'Gear', r, newValueStr);
 
-                // Check if we have *at least* Ability OR Gear data to proceed
-                const hasAbilityData = dbAbilityResult?.dataRow || klMyAbilitiesResult?.dataRow;
-                const hasGearData = dbGearResult?.dataRow;
+        // Check for critical errors during cache access/processing within handlers
+        if (dbAbilityResult === null || klMyAbilitiesResult === null || dbGearResult === null) {
+             fMyConsoleLog(`--> ❌ ${funcName}: Critical error occurred during cache processing for row ${r}. Halting.`);
+             // Error message should have been shown by fHandleNewAbilitySelection
+             // Ensure indicator is cleared if it wasn't already
+             if(fGetGridValue(r, 'Sk1') === '⏳') fSetGridValue(r, 'Sk1', 'ERR');
+             return; // Stop processing
+        }
 
-                if (!hasAbilityData && !hasGearData) {
-                    // If neither ability nor gear data was successfully retrieved (and contained dataRow), report error
-                    fMyConsoleLog(`--> ❌ ${funcName}: Failed to retrieve valid data from DB Abilities, MyKL, or DB Gear for row ${r}.`);
-                    console.error(`${funcName}: All fetches failed or returned no data for ${newValueStr}`);
-                    fSetGridValue(r, 'Sk1', 'ERR'); // Indicate general error
-                    // Optionally show a more specific error message based on individual results if needed
-                    // fShowMessage(`Error processing selection: Could not find data in Abilities, MyAbilities, or Gear databases.`).catch(e => console.error("ShowMessage Error:", e));
-                    return; // Stop processing
-                }
+        // Log individual outcomes based on the 'found' flag
+        fMyConsoleLog(`   -> ${funcName}: Cache Processing Results - DB Ability Found: ${dbAbilityResult.found}, KL MyAbil Found: ${klMyAbilitiesResult.found}, DB Gear Found: ${dbGearResult.found}`);
 
-                // Proceed to apply data - fSaveNewAbilityToAbilTbl needs to handle potentially null results
-                fMyConsoleLog(`--> ${funcName}: Fetches complete for row ${r}. Applying data...`);
-                fSaveNewAbilityToAbilTbl(r, dbAbilityResult, klMyAbilitiesResult, dbGearResult);
+        // Check if we have *at least* Ability OR Gear dataRow to proceed
+        const hasAbilityData = dbAbilityResult.found || klMyAbilitiesResult.found;
+        const hasGearData = dbGearResult.found;
 
-                // Recalculate Enc/MR AFTER saving the new data
-                fCalculateEncAndMR(); 
+        if (!hasAbilityData && !hasGearData) {
+            // If neither ability nor gear data was found in caches, report error
+            fMyConsoleLog(`--> ❌ ${funcName}: Could not find ID "${newValueStr}" in DB Abilities, MyKL, or DB Gear caches for row ${r}.`);
+            fSetGridValue(r, 'Sk1', 'NF'); // Indicate Not Found
+            fShowMessage(`Error processing selection: Could not find data in Abilities, MyAbilities, or Gear definitions.`).catch(e => console.error("ShowMessage Error:", e));
+            return; // Stop processing
+        }
 
-            });
-            // Note: Promise.allSettled itself doesn't reject unless there's a fundamental issue.
-            // Individual promise rejections are handled within the .then block by checking results[i].status.
-            // We don't need a separate .catch here for the Promise.allSettled itself unless we expect
-            // syntax errors or other non-promise-related issues within the setup.
-            // Individual fetch errors (network, server-side) should have been caught and potentially
-            // resolved to null/error objects within fHandleNewAbilitySelection, allowing allSettled to complete.
+        // Proceed to apply data
+        fMyConsoleLog(`--> ${funcName}: Cache processing complete for row ${r}. Applying data...`);
+        fSaveNewAbilityToAbilTbl(r, dbAbilityResult, klMyAbilitiesResult, dbGearResult);
+
+        // Recalculate Enc/MR AFTER saving the new data
+        fCalculateEncAndMR();
 
     } // End else (newValueStr !== '')
 
@@ -2289,105 +2364,98 @@ function fHandleClearAbilityRow(r) {
 
 
 // fHandleNewAbilitySelection //////////////////////////////////////////////////
-// Purpose -> Handles selection of a new ability. Fetches data from the specified
-//            Firestore sheet, finds the row matching the ID suffix in newValueStr
-//            using rowTagsMap. Returns a Promise resolving with an object containing
-//            { dataRow, headerRow, colTagsMap }, or rejecting on error.
-//            Gracefully handles ID not found for MyKL/MyAbilities by resolving with null dataRow.
+// Purpose -> Handles selection of a new ability/gear item synchronously using cached data.
+//            Finds the data row for the selected item ID within the appropriate cached
+//            FSData object (DB Abilities, MyKL Abilities, or DB Gear).
 // Inputs  -> workbookAbr (String): The workbook abbreviation ('DB' or 'MyKL').
-//         -> sheetName (String): The sheet name ('Abilities' or 'MyAbilities').
-//         -> r (Number): Row index in the grid where the ability was selected.
+//         -> sheetName (String): The sheet name ('Abilities', 'MyAbilities', or 'Gear').
+//         -> r (Number): Row index in the grid where the ability was selected (for logging).
 //         -> newValueStr (String): The new ability value selected (e.g., 'Name_id').
-// Outputs -> Promise<Object|Error>: Resolves with { dataRow, headerRow, colTagsMap, found: boolean }, rejects with error.
+// Outputs -> (Object | null): Returns { dataRow, headerRow, colTagsMap, found: boolean } on success,
+//                              or null if critical errors occur (like cache not loaded).
+//                              'found' is true if the ID was located in the respective cache.
 function fHandleNewAbilitySelection(workbookAbr, sheetName, r, newValueStr) {
     const funcName = 'fHandleNewAbilitySelection';
-    fMyConsoleLog(`   -> ${funcName}: Processing "${newValueStr}" for ${workbookAbr}/${sheetName}...`);
+    fMyConsoleLog(`   -> ${funcName}: Processing "${newValueStr}" for ${workbookAbr}/${sheetName} using CACHE...`);
 
-    // Set loading indicator (will be cleared before resolving/rejecting)
-    fSetGridValue(r, 'Sk1', '⏳');
+    // --- 1. Determine Target Cache and Key ---
+    let targetCache = null;
+    let cacheKey = '';
+    const lowerWorkbookAbr = workbookAbr.toLowerCase();
+    const lowerSheetName = sheetName.toLowerCase();
 
-    // Return the promise chain
-    return fFetchFullSheetFromFirestore(workbookAbr, sheetName)
-        .then(fsData => {
-            // This block runs if fFetchFullSheetFromFirestore resolves successfully
-            fMyConsoleLog(`     -> ${funcName} (${workbookAbr}/${sheetName}): Received FSData.`);
-            let foundRow = null;
-            let headerRow = null;
-            let colTagsMap = null;
-            let found = false; // Flag to indicate if data was found
+    if (lowerWorkbookAbr === 'db' && lowerSheetName === 'abilities') {
+        targetCache = gUI.dbAbilitiesFSData; cacheKey = 'gUI.dbAbilitiesFSData';
+    } else if (lowerWorkbookAbr === 'mykl' && lowerSheetName === 'myabilities') {
+        targetCache = gUI.myKlMyAbilitiesFSData; cacheKey = 'gUI.myKlMyAbilitiesFSData';
+    } else if (lowerWorkbookAbr === 'db' && lowerSheetName === 'gear') {
+        targetCache = gUI.dbGearFSData; cacheKey = 'gUI.dbGearFSData';
+    } else {
+        fMyConsoleLog(`      -> ❌ ${funcName} Error: Unsupported workbook/sheet combination: ${workbookAbr}/${sheetName}`);
+        fSetGridValue(r, 'Sk1', 'ERR');
+        return null;
+    }
 
-            // --- Validate required parts of fsData first ---
-            if (!fsData || !fsData.text || !Array.isArray(fsData.text) || !fsData.rowTagsMap || !fsData.colTagsMap) {
-                // If data is missing structure BUT it's the expected MyKL case, maybe resolve gracefully?
-                // For now, throw error for fundamentally bad FSData regardless of source.
-                throw new Error(`Received invalid or incomplete FSData structure from ${workbookAbr}/${sheetName}.`);
+    // --- 2. Validate Cache Loaded ---
+    if (!targetCache || !targetCache.text || !targetCache.rowTagsMap || !targetCache.colTagsMap) {
+        fMyConsoleLog(`      -> ❌ ${funcName} Error: Required cache ${cacheKey} is not loaded or invalid.`);
+        fShowMessage(`Error: Required definition data (${cacheKey}) not loaded. Please reload.`).catch(e => console.error("ShowMessage Error:", e));
+        fSetGridValue(r, 'Sk1', 'ERR');
+        return null;
+    }
+
+    // --- 3. Extract Ability ID ---
+    const lastUnderscoreIndex = newValueStr.lastIndexOf('_');
+    if (lastUnderscoreIndex === -1) {
+        fMyConsoleLog(`      -> ❌ ${funcName} Error: Selected value "${newValueStr}" does not contain '_' needed to extract ID.`);
+        fSetGridValue(r, 'Sk1', 'ERR');
+        return null;
+    }
+    const abilID = newValueStr.substring(lastUnderscoreIndex + 1);
+    fMyConsoleLog(`       -> Extracted ID: "${abilID}" for ${workbookAbr}/${sheetName}`);
+
+    // --- 4. Find Row Index using Cached rowTagsMap ---
+    const rowIndex = targetCache.rowTagsMap[abilID];
+    let dataRow = null;
+    let found = false;
+
+    if (rowIndex !== undefined && rowIndex !== null && rowIndex >= 0 && rowIndex < targetCache.text.length) {
+        dataRow = targetCache.text[rowIndex];
+        if (Array.isArray(dataRow)) {
+            found = true;
+            fMyConsoleLog(`       -> Successfully found row for ID "${abilID}" at index ${rowIndex} in ${cacheKey}.`);
+        } else {
+            fMyConsoleLog(`       -> ⚠️ ${funcName} Warning: Found index ${rowIndex} for ID "${abilID}", but data at index is not an array in ${cacheKey}.`);
+            dataRow = null;
+        }
+    } else {
+        // --- ID Not Found Handling ---
+        const isOptionalNotFound = (lowerWorkbookAbr === 'mykl' && lowerSheetName === 'myabilities') || (lowerWorkbookAbr === 'db' && lowerSheetName === 'gear');
+        if (isOptionalNotFound) {
+            // **Log INFO for DB/Gear, otherwise keep WARNING for others**
+            if (lowerWorkbookAbr === 'db' && lowerSheetName === 'gear') {
+                 fMyConsoleLog(`       -> INFO: ID "${abilID}" not found in ${cacheKey} map. This is expected for non-gear items.`); // <<< CHANGED Log Level
+            } else { // MyKL/MyAbilities case
+                 fMyConsoleLog(`       -> ID "${abilID}" not found in ${cacheKey} map. This is expected/handled.`);
             }
+        } else {
+            // DB/Abilities case (Should ideally be found)
+            fMyConsoleLog(`       -> ⚠️ ${funcName} Warning: ID "${abilID}" NOT found in ${cacheKey} map.`);
+        }
+        // 'found' remains false, 'dataRow' remains null
+    }
 
-            headerRow = (fsData.text.length > 0) ? fsData.text[0] : []; // Get header row safely
-            colTagsMap = fsData.colTagsMap;
+    // --- 5. Prepare Return Object ---
+    const headerRow = targetCache.text?.[0] || [];
+    const colTagsMap = targetCache.colTagsMap || {};
 
-            // --- Extract Ability ID from newValueStr ---
-            const lastUnderscoreIndex = newValueStr.lastIndexOf('_');
-            if (lastUnderscoreIndex === -1) {
-                throw new Error(`Selected value "${newValueStr}" does not contain '_' needed to extract ID.`);
-            }
-            const abilID = newValueStr.substring(lastUnderscoreIndex + 1);
-            fMyConsoleLog(`       -> Extracted Ability ID: "${abilID}" for ${workbookAbr}/${sheetName}`);
+    return {
+        dataRow: dataRow,
+        headerRow: headerRow,
+        colTagsMap: colTagsMap,
+        found: found
+    };
 
-            // --- Use FSData object to locate the FSData.text row of abilID ---
-            const rowIndex = fsData.rowTagsMap[abilID];
-
-            if (rowIndex === undefined || rowIndex === null) {
-                // ID not found in rowTagsMap
-                const isMyKLCheck = (workbookAbr.toUpperCase() === 'MYKL' && sheetName === 'MyAbilities');
-                if (isMyKLCheck) {
-                    // It's OK if not found in MyKL/MyAbilities
-                    fMyConsoleLog(`       -> Ability ID "${abilID}" not found in ${workbookAbr}/${sheetName} rowTagsMap. This is expected.`);
-                    // Resolve gracefully, indicating not found
-                    fSetGridValue(r, 'Sk1', ''); // Clear indicator
-                    return {
-                        dataRow: null,
-                        headerRow: headerRow,
-                        colTagsMap: colTagsMap,
-                        found: false
-                    };
-                } else {
-                    // For other sources (DB/Abilities, DB/Gear), throw the error as before
-                    throw new Error(`Ability ID "${abilID}" not found as a key in ${workbookAbr}/${sheetName} FSData.rowTagsMap.`);
-                }
-            }
-
-            // --- Row index found, proceed to validate and extract row ---
-            fMyConsoleLog(`       -> Found row index for "${abilID}" in ${workbookAbr}/${sheetName} map: ${rowIndex}`);
-            if (rowIndex >= fsData.text.length) {
-                throw new Error(`Row index ${rowIndex} (for ID "${abilID}") is out of bounds for ${workbookAbr}/${sheetName} FSData.text array (length ${fsData.text.length}).`);
-            }
-
-            foundRow = fsData.text[rowIndex];
-            if (!foundRow || !Array.isArray(foundRow)) {
-                throw new Error(`FSData.text[${rowIndex}] (for ID "${abilID}" in ${workbookAbr}/${sheetName}) is not a valid row array.`);
-            }
-
-            fMyConsoleLog(`       -> Successfully found row for "${abilID}" in ${workbookAbr}/${sheetName}.`);
-            fSetGridValue(r, 'Sk1', ''); // Clear indicator on success BEFORE resolving
-            found = true; // Mark as found
-
-            // --- Resolve with an object containing data and metadata ---
-            return {
-                dataRow: foundRow,
-                headerRow: headerRow, // Pass header for context if needed
-                colTagsMap: colTagsMap, // Pass map for easy index lookup
-                found: found
-            };
-        })
-        .catch(error => {
-            // This block runs if fFetchFullSheetFromFirestore rejects OR if an error is explicitly thrown in the .then block above
-            fMyConsoleLog(`     -> ❌ ${funcName} Error processing ${workbookAbr}/${sheetName}: ${error.message || error}`);
-            console.error(`${funcName} (${workbookAbr}/${sheetName}): Error in promise chain:`, error);
-            fSetGridValue(r, 'Sk1', 'ERR'); // Indicate error processing data
-            // Reject this function's promise with the error
-            return Promise.reject(error); // Ensure the error propagates to Promise.allSettled
-        });
 } // END fHandleNewAbilitySelection
 
 
@@ -2616,177 +2684,101 @@ function fApplyDropdownsToGrid() {
 
 
 // fFetchAndApplyAbilityDropdowns //////////////////////////////////////////////
-// Purpose -> Ensures the ability list ('MyCS'/'List') exists in Firestore (creating
-//            it from the Sheet if necessary), then fetches the list, processes it
-//            (sorts, adds empty option), and applies it to the grid dropdowns.
+// Purpose -> Ensures the ability list ('MyCS'/'List') is processed from the cache
+//            and applied to the grid dropdowns. Assumes the cache has already been loaded.
 // Inputs  -> None.
-// Outputs -> None (Modifies gUI.dropDownBox, calls fApplyDropdownsToGrid, may trigger server saves).
+// Outputs -> None (Calls fProcessCachedAbilityList).
 function fFetchAndApplyAbilityDropdowns() {
     const funcName = "fFetchAndApplyAbilityDropdowns";
-    fMyConsoleLog(`⚙️ ${funcName}: Checking Firestore/Sheet for Ability List...`);
+    fMyConsoleLog(`⚙️ ${funcName}: Triggering processing of cached Ability List...`);
 
-    // --- 1. Validate Prerequisites ---
-    if (!gIndex.CSID || !gIndex.GameVer || !gIndex.Email) {
-        const missing = [
-            !gIndex.CSID ? 'CS ID' : null,
-            !gIndex.GameVer ? 'Game Version' : null,
-            !gIndex.Email ? 'User Email' : null
-        ].filter(Boolean).join(', ');
-        const msg = `Cannot fetch ability list: Missing required parameters (${missing}).`;
-        console.error(`${funcName}: ${msg}`);
-        fMyConsoleLog(`   -> ❌ ${funcName} Error: ${msg}`);
-        fShowMessage(`Error: ${msg}`).catch(e => console.error("ShowMessage Error:", e));
-        return;
+    // --- Validate Prerequisite Cache ---
+    // Check if the cache load mechanism should have already run and populated the cache
+    if (!gUI.myCsListFSData) {
+         const errorMsg = `Cannot process ability list: Required cache (gUI.myCsListFSData) was not loaded during initial setup.`;
+         console.error(`${funcName}: ${errorMsg}`);
+         fMyConsoleLog(`   -> ❌ ${funcName} Error: ${errorMsg}`);
+         fShowMessage(`Error: ${errorMsg}`).catch(e => console.error("ShowMessage Error:", e));
+         return; // Stop if the cache isn't ready
     }
 
-    // --- 2. Check if Firestore Document Exists ---
-    const workbookAbr = 'MyCS';
-    const sheetName = 'List';
-    fMyConsoleLog(`   -> Calling fSrvVerifyFirestorePathExists for ${workbookAbr}/${sheetName}...`);
-
-    google.script.run
-        .withSuccessHandler((exists) => {
-            fMyConsoleLog(`   -> Firestore check result for ${workbookAbr}/${sheetName}: ${exists}`);
-            if (!exists) {
-                // --- 2a. Firestore Doc NOT Found: Load from Sheet & Save ---
-                fMyConsoleLog(`   -> Firestore data for ${workbookAbr}/${sheetName} not found. Loading from Sheet...`);
-                const loadingMsg = fShowMessage(`⏳ Reading Ability List from Character Sheet<br><br>This may take up to a minute<br><br> Do not close this message.`); // Show loading
-
-                google.script.run
-                    .withSuccessHandler((sheetData) => {
-                        fHideMessage(); // Hide loading message
-                        fMyConsoleLog(`   -> Successfully loaded data from ${workbookAbr}/${sheetName} Sheet.`);
-                        // Validate loaded sheet data structure
-                        if (!sheetData || typeof sheetData !== 'object' || !sheetData.ColTags || !sheetData.RowTags || !sheetData.sheetText2D) {
-                            const sheetLoadError = "Invalid data structure received when loading sheet data.";
-                            console.error(`${funcName}: ${sheetLoadError}`, sheetData);
-                            fMyConsoleLog(`   -> ❌ ${funcName} Error: ${sheetLoadError}`);
-                            fShowMessage(`Error: ${sheetLoadError}`).catch(e => console.error("ShowMessage Error:", e));
-                            return; // Stop if sheet load was bad
-                        }
-
-                        // Now save this sheet data to Firestore
-                        fMyConsoleLog(`      -> Saving loaded Sheet data to Firestore...`);
-                        const savingMsg = fShowMessage(`💾 Saving Ability List to database...`); // Show saving message
-
-                        google.script.run
-                            .withSuccessHandler((saveResult) => {
-                                fHideMessage(); // Hide saving message
-                                if (saveResult && saveResult.success) {
-                                    fMyConsoleLog(`      -> ✅ Successfully saved ${workbookAbr}/${sheetName} to Firestore.`);
-                                    // Now that it's saved, fetch it back to ensure consistency
-                                    fFetchAbilityListFromFirestore(workbookAbr, sheetName);
-                                } else {
-                                    const saveErrorMsg = saveResult?.message || `Unknown error saving ${workbookAbr}/${sheetName} to Firestore.`;
-                                    console.error(`${funcName}: Firestore save failed: ${saveErrorMsg}`);
-                                    fMyConsoleLog(`      -> ❌ ${funcName} Error: ${saveErrorMsg}`);
-                                    fShowMessage(`Error saving Ability List: ${saveErrorMsg}`).catch(e => console.error("ShowMessage Error:", e));
-                                    // Decide if we should proceed using the sheetData directly here as a fallback?
-                                    // For now, we stop on save failure.
-                                }
-                            })
-                            .withFailureHandler((error) => {
-                                fHideMessage(); // Hide saving message
-                                const saveError = `Failed server communication during Firestore save for ${workbookAbr}/${sheetName}: ${error.message || 'Unknown error'}`;
-                                console.error(`${funcName}: ${saveError}`, error);
-                                fMyConsoleLog(`      -> ❌ ${funcName} Error: ${saveError}`);
-                                fShowMessage(`Error: ${saveError}`).catch(e => console.error("ShowMessage Error:", e));
-                            })
-                            .fSrvSaveFullSheetTextAndTagsToFirestore(gIndex, workbookAbr, sheetName, sheetData);
-
-                    })
-                    .withFailureHandler((error) => {
-                        fHideMessage(); // Hide loading message
-                        const sheetLoadError = `Failed server communication loading sheet ${workbookAbr}/${sheetName}: ${error.message || 'Unknown error'}`;
-                        console.error(`${funcName}: ${sheetLoadError}`, error);
-                        fMyConsoleLog(`   -> ❌ ${funcName} Error: ${sheetLoadError}`);
-                        fShowMessage(`Error: ${sheetLoadError}`).catch(e => console.error("ShowMessage Error:", e));
-                    })
-                    .fSrvLoadFullGoogleSheetAndTags(workbookAbr, sheetName, gIndex.CSID);
-
-            } else {
-                // --- 2b. Firestore Doc Found: Fetch Directly ---
-                fFetchAbilityListFromFirestore(workbookAbr, sheetName);
-            }
-        })
-        .withFailureHandler((error) => {
-            // Handle failure for fSrvVerifyFirestorePathExists call
-            const verifyError = `Failed server communication checking Firestore path for ${workbookAbr}/${sheetName}: ${error.message || 'Unknown error'}`;
-            console.error(`${funcName}: ${verifyError}`, error);
-            fMyConsoleLog(`   -> ❌ ${funcName} Error: ${verifyError}`);
-            fShowMessage(`Error: ${verifyError}`).catch(e => console.error("ShowMessage Error:", e));
-            // Cannot proceed without knowing if Firestore data exists
-        })
-        .fSrvVerifyFirestorePathExists(workbookAbr, sheetName, gIndex); // Pass all necessary args
+    // --- Call Processing Function ---
+    // The cache exists, now process it and apply dropdowns
+    fProcessCachedAbilityList();
 
 } // END fFetchAndApplyAbilityDropdowns
 
 
 
 
-// fFetchAbilityListFromFirestore ///////////////////////////////////////////////
-// Purpose -> Helper function to fetch the ability list column from Firestore using
-//            fSrvReadFirestoreRange, process the list (filter, sort, add empty),
-//            and apply it to the grid dropdowns.
-// Inputs  -> workbookAbr (String): The workbook abbreviation (e.g., 'MyCS').
-//         -> sheetName (String): The sheet name (e.g., 'List').
+// fProcessCachedAbilityList ///////////////////////////////////////////////
+// Purpose -> Processes the cached MyCS/List data, sorts it, adds an empty option,
+//            and applies it to the grid dropdowns for ability selection.
+// Inputs  -> None (Uses gUI.myCsListFSData).
 // Outputs -> None (Modifies gUI.dropDownBox, calls fApplyDropdownsToGrid).
-function fFetchAbilityListFromFirestore(workbookAbr, sheetName) {
-    const funcName = "fFetchAbilityListFromFirestore";
-    fMyConsoleLog(`   -> ${funcName}: Fetching Ability List from Firestore (${workbookAbr}/${sheetName})...`);
+function fProcessCachedAbilityList() {
+    const funcName = "fProcessCachedAbilityList";
+    fMyConsoleLog(`   -> ${funcName}: Processing cached MyCS/List data...`);
 
-    // Define the range object for the AbilitiesNameID column
-    const rangeObject = {
-        r1: 'TableFirstRow',   // Start tag
-        c1: 'AbilitiesNameID', // Column tag
-        r2: -1,                // Read to the last row
-        c2: 'AbilitiesNameID'  // Same column tag
-    };
+    // --- 1. Access and Validate Cache ---
+    const listCache = gUI.myCsListFSData;
+    const colTagForAbilities = 'AbilitiesNameID'; // Define the target column tag
 
-    google.script.run
-        .withSuccessHandler((response) => {
-            if (response && response.success && response.FSData && Array.isArray(response.FSData.text)) {
-                const abilityListRaw = response.FSData.text; // Should be 1D array
-                fMyConsoleLog(`      -> Received ${abilityListRaw.length} raw ability names from Firestore.`);
+    if (!listCache || !listCache.text || !Array.isArray(listCache.text) ||
+        !listCache.colTagsMap || typeof listCache.colTagsMap !== 'object') {
+        const errMsg = `MyCS/List cache (gUI.myCsListFSData) is missing or invalid. Cannot populate Ability dropdowns.`;
+        console.error(`${funcName}: ${errMsg}`);
+        fMyConsoleLog(`      -> ❌ ${funcName} Error: ${errMsg}`);
+        fShowMessage(`Error: ${errMsg}`).catch(e => console.error("ShowMessage Error:", e));
+        return;
+    }
 
-                // Process the list: filter empty, sort, add empty option at start
-                const abilityListFiltered = abilityListRaw.filter(name => name && String(name).trim() !== '');
-                abilityListFiltered.sort((a, b) => String(a).localeCompare(String(b))); // Alphabetical sort
-                abilityListFiltered.unshift(''); // Add empty option to the beginning
+    // --- 2. Extract the Correct Column ---
+    const abilitiesColIndex = listCache.colTagsMap[colTagForAbilities];
+    if (abilitiesColIndex === undefined || abilitiesColIndex === null) {
+        const errMsg = `Column tag '${colTagForAbilities}' not found in MyCS/List cache (gUI.myCsListFSData.colTagsMap).`;
+        console.error(`${funcName}: ${errMsg}`);
+        fMyConsoleLog(`      -> ❌ ${funcName} Error: ${errMsg}`);
+        fShowMessage(`Error: ${errMsg}`).catch(e => console.error("ShowMessage Error:", e));
+        return;
+    }
 
-                fMyConsoleLog(`      -> Processed list size: ${abilityListFiltered.length} (after filter, sort, unshift).`);
+    // Map the 2D array to get only the values from the target column
+    const abilityListRaw = listCache.text.map(row => row?.[abilitiesColIndex]); // Get value at specific index, handle potential sparse rows
 
-                // Create the config object
-                const abilityConfig = {
-                    choices: abilityListFiltered,
-                    ranges: gUI.range.abilNameNoNish // Target ranges for dropdowns
-                };
+    fMyConsoleLog(`      -> Extracted ${abilityListRaw.length} potential ability names from column ${abilitiesColIndex} (${colTagForAbilities}).`);
 
-                // Add config to gUI.dropDownBox
-                gUI.dropDownBox.push(abilityConfig);
-                fMyConsoleLog("      -> Added Ability config to gUI.dropDownBox.");
+    // --- 3. Process List ---
+    // Filter empty/null/undefined, sort, add empty option at start
+    const abilityListFiltered = abilityListRaw
+        .filter(name => name !== undefined && name !== null && String(name).trim() !== '') // Filter out null/undefined/empty strings
+        .map(name => String(name).trim()); // Ensure strings and trim
 
-                // Apply the dropdowns to the grid UI
-                fApplyDropdownsToGrid();
+    abilityListFiltered.sort((a, b) => a.localeCompare(b)); // Alphabetical sort
+    abilityListFiltered.unshift(''); // Add empty option to the beginning
 
-            } else {
-                // Handle cases where server call succeeded but returned invalid data structure
-                const errMsg = response?.message || "Received invalid FSData structure for ability list from Firestore.";
-                console.error(`${funcName}: ${errMsg}`, response);
-                fMyConsoleLog(`      -> ❌ ${funcName} Error: ${errMsg}`);
-                fShowMessage(`Error: ${errMsg}`).catch(e => console.error("ShowMessage Error:", e));
-            }
-        })
-        .withFailureHandler((error) => {
-            // Handle transport errors for fSrvReadFirestoreRange call
-            const readError = `Failed server communication fetching ability list from Firestore: ${error.message || 'Unknown error'}`;
-            console.error(`${funcName}: ${readError}`, error);
-            fMyConsoleLog(`      -> ❌ ${funcName} Error: ${readError}`);
-            fShowMessage(`Error: ${readError}`).catch(e => console.error("ShowMessage Error:", e));
-        })
-        .fSrvReadFirestoreRange(rangeObject, workbookAbr, sheetName, gIndex);
+    fMyConsoleLog(`      -> Processed list size: ${abilityListFiltered.length} (after filter, sort, unshift).`);
 
-} // END fFetchAbilityListFromFirestore
+    // --- 4. Update Dropdown Config ---
+    let abilityConfig = gUI.dropDownBox.find(config => config.gUIListKey === 'myCsListFSData');
+    if (!abilityConfig) {
+         fMyConsoleLog(`      -> Creating new dropdown config for Abilities.`);
+         abilityConfig = {
+            gUIListKey: 'myCsListFSData',
+            choices: abilityListFiltered,
+            ranges: gUI.range.abilNameNoNish
+         };
+         gUI.dropDownBox.push(abilityConfig);
+    } else {
+        fMyConsoleLog(`      -> Updating existing dropdown config choices for Abilities.`);
+        abilityConfig.choices = abilityListFiltered;
+    }
+    fMyConsoleLog("      -> Added/Updated Ability config in gUI.dropDownBox.");
+
+    // --- 5. Apply Dropdowns to Grid ---
+    fApplyDropdownsToGrid();
+
+} // END fProcessCachedAbilityList
 
 
 
