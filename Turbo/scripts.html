@@ -61,8 +61,7 @@ const gUI = {
   roll: {
     // --- Input values from Sheet (populated by fClearAndSetGUIRoll) ---
     sk1CB: false,          // Flag: True if roll originated from Sk1 CheckBox column, false if Sk2
-    ability_R: '',
-    // 0-based row index of the ability/gear being rolled
+    ability_R: '',         // 0-based row index of the ability/gear being rolled
     skMorph: '',           // Raw morph string from sheet ('Morph1' or 'Morph2' col)
     skTyp: '',             // Base skill type string ('Sk', 'Atr', 'Atk', etc.) from sheet ('Sk1Typ' or 'Sk2Typ' col)
     skSk: '',              // Base skill value (numeric >= 1 or '') from sheet ('Sk1' or 'Sk2' col)
@@ -78,28 +77,24 @@ const gUI = {
 
     // --- Result values calculated after processing morphs (fProcessMorph, fApplyMorphResults) ---
     resTyp: '',            // Resulting roll type after morphs (defaults to skTyp)
-    resSk: '',
-    // Resulting skill value after skill morphs (base for roll calculation)
+    resSk: '',             // Resulting skill value after skill morphs (base for roll calculation)
     resFlatBase: '',       // Skill override value from '=' morph
     resFlatResult: '',     // Final roll result override from '==' morph
     resDif: '',            // Difficulty value from '^' morph
     resFocus: '',          // Raw Focus Meta color tag ('R'...'B')
-    resPlus: '',
-    // Sum of '+/-[num]' morphs (additive modifier to resSk)
+    resPlus: '',           // Sum of '+/-[num]' morphs (additive modifier to resSk)
     resPlusPlus: '',       // Sum of '++/--[num]' morphs (additive modifier to final roll)
     resdctMult: '',
     resMult: '',           // Cumulative multiplier from '* / /[num]' morphs (applies to resSk)
     resMultMult: '',       // Cumulative multiplier from '** // //[num]' morphs (applies to final roll)
-    resCombine: '',
-    // Combined skill value calculated from numeric morphs + skSk
+    resCombine: '',        // Combined skill value calculated from numeric morphs + skSk
 
     // --- Dice roll results (calculated by fCalcGUIRollRoll, fCalcGUIRollResRoll) ---
     roll: '',              // Raw dice roll result based on resSk and resTyp
     resRoll: '',           // Final roll result after applying roll morphs or override
 
     // --- Flags & Multi-Roll ---
-    isUnSk: false,
-    // Flag: true if 'un' or 'unsk' morph was present
+    isUnSk: false,         // Flag: true if 'un' or 'unsk' morph was present
     isFreeRoll: false,     // Flag: true if 'free' morph or Free button used
     isLuckedRoll: false,   // Flag: true if 'luck' morph or Luck button used
     multiRollCount: 1,     // Number of times to roll (defaults to 1)
@@ -108,7 +103,13 @@ const gUI = {
     htmlHeader: ''         // Stores the header HTML string for the roll log entry
   },
 
-  //
+  // === Background Data Caches ===
+  dbAbilitiesFSData: null,
+  dbCritFSData: null,
+  dbGearFSData: null,
+  myCsListFSData: null,
+  myKlMyAbilitiesFSData: null,
+
   // === Configuration & Definitions ===
   manualBorderSections: [ // Defines sections for applying manual borders post-render
     // Each object: { r1, c1, r2, c2 (tags/indices), edges ('t'op, 'b'ottom, 'l'eft, 'r'ight), style? (CSS string) }
@@ -125,14 +126,14 @@ const gUI = {
     { r1: 'AstralGauntHeader_R', c1: 'AstralGauntletSlot', r2: 'AstralGauntHeader_R', c2: 'AstralGauntletHeaderEndC', edges: 'r' },
     { r1: 'Chaos2ndHeader', c1: 'AstralGauntletSlot', r2: 'ChaosWrist', c2: 'LastC', edges: 'br' },
     { r1: 'SocketedGearHeader', c1: 'SocketedGearSlot', r2: 'SocketTblEnd', c2: 'LastC', edges: 'br' },
+
     { r1: 'GearTblHeaderStartR', c1: 'PermMorph1', r2: 'GearTblEnd_R', c2: 'Regain', edges: 'br' },
     { r1: 'GearTblHeaderStartR', c1: 'PossNum', r2: 'GearTblEnd_R', c2: 'PossAPTot', edges: 'br' },
     { r1: 'GearSpe', c1: 'SpeedHeader', r2: 'GearStr', c2: 'GearPlusMR', edges: 'br' },
     { r1: 'GearMRTbl', c1: 'MRHeader', r2: 'GearMRTbl', c2: 'MRHeaderEndC', edges: 'b' },
     { r1: 'GearCarryTbl', c1: 'MRHeader', r2: 'GearCarryTbl', c2: 'MRHeaderEndC', edges: 'b' },
     { r1: 'GearMRTbl', c1: 'GearMRCol1', r2: 'GearCarryTbl', c2: 'LastC', edges: 'br' },
-    { r1: 'PossAPTot', c1: 'CurrentEncHeader', r2: 'PossAPTot', c2: 'PossEncTotEndC',
-    edges: 'br' },
+    { r1: 'PossAPTot', c1: 'CurrentEncHeader', r2: 'PossAPTot', c2: 'PossEncTotEndC', edges: 'br' },
     { r1: 'PossEncTot', c1: 'GearAPTotHeader', r2: 'PossEncTot', c2: 'LastC', edges: 'br' }
     // Add { style: '1px solid #888' } to specific objects if dark grey is desired
   ],
@@ -142,7 +143,6 @@ const gUI = {
     // { c1: 0, c2: 0 }, // Example: Single column using index
   ],
   gearTblCols: [ // Defines columns belonging to the Gear section (for toggling)
-
     { c1: 'PossNum', c2: 'GearTblEndC' },
   ],
   initialHiddenRows: [ // Defines rows initially hidden on load
@@ -165,7 +165,6 @@ const gUI = {
       ranges: [ { r1: 'FrozenHeader', c1: 'R', r2: 'FrozenHeader', c2: 'R' },
                 { r1: 'ULMonsterTbl', c1: 'MonAtk', r2: 'LastMon_R', c2: 'MonDmg' } ]
     },
-
     { color: '#FFA500', // Orange
       ranges: [ { r1: 'FrozenHeader', c1: 'O', r2: 'FrozenHeader', c2: 'O' } ]
     },
@@ -176,7 +175,6 @@ const gUI = {
       ranges: [ { r1: 'FrozenHeader', c1: 'G', r2: 'FrozenHeader', c2: 'G' } ]
     },
     { color: '#0000FF', // Blue
-
       ranges: [ { r1: 'FrozenHeader', c1: 'B', r2: 'FrozenHeader', c2: 'B' } ]
     }
   ],
@@ -187,8 +185,7 @@ const gUI = {
     ],
     morphs: [
       { r1: 'AbilTblStart_R', c1: 'Morph1', r2: 'AbilTblEnd_R', c2: 'Morph1' },
-      { r1:
-      'GearTblStart_R', c1: 'Morph1', r2: 'GearTblEnd_R', c2: 'Morph1' },
+      { r1: 'GearTblStart_R', c1: 'Morph1', r2: 'GearTblEnd_R', c2: 'Morph1' },
       { r1: 'AbilTblStart_R', c1: 'Morph2', r2: 'AbilTblEnd_R', c2: 'Morph2' },
       { r1: 'GearTblStart_R', c1: 'Morph2', r2: 'GearTblEnd_R', c2: 'Morph2' }
     ],
@@ -206,6 +203,18 @@ const gUI = {
       { r1: 'GearTblStart_R', c1: 'Sk1ChkBox', r2: 'GearTblEnd_R', c2: 'Sk1ChkBox'},
       { r1: 'GearTblStart_R', c1: 'Sk2ChkBox', r2: 'GearTblEnd_R', c2: 'Sk2ChkBox'}
     ],
+    gearNumCol: [
+      { r1: 'AbilityStartBelowNish_R', c1: 'PossNum', r2: 'AbilTblEnd_R', c2: 'PossNum' },
+      { r1: 'GearTblStart_R', c1: 'PossNum', r2: 'GearTblEnd_R', c2: 'PossNum' }
+    ],
+    gearIsWornCol: [
+      { r1: 'AbilityStartBelowNish_R', c1: 'PossWorn', r2: 'AbilTblEnd_R', c2: 'PossWorn' },
+      { r1: 'GearTblStart_R', c1: 'PossWorn', r2: 'GearTblEnd_R', c2: 'PossWorn' }
+    ],
+    gearPercOffCol: [
+      { r1: 'AbilityStartBelowNish_R', c1: 'PossPerOff', r2: 'AbilTblEnd_R', c2: 'PossPerOff' },
+      { r1: 'GearTblStart_R', c1: 'PossPerOff', r2: 'GearTblEnd_R', c2: 'PossPerOff' }
+    ],
     gearEncCol: [
       { r1: 'AbilityStartBelowNish_R', c1: 'PossEnc', r2: 'AbilTblEnd_R', c2: 'PossEnc' },
       { r1: 'GearTblStart_R', c1: 'PossEnc', r2: 'GearTblEnd_R', c2: 'PossEnc' }
@@ -213,7 +222,6 @@ const gUI = {
     monsters: { r1: 'CustMon', c1: 'NumMon', r2: 'LastMon_R', c2: 'MonSize' },
     currentNish: { r1: 'Nish', c1: 'Nish', r2: 'Nish', c2: 'Nish' },
     meta: { r1: 'meta', c1: 'R', r2: 'meta', c2: 'B' },
-
     metaChannel: { r1: 'chnl', c1: 'R', r2: 'chnl', c2: 'B' },
     luckBox: { r1: 'LuckBox', c1: 'LuckBox', r2: 'LuckBox', c2: 'LuckBox' },
     luckBoxPlus: { r1: 'LuckPlus', c1: 'LuckBox', r2: 'LuckPlus', c2: 'LuckBox' },
@@ -221,8 +229,7 @@ const gUI = {
     actPlus: { r1: 'ActPlus', c1: 'ActTot', r2: 'ActPlus', c2: 'ActTot' },
     fortitudeSk1: { r1: 'For', c1: 'Sk1', r2: 'For', c2: 'Sk1' },
     vitMax: { r1: 'VitTbl', c1: 'vitMax', r2: 'VitTbl', c2: 'vitMax' },
-    vitMaxPlus:
-    { r1: 'VitTbl', c1: 'vitPlus', r2: 'VitTbl', c2: 'vitPlus' },
+    vitMaxPlus: { r1: 'VitTbl', c1: 'vitPlus', r2: 'VitTbl', c2: 'vitPlus' },
     vit1stWnds: { r1: 'VitTbl', c1: 'vit1st', r2: 'VitTbl', c2: 'vit1st' },
     vit2ndWnds: { r1: 'VitTbl', c1: 'vit2nd', r2: 'VitTbl', c2: 'vit2nd' },
     vit3rdWnds: { r1: 'VitTbl', c1: 'vit3rd', r2: 'VitTbl', c2: 'vit3rd' },
@@ -256,8 +263,7 @@ const gUI = {
   modalCloseBtn: null,       // Reference to #modal-close-btn span
   modalBackdrop: null,       // Reference to #modal-backdrop div
   messageModalOverlay: null, // Reference to #messageModal div
-  messageModalText: null,
-  // Reference to #messageText p tag
+  messageModalText: null,    // Reference to #messageText p tag
   messageModalCloseButton: null, // Reference to #closeMessageModal button
   promptModalOverlay: null,    // Reference to #promptModal div
   promptModalText: null,       // Reference to #promptText p tag
@@ -266,8 +272,7 @@ const gUI = {
 
   // === Async/Timing State ===
   startTime: 0,              // Timestamp for tracking load/render time
-  lastLogTime:
-  0,            // Timestamp for tracking delta time between logs
+  lastLogTime: 0,            // Timestamp for tracking delta time between logs
   tooltipTimeoutId: null,    // Stores the timeout ID for the hover delay
   messagePromiseResolve: null, // Function to resolve the message promise
   promptPromiseResolve: null,  // Function to resolve the prompt promise
@@ -275,8 +280,7 @@ const gUI = {
 
   // === Constants & Settings ===
   HOVER_DELAY_MS: 300,       // Delay before showing tooltip (milliseconds)
-  TOOLTIP_OFFSET_Y: 15,      // Tooltip
-  // vertical offset from cursor (px)
+  TOOLTIP_OFFSET_Y: 15,      // Tooltip vertical offset from cursor (px)
   TOOLTIP_OFFSET_X: 10,      // Tooltip horizontal offset from cursor (px)
   ROW_HEIGHT_PX: 20,         // Matches grid-auto-rows in style.html, used for sticky offset calculation
   isDebugMode: true,         // Turns console logging on (true) or off (false)
@@ -6940,19 +6944,109 @@ function fOnCSGameDataLoaded(data) {
 
 
 
+// fFetchBackgroundCaches //////////////////////////////////////////////////////
+// Purpose -> Fetches essential background definition data (Abilities, Crit, Gear, etc.)
+//            from Firestore in parallel after the main sheet loads. Stores results
+//            in gUI...FSData properties. Halts app load on critical fetch failure.
+// Inputs  -> None.
+// Outputs -> (Promise<Boolean>): Resolves true if all critical caches loaded successfully,
+//            false otherwise (after showing error message).
+async function fFetchBackgroundCaches() {
+    const funcName = "fFetchBackgroundCaches";
+    fMyConsoleLog(`⚙️ ${funcName}: Fetching background data caches from Firestore...`);
+
+    // Define the caches to fetch
+    const cachesToFetch = [
+      { workbookAbr: 'DB', sheetName: 'Abilities', gUIKey: 'dbAbilitiesFSData' },
+      { workbookAbr: 'DB', sheetName: 'Crit',      gUIKey: 'dbCritFSData' },
+      { workbookAbr: 'DB', sheetName: 'Gear',      gUIKey: 'dbGearFSData' },
+      { workbookAbr: 'MyCS', sheetName: 'List',    gUIKey: 'myCsListFSData' },
+      { workbookAbr: 'MyKL', sheetName: 'MyAbilities', gUIKey: 'myKlMyAbilitiesFSData' }
+    ];
+
+    const rangeObject = { r1: 0, c1: 0, r2: -1, c2: -1 }; // Fetch entire sheet
+
+    try {
+        // Create an array of promises for all fetches
+        const fetchPromises = cachesToFetch.map(config => {
+            fMyConsoleLog(`   -> Queueing fetch for ${config.workbookAbr}/${config.sheetName}`);
+            // Return the promise from google.script.run
+            return new Promise((resolve, reject) => {
+                google.script.run
+                    .withSuccessHandler(response => {
+                        // Attach config info to the response for easier handling later
+                        resolve({ ...response, config });
+                    })
+                    .withFailureHandler(error => {
+                         // Attach config info to the error for easier handling later
+                        reject({ error, config });
+                    })
+                    .fSrvReadFirestoreRange(rangeObject, config.workbookAbr, config.sheetName, gIndex);
+            });
+        });
+
+        // Wait for all fetches to settle (either succeed or fail)
+        fMyConsoleLog("   -> Awaiting Promise.allSettled for cache fetches...");
+        const results = await Promise.allSettled(fetchPromises);
+        fMyConsoleLog("   -> All cache fetches settled.");
+
+        // Process the results
+        let allSucceeded = true; // Assume success initially
+        for (const result of results) {
+            if (result.status === 'fulfilled') {
+                const response = result.value;
+                const config = response.config; // Get config back
+
+                if (response.success && response.FSData) {
+                    // Store successful data
+                    gUI[config.gUIKey] = response.FSData;
+                    fMyConsoleLog(`      -> ✅ Successfully loaded cache: ${config.workbookAbr}/${config.sheetName}`);
+                } else {
+                    // Server call succeeded but returned success: false or invalid data
+                    allSucceeded = false;
+                    const errorMessage = `Failed to load critical cache: ${config.workbookAbr}/${config.sheetName}. Reason: ${response.message || 'Invalid data received.'}`;
+                    fMyConsoleLog(`      -> ❌ ${errorMessage}`);
+                    // Throw immediately to halt loading (Option A)
+                    throw new Error(errorMessage);
+                }
+            } else {
+                // Promise was rejected (likely a transport error)
+                allSucceeded = false;
+                const config = result.reason.config; // Get config from rejected reason
+                const error = result.reason.error;   // Get error object
+                const errorMessage = `Failed to load critical cache: ${config.workbookAbr}/${config.sheetName}. Reason: ${error.message || 'Unknown server communication error.'}`;
+                fMyConsoleLog(`      -> ❌ ${errorMessage}`);
+                console.error(`Error details for ${config.workbookAbr}/${config.sheetName}:`, error);
+                // Throw immediately to halt loading (Option A)
+                throw new Error(errorMessage);
+            }
+        } // End loop through results
+
+        // If loop completes without throwing, all caches loaded successfully
+        fMyConsoleLog(`✅ ${funcName}: All background caches loaded successfully.`);
+        return true;
+
+    } catch (error) {
+        // Catch errors thrown during result processing (or unexpected errors)
+        fMyConsoleLog(`❌ ${funcName}: Critical error during cache loading: ${error.message}`);
+        await fShowMessage(`❌ Critical Error: ${error.message}<br><br>App loading halted.`); // Show error
+        return false; // Indicate failure
+    }
+} // END fFetchBackgroundCaches
+
+
+
 // fFetchRaceClassInfoAndRenderGrid //////////////////////////////////////////
 // Purpose -> Fetches initial character header data from the Sheet, then checks
 //            Firestore for potentially overriding character info data. Finally,
-//            initiates the main grid rendering process using the determined
-//            gUI.arr and the final gUI.characterInfo.
+//            fetches background cache data before initiating grid rendering.
 // Inputs  -> None.
-// Outputs -> None (Initiates server calls, then rendering).
-function fFetchRaceClassInfoAndRenderGrid() {
+// Outputs -> None (Initiates server calls, cache fetches, then rendering).
+async function fFetchRaceClassInfoAndRenderGrid() { // <<< MAKE ASYNC
     fMyConsoleLog("⚙️ Requesting Initial Character Header Data from Sheet...");
-
     // --- 1. Fetch Initial Header Data from Sheet ---
     google.script.run
-        .withSuccessHandler((sheetHeaderData) => {
+        .withSuccessHandler(async (sheetHeaderData) => { // <<< MAKE HANDLER ASYNC
             fMyConsoleLog("✅ Initial Character Header Data received from Sheet.");
 
             // --- Store Initial Sheet Data (or defaults) ---
@@ -6986,13 +7080,19 @@ function fFetchRaceClassInfoAndRenderGrid() {
             fMyConsoleLog("⚙️ Checking Firestore for saved Character Info data...");
             if (!gIndex.Email || !gIndex.CSID) {
                 fMyConsoleLog("   -> ⚠️ Skipping Firestore Character Info check: Missing Email or CSID.");
-                // Proceed to render with Sheet/default data
-                fRenderGridWithFinalData();
-                return;
+
+                // --->>> Call Background Cache Fetch <<<---
+                fMyConsoleLog("   -> Proceeding to fetch background caches (skipped Firestore char info check)...");
+                const cachesLoaded = await fFetchBackgroundCaches();
+                if (!cachesLoaded) return; // Halt if caches fail
+
+                // --->>> Render Grid (Finally!) <<<---
+                fRenderGridWithFinalData(); // Call helper to render
+                return; // Exit this path
             }
 
             google.script.run
-                .withSuccessHandler((firestoreResponse) => {
+                .withSuccessHandler(async (firestoreResponse) => { // <<< MAKE HANDLER ASYNC
                     if (firestoreResponse && firestoreResponse.success === true && firestoreResponse.characterInfo) {
                         // Firestore character info exists and is valid
                         fMyConsoleLog("   -> ✅ Firestore Character Info found. Overwriting gUI.characterInfo.");
@@ -7001,7 +7101,7 @@ function fFetchRaceClassInfoAndRenderGrid() {
                         if (!gUI.characterInfo.slotNum) {
                             const slotErrorMsg = "⚠️ Warning: Invalid or missing Slot # found in Firestore Character Info data.";
                             fMyConsoleLog(`   -> ${slotErrorMsg}`);
-                             fShowMessage(slotErrorMsg).catch(e => console.error("Error showing message:", e));
+                            fShowMessage(slotErrorMsg).catch(e => console.error("Error showing message:", e));
                         }
                         fMyConsoleLog(`   -> Final Character Info (from Firestore): ${JSON.stringify(gUI.characterInfo)}`);
                     } else {
@@ -7012,36 +7112,56 @@ function fFetchRaceClassInfoAndRenderGrid() {
                         fMyConsoleLog(`   -> Final Character Info (from Sheet): ${JSON.stringify(gUI.characterInfo)}`);
                     }
 
-                    // --- 3. Render Grid (Finally!) ---
+                    // --->>> Call Background Cache Fetch <<<---
+                    fMyConsoleLog("   -> Proceeding to fetch background caches...");
+                    const cachesLoaded = await fFetchBackgroundCaches();
+                    if (!cachesLoaded) return; // Halt if caches fail
+
+                    // --->>> Render Grid (Finally!) <<<---
                     fRenderGridWithFinalData(); // Call helper to render
 
                 })
-                .withFailureHandler((error) => {
+                .withFailureHandler(async (error) => { // <<< MAKE HANDLER ASYNC
                     // Handle transport errors calling fSrvLoadCharacterInfoFromFirestore
                     const errorMsg = `Error checking Firestore for Character Info: ${error.message}`;
                     console.error(errorMsg, error);
                     fMyConsoleLog(`   -> ❌ ${errorMsg}. Using Sheet data for Character Info as fallback.`);
 
+                    // --->>> Call Background Cache Fetch <<<---
                     // Proceed using Sheet data despite the check failure
+                    fMyConsoleLog("   -> Proceeding to fetch background caches (Firestore char info check failed)...");
+                    const cachesLoaded = await fFetchBackgroundCaches();
+                    if (!cachesLoaded) return; // Halt if caches fail
+
+                    // --->>> Render Grid (Finally!) <<<---
                     fRenderGridWithFinalData(); // Call helper to render
                 })
                 .fSrvLoadCharacterInfoFromFirestore(gIndex); // Pass Email and CSID
 
         })
-        .withFailureHandler((error) => {
+        .withFailureHandler(async (error) => { // <<< MAKE HANDLER ASYNC
             // Handle transport errors fetching INITIAL Sheet header data
             const errorMsg = `Failed to call server for initial Sheet header data: ${error.message}`;
             console.error(errorMsg, error);
             fMyConsoleLog(`❌ ${errorMsg}`);
             fShowMessage(`Error fetching character header data from Sheet: ${error.message}`).catch(e => console.error("Error showing message:", e));
 
-            // Set default blank info and proceed to render (skip Firestore check for char info)
+            // Set default blank info and proceed to cache load / render
             gUI.characterInfo = { slotNum: null, raceClass: '', level: '', playerName: '', charName: '' };
+
+            // --->>> Call Background Cache Fetch <<<---
+            fMyConsoleLog("   -> Proceeding to fetch background caches (initial sheet header fetch failed)...");
+            const cachesLoaded = await fFetchBackgroundCaches();
+            if (!cachesLoaded) return; // Halt if caches fail
+
+            // --->>> Render Grid (Finally!) <<<---
             fRenderGridWithFinalData(); // Call helper to render
         })
         .fSrvGetURLToPlayerCharForGMScreen(gIndex.CSID); // Fetch initial data from Sheet
 
 } // END fFetchRaceClassInfoAndRenderGrid
+
+
 
 
 // fRenderGridWithFinalData /////////////////////////////////////////////////
