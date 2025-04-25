@@ -2608,11 +2608,13 @@ function fSaveNewAbilityToAbilTbl(r, dbAbilityResult, klMyAbilitiesResult, dbGea
 // fApplyDropdownsToGrid ///////////////////////////////////////////////////////////
 // Purpose -> Iterates through gUI.dropDownBox configurations and replaces the
 //            content of applicable grid cells with dropdown (<select>) elements.
+//            Allows replacing existing dropdowns specifically for Ability Name lists.
 // Inputs  -> None (Uses gUI.dropDownBox, gUI.arr, gUI.grid2D).
 // Outputs -> None (Modifies DOM by replacing cell content).
 function fApplyDropdownsToGrid() {
     fMyConsoleLog("🧬 Applying Dropdowns to Grid...");
     let dropdownsApplied = 0;
+    const abilityListKey = 'myCsListFSData'; // Key identifying the ability dropdown config
 
     // === Validate Configuration ===
     if (!gUI.dropDownBox || !Array.isArray(gUI.dropDownBox)) {
@@ -2627,6 +2629,8 @@ function fApplyDropdownsToGrid() {
             console.warn("fApplyDropdownsToGrid: Skipping invalid dropdown config:", config);
             return; // Skip to next config
         }
+
+        const isAbilityDropdownConfig = (config.gUIListKey === abilityListKey); // <<< ADDED: Check if this is the ability config
 
         // === Iterate Through Ranges for This Config ===
         config.ranges.forEach(range => {
@@ -2654,15 +2658,27 @@ function fApplyDropdownsToGrid() {
                 for (let c = cMin; c <= cMax; c++) {
                     const cell = gUI.grid2D?.[r]?.[c];
 
-                    // Check if cell is suitable for a dropdown
-                    // (Must exist, be visible, not already have a checkbox or dropdown)
-                    if (cell && cell.style.display !== 'none' && !cell.querySelector('input[type="checkbox"]') && !cell.querySelector('select.grid-dropdown')) {
+                    // --- Check if cell is suitable for dropdown update ---
+                    const existingDropdown = cell ? cell.querySelector('select.grid-dropdown') : null;
+                    const hasCheckbox = cell ? cell.querySelector('input[type="checkbox"]') : true; // Assume true if cell missing
+
+                    // <<< MODIFIED Check: >>>
+                    // Allow update if:
+                    // 1. Cell exists and is visible
+                    // 2. Cell does NOT contain a checkbox
+                    // 3. EITHER the cell does NOT currently have a dropdown OR this IS the ability dropdown config
+                    const shouldApplyDropdown = cell &&
+                                                cell.style.display !== 'none' &&
+                                                !hasCheckbox &&
+                                                (!existingDropdown || isAbilityDropdownConfig);
+
+                    if (shouldApplyDropdown) {
                          const currentValue = gUI.arr?.[r]?.[c];
-                         // Create the dropdown element
+                         // Create the NEW dropdown element with updated choices
                          const dropdown = fCreateDropdownElement(r, c, config.choices, currentValue);
 
                          // Replace cell content with the dropdown
-                         cell.innerHTML = ''; // Clear existing content
+                         cell.innerHTML = ''; // Clear existing content (including old dropdown if present)
                          cell.appendChild(dropdown);
 
                          // Adjust cell style for dropdown
@@ -2671,13 +2687,14 @@ function fApplyDropdownsToGrid() {
 
                          dropdownsApplied++;
                     }
+                    // --- End Check ---
+
                 } // End col loop
             } // End row loop
         }); // End ranges.forEach
     }); // End dropDownBox.forEach
 
     fMyConsoleLog(`✅ Applied ${dropdownsApplied} Dropdowns.`);
-
 } // END fApplyDropdownsToGrid
 
 
@@ -2712,20 +2729,23 @@ function fFetchAndApplyAbilityDropdowns() {
 
 
 // fProcessCachedAbilityList ///////////////////////////////////////////////
-// Purpose -> Processes the cached MyCS/List data, sorts it, adds an empty option,
-//            and applies it to the grid dropdowns for ability selection.
+// Purpose -> Processes the cached MyCS/List data, extracting only rows from
+//            'TableFirstRow' down, sorts the relevant column ('AbilitiesNameID'),
+//            adds an empty option, and applies it to the grid dropdowns.
 // Inputs  -> None (Uses gUI.myCsListFSData).
 // Outputs -> None (Modifies gUI.dropDownBox, calls fApplyDropdownsToGrid).
 function fProcessCachedAbilityList() {
     const funcName = "fProcessCachedAbilityList";
     fMyConsoleLog(`   -> ${funcName}: Processing cached MyCS/List data...`);
 
-    // --- 1. Access and Validate Cache ---
+    // --- 1. Access and Validate Cache & Required Tags ---
     const listCache = gUI.myCsListFSData;
-    const colTagForAbilities = 'AbilitiesNameID'; // Define the target column tag
+    const colTagForAbilities = 'AbilitiesNameID';
+    const startRowTag = 'TableFirstRow';
 
     if (!listCache || !listCache.text || !Array.isArray(listCache.text) ||
-        !listCache.colTagsMap || typeof listCache.colTagsMap !== 'object') {
+        !listCache.colTagsMap || typeof listCache.colTagsMap !== 'object' ||
+        !listCache.rowTagsMap || typeof listCache.rowTagsMap !== 'object') {
         const errMsg = `MyCS/List cache (gUI.myCsListFSData) is missing or invalid. Cannot populate Ability dropdowns.`;
         console.error(`${funcName}: ${errMsg}`);
         fMyConsoleLog(`      -> ❌ ${funcName} Error: ${errMsg}`);
@@ -2733,8 +2753,9 @@ function fProcessCachedAbilityList() {
         return;
     }
 
-    // --- 2. Extract the Correct Column ---
     const abilitiesColIndex = listCache.colTagsMap[colTagForAbilities];
+    const startRowIndex = listCache.rowTagsMap[startRowTag]; // Absolute index from the full sheet cache
+
     if (abilitiesColIndex === undefined || abilitiesColIndex === null) {
         const errMsg = `Column tag '${colTagForAbilities}' not found in MyCS/List cache (gUI.myCsListFSData.colTagsMap).`;
         console.error(`${funcName}: ${errMsg}`);
@@ -2742,20 +2763,41 @@ function fProcessCachedAbilityList() {
         fShowMessage(`Error: ${errMsg}`).catch(e => console.error("ShowMessage Error:", e));
         return;
     }
+    if (startRowIndex === undefined || startRowIndex === null || isNaN(startRowIndex)) {
+        const errMsg = `Start row tag '${startRowTag}' not found or invalid in MyCS/List cache (gUI.myCsListFSData.rowTagsMap).`;
+        console.error(`${funcName}: ${errMsg}`);
+        fMyConsoleLog(`      -> ❌ ${funcName} Error: ${errMsg}`);
+        fShowMessage(`Error: ${errMsg}`).catch(e => console.error("ShowMessage Error:", e));
+        return;
+    }
 
-    // Map the 2D array to get only the values from the target column
-    const abilityListRaw = listCache.text.map(row => row?.[abilitiesColIndex]); // Get value at specific index, handle potential sparse rows
+    fMyConsoleLog(`      -> Processing list from absolute row index ${startRowIndex} ('${startRowTag}') downwards.`);
+    fMyConsoleLog(`      -> Using data from column index ${abilitiesColIndex} ('${colTagForAbilities}').`);
 
-    fMyConsoleLog(`      -> Extracted ${abilityListRaw.length} potential ability names from column ${abilitiesColIndex} (${colTagForAbilities}).`);
+    // --- 2. Extract Relevant Column Data Starting From Specific Row ---
+    const abilityListRaw = [];
+    const cachedText = listCache.text; // Full 2D array
+    const numRows = cachedText.length;
+
+    for (let r = startRowIndex; r < numRows; r++) {
+        // Ensure the row and cell exist before accessing
+        const cellValue = cachedText[r]?.[abilitiesColIndex];
+        // Add to list if it exists (it will be filtered for emptiness later)
+        if (cellValue !== undefined) {
+            abilityListRaw.push(cellValue);
+        }
+    }
+
+    fMyConsoleLog(`      -> Extracted ${abilityListRaw.length} potential ability names from row ${startRowIndex} onwards.`);
 
     // --- 3. Process List ---
     // Filter empty/null/undefined, sort, add empty option at start
     const abilityListFiltered = abilityListRaw
-        .filter(name => name !== undefined && name !== null && String(name).trim() !== '') // Filter out null/undefined/empty strings
-        .map(name => String(name).trim()); // Ensure strings and trim
+        .filter(name => name !== undefined && name !== null && String(name).trim() !== '')
+        .map(name => String(name).trim());
 
-    abilityListFiltered.sort((a, b) => a.localeCompare(b)); // Alphabetical sort
-    abilityListFiltered.unshift(''); // Add empty option to the beginning
+    abilityListFiltered.sort((a, b) => a.localeCompare(b));
+    abilityListFiltered.unshift('');
 
     fMyConsoleLog(`      -> Processed list size: ${abilityListFiltered.length} (after filter, sort, unshift).`);
 
@@ -2764,7 +2806,7 @@ function fProcessCachedAbilityList() {
     if (!abilityConfig) {
          fMyConsoleLog(`      -> Creating new dropdown config for Abilities.`);
          abilityConfig = {
-            gUIListKey: 'myCsListFSData',
+            gUIListKey: 'myCsListFSData', // Key to identify this config
             choices: abilityListFiltered,
             ranges: gUI.range.abilNameNoNish
          };
@@ -4550,57 +4592,100 @@ async function fHandleNewLevelSlotName() {
 
 
 // fLoadAndSaveAbilityLevelUpdatesToFirestore ///////////////////////////////////////////////////
-// Purpose -> Helper function to load data/tags from a specific Google Sheet and
-//            then save it to Firestore. Used by fHandleNewLevelSlotName.
+// Purpose -> Helper function to load data/tags from a specific Google Sheet,
+//            save it to Firestore, AND update the corresponding gUI cache.
+//            Used by fHandleNewLevelSlotName.
 // Inputs  -> workbookAbr (String): 'MyCS' or 'MyKL'.
 //         -> sheetName (String): The sheet name (e.g., 'List', 'MyAbilities').
-//         -> gIndex.CSID (String): The user's Character Sheet ID.
-//         -> gIndex.GameVer (String): The game version string.
-//         -> gIndex.Email (String): The user's email address.
-// Outputs -> (Promise<void>): Resolves on successful save, rejects on error.
+// Outputs -> (Promise<void>): Resolves on successful load, save, and cache update. Rejects on error.
 // Throws  -> (Error): Propagates errors from server calls or validation.
 async function fLoadAndSaveAbilityLevelUpdatesToFirestore(workbookAbr, sheetName) {
     const funcName = "fLoadAndSaveAbilityLevelUpdatesToFirestore";
     fMyConsoleLog(`   -> ${funcName}: Starting process for ${workbookAbr} -> ${sheetName}...`);
+    let loadedData; // Declare here to be accessible later
 
-    // --- 1. Load Data & Tags ---
-    fMyConsoleLog(`      -> Calling fSrvLoadFullGoogleSheetAndTags...`);
-    const loadedData = await new Promise((resolve, reject) => {
-        google.script.run
-            .withSuccessHandler(resolve)
-            .withFailureHandler(reject)
-            .fSrvLoadFullGoogleSheetAndTags(workbookAbr, sheetName, gIndex.CSID);
-    });
+    try {
+        // --- 1. Load Data & Tags from Sheet ---
+        fMyConsoleLog(`      -> Calling fSrvLoadFullGoogleSheetAndTags...`);
+        loadedData = await new Promise((resolve, reject) => { // Store result in loadedData
+            google.script.run
+                .withSuccessHandler(resolve)
+                .withFailureHandler(reject)
+                .fSrvLoadFullGoogleSheetAndTags(workbookAbr, sheetName, gIndex.CSID);
+        });
 
-    // Validate loaded data structure
-    if (!loadedData || typeof loadedData !== 'object' || !loadedData.ColTags || !loadedData.RowTags || !loadedData.sheetText2D || !Array.isArray(loadedData.sheetText2D)) {
-        console.error(`${funcName}: Invalid data structure received from fSrvLoadFullGoogleSheetAndTags for ${workbookAbr}/${sheetName}:`, loadedData);
-        throw new Error(`Received invalid data structure when loading ${workbookAbr}/${sheetName}.`);
+        // Validate loaded data structure immediately after loading
+        if (!loadedData || typeof loadedData !== 'object' || !loadedData.ColTags || !loadedData.RowTags || !loadedData.sheetText2D || !Array.isArray(loadedData.sheetText2D)) {
+            console.error(`${funcName}: Invalid data structure received from fSrvLoadFullGoogleSheetAndTags for ${workbookAbr}/${sheetName}:`, loadedData);
+            throw new Error(`Received invalid data structure when loading ${workbookAbr}/${sheetName}.`);
+        }
+        fMyConsoleLog(`      -> Successfully loaded data for ${workbookAbr}/${sheetName}.`);
+
+        // --- 2. Save Loaded Data to Firestore ---
+        fMyConsoleLog(`      -> Calling fSrvSaveFullSheetTextAndTagsToFirestore...`);
+        const saveResult = await new Promise((resolve, reject) => {
+            google.script.run
+                .withSuccessHandler(resolve)
+                .withFailureHandler(reject)
+                .fSrvSaveFullSheetTextAndTagsToFirestore(
+                    gIndex,
+                    workbookAbr,
+                    sheetName,
+                    loadedData // Pass the data loaded from the sheet
+                );
+        });
+
+        // Validate save result
+        if (!saveResult || !saveResult.success) {
+            const saveErrorMsg = saveResult?.message || `Unknown error saving ${workbookAbr}/${sheetName} to Firestore.`;
+            console.error(`${funcName}: Firestore save failed for ${workbookAbr}/${sheetName}: ${saveErrorMsg}`);
+            throw new Error(`Failed to save ${workbookAbr}/${sheetName} to Firestore: ${saveErrorMsg}`);
+        }
+        fMyConsoleLog(`      -> Successfully saved ${workbookAbr}/${sheetName} to Firestore.`);
+
+        // --- 3. Update Client-Side Cache ---
+        fMyConsoleLog(`      -> Updating client-side gUI cache for ${workbookAbr}/${sheetName}...`);
+        let targetGUIKey = null;
+        const lowerWorkbookAbr = workbookAbr.toLowerCase();
+        const lowerSheetName = sheetName.toLowerCase();
+
+        if (lowerWorkbookAbr === 'mycs' && lowerSheetName === 'list') {
+            targetGUIKey = 'myCsListFSData';
+        } else if (lowerWorkbookAbr === 'mykl' && lowerSheetName === 'myabilities') {
+            targetGUIKey = 'myKlMyAbilitiesFSData';
+        }
+        // Add other mappings here if this function is ever used for DB caches
+
+        if (targetGUIKey) {
+            // Format the sheet data into the FSData structure expected by the cache
+            const formattedFSData = {
+                r1: 0, // Assume full sheet load starts at 0,0
+                c1: 0,
+                colTagsMap: loadedData.ColTags,
+                rowTagsMap: loadedData.RowTags,
+                text: loadedData.sheetText2D
+            };
+            gUI[targetGUIKey] = formattedFSData; // Update the cache
+            fMyConsoleLog(`      -> ✅ Client cache gUI.${targetGUIKey} updated.`);
+
+            // --- 4. Refresh UI if List Cache Updated ---
+            if (targetGUIKey === 'myCsListFSData') {
+                fMyConsoleLog(`      -> Triggering dropdown refresh because ${targetGUIKey} was updated.`);
+                fProcessCachedAbilityList(); // Refresh the ability dropdowns
+            }
+        } else {
+            fMyConsoleLog(`      -> ⚠️ Warning: No matching gUI cache key found for ${workbookAbr}/${sheetName}. Cache not updated.`);
+        }
+        // --- End Cache Update ---
+
+        fMyConsoleLog(`   -> ✅ Successfully loaded, saved, and cached ${workbookAbr}/${sheetName}.`);
+
+    } catch (error) {
+        // Catch errors from either the load, save, or validation steps
+        console.error(`${funcName}: Error during process for ${workbookAbr}/${sheetName}:`, error);
+        // Re-throw the error so fHandleNewLevelSlotName can catch it
+        throw new Error(`Failed process for ${workbookAbr}/${sheetName}: ${error.message || error}`);
     }
-    fMyConsoleLog(`      -> Successfully loaded data for ${workbookAbr}/${sheetName}.`);
-
-    // --- 2. Save Data to Firestore ---
-    fMyConsoleLog(`      -> Calling fSrvSaveFullSheetTextAndTagsToFirestore...`);
-    const saveResult = await new Promise((resolve, reject) => {
-        google.script.run
-            .withSuccessHandler(resolve)
-            .withFailureHandler(reject)
-            .fSrvSaveFullSheetTextAndTagsToFirestore(
-                gIndex,
-                workbookAbr,
-                sheetName,
-                loadedData
-            );
-    });
-
-    // Validate save result
-    if (!saveResult || !saveResult.success) {
-        const saveErrorMsg = saveResult?.message || `Unknown error saving ${workbookAbr}/${sheetName} to Firestore.`;
-        console.error(`${funcName}: Firestore save failed for ${workbookAbr}/${sheetName}: ${saveErrorMsg}`);
-        throw new Error(`Failed to save ${workbookAbr}/${sheetName} to Firestore: ${saveErrorMsg}`);
-    }
-
-    fMyConsoleLog(`   -> ✅ Successfully saved ${workbookAbr}/${sheetName} to Firestore.`);
 
 } // END fLoadAndSaveAbilityLevelUpdatesToFirestore
 
