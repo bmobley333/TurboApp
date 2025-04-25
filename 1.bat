@@ -22,5 +22,3 @@ for %%F in (=*) do (
 )
 
 cd ..
-
-pause

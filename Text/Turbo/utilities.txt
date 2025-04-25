@@ -1,0 +1,493 @@
+<script>
+// utilities.html //
+
+
+
+// ==========================================================================
+// === Scripts Utilities ===
+// ==========================================================================
+
+
+
+// fMyConsoleLog ///////////////////////////////////////////////////////////////////
+// Purpose -> Logs messages to the console with timestamps, only if gUI.isDebugMode is true.
+// Inputs  -> msg (String): The message to log.
+// Outputs -> None (Logs to console).
+function fMyConsoleLog(msg) {
+    if (!gUI.isDebugMode) return; // Exit early if debug mode is off
+
+    // Calculate timestamps
+    const now = performance.now();
+    const delta = ((now - gUI.lastLogTime) / 1000).toFixed(2);
+    const total = ((now - gUI.startTime) / 1000).toFixed(2);
+    gUI.lastLogTime = now;
+
+    // Log the formatted message
+    console.log(`Status Log: [${total}s] ${msg} (+${delta}s)`);
+} // END fMyConsoleLog
+
+
+
+
+// fResolveRow ////////////////////////////////////////////////////////////////////
+// Purpose -> Converts a string tag (from gUI.rowTag) or numeric index to a 0-based row index.
+// Inputs  -> v (String | Number): Row tag string or 0-based numeric index.
+// Outputs -> (Number): The 0-based row index, or NaN if resolution fails.
+const fResolveRow = v => {
+    if (typeof v === 'string') return gUI.rowTag[v]; // Lookup tag
+    if (typeof v === 'number' && v >= 0) return v;   // Assume valid index
+
+    console.warn(`fResolveRow failed for value:`, v); // Log warning if invalid
+    return NaN; // Return NaN for errors
+}; // END fResolveRow
+
+
+
+
+// fResolveCol ////////////////////////////////////////////////////////////////////
+// Purpose -> Converts a string tag (from gUI.colTag) or numeric index to a 0-based col index.
+// Inputs  -> v (String | Number): Column tag string or 0-based numeric index.
+// Outputs -> (Number): The 0-based column index, or NaN if resolution fails.
+const fResolveCol = v => {
+     if (typeof v === 'string') return gUI.colTag[v]; // Lookup tag
+     if (typeof v === 'number' && v >= 0) return v;   // Assume valid index
+
+     console.warn(`fResolveCol failed for value:`, v); // Log warning if invalid
+     return NaN; // Return NaN for errors
+}; // END fResolveCol
+
+
+
+
+// fGetContrastColor ///////////////////////////////////////////////////////////////
+// Purpose -> Determines if black ('#000000') or white ('#ffffff') text has better
+//            contrast against a given background hex color.
+// Inputs  -> hexColor (String): The background color (e.g., '#FF0000', '03F').
+// Outputs -> (String): '#000000' or '#ffffff' for the best contrast.
+function fGetContrastColor(hexColor) {
+    const defaultColor = '#000000'; // Default to black text
+
+    // Basic validation
+    if (!hexColor || typeof hexColor !== 'string') return defaultColor;
+
+    try {
+        // Remove # if present
+        let hex = hexColor.startsWith('#') ? hexColor.substring(1) : hexColor;
+
+        // Expand shorthand hex (e.g., "03F" -> "0033FF")
+        if (hex.length === 3) {
+            hex = hex.split('').map(char => char + char).join('');
+        } else if (hex.length !== 6) {
+            return defaultColor; // Invalid hex length
+        }
+
+        // Convert hex to RGB
+        const r = parseInt(hex.substring(0, 2), 16);
+        const g = parseInt(hex.substring(2, 4), 16);
+        const b = parseInt(hex.substring(4, 6), 16);
+
+        if (isNaN(r) || isNaN(g) || isNaN(b)) return defaultColor; // Invalid hex characters
+
+        // Calculate luminance using the YIQ formula
+        const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+
+        // Return black text for light backgrounds (luminance > 0.5), white text for dark backgrounds
+        return luminance > 0.5 ? '#000000' : '#ffffff';
+
+    } catch (e) {
+        console.error("Error calculating contrast color for:", hexColor, e);
+        return defaultColor; // Fallback on error
+    }
+} // END fGetContrastColor
+
+
+
+// fIsCellInRangeArray /////////////////////////////////////////////////////////////
+// Purpose -> Checks if given coordinates (r, c) fall within ANY of the range objects
+//            defined in the provided rangeArray.
+// Inputs  -> r (Number): 0-based row index.
+//         -> c (Number): 0-based column index.
+//         -> rangeArray (Array<Object> | Object): An array of range definition objects,
+//                                                 or a single range object.
+// Outputs -> (Boolean): True if (r, c) is inside any valid range, false otherwise.
+function fIsCellInRangeArray(r, c, rangeArray) {
+    // Validate input coordinates
+    if (typeof r !== 'number' || typeof c !== 'number' || isNaN(r) || isNaN(c)) {
+        console.warn("fIsCellInRangeArray: Invalid input coordinates provided.");
+        return false;
+    }
+
+    // Handle if rangeArray is a single range object OR an array
+    const rangesToCheck = Array.isArray(rangeArray) ? rangeArray : [rangeArray];
+
+    // Check if there are any ranges to process
+    if (rangesToCheck.length === 0 || !rangesToCheck[0]) {
+        return false;
+    }
+
+    // Iterate through each range definition
+    for (const rangeDef of rangesToCheck) {
+        // Validate the range definition object structure
+        if (!fDoesObjectHaveR1C1R2C2Properties(rangeDef)) {
+             console.warn("fIsCellInRangeArray: Skipping invalid range definition object:", rangeDef);
+             continue;
+        }
+
+        // Resolve tags/indices for the current range
+        const resolved = fConvertsR1C1R2C2TagOrNumToIndices(rangeDef);
+        if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
+             console.warn("fIsCellInRangeArray: Skipping range due to unresolved indices:", rangeDef);
+             continue;
+        }
+
+        // Determine min/max row and column for the current range
+        const rMin = Math.min(resolved.r1, resolved.r2);
+        const rMax = Math.max(resolved.r1, resolved.r2);
+        const cMin = Math.min(resolved.c1, resolved.c2);
+        const cMax = Math.max(resolved.c1, resolved.c2);
+
+        // Check if the input (r, c) falls within this resolved range
+        if (r >= rMin && r <= rMax && c >= cMin && c <= cMax) {
+            return true; // Found a match
+        }
+    }
+
+    // No range contained the cell after checking all of them
+    return false;
+} // END fIsCellInRangeArray
+
+
+
+
+// fGetVal_GUICache ////////////////////////////////////////////////////////////////
+// Purpose -> Retrieves a value from a cached FSData object's text property using
+//            original sheet tags or absolute indices. Handles relative index calculation.
+// Inputs  -> rRef (String|Number): Row tag or 0-based absolute index from original sheet.
+//         -> cRef (String|Number): Column tag or 0-based absolute index from original sheet.
+//         -> dataCacheObject (Object): The cached FSData object, expected to have
+//                                   { text: Array[][], rowTagsMap: Object, colTagsMap: Object }.
+//                                   Note: This cache uses 0-based absolute indices in its maps.
+// Outputs -> (Any | undefined): The value found at the resolved position within
+//                              dataCacheObject.text, or undefined if not found or on error.
+function fGetVal_GUICache(rRef, cRef, dataCacheObject) {
+    const funcName = "fGetVal_GUICache";
+
+    // === 1. Validate Cache Object ===
+    if (!dataCacheObject || typeof dataCacheObject !== 'object' ||
+        !dataCacheObject.text || !Array.isArray(dataCacheObject.text) ||
+        !dataCacheObject.rowTagsMap || typeof dataCacheObject.rowTagsMap !== 'object' ||
+        !dataCacheObject.colTagsMap || typeof dataCacheObject.colTagsMap !== 'object')
+    {
+        console.warn(`${funcName}: Invalid or incomplete dataCacheObject provided.`);
+        fMyConsoleLog(`⚠️ ${funcName}: Invalid dataCacheObject input.`);
+        return undefined;
+    }
+
+    const { text, rowTagsMap, colTagsMap } = dataCacheObject;
+    let absolute_r = NaN;
+    let absolute_c = NaN;
+
+    // === 2. Resolve Row Reference to Absolute Index ===
+    if (typeof rRef === 'string') {
+        absolute_r = rowTagsMap[rRef];
+        if (absolute_r === undefined) {
+            // console.warn(`${funcName}: Row tag "${rRef}" not found in rowTagsMap.`); // Can be noisy
+            return undefined;
+        }
+    } else if (typeof rRef === 'number' && !isNaN(rRef) && rRef >= 0) {
+        absolute_r = rRef;
+    } else {
+        // console.warn(`${funcName}: Invalid row reference provided: ${rRef}.`); // Can be noisy
+        return undefined;
+    }
+
+    // === 3. Resolve Column Reference to Absolute Index ===
+    if (typeof cRef === 'string') {
+        absolute_c = colTagsMap[cRef];
+        if (absolute_c === undefined) {
+            // console.warn(`${funcName}: Col tag "${cRef}" not found in colTagsMap.`); // Can be noisy
+            return undefined;
+        }
+    } else if (typeof cRef === 'number' && !isNaN(cRef) && cRef >= 0) {
+        absolute_c = cRef;
+    } else {
+        // console.warn(`${funcName}: Invalid col reference provided: ${cRef}.`); // Can be noisy
+        return undefined;
+    }
+
+    // === 4. Validate Resolved Absolute Indices & Retrieve Value ===
+    if (isNaN(absolute_r) || isNaN(absolute_c)) {
+        // console.warn(`${funcName}: Failed to resolve valid absolute indices for (${rRef}, ${cRef}).`);
+        return undefined;
+    }
+
+    const value = text?.[absolute_r]?.[absolute_c];
+    if (value === undefined) {
+        // console.warn(`${funcName}: Value not found at resolved index [${absolute_r}, ${absolute_c}] for ref (${rRef}, ${cRef}).`); // Can be noisy
+    }
+
+    return value;
+} // END fGetVal_GUICache
+
+
+
+
+// fGetIDFromNameID ////////////////////////////////////////////////////////////////
+// Purpose -> Extracts the 6-character ID from the end of a Name_ID string.
+// Inputs  -> nameIdString (String): The string containing the name and ID (e.g., "Long Sword_A1B2C3").
+// Outputs -> (String | null): The 6-character ID if found and valid, otherwise null.
+function fGetIDFromNameID(nameIdString) {
+    if (typeof nameIdString !== 'string' || !nameIdString) {
+        return null; // Return null if input is not a valid string
+    }
+
+    const lastUnderscoreIndex = nameIdString.lastIndexOf('_');
+
+    // Check if underscore exists and if there are at least 6 characters after it
+    if (lastUnderscoreIndex !== -1 && nameIdString.length - lastUnderscoreIndex - 1 >= 6) {
+        const potentialId = nameIdString.substring(lastUnderscoreIndex + 1);
+        // Optional: Add more validation here if IDs have a specific format (e.g., alphanumeric)
+        if (potentialId.length === 6) { // Ensure exactly 6 characters for stricter validation
+             return potentialId;
+        }
+    }
+
+    // Log warning if ID extraction failed
+    // fMyConsoleLog(`⚠️ fGetIDFromNameID: Could not extract valid 6-char ID from "${nameIdString}".`); // Can be noisy
+    return null; // Return null if no valid ID found
+} // END fGetIDFromNameID
+
+
+
+
+// ==========================================================================
+// === Die Rolling Utilities 
+// ==========================================================================
+
+
+
+
+// fdRoll //////////////////////////////////////////////////////////////////////
+// Purpose -> Standard linear distribution die roll (e.g., 1d6).
+// Inputs  -> die (Number): The number of sides on the die.
+// Outputs -> (Number): The result of the roll (integer from 1 to die).
+function fdRoll(die) {
+  const numDie = Number(die); // Ensure input is treated as a number
+
+  // Validate input
+  if (isNaN(numDie) || numDie < 1) {
+    console.error(`fdRoll received invalid die size: ${die}`);
+    return 1; // Return 1 for invalid input
+  }
+
+  // Calculate and return random integer between 1 and numDie (inclusive)
+  return Math.floor(Math.random() * numDie) + 1;
+} // END fdRoll
+
+
+
+
+// fMetaDieRoll //////////////////////////////////////////////////////////////////////
+// Purpose -> Performs a non-linear "exploding" dice roll common in MetaScape,
+//            weighted towards lower results but with potential for high values.
+//            Used for skill/attribute checks (Sk, Atr, Atk, Def). No T/C.
+// Inputs  -> die (Number): The base value (skill/attribute) for the roll.
+// Outputs -> (Number): The integer result of the roll (minimum 1).
+function fMetaDieRoll(die) {
+  const numDie = Number(die); // Ensure input is treated as a number
+
+  // Validate input
+  if (isNaN(numDie) || numDie < 1) {
+    console.error(`fMetaDieRoll received invalid die value: ${die}`);
+    return 1; // Return 1 for invalid input
+  }
+
+  // Generate two random numbers
+  const rand1 = Math.random();
+  let rand2 = Math.random();
+
+  // Prevent division by zero or near-zero for the second random number
+  if (rand2 < 0.0001) rand2 = 0.0001; // Set a minimum divisor
+
+  // Calculate result: (die * rand1) / rand2 + 1, floored
+  return Math.floor((numDie * rand1) / rand2) + 1;
+} // END fMetaDieRoll
+
+
+
+
+// fTC /////////////////////////////////////////////////////////////////////
+// Purpose -> Rolls 1d16 to determine Tremendous ('T', roll 1) or Critical ('C', roll 2)
+//            result suffix for sidebar logging.
+// Inputs  -> None.
+// Outputs -> (String): Formatted "T", "C", or "" (empty string).
+function fTC() {
+  const roll = fdRoll(16); // Standard d16 roll
+
+  // Return formatted string based on roll result
+  return roll === 1
+    ? `<span class="tremendous">T</span>` // Roll of 1 is Tremendous
+    : roll === 2
+    ? `<span class="red-bold">C</span>`   // Roll of 2 is Critical
+    : "";                                // Other rolls result in no suffix
+} // END fTC
+
+
+
+
+// fSkRoll ////////////////////////////////////////////////////////////////////
+// Purpose -> Performs a standard MetaScape Skill roll (used for Sk, Atr, Str).
+//            Averages a linear d(die*2) roll and a non-linear fMetaDieRoll(die) roll.
+// Inputs  -> die (Number): The base skill value.
+// Outputs -> (Number): The rounded integer result of the skill roll.
+function fSkRoll(die) {
+  const numDie = Number(die); // Ensure input is treated as a number
+
+  // Validate input
+  if (isNaN(numDie) || numDie < 1) {
+    console.error(`fSkRoll received invalid die value: ${die}`);
+    return 1; // Return 1 for invalid input
+  }
+
+  // Calculate average of a linear d(2*die) and a non-linear fMetaDieRoll(die)
+  return Math.round((fdRoll(numDie * 2) + fMetaDieRoll(numDie)) / 2);
+} // END fSkRoll
+
+
+
+
+// fAtkRoll ////////////////////////////////////////////////////////////////////
+// Purpose -> Performs a MetaScape Attack roll. Currently identical to fSkRoll.
+// Inputs  -> die (Number): The base attack skill value.
+// Outputs -> (Number): The rounded integer result of the attack roll.
+function fAtkRoll(die) {
+  const numDie = Number(die); // Ensure input is treated as a number
+
+  // Validate input
+  if (isNaN(numDie) || numDie < 1) {
+    console.error(`fAtkRoll received invalid die value: ${die}`);
+    return 1; // Return 1 for invalid input
+  }
+
+  // Currently uses the same calculation as fSkRoll
+  return Math.round((fdRoll(numDie * 2) + fMetaDieRoll(numDie)) / 2);
+} // END fAtkRoll
+
+
+
+
+// fDefRoll ////////////////////////////////////////////////////////////////////
+// Purpose -> Performs a MetaScape Defense roll. Based on fMetaDieRoll(die) * 0.75.
+// Inputs  -> die (Number): The base defense value.
+// Outputs -> (Number): The rounded integer result of the defense roll.
+function fDefRoll(die) {
+  const numDie = Number(die); // Ensure input is treated as a number
+
+  // Validate input
+  if (isNaN(numDie) || numDie < 1) {
+    console.error(`fDefRoll received invalid die value: ${die}`);
+    return 1; // Return 1 for invalid input
+  }
+
+  // Calculate based on the non-linear roll, scaled down
+  return Math.round(fMetaDieRoll(numDie) * 0.75);
+} // END fDefRoll
+
+
+
+
+// fDmgRoll ///////////////////////////////////////////////////////////////////
+// Purpose -> Rolls standard PC Damage. Currently identical to fSkRoll.
+// Inputs  -> pcDmg (Number): The base damage value.
+// Outputs -> (Number): The result of the damage roll.
+function fDmgRoll(pcDmg) {
+  // Currently just calls the standard skill roll function
+  return fSkRoll(pcDmg);
+} // END fDmgRoll
+
+
+
+
+// fARRoll /////////////////////////////////////////////////////////////////
+// Purpose -> Rolls standard PC Armor. Uses fSkRoll result divided by 15,
+//            truncated to two decimal places, with a minimum result of 1.0.
+// Inputs  -> pcAR (Number): The base armor value.
+// Outputs -> (Number): The result of the armor roll (min 1.0, rounded to two decimals).
+function fARRoll(pcAR) {
+  // Get the base skill roll result for the armor value
+  const skillRoll = fSkRoll(pcAR);
+
+  // Formula: max(1, floor( (SkillRoll / 15) * 100 ) / 100 )
+  const result = Math.trunc((skillRoll / 15) * 100) / 100;
+
+  // Ensure a minimum result of 1.0
+  return Math.max(1, result);
+} // END fARRoll
+
+
+
+
+// fRollRPGDieString //////////////////////////////////////////////////////////////////
+// Purpose -> Parses a standard RPG die string (e.g., "d6", "2d8", "3d10+5", "1d12-2")
+//            and rolls the dice using fdRoll (linear distribution), returning the total.
+// Inputs  -> dieString (String): The dice notation string.
+// Outputs -> (Number | null): The numerical result of the roll, or null if parsing fails.
+function fRollRPGDieString(dieString) {
+    // === Validate Input ===
+    if (typeof dieString !== 'string' || !dieString.trim()) {
+        console.warn("fRollRPGDieString: Invalid input - requires a non-empty string.");
+        return null;
+    }
+
+    // === Define Regex ===
+    // Captures: [1]=NumDice(opt), [2]=Sides, [3]=ModifierSign(opt), [4]=ModifierValue(opt)
+    const dieStringRegex = /^\s*(\d+)?\s*d\s*(\d+)\s*(?:([-+])\s*(\d+))?\s*$/i;
+    const match = dieString.trim().match(dieStringRegex);
+
+    // === Validate Match ===
+    if (!match) {
+        // console.warn(`fRollRPGDieString: Failed to parse die string: "${dieString}"`); // Can be noisy
+        return null; // String doesn't match expected format
+    }
+
+    // === Extract & Validate Components ===
+    const numDice = match[1] ? parseInt(match[1], 10) : 1; // Default 1 die
+    const numSides = parseInt(match[2], 10);
+    const modifierSign = match[3]; // '+' or '-' or undefined
+    const modifierValue = match[4] ? parseInt(match[4], 10) : 0; // Default 0 modifier
+
+    if (isNaN(numDice) || numDice < 1 || isNaN(numSides) || numSides < 1 || isNaN(modifierValue)) {
+        console.warn(`fRollRPGDieString: Invalid numeric components in parsed string "${dieString}"`);
+        return null; // Invalid numbers parsed
+    }
+
+    // === Roll Dice ===
+    let total = 0;
+    fMyConsoleLog(`   -> Rolling Die String: ${numDice}d${numSides}`);
+    for (let i = 0; i < numDice; i++) {
+        const roll = fdRoll(numSides); // Use standard linear roll
+        total += roll;
+        // fMyConsoleLog(`      - Roll ${i+1}: ${roll}`); // Optional: Log individual rolls
+    }
+    fMyConsoleLog(`   -> Base Roll Total: ${total}`);
+
+    // === Apply Modifier ===
+    if (modifierSign === '+') {
+        total += modifierValue;
+        fMyConsoleLog(`   -> Applying Modifier: +${modifierValue} => ${total}`);
+    } else if (modifierSign === '-') {
+        total -= modifierValue;
+        fMyConsoleLog(`   -> Applying Modifier: -${modifierValue} => ${total}`);
+    }
+
+    return total;
+} // END fRollRPGDieString
+
+
+
+
+
+
+
+
+</script>

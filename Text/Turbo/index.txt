@@ -28,6 +28,10 @@
   <body>
     <?!= HtmlService.createHtmlOutputFromFile('ui.html').getContent(); ?>
 
+    <?!= HtmlService.createHtmlOutputFromFile('global.html').getContent(); ?>
+
+    <?!= HtmlService.createHtmlOutputFromFile('utilities.html').getContent(); ?>
+
     <?!= HtmlService.createHtmlOutputFromFile('gamelogic.html').getContent(); ?>
 
     <?!= HtmlService.createHtmlOutputFromFile('scripts.html').getContent(); ?>
