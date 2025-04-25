@@ -1926,27 +1926,21 @@ function fSrvCalcFirestorePath(workbookAbr, sheetName, gIndex) {
 
 
 
-// fSrvReadFirestoreRange ///////////////////////////////////////////////////////////
+// fSrvGetFirestoreFSData ///////////////////////////////////////////////////////////
 // Purpose -> Reads data from a Firestore document previously saved by
-//            fSrvSaveFullSheetTextAndTagsToFirestore, resolving tags (including -1 for end of row or col)
-//            and returning data in the object format of FSData: { r1, c1, colTagsMap, rowTagsMap, text }.
-//            Returns colTagsMap and rowTagsMap already index adjusted for the actual range of FSData:text returned and trims out all bogus rowTags and colTags that no longer apply.
-// Inputs  -> rangeObject (Object): The range { r1, c1, r2, c2 } using tags, indices, or -1 for r2/c2 end of row or col.
-//         -> workbookAbr (String): Workbook abbreviation ('db', 'mycs', etc.).
+//            fSrvSaveFullSheetTextAndTagsToFirestore. Returns the full sheet content
+//            and absolute tag maps.
+// Inputs  -> workbookAbr (String): Workbook abbreviation ('db', 'mycs', etc.).
 //         -> sheetName (String): The sheet name associated with the data.
-//         -> gIndex.CSID (String): Character Sheet ID (required for 'mycs'/'mykl').
-//         -> gIndex.GameVer (String): Game version (required for 'db'/'master*').
-//         -> gIndex.Email (String): User Email (required for 'mycs'/'mykl').
-// Outputs -> (Object): On success: { success: true, FSData: { r1, c1, colTagsMap, rowTagsMap, text } }
+//         -> gIndex (Object): Object containing CSID, GameVer, Email.
+// Outputs -> (Object): On success: { success: true, FSData: { colTagsMap, rowTagsMap, text } }
 //                     On failure: { success: false, message: String }
-function fSrvReadFirestoreRange(rangeObject, workbookAbr, sheetName, gIndex) {
-    const funcName = "fSrvReadFirestoreRange";
-    Logger.log(`${funcName}: Reading range ${JSON.stringify(rangeObject)} for Workbook: "${workbookAbr}", Sheet: "${sheetName}", Ver: ${gIndex.GameVer}, Email: ${gIndex.Email}, gIndex.CSID: ${gIndex.CSID}...`);
+function fSrvGetFirestoreFSData(workbookAbr, sheetName, gIndex) { 
+    const funcName = "fSrvGetFirestoreFSData";
+    Logger.log(`${funcName}: Reading FULL document for Workbook: "${workbookAbr}", Sheet: "${sheetName}", Ver: ${gIndex?.GameVer}, Email: ${gIndex?.Email}, CSID: ${gIndex?.CSID}...`); // Log improved
 
     let firestore;
     let documentPath;
-    let colTagsMap; // Will hold relative tags for the slice
-    let rowTagsMap; // Will hold relative tags for the slice
 
     try {
         // --- 1. Get Firestore Instance ---
@@ -1957,7 +1951,7 @@ function fSrvReadFirestoreRange(rangeObject, workbookAbr, sheetName, gIndex) {
         }
 
         // --- 2. Calculate Firestore Path ---
-        const { collectionName, documentId } = fSrvCalcFirestorePath(workbookAbr, sheetName, gIndex);
+        const { collectionName, documentId } = fSrvCalcFirestorePath(workbookAbr, sheetName, gIndex); // Validate gIndex parts inside helper
         documentPath = `${collectionName}/${documentId}`;
         Logger.log(`   -> Target Firestore Path: ${documentPath}`);
 
@@ -1973,8 +1967,9 @@ function fSrvReadFirestoreRange(rangeObject, workbookAbr, sheetName, gIndex) {
 
         const colTagsRaw = doc.fields.ColTags;
         const rowTagsRaw = doc.fields.RowTags;
-        const sheetDataRaw = doc.fields.sheetText2D_rowObjects;
+        const sheetDataRaw = doc.fields.sheetText2D_rowObjects; // Use correct field name
 
+        // Validate fields exist and have expected type indicators
         if (!colTagsRaw || typeof colTagsRaw.mapValue === 'undefined') {
             return { success: false, message: "Invalid document structure: Missing or invalid 'ColTags'." };
         }
@@ -2005,115 +2000,26 @@ function fSrvReadFirestoreRange(rangeObject, workbookAbr, sheetName, gIndex) {
         const fullData2D = fSrvUnpackFirestoreArrayTo2D(sheetDataConverted);
         const numRowsInSheet = fullData2D.length;
         const numColsInSheet = fullData2D[0]?.length || 0;
+
         if (numRowsInSheet === 0) {
             Logger.log(`   -> Warning: Firestore data unpacked into an empty 2D array.`);
-            // Return empty success response
-            return { success: true, FSData: { r1: 0, c1: 0, colTagsMap: {}, rowTagsMap: {}, text: [] } };
+            // Return empty success response according to new FSData structure
+            return { success: true, FSData: { colTagsMap: {}, rowTagsMap: {}, text: [[]] } }; // Return [[ ]] for empty
         }
 
+        // --- 6. No Range Resolution or Slicing Needed ---
 
-        // --- 6. Resolve Input Range using Firestore Tags & Handle -1 ---
-        const r1_abs = fSrvResolveTag(rangeObject.r1, absoluteRowTagMap, 'row');
-        const c1_abs = fSrvResolveTag(rangeObject.c1, absoluteColTagMap, 'col');
-        let r2_abs;
-        let c2_abs;
+        // --- 7. Format Output Data (Always return full 2D array) ---
+        Logger.log(`   -> Formatting full sheet data as 2D array (${numRowsInSheet}x${numColsInSheet}).`);
+        const formattedData = fullData2D; // Already in the desired format
 
-        // Handle r2 = -1
-        if (rangeObject.r2 === -1) {
-            r2_abs = numRowsInSheet - 1; // Last row index
-            Logger.log(`   -> Resolved r2 = -1 to last row index: ${r2_abs}`);
-        } else {
-            r2_abs = fSrvResolveTag(rangeObject.r2, absoluteRowTagMap, 'row');
-        }
-
-        // Handle c2 = -1
-        if (rangeObject.c2 === -1) {
-            c2_abs = numColsInSheet - 1; // Last column index
-            Logger.log(`   -> Resolved c2 = -1 to last column index: ${c2_abs}`);
-        } else {
-            c2_abs = fSrvResolveTag(rangeObject.c2, absoluteColTagMap, 'col');
-        }
-
-        // Validate ALL resolved indices
-        const errors = [];
-        if (isNaN(r1_abs)) errors.push(`r1 ('${rangeObject.r1}')`);
-        if (isNaN(c1_abs)) errors.push(`c1 ('${rangeObject.c1}')`);
-        if (isNaN(r2_abs)) errors.push(`r2 ('${rangeObject.r2}' resolved to NaN)`);
-        if (isNaN(c2_abs)) errors.push(`c2 ('${rangeObject.c2}' resolved to NaN)`);
-        if (errors.length > 0) {
-            throw new Error(`Failed to resolve the following tags/indices: ${errors.join(', ')}.`);
-        }
-         Logger.log(`   -> Resolved absolute indices: r1=${r1_abs}, c1=${c1_abs}, r2=${r2_abs}, c2=${c2_abs}`);
-
-
-        // --- 7. Slice Data ---
-        const rStart = Math.min(r1_abs, r2_abs);
-        const rEnd = Math.max(r1_abs, r2_abs);
-        const cStart = Math.min(c1_abs, c2_abs);
-        const cEnd = Math.max(c1_abs, c2_abs);
-
-        // Bounds check before slicing
-        if (rStart >= numRowsInSheet || cStart >= numColsInSheet || rStart < 0 || cStart < 0 ) {
-             Logger.log(`   -> Warning: Calculated range start [${rStart}, ${cStart}] is outside the bounds [${numRowsInSheet}x${numColsInSheet}] or negative. Returning empty data.`);
-             return { success: true, FSData: { r1: r1_abs, c1: c1_abs, colTagsMap: {}, rowTagsMap: {}, text: [] } };
-        }
-
-        // Adjust end bounds if they exceed actual data dimensions
-        const rEndClamped = Math.min(rEnd, numRowsInSheet - 1);
-        const cEndClamped = Math.min(cEnd, numColsInSheet - 1);
-
-        const extractedSlice = fullData2D
-            .slice(rStart, rEndClamped + 1)
-            .map(row => row.slice(cStart, cEndClamped + 1));
-
-        const extractedRows = extractedSlice.length;
-        const extractedCols = extractedSlice[0]?.length || 0;
-        Logger.log(`   -> Extracted slice dimensions: ${extractedRows}x${extractedCols}`);
-
-
-        // --- 8. Build Relative Tag Maps for the Slice ---
-        colTagsMap = {};
-        rowTagsMap = {};
-        // Adjust Column Tags
-        for (const tag in absoluteColTagMap) {
-             const absoluteIndex = absoluteColTagMap[tag];
-             if (absoluteIndex >= cStart && absoluteIndex <= cEndClamped) { // Use clamped end
-                 const relativeIndex = absoluteIndex - cStart;
-                 colTagsMap[tag] = relativeIndex;
-             }
-        }
-        // Adjust Row Tags
-        for (const tag in absoluteRowTagMap) {
-             const absoluteIndex = absoluteRowTagMap[tag];
-             if (absoluteIndex >= rStart && absoluteIndex <= rEndClamped) { // Use clamped end
-                 const relativeIndex = absoluteIndex - rStart;
-                 rowTagsMap[tag] = relativeIndex;
-             }
-        }
-         Logger.log(`   -> Built relative tag maps for slice. Rel Rows: ${Object.keys(rowTagsMap).length}, Rel Cols: ${Object.keys(colTagsMap).length}`);
-
-        // --- 9. Format Output Data ---
-        let formattedData;
-        if (extractedRows === 1 && extractedCols === 1) {
-            formattedData = extractedSlice[0][0];
-        } else if (extractedRows === 1) {
-            formattedData = extractedSlice[0];
-        } else if (extractedCols === 1) {
-            formattedData = extractedSlice.map(row => row[0]);
-        } else {
-            formattedData = extractedSlice; // Keep as 2D
-        }
-
-        // --- 10. Return Success with FSData Object ---
-        Logger.log(`   -> ✅ Successfully read and formatted Firestore range data.`);
+        // --- 8. Return Success with FSData Object (Full Data, Absolute Tags, No r1/c1) ---
+        Logger.log(`   -> ✅ Successfully read and formatted full Firestore data.`);
         const FSData = {
-            r1: r1_abs,        // Absolute starting row of original request
-            c1: c1_abs,        // Absolute starting column of original request
-            colTagsMap: colTagsMap, // Relative column tags for the text data
-            rowTagsMap: rowTagsMap, // Relative row tags for the text data
-            text: formattedData // The actual data slice
+            colTagsMap: absoluteColTagMap, // Absolute column tags
+            rowTagsMap: absoluteRowTagMap, // Absolute row tags
+            text: formattedData         // The full 2D data array
         };
-
         return {
             success: true,
             FSData: FSData
@@ -2131,7 +2037,7 @@ function fSrvReadFirestoreRange(rangeObject, workbookAbr, sheetName, gIndex) {
         return { success: false, message: safeErrorMessage };
     }
 
-} // END fSrvReadFirestoreRange
+} // END fSrvGetFirestoreFSData
 
 
 

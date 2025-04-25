@@ -1862,11 +1862,14 @@ function fHandleNewAbilitySelection(workbookAbr, sheetName, r, newValueStr) {
     const lowerSheetName = sheetName.toLowerCase();
 
     if (lowerWorkbookAbr === 'db' && lowerSheetName === 'abilities') {
-        targetCache = gUI.dbAbilitiesFSData; cacheKey = 'gUI.dbAbilitiesFSData';
+        targetCache = gUI.dbAbilitiesFSData;
+        cacheKey = 'gUI.dbAbilitiesFSData';
     } else if (lowerWorkbookAbr === 'mykl' && lowerSheetName === 'myabilities') {
-        targetCache = gUI.myKlMyAbilitiesFSData; cacheKey = 'gUI.myKlMyAbilitiesFSData';
+        targetCache = gUI.myKlMyAbilitiesFSData;
+        cacheKey = 'gUI.myKlMyAbilitiesFSData';
     } else if (lowerWorkbookAbr === 'db' && lowerSheetName === 'gear') {
-        targetCache = gUI.dbGearFSData; cacheKey = 'gUI.dbGearFSData';
+        targetCache = gUI.dbGearFSData;
+        cacheKey = 'gUI.dbGearFSData';
     } else {
         fMyConsoleLog(`      -> ❌ ${funcName} Error: Unsupported workbook/sheet combination: ${workbookAbr}/${sheetName}`);
         fSetGridValue(r, 'Sk1', 'ERR');
@@ -1881,14 +1884,15 @@ function fHandleNewAbilitySelection(workbookAbr, sheetName, r, newValueStr) {
         return null;
     }
 
-    // --- 3. Extract Ability ID ---
-    const lastUnderscoreIndex = newValueStr.lastIndexOf('_');
-    if (lastUnderscoreIndex === -1) {
-        fMyConsoleLog(`      -> ❌ ${funcName} Error: Selected value "${newValueStr}" does not contain '_' needed to extract ID.`);
+    // --- 3. Extract Ability ID using Helper Function ---
+    const abilID = fGetIDFromNameID(newValueStr); // Use the helper function
+
+    if (!abilID) { // Check if helper returned null (ID not found/invalid)
+        fMyConsoleLog(`      -> ❌ ${funcName} Error: Could not extract valid ID from selected value "${newValueStr}".`);
         fSetGridValue(r, 'Sk1', 'ERR');
         return null;
     }
-    const abilID = newValueStr.substring(lastUnderscoreIndex + 1);
+
     fMyConsoleLog(`       -> Extracted ID: "${abilID}" for ${workbookAbr}/${sheetName}`);
 
     // --- 4. Find Row Index using Cached rowTagsMap ---
@@ -1907,11 +1911,12 @@ function fHandleNewAbilitySelection(workbookAbr, sheetName, r, newValueStr) {
         }
     } else {
         // --- ID Not Found Handling ---
-        const isOptionalNotFound = (lowerWorkbookAbr === 'mykl' && lowerSheetName === 'myabilities') || (lowerWorkbookAbr === 'db' && lowerSheetName === 'gear');
+        const isOptionalNotFound = (lowerWorkbookAbr === 'mykl' && lowerSheetName === 'myabilities') ||
+                                   (lowerWorkbookAbr === 'db' && lowerSheetName === 'gear');
         if (isOptionalNotFound) {
             // **Log INFO for DB/Gear, otherwise keep WARNING for others**
             if (lowerWorkbookAbr === 'db' && lowerSheetName === 'gear') {
-                 fMyConsoleLog(`       -> INFO: ID "${abilID}" not found in ${cacheKey} map. This is expected for non-gear items.`); // <<< CHANGED Log Level
+                 fMyConsoleLog(`       -> INFO: ID "${abilID}" not found in ${cacheKey} map. This is expected for non-gear items.`);
             } else { // MyKL/MyAbilities case
                  fMyConsoleLog(`       -> ID "${abilID}" not found in ${cacheKey} map. This is expected/handled.`);
             }
@@ -1932,7 +1937,6 @@ function fHandleNewAbilitySelection(workbookAbr, sheetName, r, newValueStr) {
         colTagsMap: colTagsMap,
         found: found
     };
-
 } // END fHandleNewAbilitySelection
 
 
@@ -6108,7 +6112,7 @@ async function fHandleSaveDBSheetVer() {
 //            FSData.r1/c1 and tag lookup using FSData.rowTagsMap/colTagsMap.
 // Inputs  -> rRef (String|Number): Row tag or 0-based absolute index from original sheet.
 //         -> cRef (String|Number): Column tag or 0-based absolute index from original sheet.
-//         -> FSData (Object): The object returned by fSrvReadFirestoreRange, structured as
+//         -> FSData (Object): The object returned by fSrvGetFirestoreFSData, structured as
 //                             { r1, c1, colTagsMap, rowTagsMap, text }.
 // Outputs -> (Any | undefined): The value found at the resolved relative position within
 //                              FSData.text, or undefined if not found or on error.
@@ -6550,7 +6554,6 @@ function fOnCSGameDataLoaded(data) {
 async function fCacheFSData() {
     const funcName = "fCacheFSData";
     fMyConsoleLog(`⚙️ ${funcName}: Fetching background data caches from Firestore...`);
-
     // Define the caches to fetch
     const cachesToFetch = [
       { workbookAbr: 'DB', sheetName: 'Abilities', gUIKey: 'dbAbilitiesFSData' },
@@ -6559,8 +6562,7 @@ async function fCacheFSData() {
       { workbookAbr: 'MyCS', sheetName: 'List',    gUIKey: 'myCsListFSData' },
       { workbookAbr: 'MyKL', sheetName: 'MyAbilities', gUIKey: 'myKlMyAbilitiesFSData' }
     ];
-
-    const rangeObject = { r1: 0, c1: 0, r2: -1, c2: -1 }; // Fetch entire sheet
+    // Removed rangeObject definition
 
     try {
         // Create an array of promises for all fetches
@@ -6577,7 +6579,8 @@ async function fCacheFSData() {
                          // Attach config info to the error for easier handling later
                         reject({ error, config });
                     })
-                    .fSrvReadFirestoreRange(rangeObject, config.workbookAbr, config.sheetName, gIndex);
+                    // Call the simplified function without rangeObject
+                    .fSrvGetFirestoreFSData(config.workbookAbr, config.sheetName, gIndex);
             });
         });
 
@@ -6593,14 +6596,19 @@ async function fCacheFSData() {
                 const response = result.value;
                 const config = response.config; // Get config back
 
-                if (response.success && response.FSData) {
-                    // Store successful data
+                // Validate response structure now expects FSData directly
+                if (response.success && response.FSData &&
+                    typeof response.FSData.colTagsMap === 'object' && // Check required FSData props
+                    typeof response.FSData.rowTagsMap === 'object' &&
+                    Array.isArray(response.FSData.text))
+                {
+                    // Store successful data (the FSData object)
                     gUI[config.gUIKey] = response.FSData;
                     fMyConsoleLog(`      -> ✅ Successfully loaded cache: ${config.workbookAbr}/${config.sheetName}`);
                 } else {
                     // Server call succeeded but returned success: false or invalid data
                     allSucceeded = false;
-                    const errorMessage = `Failed to load critical cache: ${config.workbookAbr}/${config.sheetName}. Reason: ${response.message || 'Invalid data received.'}`;
+                    const errorMessage = `Failed to load critical cache: ${config.workbookAbr}/${config.sheetName}. Reason: ${response.message || 'Invalid FSData structure received.'}`;
                     fMyConsoleLog(`      -> ❌ ${errorMessage}`);
                     // Throw immediately to halt loading (Option A)
                     throw new Error(errorMessage);
@@ -6609,7 +6617,7 @@ async function fCacheFSData() {
                 // Promise was rejected (likely a transport error)
                 allSucceeded = false;
                 const config = result.reason.config; // Get config from rejected reason
-                const error = result.reason.error;   // Get error object
+                const error = result.reason.error; // Get error object
                 const errorMessage = `Failed to load critical cache: ${config.workbookAbr}/${config.sheetName}. Reason: ${error.message || 'Unknown server communication error.'}`;
                 fMyConsoleLog(`      -> ❌ ${errorMessage}`);
                 console.error(`Error details for ${config.workbookAbr}/${config.sheetName}:`, error);

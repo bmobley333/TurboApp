@@ -173,6 +173,7 @@ function fGetVal_GUICache(rRef, cRef, dataCacheObject) {
     const funcName = "fGetVal_GUICache";
 
     // === 1. Validate Cache Object ===
+    // Updated validation to check for text, rowTagsMap, colTagsMap (removed r1/c1 check)
     if (!dataCacheObject || typeof dataCacheObject !== 'object' ||
         !dataCacheObject.text || !Array.isArray(dataCacheObject.text) ||
         !dataCacheObject.rowTagsMap || typeof dataCacheObject.rowTagsMap !== 'object' ||
@@ -191,13 +192,15 @@ function fGetVal_GUICache(rRef, cRef, dataCacheObject) {
     if (typeof rRef === 'string') {
         absolute_r = rowTagsMap[rRef];
         if (absolute_r === undefined) {
-            // console.warn(`${funcName}: Row tag "${rRef}" not found in rowTagsMap.`); // Can be noisy
+            // console.warn(`${funcName}: Row tag "${rRef}" not found in rowTagsMap.`);
+            // Can be noisy
             return undefined;
         }
     } else if (typeof rRef === 'number' && !isNaN(rRef) && rRef >= 0) {
         absolute_r = rRef;
     } else {
-        // console.warn(`${funcName}: Invalid row reference provided: ${rRef}.`); // Can be noisy
+        // console.warn(`${funcName}: Invalid row reference provided: ${rRef}.`);
+        // Can be noisy
         return undefined;
     }
 
@@ -205,13 +208,15 @@ function fGetVal_GUICache(rRef, cRef, dataCacheObject) {
     if (typeof cRef === 'string') {
         absolute_c = colTagsMap[cRef];
         if (absolute_c === undefined) {
-            // console.warn(`${funcName}: Col tag "${cRef}" not found in colTagsMap.`); // Can be noisy
+            // console.warn(`${funcName}: Col tag "${cRef}" not found in colTagsMap.`);
+            // Can be noisy
             return undefined;
         }
     } else if (typeof cRef === 'number' && !isNaN(cRef) && cRef >= 0) {
         absolute_c = cRef;
     } else {
-        // console.warn(`${funcName}: Invalid col reference provided: ${cRef}.`); // Can be noisy
+        // console.warn(`${funcName}: Invalid col reference provided: ${cRef}.`);
+        // Can be noisy
         return undefined;
     }
 
@@ -221,9 +226,12 @@ function fGetVal_GUICache(rRef, cRef, dataCacheObject) {
         return undefined;
     }
 
+    // Retrieve value using absolute indices from the cached text array
     const value = text?.[absolute_r]?.[absolute_c];
+
     if (value === undefined) {
-        // console.warn(`${funcName}: Value not found at resolved index [${absolute_r}, ${absolute_c}] for ref (${rRef}, ${cRef}).`); // Can be noisy
+        // console.warn(`${funcName}: Value not found at resolved index [${absolute_r}, ${absolute_c}] for ref (${rRef}, ${cRef}).`);
+        // Can be noisy
     }
 
     return value;
