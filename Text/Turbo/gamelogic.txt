@@ -2874,6 +2874,168 @@ async function fHandleAdHocRoll(cellText) {
 
 
 
+// fCalcGearLine ///////////////////////////////////////////////////////////////////
+// Purpose -> Handles calculations and updates when a gear-related cell (PossNum, PossWorn, PossPerOff) is edited.
+//            Uses cached DB/Gear data, validates inputs, calculates totals, updates relevant cells, and triggers MR calculation.
+// Inputs  -> r (Number): The 0-based row index of the edited cell.
+//         -> c (Number): The 0-based column index of the edited cell.
+//         -> newValue (Any): The proposed new value for the edited cell.
+//         -> oldValue (Any): The previous value of the edited cell (for reverting DOM on error).
+// Outputs -> (Promise<Any | null>): Resolves with the validated `newValue` if successful, or `null` if validation fails (signaling not to update gUI.arr).
+async function fCalcGearLine(r, c, newValue, oldValue) {
+    const funcName = 'fCalcGearLine';
+    fMyConsoleLog(`⚖️ ${funcName}: Triggered for cell [${r}, ${c}] with new value: "${newValue}"`);
+
+    const gearCache = gUI.dbGearFSData;
+    const possNameColTag = 'Ability';
+    const possNumColTag = 'PossNum';
+    const possWornColTag = 'PossWorn';
+    const possPerOffColTag = 'PossPerOff';
+    const possEncColTag = 'PossEnc';
+    const possCrTotColTag = 'PossCrTot';
+    const possAPTotColTag = 'PossAPTot';
+
+    // === 1. Pre-checks ===
+    if (!gearCache || !gearCache.text || !gearCache.colTagsMap) {
+        fMyConsoleLog(`   -> ❌ Error: DB/Gear cache (gUI.dbGearFSData) not loaded or invalid.`);
+        await fShowMessage("Error: Gear definition cache not loaded. Cannot calculate gear line.");
+        fRevertCellDOM(r, c, oldValue);
+        return null;
+    }
+
+    const possNameVal = fGetGridValue(r, possNameColTag);
+    if (!possNameVal || typeof possNameVal !== 'string') {
+        fMyConsoleLog(`   -> Skipping calc: PossName cell ('${possNameColTag}') is empty or invalid for row ${r}.`);
+        await fShowMessage("Cannot modify gear numbers/status until an item is selected in the 'Ability' column.");
+        fRevertCellDOM(r, c, oldValue);
+        return null;
+    }
+    const gearID = fGetIDFromNameID(possNameVal);
+    if (!gearID) {
+        fMyConsoleLog(`   -> ⚠️ Warning: Could not extract valid Gear ID from PossName "${possNameVal}" in row ${r}. Cannot calculate accurately.`);
+        fSetGridValue(r, possEncColTag, '');
+        fSetGridValue(r, possCrTotColTag, '');
+        fSetGridValue(r, possAPTotColTag, '');
+        await fCalculateEncAndMR();
+        return newValue;
+    }
+    fMyConsoleLog(`   -> Identified Gear ID: ${gearID} for row ${r}`);
+
+    // === 2. Determine Edited Column & Validate Input ===
+    const editedColTag = Object.keys(gUI.colTag).find(tag => gUI.colTag[tag] === c);
+    let validatedValue = newValue;
+    let validationError = '';
+
+    let calc_possNumVal = NaN;
+    let calc_isWornVal = false;
+    let calc_perOffVal = '';
+
+    const currentNumVal = fGetGridValue(r, possNumColTag, true) || 0;
+    const currentWornVal = fGetGridValue(r, possWornColTag) || false;
+    const currentPerOffVal = fGetGridValue(r, possPerOffColTag) || '';
+
+    switch (editedColTag) {
+        case possNumColTag:
+            const numInput = Number(newValue);
+            if (isNaN(numInput) || !Number.isInteger(numInput) || numInput < 0) {
+                validationError = `Invalid number ("${newValue}"). '${possNumColTag}' must be a whole number >= 0.`;
+                validatedValue = null;
+            } else {
+                validatedValue = numInput;
+                calc_possNumVal = numInput;
+                calc_isWornVal = currentWornVal;
+                calc_perOffVal = currentPerOffVal;
+            }
+            break;
+        case possWornColTag:
+            const wornInput = newValue === true || String(newValue).toUpperCase() === 'TRUE';
+            validatedValue = wornInput;
+            calc_possNumVal = currentNumVal;
+            calc_isWornVal = wornInput;
+            calc_perOffVal = currentPerOffVal;
+            break;
+        case possPerOffColTag:
+            const perOffInput = String(newValue ?? '').trim();
+            if (perOffInput !== '' && (!perOffInput.endsWith('%') || isNaN(parseFloat(perOffInput)))) {
+                validationError = `Invalid format ("${newValue}"). '${possPerOffColTag}' must be blank or a percentage (e.g., 50%).`;
+                validatedValue = null;
+            } else {
+                validatedValue = perOffInput;
+                calc_possNumVal = currentNumVal;
+                calc_isWornVal = currentWornVal;
+                calc_perOffVal = perOffInput;
+            }
+            break;
+        default:
+            fMyConsoleLog(`   -> ❌ Error: ${funcName} called for unhandled column: ${editedColTag}`);
+             fRevertCellDOM(r, c, oldValue);
+            return null;
+    }
+
+    if (validatedValue === null) {
+        fMyConsoleLog(`   -> ❌ Validation Failed: ${validationError}`);
+        await fShowMessage(validationError);
+        fRevertCellDOM(r, c, oldValue);
+        return null;
+    }
+
+    calc_possNumVal = Number.isInteger(calc_possNumVal) && calc_possNumVal >= 0 ? calc_possNumVal : 0;
+
+    fMyConsoleLog(`   -> Values for Calculation: Num=${calc_possNumVal}, Worn=${calc_isWornVal}, %Off='${calc_perOffVal}'`);
+
+    // === 3. Get Constants from Gear Cache ===
+    const wornEnc = Number(fGetVal_GUICache(gearID, 'WornEnc', gearCache) || 0);
+    const itemEnc = Number(fGetVal_GUICache(gearID, 'ItemEnc', gearCache) || 0);
+    const crEach = Number(fGetVal_GUICache(gearID, 'ItemCR', gearCache) || 0);
+    const apEach = Number(fGetVal_GUICache(gearID, 'AP', gearCache) || 0);
+
+    fMyConsoleLog(`   -> DB Constants: WornEnc=${wornEnc}, ItemEnc=${itemEnc}, CrEach=${crEach}, APEach=${apEach}`);
+
+    // === 4. Perform Calculations ===
+    const encEachVal = (calc_isWornVal && wornEnc !== 0) ? wornEnc : itemEnc;
+    const gearEncTot = calc_possNumVal * encEachVal;
+    fMyConsoleLog(`      -> Enc Calc: EncEach=${encEachVal}, Total=${gearEncTot}`);
+
+    let parsedPercent = 1.0;
+    if (typeof calc_perOffVal === 'string' && calc_perOffVal.endsWith('%')) {
+        const numPart = parseFloat(calc_perOffVal);
+        if (!isNaN(numPart)) {
+            parsedPercent = (100 - numPart) / 100;
+        }
+    }
+    // Calculate raw total, then check for NaN before rounding
+    const rawCrTotal = calc_possNumVal * crEach * parsedPercent;
+    const gearTotCr = isNaN(rawCrTotal) ? 0 : Math.round(rawCrTotal); // <<< FIXED NaN handling
+
+    fMyConsoleLog(`      -> CR Calc: CrEach=${crEach}, Num=${calc_possNumVal}, PercMult=${parsedPercent.toFixed(2)} => Raw=${rawCrTotal} => Final=${gearTotCr}`); // Log includes Raw now
+
+    const gearAPTot = calc_possNumVal * apEach;
+    fMyConsoleLog(`      -> AP Calc: APEach=${apEach}, Num=${calc_possNumVal} => Total=${gearAPTot}`);
+
+    // === 5. Update Grid Cells ===
+    let updateSuccess = true;
+    fMyConsoleLog(`   -> Updating calculated cells for row ${r}...`);
+    updateSuccess &&= fSetGridValue(r, possEncColTag, gearEncTot);
+    updateSuccess &&= fSetGridValue(r, possCrTotColTag, gearTotCr); // Pass the potentially defaulted 0
+    updateSuccess &&= fSetGridValue(r, possAPTotColTag, gearAPTot);
+
+    // === 6. Recalculate Overall Encumbrance and MR ===
+    if (updateSuccess) {
+        fMyConsoleLog(`   -> Triggering fCalculateEncAndMR after updating row ${r}...`);
+        await fCalculateEncAndMR();
+        fMyConsoleLog(`✅ ${funcName} completed successfully for [${r}, ${c}].`);
+        return validatedValue;
+    } else {
+        fMyConsoleLog(`   -> ❌ Error occurred during fSetGridValue updates for row ${r}.`);
+        await fShowMessage("Error updating calculated gear values.");
+        fRevertCellDOM(r, c, oldValue);
+        return null;
+    }
+
+} // END fCalcGearLine
+
+
+
 // ==========================================================================
 // === Base Die Rolling Utilities ===
 // ==========================================================================

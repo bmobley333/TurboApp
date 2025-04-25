@@ -534,66 +534,6 @@ function fSrvBuildReturnObject(arr, format, notesArr) {
 
 
 
-
-// ==========================================================================
-// === SPECIALTY SHEET LOADER – “LIST” TAB. or similar ===
-// ==========================================================================
-
-
-
-
-// fSrvGetAbilityList /////////////////////////////////////////////////////////////
-// Purpose -> Retrieves a list of ability names from the 'List' tab of the Character Sheet
-//            using fSrvGetSheetRangeDataNTags and handling 'Calc_LastRow'.
-// Inputs  -> csId (String): The Character Sheet ID passed from the client.
-//         -> rangeconfig - the range of gUI.rangeCSList.abilitiesNameID to work on
-// Outputs -> (Array<String>): An array of unique, non-empty ability names, sorted alphabetically.
-// Throws  -> (Error): If sheet/tab/tags not found or critical values are missing.
-function fSrvGetAbilityList(csId,rangeConfig) {
-    const funcName = "fSrvGetAbilityList";
-    const sheetName = 'List';
-
-    // Basic check on csId - fSrvGetSheetRangeDataNTags will do a more robust check if needed
-    if (!csId) {
-        throw new Error(`${funcName}: Character Sheet ID argument was not provided.`);
-    }
-    Logger.log(`${funcName}: Requesting ability list via fSrvGetSheetRangeDataNTags for CS ID: ${csId}`);
-
-    try {
-        // Call the generic function, passing csId directly and the range config
-        const result = fSrvGetSheetRangeDataNTags(csId, sheetName, rangeConfig);
-
-        // Validate the result structure and data type
-        if (!result || !result.hasOwnProperty('data') || !Array.isArray(result.data)) {
-             // Check if data is an array (expected 1D array for a single column request)
-            console.error(`${funcName}: Invalid data structure returned from fSrvGetSheetRangeDataNTags. Expected { data: [...] }, got:`, result);
-            throw new Error(`Internal server error: Failed to retrieve data correctly for ability list.`);
-        }
-
-        // Data should be a 1D array from fSrvGetSheetRangeDataNTags formatting
-        const rawAbilities = result.data;
-
-        // Clean the data: filter out empty strings/nulls/undefined, trim whitespace
-        const cleanedAbilities = rawAbilities
-            .map(value => (value !== undefined && value !== null) ? String(value).trim() : '')
-            .filter(trimmedValue => trimmedValue); // Keep only non-empty strings
-
-        // Remove duplicates and sort
-        const uniqueAbilities = [...new Set(cleanedAbilities)];
-        uniqueAbilities.sort((a, b) => a.localeCompare(b)); // Alphabetical sort
-
-        Logger.log(`${funcName}: Success. Returning ${uniqueAbilities.length} unique ability names.`);
-        return uniqueAbilities;
-
-    } catch (e) {
-        // Catch errors from fSrvGetSheetRangeDataNTags or during processing
-        console.error(`Error in ${funcName} for CS ID ${csId}: ${e.message}\nStack: ${e.stack}`);
-        throw new Error(`Server error getting ability list: ${e.message || e}`);
-    }
-} // END fSrvGetAbilityList
-
-
-
 // ==========================================================================
 // === Generic Sheet Operations ===
 // ==========================================================================

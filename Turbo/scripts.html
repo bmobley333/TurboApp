@@ -475,15 +475,14 @@ function fGetVal_GUICache(rRef, cRef, dataCacheObject) {
     let absolute_c = NaN;
 
     // === 2. Resolve Row Reference to Absolute Index ===
-    // Cache maps store absolute 0-based indices directly
     if (typeof rRef === 'string') {
-        absolute_r = rowTagsMap[rRef]; // Direct lookup
+        absolute_r = rowTagsMap[rRef];
         if (absolute_r === undefined) {
-            // console.warn(`${funcName}: Row tag "${rRef}" not found in cache rowTagsMap.`); // Can be noisy
+            // console.warn(`${funcName}: Row tag "${rRef}" not found in rowTagsMap.`); // Can be noisy
             return undefined;
         }
     } else if (typeof rRef === 'number' && !isNaN(rRef) && rRef >= 0) {
-        absolute_r = rRef; // Assume direct absolute index
+        absolute_r = rRef;
     } else {
         // console.warn(`${funcName}: Invalid row reference provided: ${rRef}.`); // Can be noisy
         return undefined;
@@ -491,13 +490,13 @@ function fGetVal_GUICache(rRef, cRef, dataCacheObject) {
 
     // === 3. Resolve Column Reference to Absolute Index ===
     if (typeof cRef === 'string') {
-        absolute_c = colTagsMap[cRef]; // Direct lookup
+        absolute_c = colTagsMap[cRef];
         if (absolute_c === undefined) {
-            // console.warn(`${funcName}: Col tag "${cRef}" not found in cache colTagsMap.`); // Can be noisy
+            // console.warn(`${funcName}: Col tag "${cRef}" not found in colTagsMap.`); // Can be noisy
             return undefined;
         }
     } else if (typeof cRef === 'number' && !isNaN(cRef) && cRef >= 0) {
-        absolute_c = cRef; // Assume direct absolute index
+        absolute_c = cRef;
     } else {
         // console.warn(`${funcName}: Invalid col reference provided: ${cRef}.`); // Can be noisy
         return undefined;
@@ -505,23 +504,45 @@ function fGetVal_GUICache(rRef, cRef, dataCacheObject) {
 
     // === 4. Validate Resolved Absolute Indices & Retrieve Value ===
     if (isNaN(absolute_r) || isNaN(absolute_c)) {
-        // Should have been caught earlier, but safeguard
         // console.warn(`${funcName}: Failed to resolve valid absolute indices for (${rRef}, ${cRef}).`);
         return undefined;
     }
 
-    // Access the value from the cached 2D text array
     const value = text?.[absolute_r]?.[absolute_c];
-
-    // Check if value exists at the resolved index (handles sparse arrays implicitly)
     if (value === undefined) {
         // console.warn(`${funcName}: Value not found at resolved index [${absolute_r}, ${absolute_c}] for ref (${rRef}, ${cRef}).`); // Can be noisy
     }
 
-    // Return the found value (could be anything, including null or '') or undefined
     return value;
-
 } // END fGetVal_GUICache
+
+
+
+
+// fGetIDFromNameID ////////////////////////////////////////////////////////////////
+// Purpose -> Extracts the 6-character ID from the end of a Name_ID string.
+// Inputs  -> nameIdString (String): The string containing the name and ID (e.g., "Long Sword_A1B2C3").
+// Outputs -> (String | null): The 6-character ID if found and valid, otherwise null.
+function fGetIDFromNameID(nameIdString) {
+    if (typeof nameIdString !== 'string' || !nameIdString) {
+        return null; // Return null if input is not a valid string
+    }
+
+    const lastUnderscoreIndex = nameIdString.lastIndexOf('_');
+
+    // Check if underscore exists and if there are at least 6 characters after it
+    if (lastUnderscoreIndex !== -1 && nameIdString.length - lastUnderscoreIndex - 1 >= 6) {
+        const potentialId = nameIdString.substring(lastUnderscoreIndex + 1);
+        // Optional: Add more validation here if IDs have a specific format (e.g., alphanumeric)
+        if (potentialId.length === 6) { // Ensure exactly 6 characters for stricter validation
+             return potentialId;
+        }
+    }
+
+    // Log warning if ID extraction failed
+    // fMyConsoleLog(`⚠️ fGetIDFromNameID: Could not extract valid 6-char ID from "${nameIdString}".`); // Can be noisy
+    return null; // Return null if no valid ID found
+} // END fGetIDFromNameID
 
 
 
@@ -2834,11 +2855,11 @@ function fProcessCachedAbilityList() {
 
 // fHandleGridCheckboxClick ////////////////////////////////////////////////////////
 // Purpose -> Handles delegated click events specifically for checkboxes within the grid.
-//            Updates the data model (gUI.arr) and handles radio-button logic for
-//            Sk1/Sk2 checkboxes via fHandleSkGroupCheckboxClick.
+//            Updates the data model (gUI.arr), handles radio-button logic for
+//            Sk1/Sk2 checkboxes, and triggers fCalcGearLine for PossWorn checkboxes.
 // Inputs  -> event (MouseEvent): The click event object.
-// Outputs -> None (Modifies gUI.arr, gUI.currentSkRadioChecked, and DOM checkbox state).
-function fHandleGridCheckboxClick(event) {
+// Outputs -> None (Modifies gUI.arr, gUI.currentSkRadioChecked, DOM checkbox state, potentially triggers recalc/save).
+async function fHandleGridCheckboxClick(event) { // <<< MADE ASYNC
     const checkbox = event.target;
 
     // Validate if the clicked element is a valid grid checkbox
@@ -2857,18 +2878,79 @@ function fHandleGridCheckboxClick(event) {
     // Determine checked state and if it's part of the Sk radio group
     const isChecked = checkbox.checked;
     const isSkGroupMember = checkbox.dataset.skGroup === 'true';
+    const possWornCol = fResolveCol('PossWorn'); // Get the index for PossWorn
 
-    // Route to appropriate handler
+    // Update data model *before* potentially calling fCalcGearLine
+    const oldValue = gUI.arr[r][c]; // Capture old value before update
+    gUI.arr[r][c] = isChecked;
+    fMyConsoleLog(`Checkbox [${r}, ${c}] toggled to: ${isChecked}`);
+
+    // Handle Sk1/Sk2 Radio Group Logic
     if (isSkGroupMember) {
-        // Handle radio-button logic for Sk1/Sk2 group
-        fHandleSkGroupCheckboxClick(r, c, isChecked);
-    } else {
-        // Handle standard checkbox: update data model directly
-        gUI.arr[r][c] = isChecked;
-        fMyConsoleLog(`Checkbox [${r}, ${c}] toggled to: ${isChecked}`);
+        // Handle radio-button logic (doesn't need await)
+        fHandleSkGroupCheckboxClickLogicOnly(r, c, isChecked, oldValue); // Use refactored logic-only function
     }
+
+    // --- Trigger Gear Calculation if PossWorn was clicked ---
+    if (c === possWornCol) {
+        fMyConsoleLog(`   -> PossWorn checkbox clicked [${r}, ${c}]. Triggering fCalcGearLine...`);
+        // Call fCalcGearLine, passing the OLD value (!isChecked) for potential revert
+        const calcResult = await fCalcGearLine(r, c, isChecked, !isChecked);
+
+        // fCalcGearLine now handles DOM revert on failure and returns null.
+        // We already updated gUI.arr[r][c] optimistically.
+        // If calcResult is null, fCalcGearLine failed validation/calculation and reverted the DOM.
+        // We should technically revert gUI.arr[r][c] as well in that case, but fCalcGearLine
+        // already showed an error. Leaving gUI.arr as is simplifies this handler.
+        // We only trigger auto-save if the calculation succeeded (calcResult is not null).
+        if (calcResult !== null) {
+            fHandleAutoSaveTextToFirestore(); // Auto-save after successful calc
+        } else {
+             fMyConsoleLog(`   -> fCalcGearLine indicated failure for PossWorn click at [${r}, ${c}]. Auto-save skipped.`);
+             // Optionally revert gUI.arr here if strict consistency is needed:
+             // gUI.arr[r][c] = !isChecked;
+        }
+    } else if (!isSkGroupMember) {
+         // If it wasn't PossWorn and wasn't an SkGroup member, just save the standard checkbox change
+         fHandleAutoSaveTextToFirestore();
+    }
+     // Note: SkGroup changes don't trigger auto-save directly here; subsequent actions usually do.
+
 } // END fHandleGridCheckboxClick
 
+
+
+
+// fHandleSkGroupCheckboxClickLogicOnly ////////////////////////////////////////////
+// Purpose -> Handles the synchronous data model and tracker updates for Sk1/Sk2
+//            radio group checkboxes. Called by fHandleGridCheckboxClick.
+// Inputs  -> r (Number): Row index of the clicked checkbox.
+//         -> c (Number): Column index of the clicked checkbox.
+//         -> isChecked (Boolean): The new checked state of the clicked checkbox.
+//         -> oldValue (Any): The previous value (used to determine if unchecking).
+// Outputs -> None (Modifies gUI.arr, gUI.currentSkRadioChecked, and potentially other DOM checkboxes).
+function fHandleSkGroupCheckboxClickLogicOnly(r, c, isChecked, oldValue) {
+    const oldR = gUI.currentSkRadioChecked.r;
+    const oldC = gUI.currentSkRadioChecked.c;
+
+    if (isChecked) {
+        // If checking a new box, uncheck the previously checked one (if different)
+        if (oldR !== null && oldC !== null && (oldR !== r || oldC !== c)) {
+            fUncheckOldSkGroupBox(oldR, oldC);
+        }
+        // Update tracker
+        gUI.currentSkRadioChecked = { r, c };
+        // gUI.arr[r][c] is already set to true by the caller
+        fMyConsoleLog(`Radio group: Checked box [${r}, ${c}]`);
+    } else {
+        // If unchecking the currently tracked box, clear the tracker
+        if (oldR === r && oldC === c) {
+            gUI.currentSkRadioChecked = { r: null, c: null };
+        }
+        // gUI.arr[r][c] is already set to false by the caller
+        fMyConsoleLog(`Radio group: Unchecked box [${r}, ${c}]`);
+    }
+} // END fHandleSkGroupCheckboxClickLogicOnly
 
 
 
@@ -3173,39 +3255,73 @@ function fHandleUrlClick(cellDiv) {
 // fHandleGridCellEdit /////////////////////////////////////////////////////////////
 // Purpose -> Handles the 'blur' event delegated from the grid for contenteditable cells.
 //            Updates the underlying data model (gUI.arr) if the cell's text content
-//            has changed since it gained focus.
+//            has changed since it gained focus. Calls fCalcGearLine for specific gear columns.
 // Inputs  -> event (FocusEvent): The blur event object.
-// Outputs -> None (Modifies gUI.arr).
-function fHandleGridCellEdit(event) {
+// Outputs -> None (Modifies gUI.arr, potentially triggers calculations and auto-save).
+async function fHandleGridCellEdit(event) { // <<< MADE ASYNC
     const cellDiv = event.target;
 
-    // === Validate Target Element ===
-    // Ensure the event target is a contentEditable cell div
+    // === 1. Validate Target Element ===
     if (!cellDiv || !cellDiv.classList.contains('cell') || cellDiv.contentEditable !== 'true') {
         return; // Exit if not an editable cell div
     }
 
-    // === Get Coordinates and Values ===
+    // === 2. Get Coordinates and Values ===
     const r = parseInt(cellDiv.dataset.r, 10);
     const c = parseInt(cellDiv.dataset.c, 10);
 
-    // Validate indices
     if (isNaN(r) || isNaN(c) || r < 0 || c < 0 || !gUI.arr[r]) {
          console.warn("fHandleGridCellEdit: Invalid row/column index from data attributes.", cellDiv.dataset);
          return;
     }
 
-    // Get the new value (current text) and old value (from data model)
     const newValue = cellDiv.textContent;
     const oldValue = String(gUI.arr[r][c] ?? ''); // Coerce old value to string for comparison
 
-    // === Update Data Model (if changed) ===
-    if (newValue !== oldValue) {
-        gUI.arr[r][c] = newValue; // Update the data model
-        fMyConsoleLog(`Cell [${r}, ${c}] changed to: "${newValue}"`);
-        // Optional: Add visual feedback or trigger server update later
+    // === 3. Check if Value Changed ===
+    if (newValue === oldValue) {
+        // fMyConsoleLog(`Cell [${r}, ${c}] content unchanged.`); // Can be noisy
+        return; // Exit if content hasn't changed
     }
-    // else: Content unchanged, do nothing
+
+    // === 4. Identify Edited Column & Handle Gear Calculations ===
+    const gearColumnsToCalculate = ['PossNum', 'PossWorn', 'PossPerOff'];
+    const editedColTag = Object.keys(gUI.colTag).find(tag => gUI.colTag[tag] === c);
+    let finalValueToStore = newValue; // Default to the raw new value
+    let shouldUpdateModel = true; // Assume update is needed initially
+
+    if (gearColumnsToCalculate.includes(editedColTag)) {
+        fMyConsoleLog(`   -> Edit in gear calculation column: ${editedColTag} [${r}, ${c}]`);
+        // Call the calculation function, passing OLD value for potential revert
+        const validatedValue = await fCalcGearLine(r, c, newValue, oldValue);
+
+        if (validatedValue !== null) {
+            // fCalcGearLine succeeded and returned the validated value
+            finalValueToStore = validatedValue;
+            fMyConsoleLog(`   -> fCalcGearLine successful for [${r}, ${c}]. Value to store: "${finalValueToStore}"`);
+        } else {
+            // fCalcGearLine failed validation or encountered an error
+            fMyConsoleLog(`   -> fCalcGearLine failed for [${r}, ${c}]. NOT updating data model for this cell.`);
+            shouldUpdateModel = false; // Prevent gUI.arr update
+            // fCalcGearLine should have reverted the DOM cell already
+        }
+    } else {
+         fMyConsoleLog(`   -> Edit in standard column: ${editedColTag || 'Unknown'} [${r}, ${c}]`);
+         // No special calculation needed for other columns
+    }
+
+    // === 5. Update Data Model & Trigger Save (if appropriate) ===
+    if (shouldUpdateModel) {
+        // Check again if the final value is actually different from the original model value
+        // (e.g., fCalcGearLine might return a coerced boolean that matches the original)
+        if (gUI.arr[r][c] !== finalValueToStore) {
+            gUI.arr[r][c] = finalValueToStore; // Update the data model
+            fMyConsoleLog(`   -> Data model gUI.arr[${r}][${c}] updated to: "${finalValueToStore}"`);
+            fHandleAutoSaveTextToFirestore(); // Trigger auto-save
+        } else {
+             fMyConsoleLog(`   -> Data model gUI.arr[${r}][${c}] already matches final value. No update needed.`);
+        }
+    }
 
 } // END fHandleGridCellEdit
 
@@ -6298,59 +6414,6 @@ async function fRefreshMonsterData() {
         .fSrvGetSheetRangeDataNTags('db', 'GMScreen', gmMonsterRangeDef);
 
 } // END fRefreshMonsterData
-
-
-
-
-// fFetchFullSheetFromFirestore /////////////////////////////////////////////
-// Purpose -> Helper function to fetch the *entire* Firestore FSData object for a
-//            given sheet using fSrvReadFirestoreRange. Returns a Promise that
-//            resolves with the FSData object or rejects with an error message.
-// Inputs  -> workbookAbr (String): The workbook abbreviation (e.g., 'DB', 'MyKL').
-//         -> sheetName (String): The sheet name (e.g., 'Abilities', 'MyAbilities').
-// Outputs -> Promise<Object|Error>: Resolves with FSData object, rejects with error string.
-function fFetchFullSheetFromFirestore(workbookAbr, sheetName) {
-    const funcName = "fFetchFullSheetFromFirestore";
-    fMyConsoleLog(`   -> ${funcName}: Fetching FULL sheet from Firestore (${workbookAbr}/${sheetName})...`);
-
-    // Define the range object for the entire sheet
-    const rangeObject = {
-        r1: 0,  // First row
-        c1: 0,  // First col
-        r2: -1, // Last row
-        c2: -1  // Last col
-    };
-
-    // Return a new Promise
-    return new Promise((resolve, reject) => {
-        google.script.run
-            .withSuccessHandler((response) => {
-                if (response && response.success && response.FSData) {
-                     // Resolve the promise with the FSData object
-                    resolve(response.FSData);
-                } else {
-                    // Handle cases where server call succeeded but returned invalid data structure
-                    const errMsg = response?.message || `Received invalid FSData structure from Firestore for ${workbookAbr}/${sheetName}.`;
-                    console.error(`${funcName} (${workbookAbr}/${sheetName}): ${errMsg}`, response);
-                    fMyConsoleLog(`     -> ❌ ${funcName} Error (${workbookAbr}/${sheetName}): ${errMsg}`);
-                     // Reject the promise with the error message
-                    reject(errMsg);
-                }
-            })
-            .withFailureHandler((error) => {
-                // Handle transport errors for fSrvReadFirestoreRange call
-                const readError = `Failed server communication fetching ${workbookAbr}/${sheetName} from Firestore: ${error.message || 'Unknown error'}`;
-                console.error(`${funcName} (${workbookAbr}/${sheetName}): ${readError}`, error);
-                fMyConsoleLog(`     -> ❌ ${funcName} Error (${workbookAbr}/${sheetName}): ${readError}`);
-                 // Reject the promise with the error message
-                reject(readError);
-            })
-            // gIndex is assumed to be globally available client-side
-            .fSrvReadFirestoreRange(rangeObject, workbookAbr, sheetName, gIndex);
-    }); // End of Promise
-
-} // END fFetchFullSheetFromFirestore
-
 
 
 
