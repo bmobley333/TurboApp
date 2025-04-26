@@ -2004,113 +2004,171 @@ function fSrvCalcFirestorePath(workbookAbr, sheetName, gIndex) {
 
 
 // fSrvGetFirestoreFSData ///////////////////////////////////////////////////////////
-// Purpose -> Reads data from a Firestore document previously saved by
-//            fSrvSaveFullSheetTextAndTagsToFirestore. Returns the full sheet content
-//            and absolute tag maps.
+// Purpose -> Reads data from a Firestore document (potentially sliced across multiple
+//            documents) previously saved by fSrvSaveFullSheetTextAndTagsToFirestore.
+//            Reassembles sliced data and returns the full sheet content and absolute tag maps.
 // Inputs  -> workbookAbr (String): Workbook abbreviation ('db', 'mycs', etc.).
 //         -> sheetName (String): The sheet name associated with the data.
 //         -> gIndex (Object): Object containing CSID, GameVer, Email.
 // Outputs -> (Object): On success: { success: true, FSData: { colTagsMap, rowTagsMap, text } }
 //                     On failure: { success: false, message: String }
-function fSrvGetFirestoreFSData(workbookAbr, sheetName, gIndex) { 
+function fSrvGetFirestoreFSData(workbookAbr, sheetName, gIndex) {
     const funcName = "fSrvGetFirestoreFSData";
-    Logger.log(`${funcName}: Reading FULL document for Workbook: "${workbookAbr}", Sheet: "${sheetName}", Ver: ${gIndex?.GameVer}, Email: ${gIndex?.Email}, CSID: ${gIndex?.CSID}...`); // Log improved
+    Logger.log(`${funcName}: Reading document(s) for Workbook: "${workbookAbr}", Sheet: "${sheetName}", Ver: ${gIndex?.GameVer}, Email: ${gIndex?.Email}, CSID: ${gIndex?.CSID}...`);
 
     let firestore;
-    let documentPath;
+    let baseCollectionName;
+    let baseDocumentId;
+    let metadataPath;
+    let absoluteColTagMap = {}; // Initialize in case of zero chunks
+    let absoluteRowTagMap = {}; // Initialize in case of zero chunks
 
     try {
         // --- 1. Get Firestore Instance ---
         firestore = fSrvGetFirestoreInstance();
         if (!firestore) {
-            // Logged within the helper
             return { success: false, message: "Server configuration error (Firestore)." };
         }
 
         // --- 2. Calculate Firestore Path ---
-        const { collectionName, documentId } = fSrvCalcFirestorePath(workbookAbr, sheetName, gIndex); // Validate gIndex parts inside helper
-        documentPath = `${collectionName}/${documentId}`;
-        Logger.log(`   -> Target Firestore Path: ${documentPath}`);
+        try {
+            const pathInfo = fSrvCalcFirestorePath(workbookAbr, sheetName, gIndex);
+            baseCollectionName = pathInfo.collectionName;
+            baseDocumentId = pathInfo.documentId;
+        } catch (pathError) {
+            Logger.log(`   -> ❌ Error determining Firestore path: ${pathError.message}`);
+            return { success: false, message: pathError.message };
+        }
+        metadataPath = `${baseCollectionName}/${baseDocumentId}_metadata`;
+        Logger.log(`   -> Target Metadata Path: ${metadataPath}`);
 
-        // --- 3. Read Document ---
-        const doc = firestore.getDocument(documentPath);
+        // --- 3. Fetch Metadata Document ---
+        let metadataDoc;
+        try {
+            metadataDoc = firestore.getDocument(metadataPath);
+        } catch (e) {
+            // Catch potential "NOT_FOUND" or permission errors specifically from getDocument
+            const isNotFoundError = e.message?.toUpperCase().includes("NOT_FOUND");
+            const errorMsg = isNotFoundError
+                           ? `Metadata document not found at path: ${metadataPath}. Data may be missing or not yet saved.`
+                           : `Error fetching metadata document (${metadataPath}): ${e.message || e}`;
+            Logger.log(`   -> ${funcName}: ${errorMsg}`);
+            return { success: false, message: errorMsg };
+        }
 
-        // --- 4. Verification & Data Extraction ---
-        if (!doc || !doc.fields) {
-            const msg = `Document not found or empty at path: ${documentPath}.`;
+        // --- 4. Validate Metadata & Extract Info ---
+        if (!metadataDoc || !metadataDoc.fields) {
+            const msg = `Metadata document not found or empty at path: ${metadataPath}.`;
             Logger.log(`   -> ${funcName}: ${msg}`);
-            return { success: false, message: "No saved data found in Firestore for this sheet/character." };
+            return { success: false, message: msg };
         }
 
-        const colTagsRaw = doc.fields.ColTags;
-        const rowTagsRaw = doc.fields.RowTags;
-        const sheetDataRaw = doc.fields.sheetText2D_rowObjects; // Use correct field name
+        const colTagsRaw = metadataDoc.fields.ColTags;
+        const rowTagsRaw = metadataDoc.fields.RowTags;
+        const totalChunksRaw = metadataDoc.fields.totalChunks;
 
-        // Validate fields exist and have expected type indicators
-        if (!colTagsRaw || typeof colTagsRaw.mapValue === 'undefined') {
-            return { success: false, message: "Invalid document structure: Missing or invalid 'ColTags'." };
-        }
-        if (!rowTagsRaw || typeof rowTagsRaw.mapValue === 'undefined') {
-            return { success: false, message: "Invalid document structure: Missing or invalid 'RowTags'." };
-        }
-        if (!sheetDataRaw || typeof sheetDataRaw.arrayValue === 'undefined') {
-            return { success: false, message: "Invalid document structure: Missing or invalid 'sheetText2D_rowObjects'." };
-        }
-        Logger.log(`   -> Document found. Processing fields...`);
-
-        // --- 5. Convert Firestore Types & Unpack ---
-        const absoluteColTagMap = fSrvConvertFirestoreTypesToJS(colTagsRaw);
-        const absoluteRowTagMap = fSrvConvertFirestoreTypesToJS(rowTagsRaw);
-        const sheetDataConverted = fSrvConvertFirestoreTypesToJS(sheetDataRaw);
-
-        // Validate conversion results
-        if (typeof absoluteColTagMap !== 'object' || absoluteColTagMap === null || Array.isArray(absoluteColTagMap)) {
-             return { success: false, message: "Invalid data type for ColTags after conversion." };
-        }
-         if (typeof absoluteRowTagMap !== 'object' || absoluteRowTagMap === null || Array.isArray(absoluteRowTagMap)) {
-             return { success: false, message: "Invalid data type for RowTags after conversion." };
-        }
-         if (!Array.isArray(sheetDataConverted)) {
-             return { success: false, message: "Invalid data type for sheet data after conversion (expected array)." };
+        if (!colTagsRaw || typeof colTagsRaw.mapValue === 'undefined' ||
+            !rowTagsRaw || typeof rowTagsRaw.mapValue === 'undefined' ||
+            !totalChunksRaw || typeof totalChunksRaw.integerValue === 'undefined') {
+            const msg = "Invalid metadata document structure found (missing/invalid ColTags, RowTags, or totalChunks).";
+            Logger.log(`   -> ${funcName} Error: ${msg}`);
+            return { success: false, message: msg };
         }
 
-        const fullData2D = fSrvUnpackFirestoreArrayTo2D(sheetDataConverted);
-        const numRowsInSheet = fullData2D.length;
-        const numColsInSheet = fullData2D[0]?.length || 0;
+        absoluteColTagMap = fSrvConvertFirestoreTypesToJS(colTagsRaw);
+        absoluteRowTagMap = fSrvConvertFirestoreTypesToJS(rowTagsRaw);
+        const totalChunks = parseInt(totalChunksRaw.integerValue, 10);
 
-        if (numRowsInSheet === 0) {
-            Logger.log(`   -> Warning: Firestore data unpacked into an empty 2D array.`);
-            // Return empty success response according to new FSData structure
-            return { success: true, FSData: { colTagsMap: {}, rowTagsMap: {}, text: [[]] } }; // Return [[ ]] for empty
+        if (typeof absoluteColTagMap !== 'object' || absoluteColTagMap === null || Array.isArray(absoluteColTagMap) ||
+            typeof absoluteRowTagMap !== 'object' || absoluteRowTagMap === null || Array.isArray(absoluteRowTagMap) ||
+            isNaN(totalChunks) || totalChunks < 0) {
+            const msg = "Invalid data types found in metadata after conversion (ColTags/RowTags not objects, or totalChunks not integer >= 0).";
+            Logger.log(`   -> ${funcName} Error: ${msg}`);
+            return { success: false, message: msg };
+        }
+        Logger.log(`   -> Metadata validated. Total Chunks: ${totalChunks}. ColTags: ${Object.keys(absoluteColTagMap).length}, RowTags: ${Object.keys(absoluteRowTagMap).length}`);
+
+        // --- 5. Handle Zero Chunks ---
+        if (totalChunks === 0) {
+            Logger.log(`   -> Total chunks is 0. Returning empty data structure.`);
+            return { success: true, FSData: { colTagsMap: absoluteColTagMap, rowTagsMap: absoluteRowTagMap, text: [[]] } }; // Return empty 2D array
         }
 
-        // --- 6. No Range Resolution or Slicing Needed ---
+        // --- 6. Fetch Data Chunks ---
+        const fetchedChunkDocs = [];
+        const missingChunks = [];
+        Logger.log(`   -> Attempting to fetch ${totalChunks} data chunk(s)...`);
+        for (let i = 1; i <= totalChunks; i++) {
+            const chunkDocId = `${baseDocumentId}_${i}of${totalChunks}`;
+            const chunkPath = `${baseCollectionName}/${chunkDocId}`;
+            try {
+                const chunkDoc = firestore.getDocument(chunkPath);
+                if (chunkDoc && chunkDoc.fields && chunkDoc.fields.rowDataChunk) {
+                    fetchedChunkDocs.push(chunkDoc); // Store the whole doc for now
+                    // Logger.log(`      -> Successfully fetched chunk ${i}/${totalChunks}.`); // Can be noisy
+                } else {
+                    missingChunks.push(i);
+                    Logger.log(`      -> ❌ Failed to fetch or find valid 'rowDataChunk' in chunk ${i}/${totalChunks} at ${chunkPath}.`);
+                }
+            } catch (e) {
+                const isNotFoundError = e.message?.toUpperCase().includes("NOT_FOUND");
+                Logger.log(`      -> ❌ Exception fetching chunk ${i}/${totalChunks} at ${chunkPath}: ${e.message || e}${isNotFoundError ? ' (NOT_FOUND)' : ''}`);
+                missingChunks.push(i); // Mark as missing on error too
+            }
+        }
 
-        // --- 7. Format Output Data (Always return full 2D array) ---
-        Logger.log(`   -> Formatting full sheet data as 2D array (${numRowsInSheet}x${numColsInSheet}).`);
-        const formattedData = fullData2D; // Already in the desired format
+        // --- 7. Error Check: Ensure All Chunks Were Fetched ---
+        if (missingChunks.length > 0) {
+            const errorMsg = `Failed to load all required data chunks. Missing chunk(s): ${missingChunks.join(', ')} of ${totalChunks}. Data is incomplete.`;
+            Logger.log(`   -> ${funcName} Error: ${errorMsg}`);
+            return { success: false, message: errorMsg };
+        }
+        Logger.log(`   -> Successfully fetched all ${totalChunks} data chunk(s).`);
 
-        // --- 8. Return Success with FSData Object (Full Data, Absolute Tags, No r1/c1) ---
-        Logger.log(`   -> ✅ Successfully read and formatted full Firestore data.`);
-        const FSData = {
-            colTagsMap: absoluteColTagMap, // Absolute column tags
-            rowTagsMap: absoluteRowTagMap, // Absolute row tags
-            text: formattedData         // The full 2D data array
+        // --- 8. Reassemble Data ---
+        const combinedRowObjects = [];
+        Logger.log(`   -> Reassembling data from chunks...`);
+        for (let i = 0; i < fetchedChunkDocs.length; i++) {
+            const chunkDoc = fetchedChunkDocs[i];
+            const chunkIndex = i + 1; // 1-based for logging
+            const rowDataChunkRaw = chunkDoc.fields.rowDataChunk;
+            const rowDataChunkConverted = fSrvConvertFirestoreTypesToJS(rowDataChunkRaw);
+
+            if (!Array.isArray(rowDataChunkConverted)) {
+                const errorMsg = `Invalid rowDataChunk format found in chunk ${chunkIndex} after conversion (expected array).`;
+                Logger.log(`   -> ${funcName} Error: ${errorMsg}`);
+                return { success: false, message: errorMsg };
+            }
+            combinedRowObjects.push(...rowDataChunkConverted); // Concatenate arrays
+        }
+        Logger.log(`   -> Reassembled ${combinedRowObjects.length} total row objects.`);
+
+        // --- 9. Unpack and Format Final FSData ---
+        const fullData2D = fSrvUnpackFirestoreArrayTo2D(combinedRowObjects);
+        const numRowsFinal = fullData2D.length;
+        const numColsFinal = fullData2D[0]?.length || 0;
+        Logger.log(`   -> Unpacked reassembled data into final 2D array (${numRowsFinal}x${numColsFinal}).`);
+
+        const assembledFSDataObject = {
+            colTagsMap: absoluteColTagMap, // Use the absolute tags from metadata
+            rowTagsMap: absoluteRowTagMap, // Use the absolute tags from metadata
+            text: fullData2D              // The fully reassembled 2D data array
         };
+
+        // --- 10. Return Success ---
+        Logger.log(`   -> ✅ Successfully read and formatted sliced Firestore data.`);
         return {
             success: true,
-            FSData: FSData
+            FSData: assembledFSDataObject
         };
 
     } catch (e) {
-        // Handle errors from Firestore calls, path calculation, tag resolution, etc.
-        const isNotFoundError = e.message?.includes("NOT_FOUND");
+        // Catch errors from Firestore calls, path calculation, tag resolution, etc.
         const safeErrorMessage = e.message?.includes("permission") ? "Permission denied accessing Firestore."
-                               : isNotFoundError ? `Document not found at path: ${documentPath || 'Unknown'}.`
                                : `Server error during Firestore read/process: ${e.message || e}`;
 
-        console.error(`Exception caught in ${funcName} accessing path ${documentPath || 'Unknown'}: ${e.message}\nStack: ${e.stack}`);
-        Logger.log(`   -> ❌ Exception during Firestore read/process for ${documentPath || 'Unknown'}: ${safeErrorMessage}`);
+        console.error(`Exception caught in ${funcName} accessing path ${metadataPath || 'Unknown'}: ${e.message}\nStack: ${e.stack}`);
+        Logger.log(`   -> ❌ Exception during Firestore read/process for ${metadataPath || 'Unknown'}: ${safeErrorMessage}`);
         return { success: false, message: safeErrorMessage };
     }
 
