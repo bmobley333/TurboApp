@@ -1758,22 +1758,20 @@ function fSrvLoadCharacterInfoFromFirestore(gIndex) {
 
 // fSrvSaveFullSheetTextAndTagsToFirestore //////////////////////////////////////
 // Purpose -> Saves loaded sheet tags (ColTags, RowTags) and the full sheet text data
-//            (sheetText2D, converted to array-of-row-objects) to Firestore.
-//            Determines the target collection and document based on the workbook type.
-// Inputs  -> gIndex.GameVer (String): The game version (e.g., "28.3").
+//            (sheetText2D, converted to array-of-row-objects) to Firestore, potentially
+//            slicing the data into multiple documents if it exceeds size estimates.
+// Inputs  -> gIndex (Object): Contains Email, CSID, GameVer.
 //         -> workbookAbr (String): Abbreviation ('db', 'mastercs', 'masterkl', 'mycs', 'mykl').
 //         -> sheetName (String): The name of the sheet that was loaded.
 //         -> data (Object): The object returned by fSrvLoadFullGoogleSheetAndTags, containing
 //                             { ColTags, RowTags, sheetText2D }.
-//         -> gIndex.Email (String): The user's Email (for 'mycs'/'mykl' collections).
-//         -> gIndex.CSID (String): The Character Sheet ID (for 'mycs'/'mykl' document names).
 // Outputs -> (Object): { success: Boolean, message?: String }
 function fSrvSaveFullSheetTextAndTagsToFirestore(gIndex, workbookAbr, sheetName, data) {
     const funcName = "fSrvSaveFullSheetTextAndTagsToFirestore";
-    Logger.log(`${funcName}: Saving data for Workbook: "${workbookAbr}", Sheet: "${sheetName}", Version: ${gIndex.GameVer}, Email: ${gIndex.Email}, gIndex.CSID: ${gIndex.CSID}...`);
+    const MAX_CHUNK_SIZE_ESTIMATE = 500000; // Target ~500KB per data chunk
+    Logger.log(`${funcName}: Saving data for Workbook: "${workbookAbr}", Sheet: "${sheetName}", Version: ${gIndex?.GameVer}, Email: ${gIndex?.Email}, CSID: ${gIndex?.CSID}...`);
 
     // --- 1. Validate Inputs ---
-    // Moved path-specific validation (gIndex.GameVer, gIndex.Email, gIndex.CSID) to fSrvCalcFirestorePath
     const lowerWorkbookAbr = workbookAbr?.toLowerCase() || '';
     const trimmedSheetName = sheetName?.trim() || '';
     if (!data || typeof data !== 'object' || !data.ColTags || !data.RowTags || !data.sheetText2D || !Array.isArray(data.sheetText2D)) {
@@ -1783,7 +1781,6 @@ function fSrvSaveFullSheetTextAndTagsToFirestore(gIndex, workbookAbr, sheetName,
         return { success: false, message: "Invalid or empty sheetName provided." };
     }
 
-
     // --- 2. Get Firestore Instance ---
     const firestore = fSrvGetFirestoreInstance();
     if (!firestore) {
@@ -1792,18 +1789,21 @@ function fSrvSaveFullSheetTextAndTagsToFirestore(gIndex, workbookAbr, sheetName,
         return { success: false, message: "Server configuration error (Firestore)." };
     }
 
-
     // --- 3. Determine Firestore Path using Helper ---
-    let documentPath;
+    let baseCollectionName;
+    let baseDocumentId;
+    let documentPathBase; // For logging clarity
     try {
-        const { collectionName, documentId } = fSrvCalcFirestorePath(workbookAbr, trimmedSheetName, gIndex);
-        documentPath = `${collectionName}/${documentId}`;
-        Logger.log(`   -> Target Firestore Path: ${documentPath}`);
+        // Path calculation requires valid gIndex properties, will throw if invalid
+        const pathInfo = fSrvCalcFirestorePath(workbookAbr, trimmedSheetName, gIndex);
+        baseCollectionName = pathInfo.collectionName;
+        baseDocumentId = pathInfo.documentId;
+        documentPathBase = `${baseCollectionName}/${baseDocumentId}`; // For logging
+        Logger.log(`   -> Base Firestore Path Calculated: ${documentPathBase}`);
     } catch (pathError) {
         Logger.log(`   -> ❌ Error determining Firestore path: ${pathError.message}`);
         return { success: false, message: pathError.message }; // Return error from helper
     }
-
 
     // --- 4. Convert sheetText2D to Array of Row Objects ---
     const sheetTextArray = data.sheetText2D;
@@ -1818,30 +1818,107 @@ function fSrvSaveFullSheetTextAndTagsToFirestore(gIndex, workbookAbr, sheetName,
     }
     Logger.log(`   -> Converted ${numRows} rows to array-of-row-objects format.`);
 
+    // --- 5. Slicing Logic ---
+    const chunks = [];
+    let currentChunk = [];
+    let currentChunkSizeEstimate = 0;
 
-    // --- 5. Prepare Final Data Payload ---
-    const dataToSave = {
-        ColTags: data.ColTags,                  // Save the column tags map
-        RowTags: data.RowTags,                  // Save the row tags map
-        sheetText2D_rowObjects: arrayOfRowObjects, // Save the data in the new format
-        _lastUpdated: new Date()                // Timestamp the save operation
+    Logger.log(`   -> Slicing data based on estimated size (Target: ${MAX_CHUNK_SIZE_ESTIMATE} bytes)...`);
+    for (let i = 0; i < arrayOfRowObjects.length; i++) {
+        const rowObject = arrayOfRowObjects[i];
+        let rowObjectSizeEstimate = 0;
+        try {
+            // Estimate size of the single row object
+            rowObjectSizeEstimate = JSON.stringify(rowObject).length;
+        } catch (e) {
+            Logger.log(`   -> Warning: Could not estimate size for row object at index ${i}. Assuming small size (0). Error: ${e.message}`);
+            // Proceed cautiously if stringify fails for a single row
+        }
+
+        // Check if adding this row would exceed the limit for the current chunk
+        if (currentChunk.length > 0 && (currentChunkSizeEstimate + rowObjectSizeEstimate > MAX_CHUNK_SIZE_ESTIMATE)) {
+            // Current chunk is full (or adding next row exceeds limit), push it and start new
+            chunks.push(currentChunk);
+            Logger.log(`      -> Chunk ${chunks.length} finalized with ${currentChunk.length} rows (Estimated size: ${currentChunkSizeEstimate} bytes).`);
+            currentChunk = [rowObject]; // Start new chunk with current row object
+            currentChunkSizeEstimate = rowObjectSizeEstimate; // Reset size estimate
+        } else {
+            // Add to current chunk
+            currentChunk.push(rowObject);
+            currentChunkSizeEstimate += rowObjectSizeEstimate;
+        }
+    }
+    // Add the last remaining chunk if it has data
+    if (currentChunk.length > 0) {
+        chunks.push(currentChunk);
+        Logger.log(`      -> Chunk ${chunks.length} finalized with ${currentChunk.length} rows (Estimated size: ${currentChunkSizeEstimate} bytes).`);
+    }
+
+    // Determine total chunks (must be at least 1 if there was data)
+    const totalChunks = (arrayOfRowObjects.length > 0) ? Math.max(1, chunks.length) : 0;
+    // If input array was empty, chunks will be empty, totalChunks=0.
+    // If input array had data but was small, chunks.length will be 1, totalChunks=1.
+    Logger.log(`   -> Total data chunks determined: ${totalChunks}`);
+
+    // --- 6. Prepare and Save Metadata Document ---
+    const metadataDocId = `${baseDocumentId}_metadata`;
+    const metadataPath = `${baseCollectionName}/${metadataDocId}`;
+    const metadataObject = {
+        ColTags: data.ColTags,
+        RowTags: data.RowTags,
+        totalChunks: totalChunks, // Save the calculated number of chunks
+        _lastUpdated: new Date()
     };
-
-
-    // --- 6. Save to Firestore (Update/Overwrite) ---
+    let metadataSaveSuccess = false;
     try {
-        Logger.log(`   -> Calling firestore.updateDocument for ${documentPath}...`);
-        firestore.updateDocument(documentPath, dataToSave, false); // mask=false overwrites/creates
-        Logger.log(`   -> ✅ Successfully saved data for "${trimmedSheetName}" to Firestore path: ${documentPath}.`);
-        return { success: true };
-
+        Logger.log(`   -> Saving Metadata Document to: ${metadataPath}`);
+        firestore.updateDocument(metadataPath, metadataObject, false); // update/create
+        metadataSaveSuccess = true;
+        Logger.log(`      -> ✅ Successfully saved Metadata Document.`);
     } catch (e) {
-        console.error(`Exception caught in ${funcName} saving to path ${documentPath}: ${e.message}\nStack: ${e.stack}`);
-        Logger.log(`   -> ❌ Exception during Firestore save to path ${documentPath}: ${e.message}`);
-        const safeErrorMessage = e.message.includes("permission") ? "Permission denied."
-                               : e.message.includes("Nested arrays") ? "Nested arrays error (check data format)."
-                               : "Server error during Firestore save.";
-        return { success: false, message: safeErrorMessage };
+        const errorMsg = `Failed to save Metadata Document (${metadataPath}): ${e.message || e}`;
+        console.error(`${funcName} Error: ${errorMsg}\nStack: ${e.stack}`);
+        Logger.log(`   -> ❌ ${errorMsg}`);
+        return { success: false, message: errorMsg }; // Critical failure if metadata can't save
+    }
+
+    // --- 7. Save Data Chunk Documents ---
+    let allChunksSaved = true; // Assume success until a chunk fails
+    if (totalChunks > 0) {
+        for (let i = 0; i < totalChunks; i++) {
+            const chunkIndex = i + 1; // 1-based index for naming
+            const chunkDocId = `${baseDocumentId}_${chunkIndex}of${totalChunks}`;
+            const chunkPath = `${baseCollectionName}/${chunkDocId}`;
+            const chunkData = {
+                rowDataChunk: chunks[i], // The actual slice of arrayOfRowObjects
+                _lastUpdated: new Date()
+            };
+
+            try {
+                Logger.log(`   -> Saving Data Chunk ${chunkIndex}/${totalChunks} to: ${chunkPath}`);
+                firestore.updateDocument(chunkPath, chunkData, false); // update/create
+                Logger.log(`      -> ✅ Successfully saved Data Chunk ${chunkIndex}/${totalChunks}.`);
+            } catch (e) {
+                const errorMsg = `Failed to save Data Chunk ${chunkIndex}/${totalChunks} (${chunkPath}): ${e.message || e}`;
+                console.error(`${funcName} Error: ${errorMsg}\nStack: ${e.stack}`);
+                Logger.log(`   -> ❌ ${errorMsg}`);
+                allChunksSaved = false; // Mark failure but continue trying others
+                // Optional: Collect individual error messages if needed
+            }
+        }
+    } else {
+        Logger.log(`   -> No data chunks to save (source data likely empty).`);
+        // If there were no rows, metadata still saved, consider this overall success.
+    }
+
+    // --- 8. Return Overall Result ---
+    if (metadataSaveSuccess && allChunksSaved) {
+        Logger.log(`   -> ✅ Successfully saved Metadata and all ${totalChunks} Data Chunk(s).`);
+        return { success: true };
+    } else {
+        const finalMessage = `Firestore save partially failed. Metadata saved: ${metadataSaveSuccess}. All data chunks saved: ${allChunksSaved}. Check logs for details.`;
+        Logger.log(`   -> ❌ ${finalMessage}`);
+        return { success: false, message: finalMessage };
     }
 
 } // END fSrvSaveFullSheetTextAndTagsToFirestore
