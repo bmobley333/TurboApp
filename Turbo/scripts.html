@@ -6306,6 +6306,7 @@ async function fCacheFSData() {
     fMyConsoleLog(`⚙️ ${funcName}: Fetching background data caches from Firestore...`);
     // Define the caches to fetch
     const cachesToFetch = [
+      { workbookAbr: 'DB', sheetName: 'Elements', gUIKey: 'dbElementsFSData' },
       { workbookAbr: 'DB', sheetName: 'Abilities', gUIKey: 'dbAbilitiesFSData' },
       { workbookAbr: 'DB', sheetName: 'Crit',      gUIKey: 'dbCritFSData' },
       { workbookAbr: 'DB', sheetName: 'Gear',      gUIKey: 'dbGearFSData' },
