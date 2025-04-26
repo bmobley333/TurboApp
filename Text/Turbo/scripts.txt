@@ -3592,7 +3592,7 @@ function fSetupMenuActionClickListener() {
             case 'data-designerOnly':       fHandleDesignerOnlyClick(); break;
 
             // Designer Menu Actions
-            case 'designer-saveDbSheetVer': fHandleSaveDBSheetVer(); break; // <-- ADDED CASE
+            case 'designer-saveDbSheetVer': fSaveGoogelSheetToFSData(); break; // <-- ADDED CASE
 
             // Default case for unhandled actions
             default:
@@ -5724,15 +5724,15 @@ function fHandleAutoSaveToFirestoreFailure(error) {
 
 
 
-// fHandleSaveDBSheetVer ///////////////////////////////////////////////////////
+// fSaveGoogelSheetToFSData ///////////////////////////////////////////////////////
 // Purpose -> Handles the "Designer" -> "Save SS Sheet & Ver" menu action. Prompts
 //            user for Workbook abbreviation and sheet name, calls server to load
 //            data/tags from the specified sheet, then calls server to save the
 //            data to Firestore using appropriate collection/document paths.
 // Inputs  -> None.
 // Outputs -> (Promise<void>): Resolves after completing actions or handling errors.
-async function fHandleSaveDBSheetVer() {
-    const funcName = "fHandleSaveDBSheetVer";
+async function fSaveGoogelSheetToFSData() {
+    const funcName = "fSaveGoogelSheetToFSData";
     fMyConsoleLog(`⚙️ Menu Action: ${funcName} Triggered...`);
     const validWorkbooks = ['db', 'mastercs', 'masterkl', 'mycs', 'mykl'];
 
@@ -5851,7 +5851,7 @@ async function fHandleSaveDBSheetVer() {
         await fShowMessage(`❌ ${errorMsg}`);
     }
 
-} // END fHandleSaveDBSheetVer
+} // END fSaveGoogelSheetToFSData
 
 
 

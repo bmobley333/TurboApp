@@ -2913,7 +2913,7 @@ async function fCalcGearLine(r, c, newValue, oldValue) {
         fSetGridValue(r, possEncColTag, '');
         fSetGridValue(r, possCrTotColTag, '');
         fSetGridValue(r, possAPTotColTag, '');
-        await fCalculatesEnc_MR_AP();
+        await fCalculateEncAndMR();
         return newValue;
     }
     fMyConsoleLog(`   -> Identified Gear ID: ${gearID} for row ${r}`);
@@ -3018,8 +3018,8 @@ async function fCalcGearLine(r, c, newValue, oldValue) {
 
     // === 6. Recalculate Overall Encumbrance and MR ===
     if (updateSuccess) {
-        fMyConsoleLog(`   -> Triggering fCalculatesEnc_MR_AP after updating row ${r}...`);
-        await fCalculatesEnc_MR_AP();
+        fMyConsoleLog(`   -> Triggering fCalculateEncAndMR after updating row ${r}...`);
+        await fCalculateEncAndMR();
         fMyConsoleLog(`✅ ${funcName} completed successfully for [${r}, ${c}].`);
         return validatedValue;
     } else {
