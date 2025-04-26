@@ -177,7 +177,11 @@ const gUI = {
       ranges: [ { r1: 'FrozenHeader', c1: 'B', r2: 'FrozenHeader', c2: 'B' } ]
     }
   ],
-  range: { // Named ranges for easy access to specific cells/areas
+
+
+  // Range //////////////////////////////////////////////////////////////////////
+  // Named ranges for easy access to specific cells/areas
+  range: { 
     entireAbiliyNGearTables: [
       { r1: 'AbilTblStart_R', c1: 'PermMorph1', r2: 'AbilTblEnd_R', c2: 'Regain' },
       { r1: 'GearTblStart_R', c1: 'PermMorph1', r2: 'GearTblEnd_R', c2: 'Regain' }
@@ -217,6 +221,10 @@ const gUI = {
     gearEncCol: [
       { r1: 'AbilityStartBelowNish_R', c1: 'PossEnc', r2: 'AbilTblEnd_R', c2: 'PossEnc' },
       { r1: 'GearTblStart_R', c1: 'PossEnc', r2: 'GearTblEnd_R', c2: 'PossEnc' }
+    ],
+    gearApTotalCol: [
+      { r1: 'AbilityStartBelowNish_R', c1: 'PossAPTot', r2: 'AbilTblEnd_R', c2: 'PossAPTot' },
+      { r1: 'GearTblStart_R', c1: 'PossAPTot', r2: 'GearTblEnd_R', c2: 'PossAPTot' }
     ],
     monsters: { r1: 'CustMon', c1: 'NumMon', r2: 'LastMon_R', c2: 'MonSize' },
     currentNish: { r1: 'Nish', c1: 'Nish', r2: 'Nish', c2: 'Nish' },

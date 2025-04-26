@@ -268,6 +268,367 @@ function fGetIDFromNameID(nameIdString) {
 
 
 
+// fSetGridTagsFromHeaders /////////////////////////////////////////////////////////
+// Purpose -> Populates gUI.rowTag and gUI.colTag map objects by reading tag strings
+//            from column 0 (for rows) and row 0 (for columns) of gUI.arr.
+//            Handles comma-separated tags within a single cell.
+// Inputs  -> None (Uses gUI.arr).
+// Outputs -> None (Modifies gUI.rowTag, gUI.colTag).
+function fSetGridTagsFromHeaders() {
+    fMyConsoleLog("⚙️ Parsing Grid Tags...");
+    gUI.rowTag = {}; // Initialize/clear row tag map
+    gUI.colTag = {}; // Initialize/clear column tag map
+
+    const gameArr = gUI.arr;
+
+    // === Validate Data ===
+    if (!gameArr || gameArr.length === 0 || !gameArr[0]) {
+        console.warn("fSetGridTagsFromHeaders: Cannot parse tags, gUI.arr is empty or malformed.");
+        fMyConsoleLog("⚠️ Grid Tags: Data empty.");
+        return;
+    }
+
+    const rows = gameArr.length;
+    const cols = gameArr[0].length;
+
+    // === Process Row Tags (Column 0) ===
+    for (let r = 0; r < rows; r++) {
+        // Check if value in column 0 is a non-empty string
+        const rowCell = gameArr[r]?.[0]; // Use optional chaining for safety
+        if (typeof rowCell === 'string' && rowCell) {
+            // Split potentially comma-separated tags
+            rowCell.split(',').forEach(tag => {
+                const trimmedTag = tag.trim();
+                // Map the trimmed tag to the current row index (r)
+                if (trimmedTag) gUI.rowTag[trimmedTag] = r;
+            });
+        }
+    }
+
+    // === Process Column Tags (Row 0) ===
+    const colHeaderRow = gameArr[0]; // Already validated that gameArr[0] exists
+    if (colHeaderRow) {
+        for (let c = 0; c < cols; c++) {
+            // Check if value in row 0 is a non-empty string
+            const colCell = colHeaderRow[c];
+            if (typeof colCell === 'string' && colCell) {
+                // Split potentially comma-separated tags
+                colCell.split(',').forEach(tag => {
+                    const trimmedTag = tag.trim();
+                    // Map the trimmed tag to the current column index (c)
+                    if (trimmedTag) gUI.colTag[trimmedTag] = c;
+                });
+            }
+        }
+    }
+
+    fMyConsoleLog("✅ Grid Tags Parsed");
+} // END fSetGridTagsFromHeaders
+
+
+
+
+// fGetGridValue ///////////////////////////////////////////////////////////////////
+// Purpose -> Retrieves a value from gUI.arr using tags or indices. Optionally
+//            attempts to convert the retrieved value to a number.
+// Inputs  -> rowRef (String|Number): Row tag or 0-based index.
+//         -> colRef (String|Number): Column tag or 0-based index.
+//         -> asNumber (Boolean): If true, attempt to parse value as a Number (default: false).
+// Outputs -> (Any|Number|undefined|NaN): The value from the grid, potentially coerced
+//            to a Number, or undefined/NaN if resolution or coercion fails.
+function fGetGridValue(rowRef, colRef, asNumber = false) {
+    // === Resolve Coordinates ===
+    const r = fResolveRow(rowRef);
+    const c = fResolveCol(colRef);
+
+    // Validate resolved indices
+    if (isNaN(r) || isNaN(c)) {
+        console.warn(`fGetGridValue: Could not resolve (${rowRef}, ${colRef}) to valid indices.`);
+        return NaN; // Return NaN for unresolved references
+    }
+
+    // === Retrieve Value ===
+    const value = gUI.arr?.[r]?.[c];
+
+    // === Handle Empty/Null/Undefined ===
+    // Treat empty/null/undefined as 0 if number requested, otherwise undefined
+    if (value === undefined || value === null || value === '') {
+        return asNumber ? 0 : undefined;
+    }
+
+    // === Handle Numeric Conversion (if requested) ===
+    if (asNumber) {
+        const numValue = Number(value);
+        // Check if conversion resulted in NaN
+        if (isNaN(numValue)) {
+            console.warn(`fGetGridValue: Value at (${rowRef}, ${colRef}) -> [${r}, ${c}] ("${value}") is not a valid number.`);
+            return NaN; // Return NaN if conversion failed
+        }
+        // Return the successfully converted number
+        return numValue;
+    }
+
+    // === Return Original Value ===
+    // If no numeric conversion requested, return the value as is
+    return value;
+} // END fGetGridValue
+
+
+
+
+
+
+
+
+
+// fSetRangeOfGridValues /////////////////////////////////////////////////////////////////
+// Purpose -> Updates values in a specified grid range (both gUI.arr and DOM) using
+//            either a single value (fill) or a 1D/2D array matching the range dimensions.
+// Inputs  -> r1Ref (String|Number): Starting row tag or 0-based index.
+//         -> c1Ref (String|Number): Starting column tag or 0-based index.
+//         -> r2Ref (String|Number): Ending row tag or 0-based index.
+//         -> c2Ref (String|Number): Ending column tag or 0-based index.
+//         -> valueOrArray (Array|Any): 1D/2D array matching range dimensions, OR a single value.
+// Outputs -> (Boolean): True if all updates were successful, false otherwise.
+function fSetRangeOfGridValues(r1Ref, c1Ref, r2Ref, c2Ref, valueOrArray) {
+    fMyConsoleLog(`⚙️ Setting range values: ${r1Ref},${c1Ref} to ${r2Ref},${c2Ref}...`);
+
+    // === 1. Resolve Indices & Validate ===
+    const r1 = fResolveRow(r1Ref);
+    const c1 = fResolveCol(c1Ref);
+    const r2 = fResolveRow(r2Ref);
+    const c2 = fResolveCol(c2Ref);
+
+    if ([r1, c1, r2, c2].some(isNaN)) {
+        console.warn(`fSetRangeOfGridValues: Could not resolve one or more references: (${r1Ref}, ${c1Ref}, ${r2Ref}, ${c2Ref}) -> (${r1}, ${c1}, ${r2}, ${c2}).`);
+        fMyConsoleLog(`❌ fSetRangeOfGridValues failed: Invalid range references.`);
+        return false;
+    }
+
+    // === 2. Determine Mode (Fill vs Array) ===
+    const isSingleValueFill = !Array.isArray(valueOrArray);
+    const singleFillValue = isSingleValueFill ? valueOrArray : null;
+    const newValArr = isSingleValueFill ? null : valueOrArray;
+
+    if (isSingleValueFill) {
+        fMyConsoleLog(`   -> Mode: Single value fill ('${singleFillValue}')`);
+    } else {
+        fMyConsoleLog(`   -> Mode: Array mapping`);
+    }
+
+    // === 3. Determine Range Dimensions ===
+    const rMin = Math.min(r1, r2);
+    const rMax = Math.max(r1, r2);
+    const cMin = Math.min(c1, c2);
+    const cMax = Math.max(c1, c2);
+    const rangeRows = rMax - rMin + 1;
+    const rangeCols = cMax - cMin + 1;
+
+    // === 4. Validate Input Array Dimensions (if not filling) ===
+    if (!isSingleValueFill) {
+        let arrRows = 0;
+        let arrCols = 0;
+
+        if (newValArr.length > 0) {
+            const isInputArray2D = Array.isArray(newValArr[0]);
+            if (isInputArray2D) {
+                // Handle 2D array input
+                arrRows = newValArr.length;
+                arrCols = newValArr[0]?.length || 0; // Handle empty inner array edge case
+                // Check for consistent column lengths in 2D array
+                if (!newValArr.every(row => Array.isArray(row) && row.length === arrCols)) {
+                    console.warn(`fSetRangeOfGridValues: Input 2D array has inconsistent column lengths.`);
+                    fMyConsoleLog(`❌ fSetRangeOfGridValues failed: Input 2D array malformed.`);
+                    return false;
+                }
+            } else {
+                // Handle 1D array input (assume it matches either row or column count)
+                if (rangeRows === 1) { // Target is a single row
+                    arrRows = 1;
+                    arrCols = newValArr.length;
+                } else if (rangeCols === 1) { // Target is a single column
+                    arrRows = newValArr.length;
+                    arrCols = 1;
+                } else {
+                    // Ambiguous: Target is multi-row/col but input is 1D
+                    // Defaulting to matching columns if range is wider than tall, else rows
+                    if(rangeCols >= rangeRows) {
+                        arrRows = 1;
+                        arrCols = newValArr.length;
+                    } else {
+                         arrRows = newValArr.length;
+                         arrCols = 1;
+                    }
+                    console.warn(`fSetRangeOfGridValues: Ambiguous 1D array input for multi-dimensional range (${rangeRows}x${rangeCols}). Assuming ${arrRows}x${arrCols}.`);
+                }
+            }
+        }
+        // Else: newValArr is empty array, dimensions remain 0
+
+        // Check if calculated array dimensions match range dimensions
+        if (rangeRows !== arrRows || rangeCols !== arrCols) {
+            console.warn(`fSetRangeOfGridValues: Dimension mismatch. Range: ${rangeRows}x${rangeCols}, Array: ${arrRows}x${arrCols}.`);
+            fMyConsoleLog(`❌ fSetRangeOfGridValues failed: Dimension mismatch.`);
+            return false;
+        }
+    } // End array dimension validation
+
+    // === 5. Update Data and DOM ===
+    let updateCount = 0;
+    let updateErrors = 0;
+    for (let r = rMin; r <= rMax; r++) {
+        // Skip if row doesn't exist in data model or DOM cache
+        if (!gUI.arr[r] || !gUI.grid2D[r]) {
+            console.warn(`fSetRangeOfGridValues: Row ${r} does not exist in gUI.arr or gUI.grid2D. Skipping row.`);
+            updateErrors += rangeCols; // Count all columns in this row as errors
+            continue;
+        }
+
+        for (let c = cMin; c <= cMax; c++) {
+            let newValue;
+            // Determine the value to set based on mode
+            if (isSingleValueFill) {
+                newValue = singleFillValue;
+            } else {
+                // Calculate corresponding index in newValArr based on dimensions
+                const arrRowIdx = (rangeRows === 1) ? 0 : r - rMin;
+                const arrColIdx = (rangeCols === 1) ? 0 : c - cMin;
+                newValue = Array.isArray(newValArr[0])
+                         ? newValArr[arrRowIdx]?.[arrColIdx] // 2D access
+                         : (rangeCols === 1 ? newValArr[arrRowIdx] : newValArr[arrColIdx]); // 1D access (column or row)
+            }
+
+            // Update data model and DOM using fSetGridValue (handles DOM types)
+            if (!fSetGridValue(r, c, newValue)) {
+                // fSetGridValue logs specific errors
+                updateErrors++;
+            } else {
+                updateCount++;
+            }
+        } // End col loop
+    } // End row loop
+
+    fMyConsoleLog(`✅ fSetRangeOfGridValues: ${isSingleValueFill ? 'Filled' : 'Updated'} ${updateCount} cells. ${updateErrors > 0 ? `(${updateErrors} errors)` : ''}`);
+    return updateErrors === 0; // Return true only if no errors occurred
+
+} // END fSetRangeOfGridValues
+
+
+
+// fSetGridValue ///////////////////////////////////////////////////////////////////
+// Purpose -> Updates a value in the data model (gUI.arr) and the corresponding
+//            cell display in the DOM (gUI.grid2D). Handles special formatting for
+//            Meta/Channel Meta cells, and dynamically applies/removes URL styling
+//            and attributes based on the new value.
+// Inputs  -> rowRef (String|Number): Row tag or 0-based index.
+//         -> colRef (String|Number): Column tag or 0-based index.
+//         -> newValue (Any): The new value to set.
+// Outputs -> (Boolean): True if the update was successful (data and optionally DOM),
+//                       false if resolution failed or row/cell doesn't exist.
+function fSetGridValue(rowRef, colRef, newValue) {
+    // === 1. Resolve Coordinates ===
+    const r = fResolveRow(rowRef);
+    const c = fResolveCol(colRef);
+    let valueToSet = newValue; // Use a temporary variable
+
+    // Validate resolved indices
+    if (isNaN(r) || isNaN(c)) {
+        console.warn(`fSetGridValue: Could not resolve (${rowRef}, ${colRef}) to valid indices [${r}, ${c}].`);
+        return false;
+    }
+
+    // === 2. Validate Row Existence in Data Model ===
+    if (!gUI.arr?.[r]) {
+        console.warn(`fSetGridValue: Row ${r} does not exist in gUI.arr.`);
+        return false;
+    }
+
+    // === 3. Handle Special Meta Cell Formatting ===
+    const metaRowTags = ['meta', 'chnl'];
+    const metaColTags = gUI.list?.metaColor || ['R', 'O', 'Y', 'G', 'B'];
+    const isMetaCell = metaRowTags.includes(rowRef) && metaColTags.includes(colRef);
+    if (isMetaCell) {
+        const numericValue = Number(valueToSet);
+        if (valueToSet === null || typeof valueToSet === 'undefined' || (!isNaN(numericValue) && numericValue < 1)) {
+            valueToSet = '';
+        }
+    }
+
+    // === 4. Update Data Model ===
+    // Store the potentially modified value (e.g., '' for meta < 1)
+    gUI.arr[r][c] = valueToSet;
+
+    // === 5. Update DOM ===
+    const cell = gUI.grid2D?.[r]?.[c];
+    if (!cell) {
+        // Log warning if DOM element wasn't found
+        console.warn(`fSetGridValue: Cell element not found in gUI.grid2D at [${r}, ${c}]. Data model updated, DOM not.`);
+        // Depending on requirements, you might return false here if DOM update is critical
+        return true; // For now, return true as data model was updated
+    }
+
+    // === 6. Handle Dynamic URL Styling & Attributes ===
+    const valueStr = String(valueToSet ?? '').trim(); // Use string version for checks
+    const isUrl = valueStr.startsWith('http://') || valueStr.startsWith('https://');
+
+    if (isUrl) {
+        cell.classList.add('url-link');
+        cell.dataset.url = valueStr;
+
+        // Check for specific URL types (Drive image or standard image extension)
+        const driveMatch = valueStr.match(/drive\.google\.com\/file\/d\/([-\w]+)/);
+        const imgExts = /\.(png|jpg|jpeg|gif|webp|svg)$/i;
+
+        if (driveMatch && driveMatch[1]) {
+            // Handle Google Drive image link
+            const fileId = driveMatch[1];
+            const imageUrl = 'https://drive.google.com/uc?export=view&id=' + fileId;
+            cell.classList.add('image-link');
+            cell.dataset.imageSrc = imageUrl;
+        } else if (imgExts.test(valueStr)) {
+            // Handle standard image link (by extension)
+            cell.classList.add('image-link');
+            cell.dataset.imageSrc = valueStr;
+        } else {
+            // It's a URL, but not identified as an image link - remove image attributes
+            cell.classList.remove('image-link');
+            delete cell.dataset.imageSrc; // Use delete operator for dataset properties
+        }
+    } else {
+        // Not a URL - remove all link-related classes and attributes
+        cell.classList.remove('url-link', 'image-link');
+        delete cell.dataset.url;
+        delete cell.dataset.imageSrc;
+    }
+
+    // === 7. Update Cell Visual Content ===
+    const checkbox = cell.querySelector('input[type="checkbox"]');
+    const dropdown = cell.querySelector('select.grid-dropdown');
+
+    if (checkbox) {
+        // Update checkbox state
+        const valUpper = String(valueToSet).toUpperCase();
+        checkbox.checked = valueToSet === true || valUpper === "TRUE";
+    } else if (dropdown) {
+        // Update dropdown selection
+        dropdown.value = String(valueToSet ?? '');
+    } else {
+        // Update text content (stripping ID if present)
+        // Ensure the correct value (valueToSet) is used here
+        const idPattern = /\s{2,}_\w{6}$/;
+        const text = (typeof valueToSet === 'string' && idPattern.test(valueToSet))
+                     ? valueToSet.replace(idPattern, '')
+                     : valueToSet;
+        cell.textContent = text ?? ''; // Use empty string for null/undefined
+    }
+
+    // Optional log: fMyConsoleLog(`Grid updated [${r}, ${c}] = ${valueToSet}`);
+    return true; // Indicate success (data and DOM updated)
+
+} // END fSetGridValue
+
+
+
 // ==========================================================================
 // === Die Rolling Utilities 
 // ==========================================================================
