@@ -1354,19 +1354,18 @@ function fSrvGetFirestoreInstance() {
 
 
 // fSrvSaveTurboDataToFirestore ////////////////////////////////////////////////////
-// Purpose -> Saves grid text data (gUI.arr) and character metadata (gUI.characterInfo)
-//            to separate Firestore documents within the user's email collection.
-//            Documents: Collection = userEmail, Docs = Turbo_Game_<csId>, Turbo_CharacterInfo_<csId>.
+// Purpose -> Saves grid text data (gUI.arr) to a Firestore document within the user's
+//            email collection. Document: Collection = userEmail, Doc = Turbo_Game_<csId>.
 //            Processes gUI.arr into Array of Row Objects format for Firestore compatibility.
 //            Uses updateDocument which creates if not exists.
 // Inputs  -> gIndex.Email (String): The user's email address (used as the collection name).
 //         -> gIndex.CSID (String): The Character Sheet ID (used for document naming).
 //         -> fullArrData (Array[][]): The complete gUI.arr from the client.
-//         -> charInfo (Object): Character metadata { slotNum, raceClass, playerName, etc. }.
-// Outputs -> (Object): { success: Boolean, message?: String }
-function fSrvSaveTurboDataToFirestore(gIndex, fullArrData, charInfo) {
+//         -> charInfo (Object): DEPRECATED/UNUSED. Character metadata - no longer saved here.
+// Outputs -> (Object): { success: Boolean, message?: String } Reflects success/failure of saving grid data ONLY.
+function fSrvSaveTurboDataToFirestore(gIndex, fullArrData, charInfo) { // Keep charInfo for compatibility if needed, but ignore
     const funcName = "fSrvSaveTurboDataToFirestore";
-    Logger.log(`${funcName}: Saving data for User: ${gIndex.Email}, CS ID: ${gIndex.CSID}...`);
+    Logger.log(`${funcName}: Saving Grid data for User: ${gIndex.Email}, CS ID: ${gIndex.CSID}...`);
 
     // === 1. Validate Inputs ===
     if (!gIndex.Email || typeof gIndex.Email !== 'string' || gIndex.Email.indexOf('@') === -1) { // Basic email check
@@ -1378,11 +1377,7 @@ function fSrvSaveTurboDataToFirestore(gIndex, fullArrData, charInfo) {
     if (!Array.isArray(fullArrData) || (fullArrData.length > 0 && !Array.isArray(fullArrData[0]))) {
          return { success: false, message: "Invalid fullArrData provided (must be 2D array)." };
     }
-    if (!charInfo || typeof charInfo !== 'object') { // Allow empty charInfo for now, maybe just arr needs saving?
-        Logger.log(`   -> ${funcName} Warning: charInfo is missing or not an object.`);
-        // Proceed, but only save arr if charInfo is bad? Or save empty object? Let's allow saving arr.
-        charInfo = {}; // Use empty object if invalid to avoid errors accessing it later
-    }
+    // No longer need to validate charInfo
 
     // === 2. Get Firestore Instance ===
     const firestore = fSrvGetFirestoreInstance();
@@ -1392,14 +1387,14 @@ function fSrvSaveTurboDataToFirestore(gIndex, fullArrData, charInfo) {
         return { success: false, message: "Server configuration error (Firestore)." };
     }
 
-    // === 3. Define Paths ===
+    // === 3. Define Path ===
     const collectionPath = gIndex.Email; // User's email is the collection
     const gameDocId = `Turbo_Game_${gIndex.CSID}`;
-    const charInfoDocId = `Turbo_CharacterInfo_${gIndex.CSID}`;
+    // Removed charInfoDocId
     const gameDocPath = `${collectionPath}/${gameDocId}`;
-    const charInfoDocPath = `${collectionPath}/${charInfoDocId}`;
+    // Removed charInfoDocPath
     Logger.log(`   -> Target Firestore Game Path: ${gameDocPath}`);
-    Logger.log(`   -> Target Firestore CharInfo Path: ${charInfoDocPath}`);
+    // Removed CharInfo Path Log
 
     // === 4. Process Array into Array of Row Objects ===
     const arrayOfRowObjects = [];
@@ -1416,18 +1411,14 @@ function fSrvSaveTurboDataToFirestore(gIndex, fullArrData, charInfo) {
     const gameDataToSave = {
         gUIarr: arrayOfRowObjects,
         _lastUpdated: new Date()
-        // Removed gUIcharacterInfo from here
     };
-    const charInfoDataToSave = {
-        gUIcharacterInfo: charInfo, // Save the actual charInfo object here
-        _lastUpdated: new Date()
-    };
+    // Removed charInfoDataToSave
 
-    // === 6. Save to Firestore (Attempt both) ===
+    // === 6. Save to Firestore (Attempt Game Data Only) ===
     let gameSaveSuccess = false;
-    let charInfoSaveSuccess = false;
+    // Removed charInfoSaveSuccess
     let gameSaveError = null;
-    let charInfoError = null;
+    // Removed charInfoError
 
     try {
         Logger.log(`   -> Calling firestore.updateDocument for Game Data: ${gameDocPath}...`);
@@ -1440,27 +1431,16 @@ function fSrvSaveTurboDataToFirestore(gIndex, fullArrData, charInfo) {
         Logger.log(`   -> ❌ Exception during Game Data save: ${e.message}`);
     }
 
-    try {
-        Logger.log(`   -> Calling firestore.updateDocument for Char Info: ${charInfoDocPath}...`);
-        firestore.updateDocument(charInfoDocPath, charInfoDataToSave, false); // update/create
-        charInfoSaveSuccess = true;
-        Logger.log(`      -> ✅ Successfully saved Character Info.`);
-    } catch (e) {
-        charInfoError = e;
-        console.error(`Exception saving Char Info to ${charInfoDocPath}: ${e.message}\nStack: ${e.stack}`);
-        Logger.log(`   -> ❌ Exception during Character Info save: ${e.message}`);
-    }
+    // Removed try...catch block for charInfo save
 
-    // === 7. Return Overall Result ===
-    if (gameSaveSuccess && charInfoSaveSuccess) {
-        Logger.log(`   -> ✅ Successfully saved both documents for ${gIndex.CSID} to collection ${gIndex.Email}.`);
+    // === 7. Return Overall Result (Based on Game Data Only) ===
+    if (gameSaveSuccess) { // Check only gameSaveSuccess
+        Logger.log(`   -> ✅ Successfully saved Game Data document for ${gIndex.CSID} to collection ${gIndex.Email}.`);
         return { success: true };
     } else {
-        // Construct detailed error message
-        let finalMessage = "Firestore save failed. ";
-        if (!gameSaveSuccess) finalMessage += `Game Data Error: ${gameSaveError?.message || 'Unknown'}. `;
-        if (!charInfoSaveSuccess) finalMessage += `Char Info Error: ${charInfoError?.message || 'Unknown'}.`;
-        Logger.log(`   -> ❌ Firestore save failed for one or both documents.`);
+        // Construct detailed error message based only on game save error
+        let finalMessage = `Firestore save failed. Game Data Error: ${gameSaveError?.message || 'Unknown'}.`;
+        Logger.log(`   -> ❌ Firestore Game Data save failed.`);
         return { success: false, message: finalMessage.trim() };
     }
 
