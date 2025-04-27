@@ -3732,15 +3732,16 @@ function fToggleSidebar() {
 // fHandleNewLevelSlotName ///////////////////////////////////////////////////////
 // Purpose -> Handles the "Update (Level, Slot, Names)" menu action. Fetches fresh
 //            CS RaceClass data, validates it (especially slotNum), updates gUI.characterInfo,
-//            triggers a log refresh, and then saves MyCS/List and MyKL/MyAbilities to Firestore.
+//            triggers a log refresh, saves MyCS/List and MyKL/MyAbilities to Firestore,
+//            then triggers a full refresh of the Ability/Gear tables in Turbo.
 // Inputs  -> None.
 // Outputs -> (Promise<void>): Resolves after completing actions or handling errors.
 async function fHandleNewLevelSlotName() {
-    const funcName = "fHandleNewLevelSlotName"; // Added for clarity
+    const funcName = "fHandleNewLevelSlotName";
     fMyConsoleLog(`⚙️ Menu Action: ${funcName} Triggered...`);
 
     // === Show Initial Loading Message ===
-    const updatingMsg = fShowMessage("⏳ Updating Level/Slot/Names & Saving Key Sheets...<br><br>This may take up to a minute.<br><br>Do NOT Close unless program freezes.");
+    const updatingMsg = fShowMessage("⏳ Updating Level/Slot/Names, Saving Key Sheets, & Refreshing Grid...<br><br>This may take a minute or two.<br><br>Do NOT Close unless program freezes.");
 
     try { // Wrap the entire sequence in a try block for better error handling
 
@@ -3781,7 +3782,7 @@ async function fHandleNewLevelSlotName() {
 
         // Trigger GMScreen/PS Log update and AWAIT its completion
         fMyConsoleLog("   -> Triggering GMScreen/PS Log Update...");
-        const logSendSuccess = await fSendLogToGMScreenAndPS(); // <<< AWAIT ADDED
+        const logSendSuccess = await fSendLogToGMScreenAndPS();
         if (!logSendSuccess) {
              fMyConsoleLog("   -> ⚠️ Log send failed or was skipped. Aborting subsequent Firestore saves.");
              // Optionally throw an error or show a message if log send failure should halt the process
@@ -3798,9 +3799,15 @@ async function fHandleNewLevelSlotName() {
         // === 3. Load and Save 'MyKL' -> 'MyAbilities' ===
         await fLoadAndSaveAbilityLevelUpdatesToFirestore('MyKL', 'MyAbilities');
 
-        // === 4. Final Success Message ===
+        // === 4. Refresh Entire Ability/Gear Table in Turbo ===
+        fMyConsoleLog("   -> Triggering Full Ability/Gear Table Refresh...");
+        await fTotalRereshOfAllAbilitiesAndAllGear();
+        fMyConsoleLog("   -> Full Ability/Gear Table Refresh completed.");
+
+
+        // === 5. Final Success Message ===
         fHideMessage(); // Hide the initial "Updating..." message
-        await fShowMessage("✅ Level/Slot/Names Info Updated & Key Sheets Saved to Firestore.");
+        await fShowMessage("✅ Level/Slot/Names Info Updated, Key Sheets Saved & Grid Refreshed.");
         fMyConsoleLog(`✅ ${funcName} Completed Successfully.`);
 
     } catch (error) {
@@ -5444,10 +5451,11 @@ function fCalcTotalAP() {
 // Purpose -> Handles clicks delegated from the grid specifically for header button images.
 //            Routes the click to the appropriate action handler based on the
 //            image's 'data-button-action' attribute. Simulates a click on the
-//            main '#btn-roll' for the 'action-rollDice' button.
+//            main '#btn-roll' for the 'action-rollDice' button or the corresponding
+//            menu item for 'action-refreshData'.
 // Inputs  -> event (MouseEvent): The original click event object.
 //         -> buttonImg (HTMLImageElement): The header button image element that was clicked.
-// Outputs -> None (Calls other action functions).
+// Outputs -> None (Calls other action functions or simulates clicks).
 function fHandleGridButtonClick(event, buttonImg) {
     const action = buttonImg.dataset.buttonAction;
     fMyConsoleLog(`🖱️ Header Button Clicked: ${action}`);
@@ -5473,7 +5481,16 @@ function fHandleGridButtonClick(event, buttonImg) {
             break;
         case 'action-refreshData':
             fMyConsoleLog("   -> Refresh Data action triggered.");
-            fTotalRereshOfAllAbilitiesAndAllGear(); // <<< ADDED CALL
+            // Simulate a click on the 'Update (Level, Slot, Names)' menu item
+            const updateMenuItem = document.querySelector('a[data-action="game-updateLevelSlotName"]');
+            if (updateMenuItem) {
+                fMyConsoleLog("   -> Simulating click on 'game-updateLevelSlotName' menu item...");
+                updateMenuItem.click(); // Trigger the menu item's logic
+            } else {
+                 console.error("fHandleGridButtonClick: Could not find menu item a[data-action='game-updateLevelSlotName']!");
+                 fMyConsoleLog("   -> ❌ Error: Could not find 'Update (Level, Slot, Names)' menu item.");
+                 // Optional: fShowMessage("Error: Could not trigger the Update action.");
+            }
             break;
         case 'action-jumpTop':
             fScrollGridToTop(grid); // Scroll grid viewport to top
