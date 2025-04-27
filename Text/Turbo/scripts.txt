@@ -6493,13 +6493,13 @@ async function fOnCSGameDataLoaded(data) { // <<< MADE ASYNC
 
         // --->>> Call Background Cache Fetch (which now populates char info) <<<---
         fMyConsoleLog("   -> Proceeding to fetch background caches (skipped Firestore arr check)...");
-        const cachesLoaded = await fCacheFSData(); // Await the cache loading process
+        const cachesLoaded = await fBulkCacheFSData(); // Await the cache loading process
 
         // --->>> Render Grid (if caches loaded) <<<---
         if (cachesLoaded) {
             fRenderGridWithFinalData(); // Render only if caches (and char info population) succeed
         }
-        // If cachesLoaded is false, fCacheFSData already showed error and halted.
+        // If cachesLoaded is false, fBulkCacheFSData already showed error and halted.
         return; // Exit this path
     }
 
@@ -6523,12 +6523,12 @@ async function fOnCSGameDataLoaded(data) { // <<< MADE ASYNC
             fSetupTooltipAndModal(); // Setup tooltip/modal refs
 
             fMyConsoleLog("   -> Proceeding to fetch background caches...");
-            const cachesLoaded = await fCacheFSData(); // Await the cache loading process
+            const cachesLoaded = await fBulkCacheFSData(); // Await the cache loading process
 
             if (cachesLoaded) {
                 fRenderGridWithFinalData(); // Render only if caches (and char info population) succeed
             }
-            // If cachesLoaded is false, fCacheFSData already showed error and halted.
+            // If cachesLoaded is false, fBulkCacheFSData already showed error and halted.
 
         })
         .withFailureHandler(async (error) => { // <<< MAKE ASYNC
@@ -6542,13 +6542,13 @@ async function fOnCSGameDataLoaded(data) { // <<< MADE ASYNC
 
             // --->>> Call Background Cache Fetch (using Sheet arr data) <<<---
             fMyConsoleLog("   -> Proceeding to fetch background caches (Firestore arr check failed)...");
-            const cachesLoaded = await fCacheFSData(); // Await the cache loading process
+            const cachesLoaded = await fBulkCacheFSData(); // Await the cache loading process
 
             // --->>> Render Grid (if caches loaded) <<<---
             if (cachesLoaded) {
                 fRenderGridWithFinalData(); // Render only if caches (and char info population) succeed
             }
-            // If cachesLoaded is false, fCacheFSData already showed error and halted.
+            // If cachesLoaded is false, fBulkCacheFSData already showed error and halted.
         })
         .fSrvCheckAndLoadFirestoreGUIarrAs2D(gIndex); // Pass Email and CSID
 
@@ -6557,14 +6557,14 @@ async function fOnCSGameDataLoaded(data) { // <<< MADE ASYNC
 
 
 
-// fCacheFSData //////////////////////////////////////////////////////
+// fBulkCacheFSData //////////////////////////////////////////////////////
 // Purpose -> Ensures necessary Firestore cache documents exist (creating MyCS/MyKL ones
 //            from Sheets if missing) and then loads all required caches from Firestore
 //            into gUI. Populates gUI.characterInfo from the loaded RaceClass cache.
 // Inputs  -> None.
 // Outputs -> (Promise<Boolean>): Resolves true if all critical steps succeed, false otherwise.
-async function fCacheFSData() {
-    const funcName = "fCacheFSData";
+async function fBulkCacheFSData() {
+    const funcName = "fBulkCacheFSData";
     fMyConsoleLog(`⚙️ ${funcName}: Verifying/Loading background data caches...`);
 
     // Define Cache Configurations
@@ -6741,14 +6741,14 @@ async function fCacheFSData() {
         await fShowMessage(`❌ Critical Error: ${error.message}<br><br>App loading halted.`); // Show error
         return false; // Indicate failure
     }
-} // END fCacheFSData
+} // END fBulkCacheFSData
 
 
 
 
 // fPopulateGuiCharacterInfo ///////////////////////////////////////////////////////
 // Purpose -> Reads data from the gUI.myCsRaceClassFSData cache and populates
-//            the gUI.characterInfo object. Called by fCacheFSData.
+//            the gUI.characterInfo object. Called by fBulkCacheFSData.
 // Inputs  -> None (Reads gUI.myCsRaceClassFSData).
 // Outputs -> (Boolean): True if population is successful, false otherwise.
 function fPopulateGuiCharacterInfo() {
@@ -6764,7 +6764,7 @@ function fPopulateGuiCharacterInfo() {
         const errorMsg = `Cannot populate Character Info: Required cache ${cacheKey} is not loaded or invalid.`;
         console.error(`${funcName}: ${errorMsg}`);
         fMyConsoleLog(`      -> ❌ ${funcName} Error: ${errorMsg}`);
-        // No fShowMessage here, rely on fCacheFSData caller to handle failure
+        // No fShowMessage here, rely on fBulkCacheFSData caller to handle failure
         return false;
     }
 

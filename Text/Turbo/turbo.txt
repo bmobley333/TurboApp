@@ -2123,20 +2123,20 @@ function fSrvResolveRangeTagsForFirestore(rangeObject, rowTagMap, colTagMap) {
 
 
 // fSrvVerifyFirestorePathExists ////////////////////////////////////////////////////
-// Purpose -> Checks if a specific Firestore document exists based on calculated path.
+// Purpose -> Checks if the *metadata* Firestore document exists for a given
+//            workbook/sheet combination, based on the calculated path.
 // Inputs  -> workbookAbr (String): Workbook abbreviation ('db', 'mycs', etc.).
 //         -> sheetName (String): The sheet name associated with the data.
 //         -> gIndex.GameVer (String): Game version (required for 'db'/'master*').
 //         -> gIndex.Email (String): User Email (required for 'mycs'/'mykl').
 //         -> gIndex.CSID (String): Character Sheet ID (required for 'mycs'/'mykl').
-// Outputs -> (Boolean): True if the document exists, false otherwise (or on error).
+// Outputs -> (Boolean): True if the metadata document exists, false otherwise (or on error).
 function fSrvVerifyFirestorePathExists(workbookAbr, sheetName, gIndex) {
     const funcName = "fSrvVerifyFirestorePathExists";
-    Logger.log(`${funcName}: Verifying path for Workbook: "${workbookAbr}", Sheet: "${sheetName}", Version: ${gIndex.GameVer}, gIndex.Email: ${gIndex.Email}, gIndex.CSID: ${gIndex.CSID}...`);
+    // Logger.log(`${funcName}: Verifying path for Workbook: "${workbookAbr}", Sheet: "${sheetName}", Version: ${gIndex.GameVer}, gIndex.Email: ${gIndex.Email}, gIndex.CSID: ${gIndex.CSID}...`); // Reduced logging
 
     let firestore;
-    let documentPath;
-
+    let metadataPath; // Changed variable name for clarity
     try {
         // --- 1. Get Firestore Instance ---
         firestore = fSrvGetFirestoreInstance();
@@ -2145,43 +2145,49 @@ function fSrvVerifyFirestorePathExists(workbookAbr, sheetName, gIndex) {
             return false; // Cannot verify if Firestore isn't available
         }
 
-        // --- 2. Calculate Firestore Path ---
+        // --- 2. Calculate Firestore Path for METADATA ---
+        let baseCollectionName;
+        let baseDocumentId;
         // Use try-catch here as fSrvCalcFirestorePath throws errors on invalid inputs
         try {
-            const { collectionName, documentId } = fSrvCalcFirestorePath(workbookAbr, sheetName, gIndex);
-            documentPath = `${collectionName}/${documentId}`;
-            Logger.log(`   -> Calculated Firestore Path: ${documentPath}`);
+            const pathInfo = fSrvCalcFirestorePath(workbookAbr, sheetName, gIndex);
+            baseCollectionName = pathInfo.collectionName;
+            baseDocumentId = pathInfo.documentId; // Get the base ID
         } catch (pathError) {
-            Logger.log(`   -> ${funcName}: Error calculating path: ${pathError.message}. Assuming path does not exist.`);
+            Logger.log(`   -> ${funcName}: Error calculating base path: ${pathError.message}. Assuming path does not exist.`);
             return false; // Cannot exist if path is invalid
         }
 
-        // --- 3. Check Document Existence ---
-        // getDocument does not throw a standard error for non-existent docs,
-        // but returns an object without updateTime/createTime.
-        const doc = firestore.getDocument(documentPath);
+        // --- Construct path to the METADATA document ---
+        metadataPath = `${baseCollectionName}/${baseDocumentId}_metadata`; // Append _metadata
+        Logger.log(`   -> Calculated Firestore Metadata Path to check: ${metadataPath}`);
+
+        // --- 3. Check Metadata Document Existence ---
+        const doc = firestore.getDocument(metadataPath);
 
         // Check if the document object has an updateTime property (indicates existence)
         if (doc && doc.updateTime) {
-             Logger.log(`   -> Document found at path: ${documentPath}. Exists: true.`);
+             Logger.log(`   -> Metadata document found at path: ${metadataPath}. Exists: true.`);
              return true; // Document exists
         } else {
-             Logger.log(`   -> Document NOT found at path: ${documentPath}. Exists: false.`);
+             Logger.log(`   -> Metadata document NOT found at path: ${metadataPath}. Exists: false.`);
              return false; // Document does not exist (or has no fields/metadata)
         }
 
     } catch (e) {
         // Catch other potential errors during Firestore getDocument call (e.g., permissions)
-        // Check if the error message indicates "NOT_FOUND" (might occur in some scenarios or future library updates)
-        if (e.message && e.message.toUpperCase().includes("NOT_FOUND")) {
-             Logger.log(`   -> ${funcName}: Explicit NOT_FOUND error for path ${documentPath}. Exists: false.`);
+        const isNotFoundError = e.message && e.message.toUpperCase().includes("NOT_FOUND");
+        if (isNotFoundError) {
+             Logger.log(`   -> ${funcName}: Explicit NOT_FOUND error for metadata path ${metadataPath}. Exists: false.`);
              return false;
         } else {
             // Log other errors but return false as existence couldn't be confirmed
-            console.error(`Exception caught in ${funcName} accessing path ${documentPath || 'Unknown'}: ${e.message}\nStack: ${e.stack}`);
-            Logger.log(`   -> ❌ Exception during Firestore check for ${documentPath || 'Unknown'}: ${e.message}. Assuming path does not exist.`);
+            console.error(`Exception caught in ${funcName} accessing metadata path ${metadataPath || 'Unknown'}: ${e.message}\nStack: ${e.stack}`);
+            Logger.log(`   -> ❌ Exception during Firestore metadata check for ${metadataPath || 'Unknown'}: ${e.message}. Assuming path does not exist.`);
             return false;
         }
     }
 
 } // END fSrvVerifyFirestorePathExists
+
+

@@ -6493,13 +6493,13 @@ async function fOnCSGameDataLoaded(data) { // <<< MADE ASYNC
 
         // --->>> Call Background Cache Fetch (which now populates char info) <<<---
         fMyConsoleLog("   -> Proceeding to fetch background caches (skipped Firestore arr check)...");
-        const cachesLoaded = await fCacheFSData(); // Await the cache loading process
+        const cachesLoaded = await fBulkCacheFSData(); // Await the cache loading process
 
         // --->>> Render Grid (if caches loaded) <<<---
         if (cachesLoaded) {
             fRenderGridWithFinalData(); // Render only if caches (and char info population) succeed
         }
-        // If cachesLoaded is false, fCacheFSData already showed error and halted.
+        // If cachesLoaded is false, fBulkCacheFSData already showed error and halted.
         return; // Exit this path
     }
 
@@ -6523,12 +6523,12 @@ async function fOnCSGameDataLoaded(data) { // <<< MADE ASYNC
             fSetupTooltipAndModal(); // Setup tooltip/modal refs
 
             fMyConsoleLog("   -> Proceeding to fetch background caches...");
-            const cachesLoaded = await fCacheFSData(); // Await the cache loading process
+            const cachesLoaded = await fBulkCacheFSData(); // Await the cache loading process
 
             if (cachesLoaded) {
                 fRenderGridWithFinalData(); // Render only if caches (and char info population) succeed
             }
-            // If cachesLoaded is false, fCacheFSData already showed error and halted.
+            // If cachesLoaded is false, fBulkCacheFSData already showed error and halted.
 
         })
         .withFailureHandler(async (error) => { // <<< MAKE ASYNC
@@ -6542,13 +6542,13 @@ async function fOnCSGameDataLoaded(data) { // <<< MADE ASYNC
 
             // --->>> Call Background Cache Fetch (using Sheet arr data) <<<---
             fMyConsoleLog("   -> Proceeding to fetch background caches (Firestore arr check failed)...");
-            const cachesLoaded = await fCacheFSData(); // Await the cache loading process
+            const cachesLoaded = await fBulkCacheFSData(); // Await the cache loading process
 
             // --->>> Render Grid (if caches loaded) <<<---
             if (cachesLoaded) {
                 fRenderGridWithFinalData(); // Render only if caches (and char info population) succeed
             }
-            // If cachesLoaded is false, fCacheFSData already showed error and halted.
+            // If cachesLoaded is false, fBulkCacheFSData already showed error and halted.
         })
         .fSrvCheckAndLoadFirestoreGUIarrAs2D(gIndex); // Pass Email and CSID
 
@@ -6557,127 +6557,198 @@ async function fOnCSGameDataLoaded(data) { // <<< MADE ASYNC
 
 
 
-// fCacheFSData //////////////////////////////////////////////////////
-// Purpose -> Fetches essential background definition data (Elements, Abilities, Crit,
-//            Gear, RaceClass, List, MyAbilities) from Firestore in parallel.
-//            Stores results in gUI...FSData properties. Calls fPopulateGuiCharacterInfo
-//            after RaceClass data is loaded. Halts app load on critical fetch failure.
+// fBulkCacheFSData //////////////////////////////////////////////////////
+// Purpose -> Ensures necessary Firestore cache documents exist (creating MyCS/MyKL ones
+//            from Sheets if missing) and then loads all required caches from Firestore
+//            into gUI. Populates gUI.characterInfo from the loaded RaceClass cache.
 // Inputs  -> None.
-// Outputs -> (Promise<Boolean>): Resolves true if all critical caches loaded successfully
-//            AND character info was populated, false otherwise.
-async function fCacheFSData() {
-    const funcName = "fCacheFSData";
-    fMyConsoleLog(`⚙️ ${funcName}: Fetching background data caches from Firestore...`);
-    // Define the caches to fetch
-    const cachesToFetch = [
+// Outputs -> (Promise<Boolean>): Resolves true if all critical steps succeed, false otherwise.
+async function fBulkCacheFSData() {
+    const funcName = "fBulkCacheFSData";
+    fMyConsoleLog(`⚙️ ${funcName}: Verifying/Loading background data caches...`);
+
+    // Define Cache Configurations
+    const dbCaches = [
       { workbookAbr: 'DB', sheetName: 'Elements', gUIKey: 'dbElementsFSData' },
       { workbookAbr: 'DB', sheetName: 'Abilities', gUIKey: 'dbAbilitiesFSData' },
       { workbookAbr: 'DB', sheetName: 'Crit',      gUIKey: 'dbCritFSData' },
-      { workbookAbr: 'DB', sheetName: 'Gear',      gUIKey: 'dbGearFSData' },
+      { workbookAbr: 'DB', sheetName: 'Gear',      gUIKey: 'dbGearFSData' }
+    ];
+    const userCaches = [
       { workbookAbr: 'MyCS', sheetName: 'RaceClass',    gUIKey: 'myCsRaceClassFSData' },
       { workbookAbr: 'MyCS', sheetName: 'List',    gUIKey: 'myCsListFSData' },
       { workbookAbr: 'MyKL', sheetName: 'MyAbilities', gUIKey: 'myKlMyAbilitiesFSData' }
     ];
+    const allCaches = [...dbCaches, ...userCaches];
 
-    try {
-        // Create an array of promises for all fetches
-        const fetchPromises = cachesToFetch.map(config => {
-            fMyConsoleLog(`   -> Queueing fetch for ${config.workbookAbr}/${config.sheetName}`);
-            // Return the promise from google.script.run
+    try { // Wrap entire operation
+
+        // === Phase 1: Check & Create MyCS/MyKL Caches (if needed) ===
+        fMyConsoleLog(`   -> Phase 1: Verifying MyCS/MyKL document existence in Firestore...`);
+        const checkPromises = userCaches.map(config => {
             return new Promise((resolve, reject) => {
                 google.script.run
-                    .withSuccessHandler(response => {
-                        // Attach config info to the response for easier handling later
-                        resolve({ ...response, config });
-                    })
-                    .withFailureHandler(error => {
-                         // Attach config info to the error for easier handling later
-                        reject({ error, config });
-                     })
-                    // Call the server function to get data
-                    .fSrvGetFirestoreFSData(config.workbookAbr, config.sheetName, gIndex);
+                    .withSuccessHandler(exists => resolve({ exists: exists, config: config }))
+                    .withFailureHandler(error => reject({ error: error, config: config }))
+                    .fSrvVerifyFirestorePathExists(config.workbookAbr, config.sheetName, gIndex);
             });
         });
 
-        // Wait for all fetches to settle (either succeed or fail)
-        fMyConsoleLog("   -> Awaiting Promise.allSettled for cache fetches...");
-        const results = await Promise.allSettled(fetchPromises);
-        fMyConsoleLog("   -> All cache fetches settled.");
+        const checkResults = await Promise.allSettled(checkPromises);
+        const missingUserCaches = [];
 
-        // Process the results
-        let allSucceeded = true; // Assume success initially
-        let characterInfoPopulated = false; // Track if helper was called successfully
+        // Process existence check results
+        for (const result of checkResults) {
+            if (result.status === 'fulfilled') {
+                if (result.value.exists === false) {
+                    missingUserCaches.push(result.value.config);
+                    fMyConsoleLog(`      -> Document for ${result.value.config.gUIKey} NOT found. Queued for creation.`);
+                } else {
+                     fMyConsoleLog(`      -> Document for ${result.value.config.gUIKey} exists.`);
+                }
+            } else {
+                // Failure during existence check itself
+                const config = result.reason.config;
+                const error = result.reason.error;
+                throw new Error(`Failed to check existence for ${config.gUIKey}: ${error.message || 'Unknown error'}`);
+            }
+        }
 
-        for (const result of results) {
+        // Create missing user caches if any were identified
+        if (missingUserCaches.length > 0) {
+            fMyConsoleLog(`   -> Creating ${missingUserCaches.length} missing MyCS/MyKL documents...`);
+            const createPromises = missingUserCaches.map(config => {
+                return new Promise(async (resolve, reject) => { // Make inner function async
+                    try {
+                        fMyConsoleLog(`      -> Loading Sheet: ${config.workbookAbr}/${config.sheetName}`);
+                        const loadedData = await new Promise((res, rej) => {
+                            google.script.run
+                                .withSuccessHandler(res)
+                                .withFailureHandler(rej)
+                                .fSrvLoadFullGoogleSheetAndTags(config.workbookAbr, config.sheetName, gIndex.CSID);
+                        });
+
+                        // Basic validation of loadedData structure
+                         if (!loadedData || typeof loadedData !== 'object' || !loadedData.ColTags || !loadedData.RowTags || !loadedData.sheetText2D || !Array.isArray(loadedData.sheetText2D)) {
+                           throw new Error(`Invalid data structure loaded from Sheet for ${config.workbookAbr}/${config.sheetName}.`);
+                         }
+
+                        fMyConsoleLog(`      -> Saving to Firestore: ${config.workbookAbr}/${config.sheetName}`);
+                        const saveResult = await new Promise((res, rej) => {
+                            google.script.run
+                                .withSuccessHandler(res)
+                                .withFailureHandler(rej)
+                                .fSrvSaveFullSheetTextAndTagsToFirestore(gIndex, config.workbookAbr, config.sheetName, loadedData);
+                        });
+
+                        if (saveResult && saveResult.success) {
+                            fMyConsoleLog(`         -> ✅ Successfully created Firestore doc for ${config.gUIKey}.`);
+                            resolve({ success: true, config: config }); // Resolve on success
+                        } else {
+                             throw new Error(saveResult?.message || `Unknown error saving ${config.gUIKey} to Firestore.`);
+                        }
+                    } catch (err) {
+                         reject({ error: err, config: config }); // Reject with error and config
+                    }
+                });
+            });
+
+            const createResults = await Promise.allSettled(createPromises);
+            // Check for failures during creation
+            for (const result of createResults) {
+                if (result.status === 'rejected') {
+                    const config = result.reason.config;
+                    const error = result.reason.error;
+                    throw new Error(`Failed to create Firestore document for ${config.gUIKey}: ${error.message || 'Unknown error'}`);
+                }
+                // If fulfilled, success was already logged inside the promise
+            }
+             fMyConsoleLog(`   -> Finished attempting to create missing MyCS/MyKL documents.`);
+        } else {
+             fMyConsoleLog(`   -> All MyCS/MyKL documents already exist.`);
+        }
+        fMyConsoleLog(`   -> Phase 1 Complete.`);
+
+        // === Phase 2: Read ALL Caches from Firestore ===
+        fMyConsoleLog(`   -> Phase 2: Reading all required caches from Firestore...`);
+        const readPromises = allCaches.map(config => {
+             return new Promise((resolve, reject) => {
+                 google.script.run
+                     .withSuccessHandler(response => resolve({ ...response, config }))
+                     .withFailureHandler(error => reject({ error, config }))
+                     .fSrvGetFirestoreFSData(config.workbookAbr, config.sheetName, gIndex);
+             });
+        });
+
+        const readResults = await Promise.allSettled(readPromises);
+        let characterInfoPopulated = false; // Ensure this gets set
+
+        // Process read results
+        for (const result of readResults) {
             if (result.status === 'fulfilled') {
                 const response = result.value;
-                const config = response.config; // Get config back
+                const config = response.config;
 
-                // Validate response structure expects FSData directly
+                // Validate response structure
                 if (response.success && response.FSData &&
-                    typeof response.FSData.colTagsMap === 'object' && // Check required FSData props
+                    typeof response.FSData.colTagsMap === 'object' &&
                     typeof response.FSData.rowTagsMap === 'object' &&
                     Array.isArray(response.FSData.text))
                 {
-                    // Store successful data (the FSData object)
+                    // Store successful data
                     gUI[config.gUIKey] = response.FSData;
-                    fMyConsoleLog(`      -> ✅ Successfully loaded cache: ${config.gUIKey} (${config.workbookAbr}/${config.sheetName})`);
+                    fMyConsoleLog(`      -> ✅ Successfully read cache: ${config.gUIKey}`);
 
-                    // --- ADDED: Call helper after RaceClass cache is loaded ---
+                    // Populate Character Info if it's the RaceClass cache
                     if (config.gUIKey === 'myCsRaceClassFSData') {
                         fMyConsoleLog(`      -> Triggering fPopulateGuiCharacterInfo...`);
                         const populateSuccess = fPopulateGuiCharacterInfo();
                         if (!populateSuccess) {
-                             // If helper fails, throw to halt the process
-                             throw new Error("Failed to populate gUI.characterInfo from RaceClass cache.");
+                            // Throw critical error if population fails
+                            throw new Error("Failed to populate gUI.characterInfo from RaceClass cache.");
                         }
                         characterInfoPopulated = true; // Mark as successful
                     }
-                    // --- END ADDED BLOCK ---
-
                 } else {
                     // Server call succeeded but returned success: false or invalid data
-                    allSucceeded = false;
-                    const errorMessage = `Failed to load critical cache: ${config.gUIKey} (${config.workbookAbr}/${config.sheetName}). Reason: ${response.message || 'Invalid FSData structure received.'}`;
-                    fMyConsoleLog(`      -> ❌ ${errorMessage}`);
-                    throw new Error(errorMessage); // Halt loading
+                    const readErrorMsg = `Failed to load cache: ${config.gUIKey}. Reason: ${response.message || 'Invalid FSData structure returned.'}`;
+                    fMyConsoleLog(`      -> ❌ ${readErrorMsg}`);
+                    throw new Error(readErrorMsg); // Halt loading on critical read failure
                 }
             } else {
-                // Promise was rejected (likely a transport error)
-                allSucceeded = false;
-                const config = result.reason.config; // Get config from rejected reason
-                const error = result.reason.error; // Get error object
-                const errorMessage = `Failed to load critical cache: ${config.gUIKey} (${config.workbookAbr}/${config.sheetName}). Reason: ${error.message || 'Unknown server communication error.'}`;
-                fMyConsoleLog(`      -> ❌ ${errorMessage}`);
-                console.error(`Error details for ${config.gUIKey} (${config.workbookAbr}/${config.sheetName}):`, error);
-                throw new Error(errorMessage); // Halt loading
+                // Promise was rejected (transport error or critical FS error like NOT_FOUND for DB)
+                const config = result.reason.config;
+                const error = result.reason.error;
+                const readErrorMsg = `Failed to load cache: ${config.gUIKey}. Reason: ${error.message || 'Unknown server communication error.'}`;
+                fMyConsoleLog(`      -> ❌ ${readErrorMsg}`);
+                console.error(`Error details for ${config.gUIKey}:`, error);
+                throw new Error(readErrorMsg); // Halt loading on critical read failure
             }
-        } // End loop through results
+        } // End loop through read results
 
-        // Final check: Ensure character info was populated (it should be if myCsRaceClassFSData loaded)
+        // Final check: Ensure character info was populated
         if (!characterInfoPopulated) {
-            // This case should be rare if the myCsRaceClassFSData load succeeded but the post-processing failed
-             throw new Error("Cache loading completed, but character info population failed.");
+             // This should only happen if myCsRaceClassFSData load failed, which should have thrown above
+             throw new Error("Cache loading process error: Character info was not populated.");
         }
 
-        // If loop completes without throwing, all caches loaded successfully
-        fMyConsoleLog(`✅ ${funcName}: All background caches loaded & character info populated successfully.`);
-        return true; // Return true only if all critical steps succeeded
+        fMyConsoleLog(`✅ ${funcName}: All required caches loaded & character info populated.`);
+        return true; // All critical steps succeeded
 
     } catch (error) {
-        // Catch errors thrown during result processing or unexpected errors
+        // Catch errors thrown during the process
         fMyConsoleLog(`❌ ${funcName}: Critical error during cache loading: ${error.message}`);
         await fShowMessage(`❌ Critical Error: ${error.message}<br><br>App loading halted.`); // Show error
         return false; // Indicate failure
     }
-} // END fCacheFSData
+} // END fBulkCacheFSData
 
 
 
 
 // fPopulateGuiCharacterInfo ///////////////////////////////////////////////////////
 // Purpose -> Reads data from the gUI.myCsRaceClassFSData cache and populates
-//            the gUI.characterInfo object. Called by fCacheFSData.
+//            the gUI.characterInfo object. Called by fBulkCacheFSData.
 // Inputs  -> None (Reads gUI.myCsRaceClassFSData).
 // Outputs -> (Boolean): True if population is successful, false otherwise.
 function fPopulateGuiCharacterInfo() {
@@ -6693,7 +6764,7 @@ function fPopulateGuiCharacterInfo() {
         const errorMsg = `Cannot populate Character Info: Required cache ${cacheKey} is not loaded or invalid.`;
         console.error(`${funcName}: ${errorMsg}`);
         fMyConsoleLog(`      -> ❌ ${funcName} Error: ${errorMsg}`);
-        // No fShowMessage here, rely on fCacheFSData caller to handle failure
+        // No fShowMessage here, rely on fBulkCacheFSData caller to handle failure
         return false;
     }
 
