@@ -3730,10 +3730,10 @@ function fToggleSidebar() {
 
 
 // fHandleNewLevelSlotName ///////////////////////////////////////////////////////
-// Purpose -> Handles the "Update (Level, Slot, Names)" menu action. Fetches fresh
-//            CS RaceClass data, validates it (especially slotNum), updates gUI.characterInfo,
-//            triggers a log refresh, saves MyCS/List and MyKL/MyAbilities to Firestore,
-//            then triggers a full refresh of the Ability/Gear tables in Turbo.
+// Purpose -> Handles the "Update (Level, Slot, Names)" menu action. Force-refreshes
+//            user-specific caches (RaceClass, List, MyAbilities) from Sheets to
+//            Firestore to gUI, validates the resulting slot number, sends an update
+//            log, and triggers a full grid refresh.
 // Inputs  -> None.
 // Outputs -> (Promise<void>): Resolves after completing actions or handling errors.
 async function fHandleNewLevelSlotName() {
@@ -3741,186 +3741,108 @@ async function fHandleNewLevelSlotName() {
     fMyConsoleLog(`⚙️ Menu Action: ${funcName} Triggered...`);
 
     // === Show Initial Loading Message ===
-    const updatingMsg = fShowMessage("⏳ Updating Level/Slot/Names, Saving Key Sheets, & Refreshing Grid...<br><br>This may take a minute or two.<br><br>Do NOT Close unless program freezes.");
+    const updatingMsg = fShowMessage("⏳ Refreshing Caches, Sending Log & Updating Grid...<br><br>This may take a minute.<br><br>Do NOT Close unless program freezes.");
 
-    try { // Wrap the entire sequence in a try block for better error handling
+    try { // Wrap the entire sequence in a try block
 
-        // === 1. Fetch and Update Character Header Data ===
-        fMyConsoleLog("   -> Requesting fresh Character Header Data...");
-        const headerData = await new Promise((resolve, reject) => {
-            google.script.run
-                .withSuccessHandler(resolve)
-                .withFailureHandler(reject)
-                .fSrvGetURLToPlayerCharForGMScreen(gIndex.CSID);
-        });
+        // === 1. Parallel Cache Refresh (Force Sheet->FS->gUI for user caches) ===
+        const userCachesToRefresh = [
+          { workbookAbr: 'MyCS', sheetName: 'RaceClass',    gUIKey: 'myCsRaceClassFSData' },
+          { workbookAbr: 'MyCS', sheetName: 'List',         gUIKey: 'myCsListFSData' },
+          { workbookAbr: 'MyKL', sheetName: 'MyAbilities',  gUIKey: 'myKlMyAbilitiesFSData' }
+        ];
 
-        fMyConsoleLog("   -> Received fresh Level, Slot, Names Data.");
-        // Validate the response structure
-        if (!headerData || typeof headerData !== 'object' || headerData.error) {
-            const errMsg = headerData?.message || "Invalid Level, Slot, Names data structure received during update.";
-            console.error(`${funcName} Error:`, errMsg, headerData);
-            throw new Error(`Error updating Level, Slot, Names data: ${errMsg}`);
+        const refreshPromises = userCachesToRefresh.map(config =>
+            fRefreshAndCacheOneFSData(config.workbookAbr, config.sheetName, config.gUIKey)
+        );
+
+        fMyConsoleLog(`   -> Starting parallel refresh for ${userCachesToRefresh.length} user caches...`);
+        const results = await Promise.allSettled(refreshPromises);
+        fMyConsoleLog(`   -> Parallel cache refreshes completed.`);
+
+        // === 2. Process Refresh Results ===
+        let allRefreshesSucceeded = true;
+        let firstErrorMessage = null;
+        let failedCacheKey = null;
+
+        for (let i = 0; i < results.length; i++) {
+            const result = results[i];
+            const config = userCachesToRefresh[i]; // Get corresponding config
+            if (result.status === 'rejected') {
+                allRefreshesSucceeded = false;
+                failedCacheKey = config.gUIKey;
+                firstErrorMessage = result.reason?.message || `Unknown error refreshing ${failedCacheKey}`;
+                fMyConsoleLog(`      -> ❌ Refresh REJECTED for ${failedCacheKey}: ${firstErrorMessage}`);
+                break; // Stop checking on first failure
+            } else if (result.value === false) {
+                 // fRefreshAndCacheOneFSData resolved but indicated failure
+                allRefreshesSucceeded = false;
+                failedCacheKey = config.gUIKey;
+                // Note: fRefreshAndCacheOneFSData already showed a message in this case
+                firstErrorMessage = `Refresh failed for ${failedCacheKey}. Check logs for details.`;
+                fMyConsoleLog(`      -> ❌ Refresh FAILED (returned false) for ${failedCacheKey}.`);
+                break; // Stop checking on first failure
+            } else {
+                 fMyConsoleLog(`      -> ✅ Refresh SUCCEEDED for ${config.gUIKey}.`);
+            }
         }
 
-        // Validate Slot Number specifically
-        const receivedSlotNum = headerData.slotNum ?? null;
-        if (!receivedSlotNum || typeof receivedSlotNum !== 'string' || !receivedSlotNum.startsWith('Slot')) {
-            const slotErrorMsg = "Error: Invalid or missing Slot # found on RaceClass tab. Cannot save log updates or related sheets.";
-            fMyConsoleLog(`   -> ❌ Update failed: ${slotErrorMsg}`);
-            throw new Error(slotErrorMsg);
+        // Throw error if any refresh failed
+        if (!allRefreshesSucceeded) {
+            // Use a generic message if the specific one wasn't captured well
+            throw new Error(firstErrorMessage || `One or more cache refreshes failed.`);
         }
+        fMyConsoleLog(`   -> All user cache refreshes successful.`);
 
-        // --- Update Successful & Valid ---
-        gUI.characterInfo = {
-            slotNum: receivedSlotNum,
-            raceClass: headerData.raceClass ?? '',
-            level: headerData.level ?? '',
-            playerName: headerData.playerName ?? '',
-            charName: headerData.charName ?? ''
-        };
-        fMyConsoleLog(`   -> gUI.characterInfo updated: ${JSON.stringify(gUI.characterInfo)}`);
 
-        // Trigger GMScreen/PS Log update and AWAIT its completion
-        fMyConsoleLog("   -> Triggering GMScreen/PS Log Update...");
+        // === 3. Slot Validation ===
+        // gUI.characterInfo should now be populated/updated by the RaceClass refresh
+        fMyConsoleLog("   -> Validating Slot Number from refreshed data...");
+        const currentSlot = gUI.characterInfo?.slotNum;
+        const slotRegex = /^Slot\s+([1-9])$/i; // Expect "Slot#"
+
+        if (!currentSlot || !slotRegex.test(currentSlot)) {
+            const invalidSlotMsg = `Invalid or missing Slot # ("${currentSlot || 'null'}") found after cache refresh. Cannot send log or proceed.`;
+            fMyConsoleLog(`      -> ❌ ${invalidSlotMsg}`);
+            throw new Error(invalidSlotMsg);
+        }
+        fMyConsoleLog(`      -> Slot validated: ${currentSlot}`);
+
+
+        // === 4. Send Log ===
+        fMyConsoleLog("   -> Sending log update...");
         const logSendSuccess = await fSendLogToGMScreenAndPS();
         if (!logSendSuccess) {
-             fMyConsoleLog("   -> ⚠️ Log send failed or was skipped. Aborting subsequent Firestore saves.");
-             // Optionally throw an error or show a message if log send failure should halt the process
-             // throw new Error("Failed to send initial log update to GM/Party.");
+            fMyConsoleLog("      -> ⚠️ Log send failed or was skipped. Continuing process...");
+            // Do not throw error, continue to grid refresh
         } else {
-             fMyConsoleLog("   -> Log send completed successfully.");
+             fMyConsoleLog("      -> ✅ Log send successful.");
         }
 
 
-        // === 2. Load and Save 'MyCS' -> 'List' (Only if log send was successful or wasn't critical) ===
-        // You might add a check here: if (logSendSuccess) { ... } if it's critical
-        await fLoadAndSaveAbilityLevelUpdatesToFirestore('MyCS', 'List');
-
-        // === 3. Load and Save 'MyKL' -> 'MyAbilities' ===
-        await fLoadAndSaveAbilityLevelUpdatesToFirestore('MyKL', 'MyAbilities');
-
-        // === 4. Refresh Entire Ability/Gear Table in Turbo ===
-        fMyConsoleLog("   -> Triggering Full Ability/Gear Table Refresh...");
+        // === 5. Refresh Grid Rows ===
+        fMyConsoleLog("   -> Refreshing grid rows (Abilities/Gear)...");
         await fTotalRereshOfAllAbilitiesAndAllGear();
-        fMyConsoleLog("   -> Full Ability/Gear Table Refresh completed.");
+        fMyConsoleLog("      -> ✅ Grid row refresh complete.");
 
 
-        // === 5. Final Success Message ===
+        // === 6. Final Success Message ===
         fHideMessage(); // Hide the initial "Updating..." message
-        await fShowMessage("✅ Level/Slot/Names Info Updated, Key Sheets Saved & Grid Refreshed.");
+        await fShowMessage("✅ Caches Refreshed, Log Sent & Grid Updated.");
         fMyConsoleLog(`✅ ${funcName} Completed Successfully.`);
 
     } catch (error) {
         // === Catch All Errors from the Sequence ===
         fHideMessage(); // Ensure loading message is hidden on error
-        const errorMsg = `Error during '${funcName}': ${error?.message || error}`;
-        console.error(errorMsg, error);
+        const errorMsg = `Error during Update (Level, Slot, Names): ${error?.message || error}`;
+        console.error(errorMsg, error); // Log full error
         fMyConsoleLog(`   -> ❌ ${errorMsg}`);
         await fShowMessage(`❌ ${errorMsg}`); // Show the final error to the user
+        // Implicitly returns undefined on error
     }
 
 } // END fHandleNewLevelSlotName
 
-
-
-
-// fLoadAndSaveAbilityLevelUpdatesToFirestore ///////////////////////////////////////////////////
-// Purpose -> Helper function to load data/tags from a specific Google Sheet,
-//            save it to Firestore, AND update the corresponding gUI cache.
-//            Used by fHandleNewLevelSlotName.
-// Inputs  -> workbookAbr (String): 'MyCS' or 'MyKL'.
-//         -> sheetName (String): The sheet name (e.g., 'List', 'MyAbilities').
-// Outputs -> (Promise<void>): Resolves on successful load, save, and cache update. Rejects on error.
-// Throws  -> (Error): Propagates errors from server calls or validation.
-async function fLoadAndSaveAbilityLevelUpdatesToFirestore(workbookAbr, sheetName) {
-    const funcName = "fLoadAndSaveAbilityLevelUpdatesToFirestore";
-    fMyConsoleLog(`   -> ${funcName}: Starting process for ${workbookAbr} -> ${sheetName}...`);
-    let loadedData; // Declare here to be accessible later
-
-    try {
-        // --- 1. Load Data & Tags from Sheet ---
-        fMyConsoleLog(`      -> Calling fSrvLoadFullGoogleSheetAndTags...`);
-        loadedData = await new Promise((resolve, reject) => { // Store result in loadedData
-            google.script.run
-                .withSuccessHandler(resolve)
-                .withFailureHandler(reject)
-                .fSrvLoadFullGoogleSheetAndTags(workbookAbr, sheetName, gIndex.CSID);
-        });
-
-        // Validate loaded data structure immediately after loading
-        if (!loadedData || typeof loadedData !== 'object' || !loadedData.ColTags || !loadedData.RowTags || !loadedData.sheetText2D || !Array.isArray(loadedData.sheetText2D)) {
-            console.error(`${funcName}: Invalid data structure received from fSrvLoadFullGoogleSheetAndTags for ${workbookAbr}/${sheetName}:`, loadedData);
-            throw new Error(`Received invalid data structure when loading ${workbookAbr}/${sheetName}.`);
-        }
-        fMyConsoleLog(`      -> Successfully loaded data for ${workbookAbr}/${sheetName}.`);
-
-        // --- 2. Save Loaded Data to Firestore ---
-        fMyConsoleLog(`      -> Calling fSrvSaveFullSheetTextAndTagsToFirestore...`);
-        const saveResult = await new Promise((resolve, reject) => {
-            google.script.run
-                .withSuccessHandler(resolve)
-                .withFailureHandler(reject)
-                .fSrvSaveFullSheetTextAndTagsToFirestore(
-                    gIndex,
-                    workbookAbr,
-                    sheetName,
-                    loadedData // Pass the data loaded from the sheet
-                );
-        });
-
-        // Validate save result
-        if (!saveResult || !saveResult.success) {
-            const saveErrorMsg = saveResult?.message || `Unknown error saving ${workbookAbr}/${sheetName} to Firestore.`;
-            console.error(`${funcName}: Firestore save failed for ${workbookAbr}/${sheetName}: ${saveErrorMsg}`);
-            throw new Error(`Failed to save ${workbookAbr}/${sheetName} to Firestore: ${saveErrorMsg}`);
-        }
-        fMyConsoleLog(`      -> Successfully saved ${workbookAbr}/${sheetName} to Firestore.`);
-
-        // --- 3. Update Client-Side Cache ---
-        fMyConsoleLog(`      -> Updating client-side gUI cache for ${workbookAbr}/${sheetName}...`);
-        let targetGUIKey = null;
-        const lowerWorkbookAbr = workbookAbr.toLowerCase();
-        const lowerSheetName = sheetName.toLowerCase();
-
-        if (lowerWorkbookAbr === 'mycs' && lowerSheetName === 'list') {
-            targetGUIKey = 'myCsListFSData';
-        } else if (lowerWorkbookAbr === 'mykl' && lowerSheetName === 'myabilities') {
-            targetGUIKey = 'myKlMyAbilitiesFSData';
-        }
-        // Add other mappings here if this function is ever used for DB caches
-
-        if (targetGUIKey) {
-            // Format the sheet data into the FSData structure expected by the cache
-            const formattedFSData = {
-                r1: 0, // Assume full sheet load starts at 0,0
-                c1: 0,
-                colTagsMap: loadedData.ColTags,
-                rowTagsMap: loadedData.RowTags,
-                text: loadedData.sheetText2D
-            };
-            gUI[targetGUIKey] = formattedFSData; // Update the cache
-            fMyConsoleLog(`      -> ✅ Client cache gUI.${targetGUIKey} updated.`);
-
-            // --- 4. Refresh UI if List Cache Updated ---
-            if (targetGUIKey === 'myCsListFSData') {
-                fMyConsoleLog(`      -> Triggering dropdown refresh because ${targetGUIKey} was updated.`);
-                fProcessCachedAbilityList(); // Refresh the ability dropdowns
-            }
-        } else {
-            fMyConsoleLog(`      -> ⚠️ Warning: No matching gUI cache key found for ${workbookAbr}/${sheetName}. Cache not updated.`);
-        }
-        // --- End Cache Update ---
-
-        fMyConsoleLog(`   -> ✅ Successfully loaded, saved, and cached ${workbookAbr}/${sheetName}.`);
-
-    } catch (error) {
-        // Catch errors from either the load, save, or validation steps
-        console.error(`${funcName}: Error during process for ${workbookAbr}/${sheetName}:`, error);
-        // Re-throw the error so fHandleNewLevelSlotName can catch it
-        throw new Error(`Failed process for ${workbookAbr}/${sheetName}: ${error.message || error}`);
-    }
-
-} // END fLoadAndSaveAbilityLevelUpdatesToFirestore
 
 
 
@@ -6742,6 +6664,173 @@ async function fBulkCacheFSData() {
         return false; // Indicate failure
     }
 } // END fBulkCacheFSData
+
+
+
+// fRefreshAndCacheOneFSData /////////////////////////////////////////////////
+// Purpose -> Refreshes a single cache specified by the inputs. For 'DB' sources, it
+//            reads directly from Firestore. For 'MyCS'/'MyKL' sources, it forces
+//            an update by reading the Google Sheet, saving to Firestore, and then
+//            reading back from Firestore. Updates gUI.characterInfo if the
+//            RaceClass cache is refreshed.
+// Inputs  -> workbookAbr (String): The workbook abbreviation ('DB', 'MyCS', 'MyKL').
+//         -> sheetName (String): The specific sheet name.
+//         -> gUIKey (String): The key in the gUI object where the cache data is
+//                             stored (e.g., 'dbElementsFSData', 'myCsRaceClassFSData').
+// Outputs -> (Promise<Boolean>): Resolves true if the refresh and cache update succeeded, false otherwise.
+async function fRefreshAndCacheOneFSData(workbookAbr, sheetName, gUIKey) {
+    const funcName = "fRefreshAndCacheOneFSData";
+    const cacheDesc = `${gUIKey} (${workbookAbr}/${sheetName})`; // For logging/messages
+
+    // === 1. Input Validation ===
+    if (!workbookAbr || typeof workbookAbr !== 'string' ||
+        !sheetName || typeof sheetName !== 'string' ||
+        !gUIKey || typeof gUIKey !== 'string') {
+        const errorMsg = `Invalid input parameters provided to ${funcName}.`;
+        console.error(`${funcName}: ${errorMsg} Got:`, { workbookAbr, sheetName, gUIKey });
+        fMyConsoleLog(`❌ ${funcName}: ${errorMsg}`);
+        await fShowMessage(errorMsg);
+        return false;
+    }
+
+    fMyConsoleLog(`⚙️ ${funcName}: Starting refresh for ${cacheDesc}...`);
+
+    // === 2. Main Operation with Error Handling ===
+    try {
+        let fsData = null; // To hold data read from Firestore
+
+        // === 3. Conditional Logic based on Source Type ===
+        if (workbookAbr === 'DB') {
+            // --- DB Source: Read directly from Firestore ---
+            fMyConsoleLog(`   -> DB Source: Reading ${cacheDesc} from Firestore...`);
+            try {
+                const response = await new Promise((resolve, reject) => {
+                    google.script.run
+                        .withSuccessHandler(resolve)
+                        .withFailureHandler(reject)
+                        .fSrvGetFirestoreFSData(workbookAbr, sheetName, gIndex);
+                });
+
+                // Validate response
+                if (response.success && response.FSData &&
+                    typeof response.FSData.colTagsMap === 'object' &&
+                    typeof response.FSData.rowTagsMap === 'object' &&
+                    Array.isArray(response.FSData.text))
+                {
+                    fsData = response.FSData; // Store data for Step 4
+                    fMyConsoleLog(`      -> ✅ Successfully read ${cacheDesc} from Firestore.`);
+                } else {
+                    throw new Error(response.message || `Invalid FSData structure returned for ${cacheDesc}.`);
+                }
+            } catch (error) {
+                // Handle rejected promise or thrown validation error
+                console.error(`Error reading DB cache ${cacheDesc} from Firestore:`, error);
+                throw new Error(`Failed to load critical cache ${cacheDesc}: ${error.message || 'Unknown server error.'}`);
+            }
+
+        } else if (workbookAbr === 'MyCS' || workbookAbr === 'MyKL') {
+            // --- User Source: Force update (Sheet -> FS -> FS Read) ---
+            fMyConsoleLog(`   -> User Source: Force refreshing ${cacheDesc} (Sheet->FS->FS)...`);
+            let loadedData = null;
+
+            // --- Step A: Load from Sheet ---
+            try {
+                 fMyConsoleLog(`      -> A. Loading Sheet: ${workbookAbr}/${sheetName}`);
+                 loadedData = await new Promise((resolve, reject) => {
+                    google.script.run
+                        .withSuccessHandler(resolve)
+                        .withFailureHandler(reject)
+                        .fSrvLoadFullGoogleSheetAndTags(workbookAbr, sheetName, gIndex.CSID);
+                });
+                // Validate structure
+                 if (!loadedData || typeof loadedData !== 'object' || !loadedData.ColTags || !loadedData.RowTags || !loadedData.sheetText2D || !Array.isArray(loadedData.sheetText2D)) {
+                     throw new Error(`Invalid data structure loaded from Sheet for ${workbookAbr}/${sheetName}.`);
+                 }
+                 fMyConsoleLog(`         -> ✅ Successfully loaded ${cacheDesc} from Sheet.`);
+            } catch (error) {
+                console.error(`Error loading Sheet for ${cacheDesc}:`, error);
+                throw new Error(`Failed to load data from Sheet for ${cacheDesc}: ${error.message || 'Unknown server error.'}`);
+            }
+
+            // --- Step B: Save to Firestore ---
+            try {
+                 fMyConsoleLog(`      -> B. Saving ${cacheDesc} to Firestore...`);
+                 const saveResult = await new Promise((resolve, reject) => {
+                     google.script.run
+                         .withSuccessHandler(resolve)
+                         .withFailureHandler(reject)
+                         .fSrvSaveFullSheetTextAndTagsToFirestore(gIndex, workbookAbr, sheetName, loadedData);
+                 });
+                 // Validate response
+                 if (!saveResult || !saveResult.success) {
+                    throw new Error(saveResult?.message || `Unknown error saving ${cacheDesc} to Firestore.`);
+                 }
+                 fMyConsoleLog(`         -> ✅ Successfully saved ${cacheDesc} to Firestore.`);
+            } catch (error) {
+                console.error(`Error saving ${cacheDesc} to Firestore:`, error);
+                throw new Error(`Failed to save ${cacheDesc} to Firestore: ${error.message || 'Unknown server error.'}`);
+            }
+
+            // --- Step C: Read back from Firestore ---
+            try {
+                fMyConsoleLog(`      -> C. Reading ${cacheDesc} back from Firestore...`);
+                 const response = await new Promise((resolve, reject) => {
+                    google.script.run
+                        .withSuccessHandler(resolve)
+                        .withFailureHandler(reject)
+                        .fSrvGetFirestoreFSData(workbookAbr, sheetName, gIndex);
+                });
+                // Validate response
+                if (response.success && response.FSData &&
+                    typeof response.FSData.colTagsMap === 'object' &&
+                    typeof response.FSData.rowTagsMap === 'object' &&
+                    Array.isArray(response.FSData.text))
+                {
+                    fsData = response.FSData; // Store data for Step 4
+                    fMyConsoleLog(`         -> ✅ Successfully read ${cacheDesc} back from Firestore.`);
+                } else {
+                    throw new Error(response.message || `Invalid FSData structure returned for ${cacheDesc} after update.`);
+                }
+            } catch (error) {
+                 console.error(`Error reading ${cacheDesc} from Firestore after update:`, error);
+                 throw new Error(`Failed to read ${cacheDesc} from Firestore after update: ${error.message || 'Unknown server error.'}`);
+            }
+
+        } else {
+            // --- Invalid workbookAbr ---
+            throw new Error(`Invalid workbookAbr provided: "${workbookAbr}"`);
+        }
+
+        // === 4. Populate gUI Cache ===
+        // This step is reached only if the appropriate path above succeeded and fsData is populated
+        gUI[gUIKey] = fsData;
+        fMyConsoleLog(`   -> Updated gUI cache key: ${gUIKey}`);
+
+        // === 5. Character Info Update (Common Logic) ===
+        if (gUIKey === 'myCsRaceClassFSData') {
+            fMyConsoleLog("      -> Triggering fPopulateGuiCharacterInfo...");
+            const populateSuccess = fPopulateGuiCharacterInfo();
+            if (!populateSuccess) {
+                // fPopulateGuiCharacterInfo logs its own errors
+                throw new Error("Failed to populate gUI.characterInfo after updating RaceClass cache.");
+            }
+            fMyConsoleLog("         -> ✅ Successfully populated character info.");
+        }
+
+        // === 6. Final Success ===
+        fMyConsoleLog(`✅ ${funcName}: Successfully refreshed ${cacheDesc}.`);
+        return true;
+
+    } catch (error) {
+        // === Catch errors thrown from any step ===
+        const errorMsg = `Error during ${funcName} for ${cacheDesc}: ${error.message || 'Unknown error'}`;
+        console.error(errorMsg, error);
+        fMyConsoleLog(`❌ ${errorMsg}`);
+        await fShowMessage(`❌ Error refreshing ${cacheDesc}:<br>${error.message || 'Unknown error'}`);
+        return false; // Indicate failure
+    }
+
+} // END fRefreshAndCacheOneFSData
 
 
 
