@@ -6468,11 +6468,11 @@ function fSetupMenuInteractivity() {
 // fOnCSGameDataLoaded ///////////////////////////////////////////////////////////////////
 // Purpose -> Callback executed after initial Sheet data retrieval (fSrvReadCSGameSheet).
 //            Validates sheet data, checks Firestore for overriding gUI.arr data,
-//            then initiates the fetching of character info (with Firestore override)
-//            and subsequent grid rendering.
+//            then initiates the fetching of background caches (which now includes
+//            populating character info) and subsequent grid rendering.
 // Inputs  -> data (Object): The structured data object from the server { arr, format, notesArr }.
 // Outputs -> None (Initiates subsequent data loading and UI rendering).
-function fOnCSGameDataLoaded(data) {
+async function fOnCSGameDataLoaded(data) { // <<< MADE ASYNC
     fMyConsoleLog("✅ Initial Sheet Data received from server");
 
     // === 1. Validate and Store Initial Sheet Data ===
@@ -6488,14 +6488,24 @@ function fOnCSGameDataLoaded(data) {
     fMyConsoleLog("⚙️ Checking Firestore for saved Grid (gUI.arr) data...");
     if (!gIndex.Email || !gIndex.CSID) {
         fMyConsoleLog("   -> ⚠️ Skipping Firestore gUI.arr check: Missing Email or CSID.");
-        // Proceed using Sheet data, then fetch Character Info
-        fSetupTooltipAndModal();
-        fFetchRaceClassInfoAndRenderGrid(); // Fetch char info (will use sheet data as base)
-        return;
+        // --->>> Setup UI elements needed before cache fetch (Tooltip, Modal) <<<---
+        fSetupTooltipAndModal(); // Setup tooltip/modal refs needed by hover listeners etc.
+
+        // --->>> Call Background Cache Fetch (which now populates char info) <<<---
+        fMyConsoleLog("   -> Proceeding to fetch background caches (skipped Firestore arr check)...");
+        const cachesLoaded = await fCacheFSData(); // Await the cache loading process
+
+        // --->>> Render Grid (if caches loaded) <<<---
+        if (cachesLoaded) {
+            fRenderGridWithFinalData(); // Render only if caches (and char info population) succeed
+        }
+        // If cachesLoaded is false, fCacheFSData already showed error and halted.
+        return; // Exit this path
     }
 
+    // If Email/CSID exist, proceed with Firestore check for gUI.arr
     google.script.run
-        .withSuccessHandler((firestoreResponse) => {
+        .withSuccessHandler(async (firestoreResponse) => { // <<< MAKE ASYNC
             let usingFirestoreArr = false;
             if (firestoreResponse && firestoreResponse.success === true && firestoreResponse.firestoreArr) {
                 // Firestore data exists and is valid
@@ -6509,21 +6519,36 @@ function fOnCSGameDataLoaded(data) {
                 // gUI.arr already contains Sheet data, no action needed
             }
 
-            // === 3. Proceed with Character Info Fetch & Grid Render ===
-            // This now runs *after* the Firestore check for gUI.arr completes.
-            fSetupTooltipAndModal();
-            fFetchRaceClassInfoAndRenderGrid(); // Fetch char info (will check Firestore for override)
+            // === 3. Proceed with UI Setup, Cache Fetch & Grid Render ===
+            fSetupTooltipAndModal(); // Setup tooltip/modal refs
+
+            fMyConsoleLog("   -> Proceeding to fetch background caches...");
+            const cachesLoaded = await fCacheFSData(); // Await the cache loading process
+
+            if (cachesLoaded) {
+                fRenderGridWithFinalData(); // Render only if caches (and char info population) succeed
+            }
+            // If cachesLoaded is false, fCacheFSData already showed error and halted.
 
         })
-        .withFailureHandler((error) => {
+        .withFailureHandler(async (error) => { // <<< MAKE ASYNC
             // Handle transport errors calling fSrvCheckAndLoadFirestoreGUIarrAs2D
             const errorMsg = `Error checking Firestore for Grid data: ${error.message}`;
             console.error(errorMsg, error);
             fMyConsoleLog(`   -> ❌ ${errorMsg}. Using Sheet data for gUI.arr as fallback.`);
 
-            // Proceed using Sheet data despite the check failure
-            fSetupTooltipAndModal();
-            fFetchRaceClassInfoAndRenderGrid(); // Fetch char info (will use sheet data as base)
+            // --->>> Setup UI elements needed before cache fetch (Tooltip, Modal) <<<---
+            fSetupTooltipAndModal(); // Setup tooltip/modal refs needed by hover listeners etc.
+
+            // --->>> Call Background Cache Fetch (using Sheet arr data) <<<---
+            fMyConsoleLog("   -> Proceeding to fetch background caches (Firestore arr check failed)...");
+            const cachesLoaded = await fCacheFSData(); // Await the cache loading process
+
+            // --->>> Render Grid (if caches loaded) <<<---
+            if (cachesLoaded) {
+                fRenderGridWithFinalData(); // Render only if caches (and char info population) succeed
+            }
+            // If cachesLoaded is false, fCacheFSData already showed error and halted.
         })
         .fSrvCheckAndLoadFirestoreGUIarrAs2D(gIndex); // Pass Email and CSID
 
@@ -6533,12 +6558,13 @@ function fOnCSGameDataLoaded(data) {
 
 
 // fCacheFSData //////////////////////////////////////////////////////
-// Purpose -> Fetches essential background definition data (Abilities, Crit, Gear, etc.)
-//            from Firestore in parallel after the main sheet loads. Stores results
-//            in gUI...FSData properties. Halts app load on critical fetch failure.
+// Purpose -> Fetches essential background definition data (Elements, Abilities, Crit,
+//            Gear, RaceClass, List, MyAbilities) from Firestore in parallel.
+//            Stores results in gUI...FSData properties. Calls fPopulateGuiCharacterInfo
+//            after RaceClass data is loaded. Halts app load on critical fetch failure.
 // Inputs  -> None.
-// Outputs -> (Promise<Boolean>): Resolves true if all critical caches loaded successfully,
-//            false otherwise (after showing error message).
+// Outputs -> (Promise<Boolean>): Resolves true if all critical caches loaded successfully
+//            AND character info was populated, false otherwise.
 async function fCacheFSData() {
     const funcName = "fCacheFSData";
     fMyConsoleLog(`⚙️ ${funcName}: Fetching background data caches from Firestore...`);
@@ -6548,10 +6574,10 @@ async function fCacheFSData() {
       { workbookAbr: 'DB', sheetName: 'Abilities', gUIKey: 'dbAbilitiesFSData' },
       { workbookAbr: 'DB', sheetName: 'Crit',      gUIKey: 'dbCritFSData' },
       { workbookAbr: 'DB', sheetName: 'Gear',      gUIKey: 'dbGearFSData' },
+      { workbookAbr: 'MyCS', sheetName: 'RaceClass',    gUIKey: 'myCsRaceClassFSData' },
       { workbookAbr: 'MyCS', sheetName: 'List',    gUIKey: 'myCsListFSData' },
       { workbookAbr: 'MyKL', sheetName: 'MyAbilities', gUIKey: 'myKlMyAbilitiesFSData' }
     ];
-    // Removed rangeObject definition
 
     try {
         // Create an array of promises for all fetches
@@ -6567,8 +6593,8 @@ async function fCacheFSData() {
                     .withFailureHandler(error => {
                          // Attach config info to the error for easier handling later
                         reject({ error, config });
-                    })
-                    // Call the simplified function without rangeObject
+                     })
+                    // Call the server function to get data
                     .fSrvGetFirestoreFSData(config.workbookAbr, config.sheetName, gIndex);
             });
         });
@@ -6580,12 +6606,14 @@ async function fCacheFSData() {
 
         // Process the results
         let allSucceeded = true; // Assume success initially
+        let characterInfoPopulated = false; // Track if helper was called successfully
+
         for (const result of results) {
             if (result.status === 'fulfilled') {
                 const response = result.value;
                 const config = response.config; // Get config back
 
-                // Validate response structure now expects FSData directly
+                // Validate response structure expects FSData directly
                 if (response.success && response.FSData &&
                     typeof response.FSData.colTagsMap === 'object' && // Check required FSData props
                     typeof response.FSData.rowTagsMap === 'object' &&
@@ -6593,34 +6621,51 @@ async function fCacheFSData() {
                 {
                     // Store successful data (the FSData object)
                     gUI[config.gUIKey] = response.FSData;
-                    fMyConsoleLog(`      -> ✅ Successfully loaded cache: ${config.workbookAbr}/${config.sheetName}`);
+                    fMyConsoleLog(`      -> ✅ Successfully loaded cache: ${config.gUIKey} (${config.workbookAbr}/${config.sheetName})`);
+
+                    // --- ADDED: Call helper after RaceClass cache is loaded ---
+                    if (config.gUIKey === 'myCsRaceClassFSData') {
+                        fMyConsoleLog(`      -> Triggering fPopulateGuiCharacterInfo...`);
+                        const populateSuccess = fPopulateGuiCharacterInfo();
+                        if (!populateSuccess) {
+                             // If helper fails, throw to halt the process
+                             throw new Error("Failed to populate gUI.characterInfo from RaceClass cache.");
+                        }
+                        characterInfoPopulated = true; // Mark as successful
+                    }
+                    // --- END ADDED BLOCK ---
+
                 } else {
                     // Server call succeeded but returned success: false or invalid data
                     allSucceeded = false;
-                    const errorMessage = `Failed to load critical cache: ${config.workbookAbr}/${config.sheetName}. Reason: ${response.message || 'Invalid FSData structure received.'}`;
+                    const errorMessage = `Failed to load critical cache: ${config.gUIKey} (${config.workbookAbr}/${config.sheetName}). Reason: ${response.message || 'Invalid FSData structure received.'}`;
                     fMyConsoleLog(`      -> ❌ ${errorMessage}`);
-                    // Throw immediately to halt loading (Option A)
-                    throw new Error(errorMessage);
+                    throw new Error(errorMessage); // Halt loading
                 }
             } else {
                 // Promise was rejected (likely a transport error)
                 allSucceeded = false;
                 const config = result.reason.config; // Get config from rejected reason
                 const error = result.reason.error; // Get error object
-                const errorMessage = `Failed to load critical cache: ${config.workbookAbr}/${config.sheetName}. Reason: ${error.message || 'Unknown server communication error.'}`;
+                const errorMessage = `Failed to load critical cache: ${config.gUIKey} (${config.workbookAbr}/${config.sheetName}). Reason: ${error.message || 'Unknown server communication error.'}`;
                 fMyConsoleLog(`      -> ❌ ${errorMessage}`);
-                console.error(`Error details for ${config.workbookAbr}/${config.sheetName}:`, error);
-                // Throw immediately to halt loading (Option A)
-                throw new Error(errorMessage);
+                console.error(`Error details for ${config.gUIKey} (${config.workbookAbr}/${config.sheetName}):`, error);
+                throw new Error(errorMessage); // Halt loading
             }
         } // End loop through results
 
+        // Final check: Ensure character info was populated (it should be if myCsRaceClassFSData loaded)
+        if (!characterInfoPopulated) {
+            // This case should be rare if the myCsRaceClassFSData load succeeded but the post-processing failed
+             throw new Error("Cache loading completed, but character info population failed.");
+        }
+
         // If loop completes without throwing, all caches loaded successfully
-        fMyConsoleLog(`✅ ${funcName}: All background caches loaded successfully.`);
-        return true;
+        fMyConsoleLog(`✅ ${funcName}: All background caches loaded & character info populated successfully.`);
+        return true; // Return true only if all critical steps succeeded
 
     } catch (error) {
-        // Catch errors thrown during result processing (or unexpected errors)
+        // Catch errors thrown during result processing or unexpected errors
         fMyConsoleLog(`❌ ${funcName}: Critical error during cache loading: ${error.message}`);
         await fShowMessage(`❌ Critical Error: ${error.message}<br><br>App loading halted.`); // Show error
         return false; // Indicate failure
@@ -6629,130 +6674,97 @@ async function fCacheFSData() {
 
 
 
-// fFetchRaceClassInfoAndRenderGrid //////////////////////////////////////////
-// Purpose -> Fetches initial character header data from the Sheet, then checks
-//            Firestore for potentially overriding character info data. Finally,
-//            fetches background cache data before initiating grid rendering.
-// Inputs  -> None.
-// Outputs -> None (Initiates server calls, cache fetches, then rendering).
-async function fFetchRaceClassInfoAndRenderGrid() { // <<< MAKE ASYNC
-    fMyConsoleLog("⚙️ Requesting Initial Character Header Data from Sheet...");
-    // --- 1. Fetch Initial Header Data from Sheet ---
-    google.script.run
-        .withSuccessHandler(async (sheetHeaderData) => { // <<< MAKE HANDLER ASYNC
-            fMyConsoleLog("✅ Initial Character Header Data received from Sheet.");
 
-            // --- Store Initial Sheet Data (or defaults) ---
-            if (sheetHeaderData && typeof sheetHeaderData === 'object' && !sheetHeaderData.error) {
-                gUI.characterInfo = {
-                    slotNum: sheetHeaderData.slotNum ?? null,
-                    raceClass: sheetHeaderData.raceClass ?? '',
-                    level: sheetHeaderData.level ?? '',
-                    playerName: sheetHeaderData.playerName ?? '',
-                    charName: sheetHeaderData.charName ?? ''
-                };
-                fMyConsoleLog(`   -> Stored Initial Sheet Header Data: ${JSON.stringify(gUI.characterInfo)}`);
-                // Initial validation of Slot# from Sheet (warn but don't block yet)
-                if (!gUI.characterInfo.slotNum) {
-                    const slotErrorMsg = "⚠️ Warning: Invalid or missing Slot # found on RaceClass tab (Sheet data).";
-                    fMyConsoleLog(`   -> ${slotErrorMsg}`);
-                    // Show non-blocking message
-                    fShowMessage(slotErrorMsg).catch(e => console.error("Error showing message:", e));
-                }
-            } else {
-                // Handle error case from server function fetching Sheet data
-                const errMsg = sheetHeaderData?.message || "Invalid header data structure received from Sheet.";
-                console.error("Error fetching sheet header data:", errMsg, sheetHeaderData);
-                fMyConsoleLog(`❌ Failed to fetch/store initial header data from Sheet: ${errMsg}`);
-                fShowMessage(`Error fetching character header data from Sheet: ${errMsg}`).catch(e => console.error("Error showing message:", e));
-                // Set default blank info
-                gUI.characterInfo = { slotNum: null, raceClass: '', level: '', playerName: '', charName: '' };
+// fPopulateGuiCharacterInfo ///////////////////////////////////////////////////////
+// Purpose -> Reads data from the gUI.myCsRaceClassFSData cache and populates
+//            the gUI.characterInfo object. Called by fCacheFSData.
+// Inputs  -> None (Reads gUI.myCsRaceClassFSData).
+// Outputs -> (Boolean): True if population is successful, false otherwise.
+function fPopulateGuiCharacterInfo() {
+    const funcName = "fPopulateGuiCharacterInfo";
+    fMyConsoleLog(`   -> ${funcName}: Populating gUI.characterInfo from cache...`);
+
+    // === 1. Validate Cache ===
+    const cache = gUI.myCsRaceClassFSData;
+    const cacheKey = 'gUI.myCsRaceClassFSData';
+    if (!cache || !cache.text || !Array.isArray(cache.text) ||
+        !cache.rowTagsMap || typeof cache.rowTagsMap !== 'object' ||
+        !cache.colTagsMap || typeof cache.colTagsMap !== 'object') {
+        const errorMsg = `Cannot populate Character Info: Required cache ${cacheKey} is not loaded or invalid.`;
+        console.error(`${funcName}: ${errorMsg}`);
+        fMyConsoleLog(`      -> ❌ ${funcName} Error: ${errorMsg}`);
+        // No fShowMessage here, rely on fCacheFSData caller to handle failure
+        return false;
+    }
+
+    // === 2. Resolve Tags ===
+    const requiredRowTags = ['RC', 'level', 'playerName', 'charName', 'slot'];
+    const requiredColTag = 'Val';
+    const indices = {};
+    let missingTag = null;
+
+    indices.Val = cache.colTagsMap[requiredColTag];
+    if (indices.Val === undefined || isNaN(indices.Val)) missingTag = requiredColTag;
+
+    requiredRowTags.forEach(tag => {
+        if (!missingTag) { // Don't bother resolving rows if column failed
+            indices[tag] = cache.rowTagsMap[tag];
+            if (indices[tag] === undefined || isNaN(indices[tag])) {
+                missingTag = tag;
             }
+        }
+    });
 
-            // --- 2. Check Firestore for Overriding Character Info ---
-            fMyConsoleLog("⚙️ Checking Firestore for saved Character Info data...");
-            if (!gIndex.Email || !gIndex.CSID) {
-                fMyConsoleLog("   -> ⚠️ Skipping Firestore Character Info check: Missing Email or CSID.");
+    if (missingTag) {
+        const errorMsg = `Cannot populate Character Info: Required tag '${missingTag}' not found in ${cacheKey} maps.`;
+        console.error(`${funcName}: ${errorMsg}`);
+        fMyConsoleLog(`      -> ❌ ${funcName} Error: ${errorMsg}`);
+        return false;
+    }
+    fMyConsoleLog(`      -> All required tags resolved in ${cacheKey}.`);
 
-                // --->>> Call Background Cache Fetch <<<---
-                fMyConsoleLog("   -> Proceeding to fetch background caches (skipped Firestore char info check)...");
-                const cachesLoaded = await fCacheFSData();
-                if (!cachesLoaded) return; // Halt if caches fail
+    // === 3. Extract Raw Values ===
+    const cVal = indices.Val;
+    const rawRC = cache.text?.[indices.RC]?.[cVal];
+    const rawLevel = cache.text?.[indices.level]?.[cVal];
+    const rawPlayerName = cache.text?.[indices.playerName]?.[cVal];
+    const rawCharName = cache.text?.[indices.charName]?.[cVal];
+    const rawSlot = cache.text?.[indices.slot]?.[cVal];
 
-                // --->>> Render Grid (Finally!) <<<---
-                fRenderGridWithFinalData(); // Call helper to render
-                return; // Exit this path
-            }
+    // === 4. Process Values ===
+    const raceClass = String(rawRC ?? '').trim();
+    const level = String(rawLevel ?? '').trim();
+    const playerName = String(rawPlayerName ?? '').trim().split(' ')[0] || '';
+    const charName = String(rawCharName ?? '').trim().split(' ')[0] || '';
 
-            google.script.run
-                .withSuccessHandler(async (firestoreResponse) => { // <<< MAKE HANDLER ASYNC
-                    if (firestoreResponse && firestoreResponse.success === true && firestoreResponse.characterInfo) {
-                        // Firestore character info exists and is valid
-                        fMyConsoleLog("   -> ✅ Firestore Character Info found. Overwriting gUI.characterInfo.");
-                        gUI.characterInfo = firestoreResponse.characterInfo; // Use Firestore data
-                        // Re-validate Slot# from Firestore data
-                        if (!gUI.characterInfo.slotNum) {
-                            const slotErrorMsg = "⚠️ Warning: Invalid or missing Slot # found in Firestore Character Info data.";
-                            fMyConsoleLog(`   -> ${slotErrorMsg}`);
-                            fShowMessage(slotErrorMsg).catch(e => console.error("Error showing message:", e));
-                        }
-                        fMyConsoleLog(`   -> Final Character Info (from Firestore): ${JSON.stringify(gUI.characterInfo)}`);
-                    } else {
-                        // Firestore data not found or error
-                        const reason = firestoreResponse?.message || "Reason unknown.";
-                        fMyConsoleLog(`   -> ℹ️ Firestore Character Info check returned false (${reason}). Using Sheet data.`);
-                        // gUI.characterInfo already holds Sheet data, no action needed
-                        fMyConsoleLog(`   -> Final Character Info (from Sheet): ${JSON.stringify(gUI.characterInfo)}`);
-                    }
+    // --- Slot Processing ---
+    let slotNum = null;
+    const slotString = String(rawSlot ?? '').trim();
+    const slotRegex = /^Slot\s+([1-9])$/i;
+    const match = slotString.match(slotRegex);
+    if (match && match[1]) {
+        slotNum = `Slot${match[1]}`; // Cleaned slot number
+    } else if (slotString !== '') { // Log warning only if it wasn't blank
+        fMyConsoleLog(`      -> ⚠️ ${funcName}: Invalid Slot format found in cache: "${slotString}". Storing null.`);
+        // Optional: Show non-blocking message?
+        // fShowMessage(`Warning: Invalid Slot# ("${slotString}") found in saved RaceClass data.`).catch(e => {});
+    }
+    // slotNum remains null if blank or invalid
 
-                    // --->>> Call Background Cache Fetch <<<---
-                    fMyConsoleLog("   -> Proceeding to fetch background caches...");
-                    const cachesLoaded = await fCacheFSData();
-                    if (!cachesLoaded) return; // Halt if caches fail
+    // === 5. Update gUI.characterInfo ===
+    gUI.characterInfo = {
+        slotNum: slotNum,
+        raceClass: raceClass,
+        level: level,
+        playerName: playerName,
+        charName: charName
+    };
 
-                    // --->>> Render Grid (Finally!) <<<---
-                    fRenderGridWithFinalData(); // Call helper to render
+    fMyConsoleLog(`   -> ✅ Successfully populated gUI.characterInfo: ${JSON.stringify(gUI.characterInfo)}`);
+    return true;
 
-                })
-                .withFailureHandler(async (error) => { // <<< MAKE HANDLER ASYNC
-                    // Handle transport errors calling fSrvLoadCharacterInfoFromFirestore
-                    const errorMsg = `Error checking Firestore for Character Info: ${error.message}`;
-                    console.error(errorMsg, error);
-                    fMyConsoleLog(`   -> ❌ ${errorMsg}. Using Sheet data for Character Info as fallback.`);
+} // END fPopulateGuiCharacterInfo
 
-                    // --->>> Call Background Cache Fetch <<<---
-                    // Proceed using Sheet data despite the check failure
-                    fMyConsoleLog("   -> Proceeding to fetch background caches (Firestore char info check failed)...");
-                    const cachesLoaded = await fCacheFSData();
-                    if (!cachesLoaded) return; // Halt if caches fail
-
-                    // --->>> Render Grid (Finally!) <<<---
-                    fRenderGridWithFinalData(); // Call helper to render
-                })
-                .fSrvLoadCharacterInfoFromFirestore(gIndex); // Pass Email and CSID
-
-        })
-        .withFailureHandler(async (error) => { // <<< MAKE HANDLER ASYNC
-            // Handle transport errors fetching INITIAL Sheet header data
-            const errorMsg = `Failed to call server for initial Sheet header data: ${error.message}`;
-            console.error(errorMsg, error);
-            fMyConsoleLog(`❌ ${errorMsg}`);
-            fShowMessage(`Error fetching character header data from Sheet: ${error.message}`).catch(e => console.error("Error showing message:", e));
-
-            // Set default blank info and proceed to cache load / render
-            gUI.characterInfo = { slotNum: null, raceClass: '', level: '', playerName: '', charName: '' };
-
-            // --->>> Call Background Cache Fetch <<<---
-            fMyConsoleLog("   -> Proceeding to fetch background caches (initial sheet header fetch failed)...");
-            const cachesLoaded = await fCacheFSData();
-            if (!cachesLoaded) return; // Halt if caches fail
-
-            // --->>> Render Grid (Finally!) <<<---
-            fRenderGridWithFinalData(); // Call helper to render
-        })
-        .fSrvGetURLToPlayerCharForGMScreen(gIndex.CSID); // Fetch initial data from Sheet
-
-} // END fFetchRaceClassInfoAndRenderGrid
 
 
 
