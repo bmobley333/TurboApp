@@ -1746,22 +1746,19 @@ function fProcessAbilityChange(r, c, newValue, oldValue) {
     // --- Dispatch based on new value ---
     if (newValueStr === '') {
         // Scenario 1: New value is empty - call helper to clear row
-        fHandleClearAbilityRow(r);
+        fHandleClearAbilityRow(r); // Uses default saveAbilityNameID = false
         // Recalculate Enc/MR AFTER clearing the row
         fCalculatesEnc_MR_AP();
     } else {
         // Scenario 2: New value is not empty - Process data from relevant sources using caches
-        fHandleClearAbilityRow(r); // Sets defaults. REQUIRED here!
+        fHandleClearAbilityRow(r, true); // Clears fields BUT preserves 'Ability' name
         fMyConsoleLog(`   -> ${funcName}: New Ability/Gear selected: "${newValueStr}". Processing caches...`);
-
         // Set loading indicator (will be cleared by fSaveNewAbilityToAbilTbl)
         fSetGridValue(r, 'Sk1', '⏳');
-
         // Call handlers synchronously - they now read from cache
         const dbAbilityResult = fHandleNewAbilitySelection('DB', 'Abilities', r, newValueStr);
         const klMyAbilitiesResult = fHandleNewAbilitySelection('MyKL', 'MyAbilities', r, newValueStr);
         const dbGearResult = fHandleNewAbilitySelection('DB', 'Gear', r, newValueStr);
-
         // Check for critical errors during cache access/processing within handlers
         if (dbAbilityResult === null || klMyAbilitiesResult === null || dbGearResult === null) {
              fMyConsoleLog(`--> ❌ ${funcName}: Critical error occurred during cache processing for row ${r}. Halting.`);
@@ -1773,7 +1770,6 @@ function fProcessAbilityChange(r, c, newValue, oldValue) {
 
         // Log individual outcomes based on the 'found' flag
         fMyConsoleLog(`   -> ${funcName}: Cache Processing Results - DB Ability Found: ${dbAbilityResult.found}, KL MyAbil Found: ${klMyAbilitiesResult.found}, DB Gear Found: ${dbGearResult.found}`);
-
         // Check if we have *at least* Ability OR Gear dataRow to proceed
         const hasAbilityData = dbAbilityResult.found || klMyAbilitiesResult.found;
         const hasGearData = dbGearResult.found;
@@ -1792,7 +1788,6 @@ function fProcessAbilityChange(r, c, newValue, oldValue) {
 
         // Recalculate Enc/MR AFTER saving the new data
         fCalculatesEnc_MR_AP();
-
     } // End else (newValueStr !== '')
 
 } // END fProcessAbilityChange
@@ -1801,22 +1796,35 @@ function fProcessAbilityChange(r, c, newValue, oldValue) {
 
 // fHandleClearAbilityRow //////////////////////////////////////////////////////
 // Purpose -> Helper function to clear relevant cells in a grid row when an
-//            Ability selection is removed (set to empty).
+//            Ability selection is removed (set to empty) or when preparing for
+//            a new selection (optionally preserving the Ability name).
 // Inputs  -> r (Number): Row index to clear.
+//         -> saveAbilityNameID (Boolean): Optional. If true, preserves the 'Ability'
+//                                         cell value. Defaults to false (clears 'Ability').
 // Outputs -> None (Modifies grid via fSetGridValue, calls auto-save).
-function fHandleClearAbilityRow(r) {
+function fHandleClearAbilityRow(r, saveAbilityNameID = false) {
     const funcName = 'fHandleClearAbilityRow';
-    fMyConsoleLog(`   -> ${funcName}: Clearing row ${r}...`);
+    fMyConsoleLog(`   -> ${funcName}: Clearing row ${r}${saveAbilityNameID ? ' (preserving Ability Name)' : ''}...`);
     let clearSuccess = true; // Note: check based on fSetGridValue return is likely flawed
 
     // Clear cells needing empty string
     // Assumes gUI.list.clearAbilityColTags_EmptyString is defined and populated
     const colsToClearEmpty = gUI.list?.clearAbilityColTags_EmptyString || [];
     colsToClearEmpty.forEach(tag => {
-        // Note: This check assumes fSetGridValue returns boolean, which it might not.
-        if (!fSetGridValue(r, tag, '')) { // Set to empty string
-            fMyConsoleLog(`     -> (Check Warning) Failed check for clearing column '${tag}' for row ${r}.`);
-            // clearSuccess = false; // Commented out: Unreliable check
+        let shouldClear = true;
+        // --- MODIFIED LOGIC ---
+        if (tag === 'Ability' && saveAbilityNameID) {
+             shouldClear = false; // Don't clear Ability name if flag is true
+             fMyConsoleLog(`     -> Skipping clear for column '${tag}' due to saveAbilityNameID=true.`);
+        }
+        // --- END MODIFIED LOGIC ---
+
+        if (shouldClear) {
+            // Note: This check assumes fSetGridValue returns boolean, which it might not.
+            if (!fSetGridValue(r, tag, '')) { // Set to empty string
+                fMyConsoleLog(`     -> (Check Warning) Failed check for clearing column '${tag}' for row ${r}.`);
+                // clearSuccess = false; // Commented out: Unreliable check
+            }
         }
     });
 
@@ -5463,30 +5471,26 @@ function fHandleGridButtonClick(event, buttonImg) {
                 // Optional: fShowMessage("Error: Could not find the main Roll button.");
             }
             break;
-
         case 'action-refreshData':
-            // Placeholder for future refresh logic
-            console.log("ACTION: Refresh Data button clicked (logic pending)");
-             fMyConsoleLog("   -> Refresh Data action (pending implementation).");
-           // await fFetchFullData(); // Example future call
+            fMyConsoleLog("   -> Refresh Data action triggered.");
+            fTotalRereshOfAllAbilitiesAndAllGear(); // <<< ADDED CALL
             break;
-
         case 'action-jumpTop':
             fScrollGridToTop(grid); // Scroll grid viewport to top
             break;
-
         case 'action-jumpBottom':
             fScrollGridToBottom(grid); // Scroll grid viewport to bottom (Gear section)
             break;
-
         case 'action-showMonsters':
             fRefreshMonsterData(); // Refresh monster data from sheet
             break;
-
         default:
             console.warn(`Unhandled header button action: ${action}`);
+            fShowMessage(`Action "${action}" not yet implemented.`); // Show message for unhandled
     }
 } // END fHandleGridButtonClick
+
+
 
 
 // fScrollGridToTop ////////////////////////////////////////////////////////////////
@@ -5624,6 +5628,120 @@ async function fRefreshMonsterData() {
         .fSrvGetSheetRangeDataNTags('db', 'GMScreen', gmMonsterRangeDef);
 
 } // END fRefreshMonsterData
+
+
+
+
+// fTotalRereshOfAllAbilitiesAndAllGear ////////////////////////////////////////
+// Purpose -> (Stage 1) Iterates through Ability/Gear table rows, validating the 'Ability'
+//            cell content against the myCsListFSData cache. Clears rows with empty
+//            'Ability' cells, invalid extracted IDs, or IDs not found in the list cache.
+// Inputs  -> None (Relies on gUI state).
+// Outputs -> (Promise<void>): Implicitly returns promise due to async calls like fShowMessage.
+// Note    -> This is Stage 1. Later stages will populate valid rows with data.
+async function fTotalRereshOfAllAbilitiesAndAllGear() {
+    const funcName = "fTotalRereshOfAllAbilitiesAndAllGear";
+    fMyConsoleLog(`🔄 ${funcName} (Stage 1 - Validation/Clear): Starting...`);
+
+    // --- 1. Get Target Ranges ---
+    const abilityGearRanges = gUI.range?.entireAbiliyNGearTables;
+    if (!Array.isArray(abilityGearRanges) || abilityGearRanges.length === 0) {
+        fMyConsoleLog(`   -> ❌ Error: Range definition 'gUI.range.entireAbiliyNGearTables' is missing or empty.`);
+        // Consider fShowMessage here if needed
+        return;
+    }
+
+    // --- 2. Validate myCsListFSData Cache & Get Column Index ---
+    const listCache = gUI.myCsListFSData;
+    const listCacheKey = 'gUI.myCsListFSData';
+    const listColTag = 'AbilitiesNameID';
+    let abilitiesNameIdColIndex = -1;
+
+    if (!listCache || !listCache.text || !Array.isArray(listCache.text) ||
+        !listCache.colTagsMap || typeof listCache.colTagsMap !== 'object') {
+        fMyConsoleLog(`   -> ❌ Error: Required cache ${listCacheKey} is not loaded or invalid.`);
+        // Consider fShowMessage here if needed
+        return; // Cannot perform validation
+    }
+    abilitiesNameIdColIndex = listCache.colTagsMap[listColTag];
+    if (abilitiesNameIdColIndex === undefined || abilitiesNameIdColIndex === null || isNaN(abilitiesNameIdColIndex)) {
+        fMyConsoleLog(`   -> ❌ Error: Column tag '${listColTag}' not found in ${listCacheKey}.colTagsMap.`);
+        // Consider fShowMessage here if needed
+        return; // Cannot perform validation
+    }
+    fMyConsoleLog(`   -> Validated ${listCacheKey} and found '${listColTag}' at index ${abilitiesNameIdColIndex}.`);
+
+    // --- 3. Iterate Through Grid Ranges ---
+    let rowsProcessed = 0;
+    let rowsCleared = 0;
+
+    for (const range of abilityGearRanges) {
+        if (!fDoesObjectHaveR1C1R2C2Properties(range)) {
+            console.warn(`${funcName}: Skipping invalid range object in entireAbiliyNGearTables:`, range);
+            continue;
+        }
+        const resolved = fConvertsR1C1R2C2TagOrNumToIndices(range);
+        if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
+            console.warn(`${funcName}: Skipping range due to unresolved indices:`, range);
+            continue;
+        }
+        const rMin = Math.min(resolved.r1, resolved.r2);
+        const rMax = Math.max(resolved.r1, resolved.r2);
+
+        // --- 4. Iterate Through Rows in Range ---
+        for (let r = rMin; r <= rMax; r++) {
+            rowsProcessed++;
+            // --- 5. Inside Row Loop (Validation & Clearing) ---
+            const abilityNameId = fGetGridValue(r, 'Ability');
+
+            // Check 1: Empty Ability Cell
+            if (!abilityNameId) {
+                // Check if row *already* looks clear to avoid unnecessary calls/logging
+                const sk1Val = fGetGridValue(r, 'Sk1'); // Check a key value
+                if (sk1Val !== '' && sk1Val !== undefined && sk1Val !== false) { // Check if not already cleared
+                    fMyConsoleLog(`   -> Row ${r}: Clearing due to empty 'Ability' cell.`);
+                    fHandleClearAbilityRow(r); // Clears multiple fields, should call auto-save
+                    rowsCleared++;
+                }
+                continue; // Move to next row
+            }
+
+            // Extract the ID
+            const abilID = fGetIDFromNameID(abilityNameId);
+
+            // Check 2: Invalid ID
+            if (!abilID) {
+                fMyConsoleLog(`   -> Row ${r}: Clearing due to invalid ID extracted from "${abilityNameId}".`);
+                fHandleClearAbilityRow(r); // Clears multiple fields, should call auto-save
+                rowsCleared++;
+                continue; // Move to next row
+            }
+
+            // Check 3: ID not in myCsListFSData
+            let foundInList = false;
+            const listCacheText = listCache.text;
+            for (let list_R = 0; list_R < listCacheText.length; list_R++) {
+                const listValue = listCacheText[list_R]?.[abilitiesNameIdColIndex];
+                if (abilID === fGetIDFromNameID(listValue)) {
+                    foundInList = true;
+                    break; // Found it, no need to check further
+                }
+            }
+
+            if (!foundInList) {
+                fMyConsoleLog(`   -> Row ${r}: Clearing because ID "${abilID}" (from "${abilityNameId}") not found in ${listCacheKey}.`);
+                fHandleClearAbilityRow(r); // Clears multiple fields, should call auto-save
+                rowsCleared++;
+            }
+            // If foundInList is true, do nothing for this row in Stage 1
+        } // End row loop
+    } // End range loop
+
+    fMyConsoleLog(`✅ ${funcName} (Stage 1) Complete. Processed: ${rowsProcessed} rows, Cleared: ${rowsCleared} rows.`);
+    // Note: Auto-save is handled within fHandleClearAbilityRow
+
+} // END fTotalRereshOfAllAbilitiesAndAllGear
+
 
 
 
