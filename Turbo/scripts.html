@@ -5636,44 +5636,56 @@ async function fRefreshMonsterData() {
 // Purpose -> (Stage 1) Iterates through Ability/Gear table rows, validating the 'Ability'
 //            cell content against the myCsListFSData cache. Clears rows with empty
 //            'Ability' cells, invalid extracted IDs, or IDs not found in the list cache.
+//            (Stage 2) For rows that passed Stage 1, fetches static definition data
+//            from various caches, updates the grid, and triggers recalculations.
 // Inputs  -> None (Relies on gUI state).
 // Outputs -> (Promise<void>): Implicitly returns promise due to async calls like fShowMessage.
-// Note    -> This is Stage 1. Later stages will populate valid rows with data.
+// Note    -> Stage 1 handles validation/clearing. Stage 2 populates valid rows.
 async function fTotalRereshOfAllAbilitiesAndAllGear() {
     const funcName = "fTotalRereshOfAllAbilitiesAndAllGear";
-    fMyConsoleLog(`🔄 ${funcName} (Stage 1 - Validation/Clear): Starting...`);
+    fMyConsoleLog(`🔄 ${funcName}: Starting Full Ability/Gear Refresh...`);
 
-    // --- 1. Get Target Ranges ---
+    // --- 1. Get Target Ranges & Validate Caches ---
     const abilityGearRanges = gUI.range?.entireAbiliyNGearTables;
-    if (!Array.isArray(abilityGearRanges) || abilityGearRanges.length === 0) {
-        fMyConsoleLog(`   -> ❌ Error: Range definition 'gUI.range.entireAbiliyNGearTables' is missing or empty.`);
-        // Consider fShowMessage here if needed
-        return;
-    }
-
-    // --- 2. Validate myCsListFSData Cache & Get Column Index ---
     const listCache = gUI.myCsListFSData;
     const listCacheKey = 'gUI.myCsListFSData';
     const listColTag = 'AbilitiesNameID';
     let abilitiesNameIdColIndex = -1;
+    let requiredCacheMissing = false;
 
+    if (!Array.isArray(abilityGearRanges) || abilityGearRanges.length === 0) {
+        fMyConsoleLog(`   -> ❌ Error: Range definition 'gUI.range.entireAbiliyNGearTables' is missing or empty.`);
+        requiredCacheMissing = true;
+    }
     if (!listCache || !listCache.text || !Array.isArray(listCache.text) ||
         !listCache.colTagsMap || typeof listCache.colTagsMap !== 'object') {
         fMyConsoleLog(`   -> ❌ Error: Required cache ${listCacheKey} is not loaded or invalid.`);
-        // Consider fShowMessage here if needed
-        return; // Cannot perform validation
+        requiredCacheMissing = true;
+    } else {
+        abilitiesNameIdColIndex = listCache.colTagsMap[listColTag];
+        if (abilitiesNameIdColIndex === undefined || abilitiesNameIdColIndex === null || isNaN(abilitiesNameIdColIndex)) {
+            fMyConsoleLog(`   -> ❌ Error: Column tag '${listColTag}' not found in ${listCacheKey}.colTagsMap.`);
+            requiredCacheMissing = true;
+        }
     }
-    abilitiesNameIdColIndex = listCache.colTagsMap[listColTag];
-    if (abilitiesNameIdColIndex === undefined || abilitiesNameIdColIndex === null || isNaN(abilitiesNameIdColIndex)) {
-        fMyConsoleLog(`   -> ❌ Error: Column tag '${listColTag}' not found in ${listCacheKey}.colTagsMap.`);
-        // Consider fShowMessage here if needed
-        return; // Cannot perform validation
+    // Validate other necessary caches exist before starting the loop
+    if (!gUI.dbAbilitiesFSData || !gUI.myKlMyAbilitiesFSData || !gUI.dbElementsFSData || !gUI.dbGearFSData) {
+         fMyConsoleLog(`   -> ❌ Error: One or more required data caches (dbAbilities, myKlMyAbilities, dbElements, dbGear) are not loaded.`);
+         requiredCacheMissing = true;
     }
-    fMyConsoleLog(`   -> Validated ${listCacheKey} and found '${listColTag}' at index ${abilitiesNameIdColIndex}.`);
 
-    // --- 3. Iterate Through Grid Ranges ---
+    if (requiredCacheMissing) {
+         await fShowMessage("Error: Cannot perform refresh due to missing cache or range definitions. Please reload.");
+         return;
+    }
+    fMyConsoleLog(`   -> Validated ranges and caches. Found '${listColTag}' at index ${abilitiesNameIdColIndex}.`);
+
+    // --- 2. Iterate Through Grid Ranges (Stage 1 & 2) ---
     let rowsProcessed = 0;
     let rowsCleared = 0;
+    let rowsRefreshed = 0;
+    let refreshErrors = 0;
+    const nishRowResolved = fResolveRow('NishAtr_R'); // Resolve Nish row once
 
     for (const range of abilityGearRanges) {
         if (!fDoesObjectHaveR1C1R2C2Properties(range)) {
@@ -5688,57 +5700,148 @@ async function fTotalRereshOfAllAbilitiesAndAllGear() {
         const rMin = Math.min(resolved.r1, resolved.r2);
         const rMax = Math.max(resolved.r1, resolved.r2);
 
-        // --- 4. Iterate Through Rows in Range ---
+        // --- Iterate Through Rows in Range ---
         for (let r = rMin; r <= rMax; r++) {
             rowsProcessed++;
-            // --- 5. Inside Row Loop (Validation & Clearing) ---
+            let rowShouldBeCleared = false; // Flag for Stage 1 clearing
+            let abilID = null; // Store valid ID if found
+
+            // --- Stage 1: Validation & Clearing Logic ---
             const abilityNameId = fGetGridValue(r, 'Ability');
 
-            // Check 1: Empty Ability Cell
             if (!abilityNameId) {
-                // Check if row *already* looks clear to avoid unnecessary calls/logging
-                const sk1Val = fGetGridValue(r, 'Sk1'); // Check a key value
-                if (sk1Val !== '' && sk1Val !== undefined && sk1Val !== false) { // Check if not already cleared
+                const sk1Val = fGetGridValue(r, 'Sk1');
+                if (sk1Val !== '' && sk1Val !== undefined && sk1Val !== false) {
                     fMyConsoleLog(`   -> Row ${r}: Clearing due to empty 'Ability' cell.`);
-                    fHandleClearAbilityRow(r); // Clears multiple fields, should call auto-save
-                    rowsCleared++;
+                    rowShouldBeCleared = true;
+                } else {
+                    continue;
                 }
-                continue; // Move to next row
+            } else {
+                abilID = fGetIDFromNameID(abilityNameId);
+                if (!abilID) {
+                    fMyConsoleLog(`   -> Row ${r}: Clearing due to invalid ID extracted from "${abilityNameId}".`);
+                    rowShouldBeCleared = true;
+                } else {
+                    let foundInList = false;
+                    const listCacheText = listCache.text;
+                    for (let list_R = 0; list_R < listCacheText.length; list_R++) {
+                        const listValue = listCacheText[list_R]?.[abilitiesNameIdColIndex];
+                        if (abilID === fGetIDFromNameID(listValue)) {
+                            foundInList = true;
+                            break;
+                        }
+                    }
+                    if (!foundInList) {
+                        fMyConsoleLog(`   -> Row ${r}: Clearing because ID "${abilID}" (from "${abilityNameId}") not found in ${listCacheKey}.`);
+                        rowShouldBeCleared = true;
+                    }
+                }
             }
 
-            // Extract the ID
-            const abilID = fGetIDFromNameID(abilityNameId);
+            if (rowShouldBeCleared) {
+                fHandleClearAbilityRow(r);
+                rowsCleared++;
+                continue; // Skip Stage 2 for this row
+            }
 
-            // Check 2: Invalid ID
+            // --- Stage 2: Refresh Valid Row ---
             if (!abilID) {
-                fMyConsoleLog(`   -> Row ${r}: Clearing due to invalid ID extracted from "${abilityNameId}".`);
-                fHandleClearAbilityRow(r); // Clears multiple fields, should call auto-save
-                rowsCleared++;
-                continue; // Move to next row
+                console.warn(`${funcName}: Row ${r} was not cleared, but abilID is missing. Skipping Stage 2.`);
+                continue;
             }
 
-            // Check 3: ID not in myCsListFSData
-            let foundInList = false;
-            const listCacheText = listCache.text;
-            for (let list_R = 0; list_R < listCacheText.length; list_R++) {
-                const listValue = listCacheText[list_R]?.[abilitiesNameIdColIndex];
-                if (abilID === fGetIDFromNameID(listValue)) {
-                    foundInList = true;
-                    break; // Found it, no need to check further
+            fMyConsoleLog(`   -> Row ${r}: Refreshing data for ID "${abilID}"...`);
+            rowsRefreshed++;
+            try {
+                // Fetch Data
+                const newSk1Typ = fGetVal_GUICache(abilID, 'SkTyp1', gUI.dbAbilitiesFSData) ?? '';
+                const newSk1 = fGetVal_GUICache(abilID, 'TrainedSk1', gUI.myKlMyAbilitiesFSData) ?? '';
+                const newAbilNameID = fGetVal_GUICache(abilID, 'Name_ID', gUI.dbElementsFSData) ?? '';
+                const newSk2 = fGetVal_GUICache(abilID, 'TrainedSk2', gUI.myKlMyAbilitiesFSData) ?? '';
+                const newSk2Typ = fGetVal_GUICache(abilID, 'SkTyp2', gUI.dbAbilitiesFSData) ?? '';
+                const newVer = fGetVal_GUICache(abilID, 'Ver', gUI.myKlMyAbilitiesFSData) ?? '';
+                const newNotes = fGetVal_GUICache(abilID, 'Notes', gUI.dbElementsFSData) ?? '';
+                const newPic = fGetVal_GUICache(abilID, 'Pic', gUI.dbElementsFSData) ?? '';
+                const newAct = fGetVal_GUICache(abilID, 'Act', gUI.myKlMyAbilitiesFSData) ?? '';
+                const newDur = fGetVal_GUICache(abilID, 'Dur', gUI.myKlMyAbilitiesFSData) ?? '';
+                const newRng = fGetVal_GUICache(abilID, 'Rng', gUI.myKlMyAbilitiesFSData) ?? '';
+                const newMeta = fGetVal_GUICache(abilID, 'Meta', gUI.myKlMyAbilitiesFSData) ?? '';
+                const newRgn = fGetVal_GUICache(abilID, 'Regain', gUI.myKlMyAbilitiesFSData) ?? '';
+                const newGearName = fGetVal_GUICache(abilID, 'Name', gUI.dbGearFSData) ?? '';
+                const newCrEach = fGetVal_GUICache(abilID, 'ItemCR', gUI.dbGearFSData) ?? '';
+                const newIsArtifact = fGetVal_GUICache(abilID, 'IsArtifact', gUI.dbGearFSData) ?? false;
+                const newAPEach = fGetVal_GUICache(abilID, 'AP', gUI.dbGearFSData) ?? '';
+
+                // --- Debug Log for Row/Ability ---
+                fMyConsoleLog(`   -> r="${r}", newAbilNameID="${newAbilNameID}"`);
+
+                // --- Check if Item is Gear ---
+                const isGearItem = gUI.dbGearFSData?.rowTagsMap?.hasOwnProperty(abilID);
+
+                // Update Grid (Static Values)
+                let setSuccess = true;
+                setSuccess &&= fSetGridValue(r, 'Sk1Typ', newSk1Typ);
+                setSuccess &&= fSetGridValue(r, 'Sk1', newSk1);
+                if (r !== nishRowResolved) { // EXCEPTION: Do not update Ability name for NishAtr_R
+                    setSuccess &&= fSetGridValue(r, 'Ability', newAbilNameID || abilityNameId);
                 }
-            }
+                setSuccess &&= fSetGridValue(r, 'Sk2', newSk2);
+                setSuccess &&= fSetGridValue(r, 'Sk2Typ', newSk2Typ);
+                setSuccess &&= fSetGridValue(r, 'Ver', newVer);
+                setSuccess &&= fSetGridValue(r, 'Notes', newNotes);
+                setSuccess &&= fSetGridValue(r, 'Pic', newPic);
+                setSuccess &&= fSetGridValue(r, 'Act', newAct);
+                setSuccess &&= fSetGridValue(r, 'Dur', newDur);
+                setSuccess &&= fSetGridValue(r, 'Rng', newRng);
+                setSuccess &&= fSetGridValue(r, 'MetaCost', newMeta);
+                setSuccess &&= fSetGridValue(r, 'Regain', newRgn);
 
-            if (!foundInList) {
-                fMyConsoleLog(`   -> Row ${r}: Clearing because ID "${abilID}" (from "${abilityNameId}") not found in ${listCacheKey}.`);
-                fHandleClearAbilityRow(r); // Clears multiple fields, should call auto-save
-                rowsCleared++;
+                // --- Update Gear-Specific Grid Values (Conditional) ---
+                if (isGearItem) {
+                    fMyConsoleLog(`      -> Item ${abilID} is Gear. Updating gear fields...`);
+                    setSuccess &&= fSetGridValue(r, 'PossName', newGearName);
+                    setSuccess &&= fSetGridValue(r, 'PossCrEa', newCrEach);
+                    setSuccess &&= fSetGridValue(r, 'PossIsArtifact', newIsArtifact);
+                    setSuccess &&= fSetGridValue(r, 'PossAPEa', newAPEach);
+                } else {
+                     fMyConsoleLog(`      -> Item ${abilID} is not Gear. Skipping gear field updates.`);
+                }
+                // --- End Conditional Gear Update ---
+
+                if (!setSuccess) {
+                     fMyConsoleLog(`      -> ⚠️ Error setting one or more grid values for row ${r}. Proceeding to recalc.`);
+                     refreshErrors++;
+                }
+
+                // --- Recalculate Gear Line (Conditional) ---
+                if (isGearItem) {
+                    fMyConsoleLog(`      -> Running fRefreshGearLineCalcs for Gear Item...`);
+                    const currentEnc = fGetGridValue(r, 'PossEnc');
+                    const currentCr = fGetGridValue(r, 'PossCrTot');
+                    const currentAp = fGetGridValue(r, 'PossAPTot');
+                    if (!fRefreshGearLineCalcs(r, currentEnc, currentCr, currentAp)) {
+                        fMyConsoleLog(`      -> ⚠️ Error occurred during fRefreshGearLineCalcs for row ${r}.`);
+                        refreshErrors++;
+                    }
+                } else {
+                    fMyConsoleLog(`      -> Skipping fRefreshGearLineCalcs.`);
+                }
+
+            } catch (error) {
+                console.error(`${funcName}: Unexpected error processing row ${r} (ID: ${abilID}):`, error);
+                fMyConsoleLog(`   -> ❌ Unexpected error during Stage 2 for row ${r}: ${error.message}`);
+                refreshErrors++;
             }
-            // If foundInList is true, do nothing for this row in Stage 1
-        } // End row loop
+        } // End row loop (r)
     } // End range loop
 
-    fMyConsoleLog(`✅ ${funcName} (Stage 1) Complete. Processed: ${rowsProcessed} rows, Cleared: ${rowsCleared} rows.`);
-    // Note: Auto-save is handled within fHandleClearAbilityRow
+    // --- 3. Overall Recalculation & Save (Outside Loop) ---
+    fMyConsoleLog(`   -> Refresh loop complete. Triggering final calculations and save...`);
+    await fCalculatesEnc_MR_AP(); // Update overall totals
+    fHandleAutoSaveTextToFirestore(); // Save all changes
+
+    fMyConsoleLog(`✅ ${funcName} Complete. Processed: ${rowsProcessed}, Cleared: ${rowsCleared}, Refreshed: ${rowsRefreshed}${refreshErrors > 0 ? ` (${refreshErrors} errors)` : ''}.`);
 
 } // END fTotalRereshOfAllAbilitiesAndAllGear
 
