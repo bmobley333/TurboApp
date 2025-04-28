@@ -1858,7 +1858,7 @@ function fHandleClearAbilityRow(r, saveAbilityNameID = false) {
 //         -> newValueStr (String): The new ability value selected (e.g., 'Name_id').
 // Outputs -> (Object | null): Returns { dataRow, headerRow, colTagsMap, found: boolean } on success,
 //                              or null if critical errors occur (like cache not loaded).
-//                              'found' is true if the ID was located in the respective cache.
+//                              'found' is true if RowBeforeFirstDataRow was located in the respective cache.
 function fHandleNewAbilitySelection(workbookAbr, sheetName, r, newValueStr) {
     const funcName = 'fHandleNewAbilitySelection';
     fMyConsoleLog(`   -> ${funcName}: Processing "${newValueStr}" for ${workbookAbr}/${sheetName} using CACHE...`);
@@ -3867,9 +3867,9 @@ async function fHandleGMAward() {
 
     // === 2. Resolve Tags & Indices using FSData resolvers ===
     const gmawardColTag = 'GMAward';
-    const startRowTag = 'FirstDataRow';
+    const startRowTag = 'RowBeforeFirstDataRow';
     const gmawardColIndex = fResolveFSDataCol(cacheKey, gmawardColTag);
-    const startRowIndex = fResolveFSDataRow(cacheKey, startRowTag);
+    const startRowIndex = fResolveFSDataRow(cacheKey, startRowTag) + 1;
 
     // Validation happens within resolvers, they return NaN on failure
     if (isNaN(gmawardColIndex) || isNaN(startRowIndex)) {
@@ -5084,8 +5084,8 @@ async function fLoot_RollValuables(isRandomRoll = false) {
     // === 3. Resolve Tags & Indices ===
     const treasureColor_C = fResolveFSDataCol(cacheKey, 'TreasureColor');
     const treasureDesc_C = fResolveFSDataCol(cacheKey, 'Treasure'); // Corrected tag based on user prompt
-    const startRowTag = 'FirstDataRow'; // Use standard start tag
-    const dataFirst_R_idx = fResolveFSDataRow(cacheKey, startRowTag);
+    const startRowTag = 'RowBeforeFirstDataRow'; // Use standard start tag
+    const dataFirst_R_idx = fResolveFSDataRow(cacheKey, startRowTag) + 1;
     const dataLast_R_idx = critCache.text.length - 1;
 
     const failedTags = [];
@@ -5213,8 +5213,8 @@ async function fLoot_RollGear(isRandomRoll = false) {
     const isArtifact_C = fResolveFSDataCol(cacheKey, 'IsArtifact');
     const itemCr_C = fResolveFSDataCol(cacheKey, 'ItemCR');
     const itemName_C = fResolveFSDataCol(cacheKey, 'Name');
-    const dataFirst_R_tag = 'The ID'; // Standard tag for row before first data entry
-    const dataFirst_R_idx = fResolveFSDataRow(cacheKey, dataFirst_R_tag);
+    const dataFirst_R_tag = 'RowBeforeFirstDataRow'; // Standard tag for row before first data entry
+    const dataFirst_R_idx = fResolveFSDataRow(cacheKey, dataFirst_R_tag) + 1;
     const dataLast_R_idx = gearCache.text.length - 1;
 
     // Validate resolved tags/indices
@@ -5341,8 +5341,8 @@ async function fLoot_ChaosCrystal(isRandomRoll = false) {
     // === 3. Resolve Tags & Indices ===
     const chaosCrystalMaxUses_C = fResolveFSDataCol(cacheKey, 'ChaosCrytstalMaxUses');
     const chaosCrystal_C = fResolveFSDataCol(cacheKey, 'ChaosCrystal');
-    const startRowTag = 'FirstDataRow';
-    const dataFirst_R_idx = fResolveFSDataRow(cacheKey, startRowTag);
+    const startRowTag = 'RowBeforeFirstDataRow';
+    const dataFirst_R_idx = fResolveFSDataRow(cacheKey, startRowTag) + 1;
     const dataLast_R_idx = critCache.text.length - 1;
 
     // Validate resolved tags/indices
@@ -5493,8 +5493,8 @@ async function fLoot_RollSocketGem(isRandomRoll = false) {
     // === 3. Resolve Tags & Indices ===
     const gemColor_C = fResolveFSDataCol(cacheKey, 'GemColor');
     const gemDesc_C = fResolveFSDataCol(cacheKey, 'GemDesc');
-    const startRowTag = 'FirstDataRow'; // Use standard start tag
-    const dataFirst_R_idx = fResolveFSDataRow(cacheKey, startRowTag);
+    const startRowTag = 'RowBeforeFirstDataRow'; // Use standard start tag
+    const dataFirst_R_idx = fResolveFSDataRow(cacheKey, startRowTag) + 1;
     const dataLast_R_idx = critCache.text.length - 1;
 
     const failedTags = [];
@@ -5624,7 +5624,8 @@ async function fLoot_RollArtifact(isRandomRoll = false) {
     const isArtifact_C = fResolveFSDataCol(cacheKey, 'IsArtifact');
     const artName_C = fResolveFSDataCol(cacheKey, 'Name');
     const apCost_C = fResolveFSDataCol(cacheKey, 'AP');
-    const artDataFirst_R = fResolveFSDataRow(cacheKey, 'The ID'); // Resolve 'The ID' tag row
+    const artDataFirst_R = fResolveFSDataRow(cacheKey, 'RowBeforeFirstDataRow'); // Resolve 'RowBeforeFirstDataRow' tag row
+    const firstDataRowIndex = artDataFirst_R + 1; // Actual first data row is one below 'RowBeforeFirstDataRow'
     const artDataLast_R = gearCache.text.length - 1; // Last row index
 
     // Validate resolved tags/indices
@@ -5632,7 +5633,7 @@ async function fLoot_RollArtifact(isRandomRoll = false) {
     if (isNaN(isArtifact_C)) failedTags.push('IsArtifact');
     if (isNaN(artName_C)) failedTags.push('Name');
     if (isNaN(apCost_C)) failedTags.push('AP');
-    if (isNaN(artDataFirst_R)) failedTags.push('The ID (start row)');
+    if (isNaN(artDataFirst_R)) failedTags.push('RowBeforeFirstDataRow (start row)');
 
     if (failedTags.length > 0) {
         const errorMsg = `Could not resolve required tags in ${cacheKey}: ${failedTags.join(', ')}.`;
@@ -5642,7 +5643,6 @@ async function fLoot_RollArtifact(isRandomRoll = false) {
         return; // Halt execution
     }
 
-    const firstDataRowIndex = artDataFirst_R + 1; // Actual first data row is one below 'The ID'
     fMyConsoleLog(`   -> Resolved Tags: IsArtifact=${isArtifact_C}, Name=${artName_C}, AP=${apCost_C}. Data Range: ${firstDataRowIndex}-${artDataLast_R}. CharLvl=${charLvl}.`);
 
     // === 4. Filter Artifacts ===
