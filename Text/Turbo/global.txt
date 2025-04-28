@@ -93,6 +93,7 @@ const gUI = {
     resRoll: '',           // Final roll result after applying roll morphs or override
 
     // --- Flags & Multi-Roll ---
+    isNish: false,         // Flag: true if Nish roll
     isUnSk: false,         // Flag: true if 'un' or 'unsk' morph was present
     isFreeRoll: false,     // Flag: true if 'free' morph or Free button used
     isLuckedRoll: false,   // Flag: true if 'luck' morph or Luck button used

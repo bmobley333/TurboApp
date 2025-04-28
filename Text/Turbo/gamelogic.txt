@@ -295,7 +295,8 @@ async function fIsSk1Sk2RadioCheckbox(row, col) {
 // Purpose -> Resets the global gUI.roll object and populates it with base data
 //            extracted from the ability/gear row specified by the selected checkbox (r, c).
 //            Cleans and standardizes the extracted data (e.g., trims strings,
-//            parses numbers, defaults empty values). Sets initial resTyp and multiRollCount.
+//            parses numbers, defaults empty values). Sets initial resTyp, multiRollCount,
+//            and the isNish flag.
 // Inputs  -> r (Number): Row index of the selected ability/gear.
 //         -> c (Number): Column index of the selected checkbox (determines Sk1 vs Sk2).
 // Outputs -> (Promise<Boolean>): Resolves true if successful, false if an error occurs.
@@ -335,11 +336,21 @@ async function fClearAndSetGUIRoll(r, c) {
             resMultMult: '',
             resCombine: '',
             isUnSk: false,
+            isNish: false, // <<< Initialized isNish flag
             multiRollCount: 1, // Default multi-roll count
             roll: '',
             resRoll: '',
             htmlHeader: ''
            };
+
+        // --- Set isNish Flag ---
+        // Resolve Nish row index and compare with current row 'r'
+        const nishRowResolved = fResolveRow('NishAtr_R');
+        if (!isNaN(nishRowResolved) && r === nishRowResolved) {
+            gUI.roll.isNish = true;
+            fMyConsoleLog("   -> Setting gUI.roll.isNish = true");
+        }
+        // --- End Set isNish Flag ---
 
         const rData = gUI.roll; // Alias for convenience
 
@@ -371,7 +382,7 @@ async function fClearAndSetGUIRoll(r, c) {
         // Default resulting type to the base skill type
         rData.resTyp = rData.skTyp;
 
-        fMyConsoleLog(`⚙️ Populated & Cleaned gUI.roll for row ${r} (isSk1: ${isSk1})`);
+        fMyConsoleLog(`⚙️ Populated & Cleaned gUI.roll for row ${r} (isSk1: ${isSk1}, isNish: ${gUI.roll.isNish})`);
         return true; // Indicate success
 
     } catch (err) {
@@ -1914,7 +1925,7 @@ function fCalcGUIRollResRoll() {
 // Purpose -> Constructs formatted HTML and plain text log lines for a *single roll*
 //            result based on the current state of gUI.roll. Handles different roll
 //            types, multi-roll prefixes, T/C results, skill/roll values, difficulty,
-//            and success/failure/wound results.
+//            and success/failure/wound results. Calls fNishTorCText if appropriate.
 // Inputs  -> rollNum (Number): Current roll number in a multi-roll sequence (e.g., 1).
 //         -> totalRolls (Number): Total number of rolls in the sequence (e.g., 3).
 //         -> isFirstRoll (Boolean): True if this is the first roll (for T/C).
@@ -1954,7 +1965,6 @@ function fBuildSidebarHTMLAndSimpleText(rollNum, totalRolls, isFirstRoll) {
         const rollStr = (typeof roll === 'number' || (typeof roll === 'string' && roll !== '')) && roll != null ? String(roll) : '';
         const resRollStr = (typeof resRoll === 'number' || (typeof resRoll === 'string' && resRoll !== '')) && resRoll != null ? String(resRoll) : '';
         const showFinal = resRollStr !== '' && resRollStr !== rollStr;
-
         if (rollStr) {
             htmlRollResult += ` ~${rollStr}${showFinal ? `->${resRollStr}` : ''}`;
             textRollResult += ` ~${rollStr}${showFinal ? `->${resRollStr}` : ''}`;
@@ -1999,10 +2009,10 @@ function fBuildSidebarHTMLAndSimpleText(rollNum, totalRolls, isFirstRoll) {
             const delta = resRoll - dif;
             if (delta >= 0) {
                 htmlSuccessDelta = ` =+${delta} ✅`;
-                textSuccessDelta = ` =+${delta} ✅`; 
+                textSuccessDelta = ` =+${delta} ✅`;
             } else {
                 htmlSuccessDelta = ` =${delta} ❌`;
-                textSuccessDelta = ` =${delta} ❌`; 
+                textSuccessDelta = ` =${delta} ❌`;
             }
         }
     }
@@ -2012,12 +2022,20 @@ function fBuildSidebarHTMLAndSimpleText(rollNum, totalRolls, isFirstRoll) {
     textLine = `${textBase}${textRollResult}${textDifIndicator}${textSuccessDelta}`.trim();
 
     // === Add T/C Result (First Roll Only) ===
-    const tc = isFirstRoll ? fTC() : "";
-    const tcText = tc ? (tc.includes('red-bold') ? ' C' : ' T') : "";
+    const tc = isFirstRoll ? fTC() : ""; // Determine T/C result
+    const tcText = tc ? (tc.includes('red-bold') ? ' C' : ' T') : ""; // Plain text version
     if (tc) {
         htmlLine += `   ${tc}`;
-        textLine += ` ${tcText}`;
+        textLine += ` ${tcText}`; // Append plain text T/C
     }
+
+    // === ADDED: Call Nish T/C Text Function ===
+    if (gUI.roll.isNish && tc !== "") { // Only call if it's a Nish roll AND T/C occurred
+        const tOrCParam = tc.includes('red-bold') ? 'c' : 't'; // Determine parameter
+        fMyConsoleLog(`   -> Nish roll T/C detected. Calling fNishTorCText('${tOrCParam}')...`);
+        fNishTorCText(tOrCParam); // Call the function (async, but don't await)
+    }
+    // === END ADDED ===
 
     // === Add Multi-Roll Prefix ===
     let htmlPrefix = '';
@@ -2482,9 +2500,92 @@ async function fExecuteNishSequence() {
 
 
 
+
+// fNishTorCText ///////////////////////////////////////////////////////////////
+// Purpose -> Selects and displays a random Tremendous ('t') or Critical ('c') Nish
+//            result from the dbCritFSData cache to the sidebar.
+// Inputs  -> tOrC (String): 't' for Tremendous, 'c' for Critical (case-insensitive).
+// Outputs -> None (Posts result to sidebar via fPostToSidebar if successful).
+// Notes   -> Logic is similar to fHandleGMAward.
+async function fNishTorCText(tOrC) {
+    const funcName = "fNishTorCText";
+    fMyConsoleLog(`⚙️ ${funcName}: Processing Nish T/C result for input '${tOrC}'...`);
+
+    // --- 1. Validate Input ---
+    const inputLower = String(tOrC ?? '').toLowerCase();
+    if (inputLower !== 't' && inputLower !== 'c') {
+        fMyConsoleLog(`   -> ${funcName}: Invalid input '${tOrC}'. Must be 't' or 'c'. Aborting.`);
+        return;
+    }
+
+    // --- 2. Validate Cache ---
+    const cacheKey = 'dbCritFSData';
+    const cache = gUI[cacheKey];
+    if (!cache || !cache.text || !Array.isArray(cache.text) || !cache.colTagsMap || !cache.rowTagsMap) {
+        const errorMsg = `Cannot get Nish T/C text: Required cache gUI['${cacheKey}'] is missing or invalid.`;
+        console.error(`${funcName}: ${errorMsg}`);
+        fMyConsoleLog(`   -> ❌ ${funcName} Error: ${errorMsg}`);
+        // No user message needed here as this is usually part of another roll sequence.
+        return;
+    }
+
+    // --- 3. Determine Column Tag and Title ---
+    const columnTag = (inputLower === 't') ? 'NishTrem' : 'NishCrit';
+    const titleText = (inputLower === 't') ? 'Tremendous Nish:' : 'Critical Nish:';
+    const titleHtml = `<span class="red-bold">${titleText}</span>`; // Use red-bold for both per request
+
+    // --- 4. Resolve Tags & Indices ---
+    const startRowTag = 'FirstDataRow';
+    const resultColIndex = fResolveFSDataCol(cacheKey, columnTag);
+    const startRowIndex = fResolveFSDataRow(cacheKey, startRowTag);
+
+    if (isNaN(resultColIndex)) {
+        fMyConsoleLog(`   -> ❌ ${funcName} Error: Column tag '${columnTag}' not found in ${cacheKey}.`);
+        return;
+    }
+    if (isNaN(startRowIndex)) {
+        fMyConsoleLog(`   -> ❌ ${funcName} Error: Start row tag '${startRowTag}' not found in ${cacheKey}.`);
+        return;
+    }
+    fMyConsoleLog(`   -> Resolved '${columnTag}' to index ${resultColIndex}, '${startRowTag}' to index ${startRowIndex}.`);
+
+    // --- 5. Extract, Filter, and Select Award ---
+    const resultsList = [];
+    const numRows = cache.text.length;
+    for (let r = startRowIndex; r < numRows; r++) {
+        const cellValue = cache.text[r]?.[resultColIndex];
+        const trimmedValue = String(cellValue ?? '').trim();
+        if (trimmedValue !== '') {
+            resultsList.push(trimmedValue);
+        }
+    }
+
+    if (resultsList.length === 0) {
+        fMyConsoleLog(`   -> ${funcName}: No valid results found in '${columnTag}' column starting from row '${startRowTag}'. Skipping display.`);
+        return;
+    }
+
+    const randomIndex = Math.floor(Math.random() * resultsList.length);
+    const selectedResult = resultsList[randomIndex];
+    fMyConsoleLog(`   -> Randomly selected result: "${selectedResult}"`);
+
+    // --- 6. Format and Post to Sidebar ---
+    const sidebarMsgHtml = `${titleHtml}<br>${selectedResult}`;
+    const sidebarMsgText = `${titleText}\n${selectedResult}`; // Plain text version
+    fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
+    fShowSidebar(); // Ensure sidebar is visible
+
+    fMyConsoleLog(`✅ ${funcName}: Completed.`);
+
+} // END fNishTorCText
+
+
+
 // ==========================================================================
 // === Grid Interaction & Ad-Hoc Rolls ===
 // ==========================================================================
+
+
 
 // fUpdateMonsterTable ////////////////////////////////////////////////////////
 // Purpose -> Processes monster data received from the GM Screen DB and populates
