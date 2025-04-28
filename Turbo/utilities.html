@@ -59,6 +59,120 @@ const fResolveCol = v => {
 
 
 
+// fResolveFSDataRow /////////////////////////////////////////////////////////////
+// Purpose -> Resolve a row tag (String) or index (Number) against a specified
+//            Firestore data cache object (gUI[fsDataObjKey]) and validate against
+//            the cache's row bounds.
+// Inputs  -> fsDataObjKey (String): Key name of the cache object in gUI.
+//         -> tagOrIndex (String | Number): Row tag or 0-based index to resolve.
+// Outputs -> (Number): The resolved 0-based numeric row index, or NaN on failure.
+function fResolveFSDataRow(fsDataObjKey, tagOrIndex) {
+    const funcName = "fResolveFSDataRow";
+    const cache = gUI[fsDataObjKey];
+
+    // Validate Cache Object Structure
+    if (!cache || typeof cache !== 'object' ||
+        !cache.text || !Array.isArray(cache.text) ||
+        !cache.rowTagsMap || typeof cache.rowTagsMap !== 'object') {
+        console.warn(`${funcName}: Cache object gUI['${fsDataObjKey}'] is missing, invalid, or incomplete (missing text/rowTagsMap).`);
+        return NaN;
+    }
+
+    const textData = cache.text;
+    const numRows = textData.length;
+
+    // Handle String Input (Tag)
+    if (typeof tagOrIndex === 'string') {
+        const resolvedIndex = cache.rowTagsMap[tagOrIndex];
+
+        if (resolvedIndex === undefined) {
+            console.warn(`${funcName}: Row tag "${tagOrIndex}" not found in rowTagsMap for cache '${fsDataObjKey}'.`);
+            return NaN;
+        }
+
+        // Validate resolved index against bounds
+        if (typeof resolvedIndex !== 'number' || isNaN(resolvedIndex) || resolvedIndex < 0 || resolvedIndex >= numRows) {
+            console.warn(`${funcName}: Resolved row index ${resolvedIndex} for tag "${tagOrIndex}" in cache '${fsDataObjKey}' is out of bounds (0-${numRows - 1}).`);
+            return NaN;
+        }
+        return resolvedIndex;
+
+    // Handle Number Input (Index)
+    } else if (typeof tagOrIndex === 'number') {
+        // Validate input index is a valid number and within bounds
+        if (isNaN(tagOrIndex) || tagOrIndex < 0 || tagOrIndex >= numRows) {
+            console.warn(`${funcName}: Input row index ${tagOrIndex} for cache '${fsDataObjKey}' is invalid or out of bounds (0-${numRows - 1}).`);
+            return NaN;
+        }
+        return tagOrIndex; // Return the validated numeric index
+
+    // Handle Invalid Input Type
+    } else {
+        console.warn(`${funcName}: Invalid tagOrIndex type (${typeof tagOrIndex}) provided for cache '${fsDataObjKey}'. Must be string or number.`);
+        return NaN;
+    }
+} // END fResolveFSDataRow
+
+
+
+
+// fResolveFSDataCol /////////////////////////////////////////////////////////////
+// Purpose -> Resolve a column tag (String) or index (Number) against a specified
+//            Firestore data cache object (gUI[fsDataObjKey]) and validate against
+//            the cache's column bounds.
+// Inputs  -> fsDataObjKey (String): Key name of the cache object in gUI.
+//         -> tagOrIndex (String | Number): Column tag or 0-based index to resolve.
+// Outputs -> (Number): The resolved 0-based numeric column index, or NaN on failure.
+function fResolveFSDataCol(fsDataObjKey, tagOrIndex) {
+    const funcName = "fResolveFSDataCol";
+    const cache = gUI[fsDataObjKey];
+
+    // Validate Cache Object Structure (including check for first row if data exists)
+    if (!cache || typeof cache !== 'object' ||
+        !cache.text || !Array.isArray(cache.text) ||
+        !cache.colTagsMap || typeof cache.colTagsMap !== 'object' ||
+        (cache.text.length > 0 && !Array.isArray(cache.text[0])) ) { // Check first row if data exists
+        console.warn(`${funcName}: Cache object gUI['${fsDataObjKey}'] is missing, invalid, or incomplete (missing text/colTagsMap or invalid text[0]).`);
+        return NaN;
+    }
+
+    const textData = cache.text;
+    const numCols = textData[0]?.length || 0; // Get column count from first row, or 0 if no rows
+
+    // Handle String Input (Tag)
+    if (typeof tagOrIndex === 'string') {
+        const resolvedIndex = cache.colTagsMap[tagOrIndex];
+
+        if (resolvedIndex === undefined) {
+            console.warn(`${funcName}: Col tag "${tagOrIndex}" not found in colTagsMap for cache '${fsDataObjKey}'.`);
+            return NaN;
+        }
+
+        // Validate resolved index against bounds
+        if (typeof resolvedIndex !== 'number' || isNaN(resolvedIndex) || resolvedIndex < 0 || resolvedIndex >= numCols) {
+            console.warn(`${funcName}: Resolved col index ${resolvedIndex} for tag "${tagOrIndex}" in cache '${fsDataObjKey}' is out of bounds (0-${numCols - 1}).`);
+            return NaN;
+        }
+        return resolvedIndex;
+
+    // Handle Number Input (Index)
+    } else if (typeof tagOrIndex === 'number') {
+        // Validate input index is a valid number and within bounds
+        if (isNaN(tagOrIndex) || tagOrIndex < 0 || tagOrIndex >= numCols) {
+            console.warn(`${funcName}: Input col index ${tagOrIndex} for cache '${fsDataObjKey}' is invalid or out of bounds (0-${numCols - 1}).`);
+            return NaN;
+        }
+        return tagOrIndex; // Return the validated numeric index
+
+    // Handle Invalid Input Type
+    } else {
+        console.warn(`${funcName}: Invalid tagOrIndex type (${typeof tagOrIndex}) provided for cache '${fsDataObjKey}'. Must be string or number.`);
+        return NaN;
+    }
+} // END fResolveFSDataCol
+
+
+
 // fGetContrastColor ///////////////////////////////////////////////////////////////
 // Purpose -> Determines if black ('#000000') or white ('#ffffff') text has better
 //            contrast against a given background hex color.

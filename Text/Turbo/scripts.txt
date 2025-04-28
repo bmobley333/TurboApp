@@ -3551,7 +3551,8 @@ function fSetupMenuActionClickListener() {
         fMyConsoleLog(`🎬 Menu Action Clicked: ${action}`);
 
 
-        // Close any open dropdowns first
+     
+           // Close any open dropdowns first
         document.querySelectorAll('.dropdown-content.show').forEach(dropdown => {
             dropdown.classList.remove('show');
         });
@@ -3567,7 +3568,7 @@ function fSetupMenuActionClickListener() {
             case 'game-nishStartEnd':       fHandleNishStartOrEnd(); break;
             case 'game-toggleSidebar':      fToggleSidebar(); break;
             case 'game-updateLevelSlotName':   fHandleNewLevelSlotName(); break;
-            case 'game-gmAward':            fShowMessage(`Action "${action}" is not yet implemented.`); break; // Placeholder
+            case 'game-gmAward':            fHandleGMAward(); break; // <<< ADDED
             case 'game-metaFlood':          fMetaFlood(); break;
             case 'game-healingNatural':     fCalc_NaturalHealing(); break;
             case 'game-healingAll':         fHealAllWounds(); break;
@@ -3842,6 +3843,81 @@ async function fHandleNewLevelSlotName() {
     }
 
 } // END fHandleNewLevelSlotName
+
+
+
+
+// fHandleGMAward //////////////////////////////////////////////////////////////
+// Purpose -> Handles the <Game><GM Award> menu action. Gets a random award from
+//            the DB/Crit cache, filters empty entries, selects one randomly,
+//            and posts it to the sidebar and GMScreen/PartyLog.
+// Inputs  -> None (Uses gUI.dbCritFSData).
+// Outputs -> (Promise<void>): Implicitly returns promise due to async calls.
+async function fHandleGMAward() {
+    const funcName = "fHandleGMAward";
+    fMyConsoleLog(`⚙️ Menu Action: ${funcName} Triggered...`);
+
+    // === 1. Access and Validate Cache ===
+    // Cache key is explicitly passed to resolver functions, validation happens there too.
+    const cacheKey = 'dbCritFSData';
+    if (!gUI[cacheKey]) { // Basic check if cache object exists at all
+      console.error(`${funcName}: Cache object gUI['${cacheKey}'] is missing.`);
+      // No user message per instructions, just log and exit.
+      return;
+    }
+
+    // === 2. Resolve Tags & Indices using FSData resolvers ===
+    const gmawardColTag = 'GMAward';
+    const startRowTag = 'FirstDataRow';
+    const gmawardColIndex = fResolveFSDataCol(cacheKey, gmawardColTag);
+    const startRowIndex = fResolveFSDataRow(cacheKey, startRowTag);
+
+    // Validation happens within resolvers, they return NaN on failure
+    if (isNaN(gmawardColIndex) || isNaN(startRowIndex)) {
+        // Error messages are logged by the resolver functions.
+        return; // Exit if tags didn't resolve correctly
+    }
+
+    // === 3. Extract & Filter Award List ===
+    const awardsList = [];
+    // Access cache directly now that key is confirmed to exist (basic check)
+    const cachedText = gUI[cacheKey].text;
+    const numRows = cachedText.length;
+
+    for (let r = startRowIndex; r < numRows; r++) {
+        // Accessing the 2D array directly
+        const cellValue = cachedText[r]?.[gmawardColIndex];
+        const trimmedValue = String(cellValue ?? '').trim(); // Trim and handle null/undefined
+        if (trimmedValue !== '') {
+            awardsList.push(trimmedValue);
+        }
+    }
+
+    // === 4. Handle Empty List ===
+    if (awardsList.length === 0) {
+        fMyConsoleLog(`   -> ${funcName}: No valid GM Awards found in '${gmawardColTag}' column starting from row '${startRowTag}'. Skipping display.`);
+        // No user message per instructions, just log and exit.
+        return;
+    }
+
+    // === 5. Select Random Award ===
+    const randomIndex = Math.floor(Math.random() * awardsList.length);
+    const selectedAward = awardsList[randomIndex];
+    fMyConsoleLog(`   -> Randomly selected award: "${selectedAward}"`);
+
+    // === 6. Format and Post to Sidebar ===
+    const sidebarMsgHtml = `<span class="blue-bold">GM Award:</span><br>${selectedAward}`;
+    const sidebarMsgText = `GM Award:\n${selectedAward}`;
+    fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
+    fShowSidebar(); // Ensure sidebar is visible
+
+    // === 7. Log to GMScreen/PartyLog ===
+    // Per instructions, this needs to be sent
+    fMyConsoleLog(`   -> Queueing log send for GM Award.`);
+    setTimeout(() => fSendLogToGMScreenAndPS(), 0);
+
+    fMyConsoleLog(`✅ ${funcName}: Completed.`);
+} // END fHandleGMAward
 
 
 
