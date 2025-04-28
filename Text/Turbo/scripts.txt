@@ -1900,40 +1900,44 @@ function fHandleNewAbilitySelection(workbookAbr, sheetName, r, newValueStr) {
         fSetGridValue(r, 'Sk1', 'ERR');
         return null;
     }
-
     fMyConsoleLog(`       -> Extracted ID: "${abilID}" for ${workbookAbr}/${sheetName}`);
 
-    // --- 4. Find Row Index using Cached rowTagsMap ---
-    const rowIndex = targetCache.rowTagsMap[abilID];
+    // --- 4. Find Row Index using FSData Resolver ---
+    const rowIndex = fResolveFSDataRow(cacheKey.replace('gUI.', ''), abilID); // Use resolver, pass gUI key without 'gUI.'
     let dataRow = null;
     let found = false;
 
-    if (rowIndex !== undefined && rowIndex !== null && rowIndex >= 0 && rowIndex < targetCache.text.length) {
-        dataRow = targetCache.text[rowIndex];
-        if (Array.isArray(dataRow)) {
-            found = true;
-            fMyConsoleLog(`       -> Successfully found row for ID "${abilID}" at index ${rowIndex} in ${cacheKey}.`);
-        } else {
-            fMyConsoleLog(`       -> ⚠️ ${funcName} Warning: Found index ${rowIndex} for ID "${abilID}", but data at index is not an array in ${cacheKey}.`);
-            dataRow = null;
-        }
-    } else {
-        // --- ID Not Found Handling ---
+    if (isNaN(rowIndex)) {
+        // ID not found or index out of bounds (fResolveFSDataRow handles this)
         const isOptionalNotFound = (lowerWorkbookAbr === 'mykl' && lowerSheetName === 'myabilities') ||
                                    (lowerWorkbookAbr === 'db' && lowerSheetName === 'gear');
         if (isOptionalNotFound) {
-            // **Log INFO for DB/Gear, otherwise keep WARNING for others**
+            // Log INFO for optional sources
             if (lowerWorkbookAbr === 'db' && lowerSheetName === 'gear') {
-                 fMyConsoleLog(`       -> INFO: ID "${abilID}" not found in ${cacheKey} map. This is expected for non-gear items.`);
+                 fMyConsoleLog(`       -> INFO: ID "${abilID}" not found in ${cacheKey}. Expected for non-gear.`);
             } else { // MyKL/MyAbilities case
-                 fMyConsoleLog(`       -> ID "${abilID}" not found in ${cacheKey} map. This is expected/handled.`);
+                 fMyConsoleLog(`       -> ID "${abilID}" not found in ${cacheKey}. Expected/handled.`);
             }
         } else {
             // DB/Abilities case (Should ideally be found)
-            fMyConsoleLog(`       -> ⚠️ ${funcName} Warning: ID "${abilID}" NOT found in ${cacheKey} map.`);
+            fMyConsoleLog(`       -> ⚠️ ${funcName} Warning: ID "${abilID}" NOT found in ${cacheKey} or index invalid.`);
         }
-        // 'found' remains false, 'dataRow' remains null
+        found = false;
+        dataRow = null;
+    } else {
+        // Row index is valid and within bounds
+        dataRow = targetCache.text[rowIndex];
+        if (Array.isArray(dataRow)) {
+             found = true;
+             fMyConsoleLog(`       -> Successfully found row for ID "${abilID}" at index ${rowIndex} in ${cacheKey}.`);
+        } else {
+             fMyConsoleLog(`       -> ⚠️ ${funcName} Warning: Found index ${rowIndex} for ID "${abilID}", but data at index is not an array in ${cacheKey}.`);
+             dataRow = null; // Treat non-array data as not found
+             found = false;
+        }
     }
+    // --- END 4. Find Row Index ---
+
 
     // --- 5. Prepare Return Object ---
     const headerRow = targetCache.text?.[0] || [];
@@ -2229,36 +2233,39 @@ function fProcessCachedAbilityList() {
 
     // --- 1. Access and Validate Cache & Required Tags ---
     const listCache = gUI.myCsListFSData;
+    const cacheKey = 'myCsListFSData'; // Key for resolver functions
     const colTagForAbilities = 'AbilitiesNameID';
     const startRowTag = 'TableFirstRow';
 
-    if (!listCache || !listCache.text || !Array.isArray(listCache.text) ||
-        !listCache.colTagsMap || typeof listCache.colTagsMap !== 'object' ||
-        !listCache.rowTagsMap || typeof listCache.rowTagsMap !== 'object') {
-        const errMsg = `MyCS/List cache (gUI.myCsListFSData) is missing or invalid. Cannot populate Ability dropdowns.`;
+    // Basic cache check
+    if (!listCache) {
+        const errMsg = `MyCS/List cache (gUI.${cacheKey}) is missing. Cannot populate Ability dropdowns.`;
         console.error(`${funcName}: ${errMsg}`);
         fMyConsoleLog(`      -> ❌ ${funcName} Error: ${errMsg}`);
         fShowMessage(`Error: ${errMsg}`).catch(e => console.error("ShowMessage Error:", e));
         return;
     }
 
-    const abilitiesColIndex = listCache.colTagsMap[colTagForAbilities];
-    const startRowIndex = listCache.rowTagsMap[startRowTag]; // Absolute index from the full sheet cache
+    // Resolve indices using FSData resolvers
+    const abilitiesColIndex = fResolveFSDataCol(cacheKey, colTagForAbilities);
+    const startRowIndex = fResolveFSDataRow(cacheKey, startRowTag);
 
-    if (abilitiesColIndex === undefined || abilitiesColIndex === null) {
-        const errMsg = `Column tag '${colTagForAbilities}' not found in MyCS/List cache (gUI.myCsListFSData.colTagsMap).`;
+    // Validate resolved indices
+    if (isNaN(abilitiesColIndex)) {
+        const errMsg = `Column tag '${colTagForAbilities}' not found or invalid in ${cacheKey} maps.`;
         console.error(`${funcName}: ${errMsg}`);
         fMyConsoleLog(`      -> ❌ ${funcName} Error: ${errMsg}`);
         fShowMessage(`Error: ${errMsg}`).catch(e => console.error("ShowMessage Error:", e));
         return;
     }
-    if (startRowIndex === undefined || startRowIndex === null || isNaN(startRowIndex)) {
-        const errMsg = `Start row tag '${startRowTag}' not found or invalid in MyCS/List cache (gUI.myCsListFSData.rowTagsMap).`;
+    if (isNaN(startRowIndex)) {
+        const errMsg = `Start row tag '${startRowTag}' not found or invalid in ${cacheKey} maps.`;
         console.error(`${funcName}: ${errMsg}`);
         fMyConsoleLog(`      -> ❌ ${funcName} Error: ${errMsg}`);
         fShowMessage(`Error: ${errMsg}`).catch(e => console.error("ShowMessage Error:", e));
         return;
     }
+    // fResolveFSDataRow already checks bounds
 
     fMyConsoleLog(`      -> Processing list from absolute row index ${startRowIndex} ('${startRowTag}') downwards.`);
     fMyConsoleLog(`      -> Using data from column index ${abilitiesColIndex} ('${colTagForAbilities}').`);
@@ -2284,20 +2291,20 @@ function fProcessCachedAbilityList() {
     const abilityListFiltered = abilityListRaw
         .filter(name => name !== undefined && name !== null && String(name).trim() !== '')
         .map(name => String(name).trim());
-
     abilityListFiltered.sort((a, b) => a.localeCompare(b));
     abilityListFiltered.unshift('');
 
     fMyConsoleLog(`      -> Processed list size: ${abilityListFiltered.length} (after filter, sort, unshift).`);
 
     // --- 4. Update Dropdown Config ---
-    let abilityConfig = gUI.dropDownBox.find(config => config.gUIListKey === 'myCsListFSData');
+    let abilityConfig = gUI.dropDownBox.find(config => config.gUIListKey === cacheKey);
+
     if (!abilityConfig) {
          fMyConsoleLog(`      -> Creating new dropdown config for Abilities.`);
          abilityConfig = {
-            gUIListKey: 'myCsListFSData', // Key to identify this config
+            gUIListKey: cacheKey, // Key to identify this config
             choices: abilityListFiltered,
-            ranges: gUI.range.abilNameNoNish
+            ranges: gUI.range.abilNameNoNish // Use existing range definition
          };
          gUI.dropDownBox.push(abilityConfig);
     } else {
@@ -3734,7 +3741,7 @@ function fToggleSidebar() {
 // Purpose -> Handles the "Update (Level, Slot, Names)" menu action. Force-refreshes
 //            user-specific caches (RaceClass, List, MyAbilities) from Sheets to
 //            Firestore to gUI, validates the resulting slot number, sends an update
-//            log, and triggers a full grid refresh.
+//            log, UPDATES ABILITY DROPDOWNS, and triggers a full grid refresh.
 // Inputs  -> None.
 // Outputs -> (Promise<void>): Resolves after completing actions or handling errors.
 async function fHandleNewLevelSlotName() {
@@ -3752,11 +3759,9 @@ async function fHandleNewLevelSlotName() {
           { workbookAbr: 'MyCS', sheetName: 'List',         gUIKey: 'myCsListFSData' },
           { workbookAbr: 'MyKL', sheetName: 'MyAbilities',  gUIKey: 'myKlMyAbilitiesFSData' }
         ];
-
         const refreshPromises = userCachesToRefresh.map(config =>
             fRefreshAndCacheOneFSData(config.workbookAbr, config.sheetName, config.gUIKey)
         );
-
         fMyConsoleLog(`   -> Starting parallel refresh for ${userCachesToRefresh.length} user caches...`);
         const results = await Promise.allSettled(refreshPromises);
         fMyConsoleLog(`   -> Parallel cache refreshes completed.`);
@@ -3795,9 +3800,12 @@ async function fHandleNewLevelSlotName() {
         }
         fMyConsoleLog(`   -> All user cache refreshes successful.`);
 
+        // === 3. Update Ability Dropdowns === <<<--- ADDED STEP
+        fMyConsoleLog("   -> Updating Ability Dropdowns based on refreshed List cache...");
+        fProcessCachedAbilityList(); // Process new list and apply dropdowns
+        fMyConsoleLog("      -> ✅ Ability Dropdowns updated.");
 
-        // === 3. Slot Validation ===
-        // gUI.characterInfo should now be populated/updated by the RaceClass refresh
+        // === 4. Slot Validation ===
         fMyConsoleLog("   -> Validating Slot Number from refreshed data...");
         const currentSlot = gUI.characterInfo?.slotNum;
         const slotRegex = /^Slot([1-9])$/i; // Expect "Slot#"
@@ -3809,8 +3817,7 @@ async function fHandleNewLevelSlotName() {
         }
         fMyConsoleLog(`      -> Slot validated: ${currentSlot}`);
 
-
-        // === 4. Send Log ===
+        // === 5. Send Log ===
         fMyConsoleLog("   -> Sending log update...");
         const logSendSuccess = await fSendLogToGMScreenAndPS();
         if (!logSendSuccess) {
@@ -3820,14 +3827,12 @@ async function fHandleNewLevelSlotName() {
              fMyConsoleLog("      -> ✅ Log send successful.");
         }
 
-
-        // === 5. Refresh Grid Rows ===
+        // === 6. Refresh Grid Rows ===
         fMyConsoleLog("   -> Refreshing grid rows (Abilities/Gear)...");
         await fTotalRereshOfAllAbilitiesAndAllGear();
         fMyConsoleLog("      -> ✅ Grid row refresh complete.");
 
-
-        // === 6. Final Success Message ===
+        // === 7. Final Success Message ===
         fHideMessage(); // Hide the initial "Updating..." message
         await fShowMessage("✅ Caches Refreshed, Log Sent & Grid Updated.");
         fMyConsoleLog(`✅ ${funcName} Completed Successfully.`);
@@ -6921,51 +6926,51 @@ function fPopulateGuiCharacterInfo() {
     fMyConsoleLog(`   -> ${funcName}: Populating gUI.characterInfo from cache...`);
 
     // === 1. Validate Cache ===
-    const cache = gUI.myCsRaceClassFSData;
-    const cacheKey = 'gUI.myCsRaceClassFSData';
-    if (!cache || !cache.text || !Array.isArray(cache.text) ||
-        !cache.rowTagsMap || typeof cache.rowTagsMap !== 'object' ||
-        !cache.colTagsMap || typeof cache.colTagsMap !== 'object') {
+    const cacheKey = 'myCsRaceClassFSData';
+    const cache = gUI[cacheKey];
+    if (!cache || !cache.text || !Array.isArray(cache.text)) { // Removed map checks as resolvers handle that
         const errorMsg = `Cannot populate Character Info: Required cache ${cacheKey} is not loaded or invalid.`;
         console.error(`${funcName}: ${errorMsg}`);
         fMyConsoleLog(`      -> ❌ ${funcName} Error: ${errorMsg}`);
-        // No fShowMessage here, rely on fBulkCacheFSData caller to handle failure
         return false;
     }
 
-    // === 2. Resolve Tags ===
-    const requiredRowTags = ['RC', 'level', 'playerName', 'charName', 'slot'];
+    // === 2. Resolve Tags using FSData Resolvers ===
     const requiredColTag = 'Val';
-    const indices = {};
-    let missingTag = null;
+    const requiredRowTags = ['RC', 'level', 'playerName', 'charName', 'slot'];
 
-    indices.Val = cache.colTagsMap[requiredColTag];
-    if (indices.Val === undefined || isNaN(indices.Val)) missingTag = requiredColTag;
+    const colValIndex = fResolveFSDataCol(cacheKey, requiredColTag);
+    const rowRCIndex = fResolveFSDataRow(cacheKey, 'RC');
+    const rowLevelIndex = fResolveFSDataRow(cacheKey, 'level');
+    const rowPlayerNameIndex = fResolveFSDataRow(cacheKey, 'playerName');
+    const rowCharNameIndex = fResolveFSDataRow(cacheKey, 'charName');
+    const rowSlotIndex = fResolveFSDataRow(cacheKey, 'slot');
 
-    requiredRowTags.forEach(tag => {
-        if (!missingTag) { // Don't bother resolving rows if column failed
-            indices[tag] = cache.rowTagsMap[tag];
-            if (indices[tag] === undefined || isNaN(indices[tag])) {
-                missingTag = tag;
-            }
-        }
-    });
+    // Validate ALL resolved indices
+    const resolvedIndices = [colValIndex, rowRCIndex, rowLevelIndex, rowPlayerNameIndex, rowCharNameIndex, rowSlotIndex];
+    const failedTags = [];
+    if (isNaN(colValIndex)) failedTags.push('Val');
+    if (isNaN(rowRCIndex)) failedTags.push('RC');
+    if (isNaN(rowLevelIndex)) failedTags.push('level');
+    if (isNaN(rowPlayerNameIndex)) failedTags.push('playerName');
+    if (isNaN(rowCharNameIndex)) failedTags.push('charName');
+    if (isNaN(rowSlotIndex)) failedTags.push('slot');
 
-    if (missingTag) {
-        const errorMsg = `Cannot populate Character Info: Required tag '${missingTag}' not found in ${cacheKey} maps.`;
+    if (failedTags.length > 0) { // Check if any resolution failed
+        const errorMsg = `Cannot populate Character Info: Required tag(s) '${failedTags.join(', ')}' not found or invalid in ${cacheKey} maps.`;
         console.error(`${funcName}: ${errorMsg}`);
         fMyConsoleLog(`      -> ❌ ${funcName} Error: ${errorMsg}`);
         return false;
     }
     fMyConsoleLog(`      -> All required tags resolved in ${cacheKey}.`);
 
-    // === 3. Extract Raw Values ===
-    const cVal = indices.Val;
-    const rawRC = cache.text?.[indices.RC]?.[cVal];
-    const rawLevel = cache.text?.[indices.level]?.[cVal];
-    const rawPlayerName = cache.text?.[indices.playerName]?.[cVal];
-    const rawCharName = cache.text?.[indices.charName]?.[cVal];
-    const rawSlot = cache.text?.[indices.slot]?.[cVal];
+    // === 3. Extract Raw Values using Resolved Indices ===
+    // const cVal = colValIndex; // No longer needed as separate var
+    const rawRC = cache.text?.[rowRCIndex]?.[colValIndex];
+    const rawLevel = cache.text?.[rowLevelIndex]?.[colValIndex];
+    const rawPlayerName = cache.text?.[rowPlayerNameIndex]?.[colValIndex];
+    const rawCharName = cache.text?.[rowCharNameIndex]?.[colValIndex];
+    const rawSlot = cache.text?.[rowSlotIndex]?.[colValIndex];
 
     // === 4. Process Values ===
     const raceClass = String(rawRC ?? '').trim();
@@ -6978,14 +6983,12 @@ function fPopulateGuiCharacterInfo() {
     const slotString = String(rawSlot ?? '').trim();
     const slotRegex = /^Slot\s+([1-9])$/i;
     const match = slotString.match(slotRegex);
+
     if (match && match[1]) {
         slotNum = `Slot${match[1]}`; // Cleaned slot number
     } else if (slotString !== '') { // Log warning only if it wasn't blank
         fMyConsoleLog(`      -> ⚠️ ${funcName}: Invalid Slot format found in cache: "${slotString}". Storing null.`);
-        // Optional: Show non-blocking message?
-        // fShowMessage(`Warning: Invalid Slot# ("${slotString}") found in saved RaceClass data.`).catch(e => {});
     }
-    // slotNum remains null if blank or invalid
 
     // === 5. Update gUI.characterInfo ===
     gUI.characterInfo = {
@@ -6995,7 +6998,6 @@ function fPopulateGuiCharacterInfo() {
         playerName: playerName,
         charName: charName
     };
-
     fMyConsoleLog(`   -> ✅ Successfully populated gUI.characterInfo: ${JSON.stringify(gUI.characterInfo)}`);
     return true;
 
