@@ -3540,12 +3540,13 @@ async function fSendLogToGMScreenAndPS() { // Made async to return a Promise imp
 // fSetupMenuActionClickListener //////////////////////////////////////////////
 // Purpose -> Sets up a single event listener on the menu bar to handle clicks
 //            on menu items using event delegation and data attributes.
-// Inputs  -> None. Relies on DOM structure.
+// Inputs  -> menuBar (HTMLElement): The menu bar element (#menu-bar) is expected to exist.
 // Outputs -> None. Attaches event listener.
-function fSetupMenuActionClickListener() {
+function fSetupMenuActionClickListener() { // Removed menuBar parameter, gets element inside
     const menuBar = document.getElementById('menu-bar');
     if (!menuBar) {
         console.error("Setup failed: Menu bar (#menu-bar) not found.");
+        fMyConsoleLog("❌ ERROR: Menu bar element not found for action listener setup."); // Added log
         return; // Stop if the menu bar isn't there
     }
 
@@ -3558,15 +3559,8 @@ function fSetupMenuActionClickListener() {
         fMyConsoleLog(`🎬 Menu Action Clicked: ${action}`);
 
 
-     
-           // Close any open dropdowns first
-        document.querySelectorAll('.dropdown-content.show').forEach(dropdown => {
-            dropdown.classList.remove('show');
-        });
-        // Close any open sub-menus
-         document.querySelectorAll('.dropdown-content.sub-menu.show-sub').forEach(subMenu => {
-             subMenu.classList.remove('show-sub');
-         });
+        // Close any open dropdowns first
+        fCloseAllDropdowns(); // Use the existing helper
 
 
         // --- Handle actions based on the data-action attribute ---
@@ -3574,8 +3568,8 @@ function fSetupMenuActionClickListener() {
             // Game Menu Actions
             case 'game-nishStartEnd':       fHandleNishStartOrEnd(); break;
             case 'game-toggleSidebar':      fToggleSidebar(); break;
-            case 'game-updateLevelSlotName':   fHandleNewLevelSlotName(); break;
-            case 'game-gmAward':            fHandleGMAward(); break; // <<< ADDED
+            case 'game-updateLevelSlotName': fHandleNewLevelSlotName(); break;
+            case 'game-gmAward':            fHandleGMAward(); break;
             case 'game-metaFlood':          fMetaFlood(); break;
             case 'game-healingNatural':     fCalc_NaturalHealing(); break;
             case 'game-healingAll':         fHealAllWounds(); break;
@@ -3595,20 +3589,20 @@ function fSetupMenuActionClickListener() {
 
             // Gear Menu Actions
             case 'gear-toggleGear':         fToggleGearColumns(); break;
-            case 'gear-loot':               fShowMessage(`Action "${action}" is not yet implemented.`); break; // Placeholder
-            case 'gear-lootArtifact':       fShowMessage(`Action "${action}" is not yet implemented.`); break; // Placeholder
-            case 'gear-lootChaosCrystal':   fShowMessage(`Action "${action}" is not yet implemented.`); break; // Placeholder
-            case 'gear-lootGear':           fShowMessage(`Action "${action}" is not yet implemented.`); break; // Placeholder
-            case 'gear-lootGem':            fShowMessage(`Action "${action}" is not yet implemented.`); break; // Placeholder
-            case 'gear-lootSocketed':       fShowMessage(`Action "${action}" is not yet implemented.`); break; // Placeholder
-            case 'gear-lootValuables':      fShowMessage(`Action "${action}" is not yet implemented.`); break; // Placeholder
+            case 'fLoot_RollRndTreasure':   fLoot_RollRndTreasure(); break;
+            case 'fLoot_RollArtifact':      fLoot_RollArtifact(); break;
+            case 'fLoot_ChaosCrystal':      fLoot_ChaosCrystal(); break;
+            case 'fLoot_RollGear':          fLoot_RollGear(); break;
+            case 'fLoot_RollSocketGem':     fLoot_RollSocketGem(); break;
+            case 'fLoot_RollSockets':       fLoot_RollSockets(); break;
+            case 'fLoot_RollValuables':     fLoot_RollValuables(); break;
 
             // Data Menu Actions
             case 'data-saveNow':            fHandleAutoSaveTextToFirestore(); break;
             case 'data-designerOnly':       fHandleDesignerOnlyClick(); break;
 
             // Designer Menu Actions
-            case 'designer-saveDbSheetVer': fSaveGoogelSheetToFSData(); break; // <-- ADDED CASE
+            case 'designer-saveDbSheetVer': fSaveGoogelSheetToFSData(); break;
 
             // Default case for unhandled actions
             default:
@@ -5019,6 +5013,222 @@ function fToggleGearColumns() {
         fShowGridsColumnRange(gearRanges); // Show all defined gear ranges
     }
 } // END fToggleGearColumns
+
+
+
+
+
+// fLoot_RollRndTreasure ///////////////////////////////////////////////////////
+// Purpose -> Rolls 1d12 to randomly determine and trigger a specific type of
+//            loot roll (Valuables, Gear, Chaos Crystal, Socket Gem, Artifact, Sockets).
+// Inputs  -> None.
+// Outputs -> None (Calls one of the specific fLoot_... placeholder functions).
+function fLoot_RollRndTreasure() {
+    const funcName = "fLoot_RollRndTreasure";
+    fMyConsoleLog(`⚙️ ${funcName}: Rolling for random treasure type...`);
+
+    const roll = fdRoll(12); // Roll 1d12
+    fMyConsoleLog(`   -> Random Treasure Roll (d12): ${roll}`);
+
+    // Select the treasure type based on the roll
+    switch (true) {
+        case roll <= 2: fLoot_RollValuables(); break;    // 1-2
+        case roll <= 4: fLoot_RollGear(); break;         // 3-4
+        case roll <= 6: fLoot_ChaosCrystal(); break;    // 5-6
+        case roll <= 8: fLoot_RollSocketGem(); break;   // 7-8
+        case roll <= 10: fLoot_RollArtifact(); break;   // 9-10
+        default: fLoot_RollSockets();                  // 11-12
+    }
+
+    // Note: The called function handles sidebar logging and GMScreen update
+
+} // END fLoot_RollRndTreasure
+
+
+
+
+// fLoot_RollValuables /////////////////////////////////////////////////////////
+// Purpose -> Placeholder for rolling Valuables loot. Logs message to sidebar.
+// Inputs  -> None.
+// Outputs -> None. Posts placeholder message to sidebar and GMScreen/PS.
+function fLoot_RollValuables() {
+    const funcName = "fLoot_RollValuables";
+    const lootType = "Valuables"; // Define loot type for messages
+    fMyConsoleLog(`⚙️ ${funcName}: Triggered placeholder for ${lootType}...`);
+
+    // Format message
+    const titleHtml = `<span class="blue-bold">Loot ${lootType}:</span>`;
+    const titleText = `Loot ${lootType}:`;
+    const messageBody = `Future loot roll here`;
+
+    const sidebarMsgHtml = `${titleHtml}<br>${messageBody}`;
+    const sidebarMsgText = `${titleText}\n${messageBody}`;
+
+    // Post to sidebar and ensure it's visible
+    fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
+    fShowSidebar();
+
+    // Ensure log is sent
+    setTimeout(() => fSendLogToGMScreenAndPS(), 0);
+
+    fMyConsoleLog(`✅ ${funcName}: Placeholder message posted for ${lootType}.`);
+
+} // END fLoot_RollValuables
+
+
+
+
+// fLoot_RollGear //////////////////////////////////////////////////////////////
+// Purpose -> Placeholder for rolling standard Gear loot. Logs message to sidebar.
+// Inputs  -> None.
+// Outputs -> None. Posts placeholder message to sidebar and GMScreen/PS.
+function fLoot_RollGear() {
+    const funcName = "fLoot_RollGear";
+    const lootType = "Gear"; // Define loot type for messages
+    fMyConsoleLog(`⚙️ ${funcName}: Triggered placeholder for ${lootType}...`);
+
+    // Format message
+    const titleHtml = `<span class="blue-bold">Loot ${lootType}:</span>`;
+    const titleText = `Loot ${lootType}:`;
+    const messageBody = `Future loot roll here`;
+
+    const sidebarMsgHtml = `${titleHtml}<br>${messageBody}`;
+    const sidebarMsgText = `${titleText}\n${messageBody}`;
+
+    // Post to sidebar and ensure it's visible
+    fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
+    fShowSidebar();
+
+    // Ensure log is sent
+    setTimeout(() => fSendLogToGMScreenAndPS(), 0);
+
+    fMyConsoleLog(`✅ ${funcName}: Placeholder message posted for ${lootType}.`);
+
+} // END fLoot_RollGear
+
+
+
+// fLoot_ChaosCrystal //////////////////////////////////////////////////////////
+// Purpose -> Placeholder for rolling Chaos Crystal loot. Logs message to sidebar.
+// Inputs  -> None.
+// Outputs -> None. Posts placeholder message to sidebar and GMScreen/PS.
+function fLoot_ChaosCrystal() {
+    const funcName = "fLoot_ChaosCrystal";
+    const lootType = "Chaos Crystal"; // Define loot type for messages
+    fMyConsoleLog(`⚙️ ${funcName}: Triggered placeholder for ${lootType}...`);
+
+    // Format message
+    const titleHtml = `<span class="blue-bold">Loot ${lootType}:</span>`;
+    const titleText = `Loot ${lootType}:`;
+    const messageBody = `Future loot roll here`;
+
+    const sidebarMsgHtml = `${titleHtml}<br>${messageBody}`;
+    const sidebarMsgText = `${titleText}\n${messageBody}`;
+
+    // Post to sidebar and ensure it's visible
+    fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
+    fShowSidebar();
+
+    // Ensure log is sent
+    setTimeout(() => fSendLogToGMScreenAndPS(), 0);
+
+    fMyConsoleLog(`✅ ${funcName}: Placeholder message posted for ${lootType}.`);
+
+} // END fLoot_ChaosCrystal
+
+
+
+
+// fLoot_RollSocketGem /////////////////////////////////////////////////////////
+// Purpose -> Placeholder for rolling Socket Gem loot. Logs message to sidebar.
+// Inputs  -> None.
+// Outputs -> None. Posts placeholder message to sidebar and GMScreen/PS.
+function fLoot_RollSocketGem() {
+    const funcName = "fLoot_RollSocketGem";
+    const lootType = "Socket Gem"; // Define loot type for messages
+    fMyConsoleLog(`⚙️ ${funcName}: Triggered placeholder for ${lootType}...`);
+
+    // Format message
+    const titleHtml = `<span class="blue-bold">Loot ${lootType}:</span>`;
+    const titleText = `Loot ${lootType}:`;
+    const messageBody = `Future loot roll here`;
+
+    const sidebarMsgHtml = `${titleHtml}<br>${messageBody}`;
+    const sidebarMsgText = `${titleText}\n${messageBody}`;
+
+    // Post to sidebar and ensure it's visible
+    fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
+    fShowSidebar();
+
+    // Ensure log is sent
+    setTimeout(() => fSendLogToGMScreenAndPS(), 0);
+
+    fMyConsoleLog(`✅ ${funcName}: Placeholder message posted for ${lootType}.`);
+
+} // END fLoot_RollSocketGem
+
+
+
+
+// fLoot_RollArtifact //////////////////////////////////////////////////////////
+// Purpose -> Placeholder for rolling Artifact loot. Logs message to sidebar.
+// Inputs  -> None.
+// Outputs -> None. Posts placeholder message to sidebar and GMScreen/PS.
+function fLoot_RollArtifact() {
+    const funcName = "fLoot_RollArtifact";
+    const lootType = "Artifact"; // Define loot type for messages
+    fMyConsoleLog(`⚙️ ${funcName}: Triggered placeholder for ${lootType}...`);
+
+    // Format message
+    const titleHtml = `<span class="blue-bold">Loot ${lootType}:</span>`;
+    const titleText = `Loot ${lootType}:`;
+    const messageBody = `Future loot roll here`;
+
+    const sidebarMsgHtml = `${titleHtml}<br>${messageBody}`;
+    const sidebarMsgText = `${titleText}\n${messageBody}`;
+
+    // Post to sidebar and ensure it's visible
+    fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
+    fShowSidebar();
+
+    // Ensure log is sent
+    setTimeout(() => fSendLogToGMScreenAndPS(), 0);
+
+    fMyConsoleLog(`✅ ${funcName}: Placeholder message posted for ${lootType}.`);
+
+} // END fLoot_RollArtifact
+
+
+
+
+// fLoot_RollSockets ///////////////////////////////////////////////////////////
+// Purpose -> Placeholder for rolling Socketed Gear loot. Logs message to sidebar.
+// Inputs  -> None.
+// Outputs -> None. Posts placeholder message to sidebar and GMScreen/PS.
+function fLoot_RollSockets() {
+    const funcName = "fLoot_RollSockets";
+    const lootType = "Socketed Gear"; // Define loot type for messages
+    fMyConsoleLog(`⚙️ ${funcName}: Triggered placeholder for ${lootType}...`);
+
+    // Format message
+    const titleHtml = `<span class="blue-bold">Loot ${lootType}:</span>`;
+    const titleText = `Loot ${lootType}:`;
+    const messageBody = `Future loot roll here`;
+
+    const sidebarMsgHtml = `${titleHtml}<br>${messageBody}`;
+    const sidebarMsgText = `${titleText}\n${messageBody}`;
+
+    // Post to sidebar and ensure it's visible
+    fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
+    fShowSidebar();
+
+    // Ensure log is sent
+    setTimeout(() => fSendLogToGMScreenAndPS(), 0);
+
+    fMyConsoleLog(`✅ ${funcName}: Placeholder message posted for ${lootType}.`);
+
+} // END fLoot_RollSockets
+
 
 
 
