@@ -5030,14 +5030,14 @@ function fLoot_RollRndTreasure() {
     const roll = fdRoll(12); // Roll 1d12
     fMyConsoleLog(`   -> Random Treasure Roll (d12): ${roll}`);
 
-    // Select the treasure type based on the roll
+    // Select the treasure type based on the roll, passing true for isRandomRoll
     switch (true) {
-        case roll <= 2: fLoot_RollValuables(); break;    // 1-2
-        case roll <= 4: fLoot_RollGear(); break;         // 3-4
-        case roll <= 6: fLoot_ChaosCrystal(); break;    // 5-6
-        case roll <= 8: fLoot_RollSocketGem(); break;   // 7-8
-        case roll <= 10: fLoot_RollArtifact(); break;   // 9-10
-        default: fLoot_RollSockets();                  // 11-12
+        case roll <= 2: fLoot_RollValuables(true); break;    // 1-2
+        case roll <= 4: fLoot_RollGear(true); break;         // 3-4
+        case roll <= 6: fLoot_ChaosCrystal(true); break;    // 5-6
+        case roll <= 8: fLoot_RollSocketGem(true); break;   // 7-8
+        case roll <= 10: fLoot_RollArtifact(true); break;   // 9-10
+        default: fLoot_RollSockets(true);                  // 11-12
     }
 
     // Note: The called function handles sidebar logging and GMScreen update
@@ -5048,30 +5048,135 @@ function fLoot_RollRndTreasure() {
 
 
 // fLoot_RollValuables /////////////////////////////////////////////////////////
-// Purpose -> Placeholder for rolling Valuables loot. Logs message to sidebar.
-// Inputs  -> None.
-// Outputs -> None. Posts placeholder message to sidebar and GMScreen/PS.
-function fLoot_RollValuables() {
+// Purpose -> Rolls level-appropriate Valuables from the dbCritFSData cache and
+//            logs the result to the sidebar.
+// Inputs  -> isRandomRoll (Boolean, optional): True if called via fLoot_RollRndTreasure (default: false).
+// Outputs -> None. Posts selected valuable or error message to sidebar and GMScreen/PS.
+async function fLoot_RollValuables(isRandomRoll = false) {
     const funcName = "fLoot_RollValuables";
-    const lootType = "Valuables"; // Define loot type for messages
-    fMyConsoleLog(`⚙️ ${funcName}: Triggered placeholder for ${lootType}...`);
+    const lootType = "Valuables";
+    fMyConsoleLog(`⚙️ ${funcName}: Triggered for ${lootType} (isRandomRoll: ${isRandomRoll})...`);
 
-    // Format message
-    const titleHtml = `<span class="blue-bold">Loot ${lootType}:</span>`;
-    const titleText = `Loot ${lootType}:`;
-    const messageBody = `Future loot roll here`;
+    // === 1. Get Prerequisites ===
+    const charLvl = Number(gUI.characterInfo?.level) || 0;
+    const treasureColorArr = gUI.list?.metaColor; // Assuming R,O,Y,G,B map to treasure levels
+    const cacheKey = 'dbCritFSData';
+    const critCache = gUI[cacheKey];
 
-    const sidebarMsgHtml = `${titleHtml}<br>${messageBody}`;
-    const sidebarMsgText = `${titleText}\n${messageBody}`;
+    // === 2. Validate Prerequisites ===
+    if (!Array.isArray(treasureColorArr) || treasureColorArr.length !== 5) {
+        const errorMsg = `Treasure color list (gUI.list.metaColor) is missing or invalid.`;
+        console.error(`${funcName}: ${errorMsg}`);
+        fMyConsoleLog(`   -> ❌ ${funcName} Error: ${errorMsg}`);
+        await fShowMessage(`Error: ${errorMsg}`);
+        return;
+    }
+    if (!critCache || !critCache.text || !Array.isArray(critCache.text) ||
+        !critCache.colTagsMap || typeof critCache.colTagsMap !== 'object' ||
+        !critCache.rowTagsMap || typeof critCache.rowTagsMap !== 'object') {
+        const errorMsg = `Required cache ${cacheKey} is not loaded or invalid.`;
+        console.error(`${funcName}: ${errorMsg}`);
+        fMyConsoleLog(`   -> ❌ ${funcName} Error: ${errorMsg}`);
+        await fShowMessage(`Error: ${errorMsg}`);
+        return;
+    }
 
-    // Post to sidebar and ensure it's visible
+    // === 3. Resolve Tags & Indices ===
+    const treasureColor_C = fResolveFSDataCol(cacheKey, 'TreasureColor');
+    const treasureDesc_C = fResolveFSDataCol(cacheKey, 'Treasure'); // Corrected tag based on user prompt
+    const startRowTag = 'FirstDataRow'; // Use standard start tag
+    const dataFirst_R_idx = fResolveFSDataRow(cacheKey, startRowTag);
+    const dataLast_R_idx = critCache.text.length - 1;
+
+    const failedTags = [];
+    if (isNaN(treasureColor_C)) failedTags.push('TreasureColor');
+    if (isNaN(treasureDesc_C)) failedTags.push('Treasure'); // Check resolved tag
+    if (isNaN(dataFirst_R_idx)) failedTags.push(startRowTag);
+
+    if (failedTags.length > 0) {
+        const errorMsg = `Could not resolve required tags in ${cacheKey}: ${failedTags.join(', ')}.`;
+        console.error(`${funcName}: ${errorMsg}`);
+        fMyConsoleLog(`   -> ❌ ${funcName} Error: ${errorMsg}`);
+        await fShowMessage(`Error: ${errorMsg}`);
+        return;
+    }
+
+    if (dataFirst_R_idx > dataLast_R_idx) {
+        const errorMsg = `Start row index (${dataFirst_R_idx}) is after last row index (${dataLast_R_idx}) in ${cacheKey}.`;
+        console.error(`${funcName}: ${errorMsg}`);
+        fMyConsoleLog(`   -> ❌ ${funcName} Error: ${errorMsg}`);
+        await fShowMessage(`Error: ${errorMsg}`);
+        return;
+    }
+    fMyConsoleLog(`   -> Resolved Tags: TreasureColor=${treasureColor_C}, Treasure=${treasureDesc_C}. Data Range: ${dataFirst_R_idx}-${dataLast_R_idx}. CharLvl=${charLvl}.`);
+
+    // === 4. Determine Max Treasure Color Index based on Level & Random Rolls ===
+    let maxTreasureColorIndexBase;
+    if (charLvl <= 4) maxTreasureColorIndexBase = 2;      // Up to Yellow (index 2)
+    else if (charLvl <= 9) maxTreasureColorIndexBase = 3; // Up to Green (index 3)
+    else maxTreasureColorIndexBase = 4;                   // Up to Blue (index 4)
+
+    const roll1 = fdRoll(maxTreasureColorIndexBase + 1);
+    const roll2 = fdRoll(maxTreasureColorIndexBase + 1);
+    const maxTreasureColorIndex = Math.min(roll1, roll2) - 1;
+
+    fMyConsoleLog(`   -> Base Max Index=${maxTreasureColorIndexBase}. Rolls=(${roll1}, ${roll2}). Final Max Index=${maxTreasureColorIndex} (${treasureColorArr[maxTreasureColorIndex]}).`);
+
+    // === 5. Filter Eligible Valuables ===
+    const eligibleValuables = [];
+    for (let r = dataFirst_R_idx; r <= dataLast_R_idx; r++) {
+        const rowData = critCache.text[r];
+        if (!Array.isArray(rowData)) continue;
+
+        const treasureColor = String(rowData[treasureColor_C] ?? '').toUpperCase();
+        const treasureDesc = String(rowData[treasureDesc_C] ?? '').trim();
+        const treasureColorIndex = treasureColorArr.indexOf(treasureColor); // Find index of this treasure's color
+
+        // Check if valid color, below max index, and has description
+        if (treasureColorIndex !== -1 && treasureColorIndex <= maxTreasureColorIndex && treasureDesc !== '') {
+            eligibleValuables.push({
+                index: r,
+                description: treasureDesc
+            });
+        }
+    }
+
+    if (eligibleValuables.length === 0) {
+        const errorMsg = `No valuables found matching level ${charLvl} criteria (Max Color: ${treasureColorArr[maxTreasureColorIndex]}).`;
+        fMyConsoleLog(`   -> ⚠️ ${funcName} Warning: ${errorMsg}`);
+        await fShowMessage(`Warning: ${errorMsg}`);
+        return; // Halt execution
+    }
+    fMyConsoleLog(`   -> Found ${eligibleValuables.length} eligible valuables.`);
+
+    // === 6. Select Random Eligible Valuable ===
+    const randomIndex = Math.floor(Math.random() * eligibleValuables.length);
+    const selectedValuable = eligibleValuables[randomIndex];
+    fMyConsoleLog(`   -> Selected Valuable: "${selectedValuable.description}" (from original index ${selectedValuable.index}).`);
+
+    // === 7. Format and Post Result ===
+    let titleHtml, titleText;
+    if (isRandomRoll) {
+        titleHtml = `<span class="blue-bold">Loot ${lootType}:</span>`;
+        titleText = `Loot ${lootType}:`;
+    } else {
+        titleHtml = `<span class="red-bold">SPECIFIC</span> <span class="blue-bold">Loot ${lootType}:</span>`;
+        titleText = `SPECIFIC Loot ${lootType}:`;
+    }
+    // Format message body
+    const messageBodyHtml = selectedValuable.description;
+    const messageBodyText = selectedValuable.description;
+
+    const sidebarMsgHtml = `${titleHtml}<br>${messageBodyHtml}`;
+    const sidebarMsgText = `${titleText}\n${messageBodyText}`;
+
     fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
     fShowSidebar();
 
     // Ensure log is sent
     setTimeout(() => fSendLogToGMScreenAndPS(), 0);
 
-    fMyConsoleLog(`✅ ${funcName}: Placeholder message posted for ${lootType}.`);
+    fMyConsoleLog(`✅ ${funcName}: Valuables loot posted.`);
 
 } // END fLoot_RollValuables
 
@@ -5079,60 +5184,272 @@ function fLoot_RollValuables() {
 
 
 // fLoot_RollGear //////////////////////////////////////////////////////////////
-// Purpose -> Placeholder for rolling standard Gear loot. Logs message to sidebar.
-// Inputs  -> None.
-// Outputs -> None. Posts placeholder message to sidebar and GMScreen/PS.
-function fLoot_RollGear() {
+// Purpose -> Rolls a random, level-appropriate, non-artifact gear item from the
+//            dbGearFSData cache and logs it with a random condition to the sidebar.
+// Inputs  -> isRandomRoll (Boolean, optional): True if called via fLoot_RollRndTreasure (default: false).
+// Outputs -> None. Posts selected gear item or error message to sidebar and GMScreen/PS.
+async function fLoot_RollGear(isRandomRoll = false) {
     const funcName = "fLoot_RollGear";
-    const lootType = "Gear"; // Define loot type for messages
-    fMyConsoleLog(`⚙️ ${funcName}: Triggered placeholder for ${lootType}...`);
+    const lootType = "Gear";
+    fMyConsoleLog(`⚙️ ${funcName}: Triggered for ${lootType} (isRandomRoll: ${isRandomRoll})...`);
 
-    // Format message
-    const titleHtml = `<span class="blue-bold">Loot ${lootType}:</span>`;
-    const titleText = `Loot ${lootType}:`;
-    const messageBody = `Future loot roll here`;
+    // === 1. Get Prerequisites ===
+    const charLvl = Number(gUI.characterInfo?.level) || 0;
+    const cacheKey = 'dbGearFSData';
+    const gearCache = gUI[cacheKey];
 
-    const sidebarMsgHtml = `${titleHtml}<br>${messageBody}`;
-    const sidebarMsgText = `${titleText}\n${messageBody}`;
+    // === 2. Validate Cache ===
+    if (!gearCache || !gearCache.text || !Array.isArray(gearCache.text) ||
+        !gearCache.colTagsMap || typeof gearCache.colTagsMap !== 'object' ||
+        !gearCache.rowTagsMap || typeof gearCache.rowTagsMap !== 'object') {
+        const errorMsg = `Required cache ${cacheKey} is not loaded or invalid.`;
+        console.error(`${funcName}: ${errorMsg}`);
+        fMyConsoleLog(`   -> ❌ ${funcName} Error: ${errorMsg}`);
+        await fShowMessage(`Error: ${errorMsg}`);
+        return; // Halt execution
+    }
 
-    // Post to sidebar and ensure it's visible
+    // === 3. Resolve Tags & Indices ===
+    const isArtifact_C = fResolveFSDataCol(cacheKey, 'IsArtifact');
+    const itemCr_C = fResolveFSDataCol(cacheKey, 'ItemCR');
+    const itemName_C = fResolveFSDataCol(cacheKey, 'Name');
+    const dataFirst_R_tag = 'The ID'; // Standard tag for row before first data entry
+    const dataFirst_R_idx = fResolveFSDataRow(cacheKey, dataFirst_R_tag);
+    const dataLast_R_idx = gearCache.text.length - 1;
+
+    // Validate resolved tags/indices
+    const failedTags = [];
+    if (isNaN(isArtifact_C)) failedTags.push('IsArtifact');
+    if (isNaN(itemCr_C)) failedTags.push('ItemCR');
+    if (isNaN(itemName_C)) failedTags.push('Name');
+    if (isNaN(dataFirst_R_idx)) failedTags.push(dataFirst_R_tag);
+
+    if (failedTags.length > 0) {
+        const errorMsg = `Could not resolve required tags in ${cacheKey}: ${failedTags.join(', ')}.`;
+        console.error(`${funcName}: ${errorMsg}`);
+        fMyConsoleLog(`   -> ❌ ${funcName} Error: ${errorMsg}`);
+        await fShowMessage(`Error: ${errorMsg}`);
+        return; // Halt execution
+    }
+
+    const firstDataRowIndex = dataFirst_R_idx + 1; // Actual data starts below the tag row
+    if (firstDataRowIndex > dataLast_R_idx) {
+        const errorMsg = `Start row index (${firstDataRowIndex}) is after last row index (${dataLast_R_idx}) in ${cacheKey}.`;
+        console.error(`${funcName}: ${errorMsg}`);
+        fMyConsoleLog(`   -> ❌ ${funcName} Error: ${errorMsg}`);
+        await fShowMessage(`Error: ${errorMsg}`);
+        return;
+    }
+    fMyConsoleLog(`   -> Resolved Tags: IsArtifact=${isArtifact_C}, ItemCR=${itemCr_C}, Name=${itemName_C}. Data Range: ${firstDataRowIndex}-${dataLast_R_idx}. CharLvl=${charLvl}.`);
+
+    // === 4. Determine Max CR based on Level ===
+    const maxCr = charLvl <= 4 ? 100 : charLvl <= 9 ? 250 : charLvl <= 20 ? 1000 : 10000;
+    fMyConsoleLog(`   -> Max ItemCR for Level ${charLvl} is ${maxCr}.`);
+
+    // === 5. Filter Eligible Gear ===
+    const eligibleGear = [];
+    for (let r = firstDataRowIndex; r <= dataLast_R_idx; r++) {
+        const rowData = gearCache.text[r];
+        if (!Array.isArray(rowData)) continue;
+
+        const isArtifactVal = rowData[isArtifact_C];
+        const isTrulyArtifact = (isArtifactVal === true || String(isArtifactVal).toUpperCase() === 'TRUE');
+        const itemCr = Number(rowData[itemCr_C]);
+        const itemName = String(rowData[itemName_C] ?? '').trim();
+
+        // Check if: NOT artifact, ItemCR is valid number, ItemCR <= maxCr, and Name is not empty
+        if (!isTrulyArtifact && !isNaN(itemCr) && itemCr <= maxCr && itemName !== '') {
+            eligibleGear.push({
+                index: r,
+                name: itemName
+            });
+        }
+    }
+
+    if (eligibleGear.length === 0) {
+        const errorMsg = `No non-artifact gear found with ItemCR <= ${maxCr}.`;
+        fMyConsoleLog(`   -> ⚠️ ${funcName} Warning: ${errorMsg}`);
+        await fShowMessage(`Warning: ${errorMsg}`);
+        return; // Halt execution
+    }
+    fMyConsoleLog(`   -> Found ${eligibleGear.length} eligible gear items.`);
+
+    // === 6. Select Random Eligible Gear ===
+    const randomIndex = Math.floor(Math.random() * eligibleGear.length);
+    const selectedGear = eligibleGear[randomIndex];
+    fMyConsoleLog(`   -> Selected Gear: "${selectedGear.name}" (from original index ${selectedGear.index}).`);
+
+    // === 7. Determine Random Condition ===
+    const conditionArr = ['Useless', 'Broken', 'Used', 'Good', 'New', 'High Quality (Cr*2)'];
+    const conditionIndex = Math.floor(Math.random() * conditionArr.length);
+    const condition = conditionArr[conditionIndex];
+    fMyConsoleLog(`   -> Determined Condition: "${condition}"`);
+
+    // === 8. Format and Post Result ===
+    let titleHtml, titleText;
+    if (isRandomRoll) {
+        titleHtml = `<span class="blue-bold">Loot ${lootType}:</span>`;
+        titleText = `Loot ${lootType}:`;
+    } else {
+        titleHtml = `<span class="red-bold">SPECIFIC</span> <span class="blue-bold">Loot ${lootType}:</span>`;
+        titleText = `SPECIFIC Loot ${lootType}:`;
+    }
+    const messageBodyHtml = `${selectedGear.name}<br>Condition: ${condition}`;
+    const messageBodyText = `${selectedGear.name}\nCondition: ${condition}`;
+
+    const sidebarMsgHtml = `${titleHtml}<br>${messageBodyHtml}`;
+    const sidebarMsgText = `${titleText}\n${messageBodyText}`;
+
     fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
     fShowSidebar();
 
     // Ensure log is sent
     setTimeout(() => fSendLogToGMScreenAndPS(), 0);
 
-    fMyConsoleLog(`✅ ${funcName}: Placeholder message posted for ${lootType}.`);
+    fMyConsoleLog(`✅ ${funcName}: Gear loot posted.`);
 
 } // END fLoot_RollGear
 
 
 
 // fLoot_ChaosCrystal //////////////////////////////////////////////////////////
-// Purpose -> Placeholder for rolling Chaos Crystal loot. Logs message to sidebar.
-// Inputs  -> None.
-// Outputs -> None. Posts placeholder message to sidebar and GMScreen/PS.
-function fLoot_ChaosCrystal() {
+// Purpose -> Rolls a Chaos Crystal ability from the dbCritFSData cache, determines
+//            its uses based on the MaxUses column (handling "dX" or "X"),
+//            and logs the result to the sidebar.
+// Inputs  -> isRandomRoll (Boolean, optional): True if called via fLoot_RollRndTreasure (default: false).
+// Outputs -> None. Posts selected crystal or error message to sidebar and GMScreen/PS.
+async function fLoot_ChaosCrystal(isRandomRoll = false) {
     const funcName = "fLoot_ChaosCrystal";
-    const lootType = "Chaos Crystal"; // Define loot type for messages
-    fMyConsoleLog(`⚙️ ${funcName}: Triggered placeholder for ${lootType}...`);
+    const lootType = "Chaos Crystal";
+    fMyConsoleLog(`⚙️ ${funcName}: Triggered placeholder for ${lootType} (isRandomRoll: ${isRandomRoll})...`);
 
-    // Format message
-    const titleHtml = `<span class="blue-bold">Loot ${lootType}:</span>`;
-    const titleText = `Loot ${lootType}:`;
-    const messageBody = `Future loot roll here`;
+    // === 1. Get Prerequisites ===
+    const cacheKey = 'dbCritFSData';
+    const critCache = gUI[cacheKey];
 
-    const sidebarMsgHtml = `${titleHtml}<br>${messageBody}`;
-    const sidebarMsgText = `${titleText}\n${messageBody}`;
+    // === 2. Validate Cache ===
+    if (!critCache || !critCache.text || !Array.isArray(critCache.text) ||
+        !critCache.colTagsMap || typeof critCache.colTagsMap !== 'object' ||
+        !critCache.rowTagsMap || typeof critCache.rowTagsMap !== 'object') {
+        const errorMsg = `Required cache ${cacheKey} is not loaded or invalid.`;
+        console.error(`${funcName}: ${errorMsg}`);
+        fMyConsoleLog(`   -> ❌ ${funcName} Error: ${errorMsg}`);
+        await fShowMessage(`Error: ${errorMsg}`);
+        return; // Halt execution
+    }
 
-    // Post to sidebar and ensure it's visible
+    // === 3. Resolve Tags & Indices ===
+    const chaosCrystalMaxUses_C = fResolveFSDataCol(cacheKey, 'ChaosCrytstalMaxUses');
+    const chaosCrystal_C = fResolveFSDataCol(cacheKey, 'ChaosCrystal');
+    const startRowTag = 'FirstDataRow';
+    const dataFirst_R_idx = fResolveFSDataRow(cacheKey, startRowTag);
+    const dataLast_R_idx = critCache.text.length - 1;
+
+    // Validate resolved tags/indices
+    const failedTags = [];
+    if (isNaN(chaosCrystalMaxUses_C)) failedTags.push('ChaosCrytstalMaxUses');
+    if (isNaN(chaosCrystal_C)) failedTags.push('ChaosCrystal');
+    if (isNaN(dataFirst_R_idx)) failedTags.push(startRowTag);
+
+    if (failedTags.length > 0) {
+        const errorMsg = `Could not resolve required tags in ${cacheKey}: ${failedTags.join(', ')}.`;
+        console.error(`${funcName}: ${errorMsg}`);
+        fMyConsoleLog(`   -> ❌ ${funcName} Error: ${errorMsg}`);
+        await fShowMessage(`Error: ${errorMsg}`);
+        return; // Halt execution
+    }
+
+    if (dataFirst_R_idx > dataLast_R_idx) {
+        const errorMsg = `Start row index (${dataFirst_R_idx}) is after last row index (${dataLast_R_idx}) in ${cacheKey}.`;
+        console.error(`${funcName}: ${errorMsg}`);
+        fMyConsoleLog(`   -> ❌ ${funcName} Error: ${errorMsg}`);
+        await fShowMessage(`Error: ${errorMsg}`);
+        return;
+    }
+
+    fMyConsoleLog(`   -> Resolved Tags: MaxUses=${chaosCrystalMaxUses_C}, Crystal=${chaosCrystal_C}. Data Range: ${dataFirst_R_idx}-${dataLast_R_idx}.`);
+
+    // === 4. Filter Valid Crystal Rows ===
+    const validRows = [];
+    for (let r = dataFirst_R_idx; r <= dataLast_R_idx; r++) {
+        const rowData = critCache.text[r];
+        if (!Array.isArray(rowData)) continue;
+
+        const maxUsesVal = rowData[chaosCrystalMaxUses_C];
+        const abilityVal = rowData[chaosCrystal_C];
+
+        const hasMaxUses = maxUsesVal !== undefined && maxUsesVal !== null && String(maxUsesVal).trim() !== '';
+        const hasAbility = abilityVal !== undefined && abilityVal !== null && String(abilityVal).trim() !== '';
+
+        if (hasMaxUses && hasAbility) {
+            validRows.push(r);
+        }
+    }
+
+    if (validRows.length === 0) {
+        const errorMsg = `No valid Chaos Crystal definitions found in the data range (${dataFirst_R_idx}-${dataLast_R_idx}).`;
+        fMyConsoleLog(`   -> ⚠️ ${funcName} Warning: ${errorMsg}`);
+        await fShowMessage(`Warning: ${errorMsg}`);
+        return;
+    }
+    fMyConsoleLog(`   -> Found ${validRows.length} valid crystal rows.`);
+
+    // === 5. Select Random Valid Row ===
+    const randomValidIndex = Math.floor(Math.random() * validRows.length);
+    const randomRow = validRows[randomValidIndex];
+    fMyConsoleLog(`   -> Selected valid row index: ${randomRow}`);
+
+    // === 6. Determine Uses (Revised Logic) ===
+    const maxUsesStr = String(critCache.text[randomRow][chaosCrystalMaxUses_C] ?? '1').trim();
+    let chaosCrystalUses = 1; // Default uses to 1
+
+    // Try parsing as full die string first (e.g., "2d4+1")
+    const rpgRollResult = fRollRPGDieString(maxUsesStr);
+    if (rpgRollResult !== null && rpgRollResult >= 1) {
+        chaosCrystalUses = rpgRollResult;
+        fMyConsoleLog(`      -> Determined uses by parsing "${maxUsesStr}" as RPG string: ${chaosCrystalUses}`);
+    } else {
+        // If RPG parse failed, try parsing as just a number (e.g., "4") to use as die size
+        const dieSize = parseInt(maxUsesStr, 10);
+        if (!isNaN(dieSize) && dieSize >= 1) {
+            chaosCrystalUses = fdRoll(dieSize); // Roll d(Size)
+            fMyConsoleLog(`      -> Determined uses by parsing "${maxUsesStr}" as die size and rolling d${dieSize}: ${chaosCrystalUses}`);
+        } else {
+            // If both parsing attempts fail, keep the default of 1
+            fMyConsoleLog(`      -> Warning: Failed to parse MaxUses string "${maxUsesStr}" as RPG string or die size. Defaulting uses to 1.`);
+            chaosCrystalUses = 1;
+        }
+    }
+    fMyConsoleLog(`   -> Final Determined Uses: ${chaosCrystalUses}`);
+
+    // === 7. Get and Clean Ability Text ===
+    let chaosCrystalAbility = String(critCache.text[randomRow][chaosCrystal_C] ?? 'Unknown Ability').trim();
+    chaosCrystalAbility = chaosCrystalAbility.replace(/[\r\n]/g, ' ');
+    fMyConsoleLog(`   -> Selected Ability: "${chaosCrystalAbility}"`);
+
+    // === 8. Format and Post Result ===
+    let titleHtml, titleText;
+    if (isRandomRoll) {
+        titleHtml = `<span class="blue-bold">Loot ${lootType}:</span>`;
+        titleText = `Loot ${lootType}:`;
+    } else {
+        titleHtml = `<span class="red-bold">SPECIFIC</span> <span class="blue-bold">Loot ${lootType}:</span>`;
+        titleText = `SPECIFIC Loot ${lootType}:`;
+    }
+    const usesLabel = (chaosCrystalUses === 1) ? 'Use' : 'Uses';
+    const messageBodyHtml = `${usesLabel}(${chaosCrystalUses})<br>${chaosCrystalAbility}`;
+    const messageBodyText = `${usesLabel}(${chaosCrystalUses})\n${chaosCrystalAbility}`;
+
+    const sidebarMsgHtml = `${titleHtml}<br>${messageBodyHtml}`;
+    const sidebarMsgText = `${titleText}\n${messageBodyText}`;
+
     fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
     fShowSidebar();
 
     // Ensure log is sent
     setTimeout(() => fSendLogToGMScreenAndPS(), 0);
 
-    fMyConsoleLog(`✅ ${funcName}: Placeholder message posted for ${lootType}.`);
+    fMyConsoleLog(`✅ ${funcName}: Chaos Crystal loot posted.`);
 
 } // END fLoot_ChaosCrystal
 
@@ -5140,30 +5457,137 @@ function fLoot_ChaosCrystal() {
 
 
 // fLoot_RollSocketGem /////////////////////////////////////////////////////////
-// Purpose -> Placeholder for rolling Socket Gem loot. Logs message to sidebar.
-// Inputs  -> None.
-// Outputs -> None. Posts placeholder message to sidebar and GMScreen/PS.
-function fLoot_RollSocketGem() {
+// Purpose -> Rolls a level-appropriate Socket Gem from the dbCritFSData cache
+//            and logs the result to the sidebar.
+// Inputs  -> isRandomRoll (Boolean, optional): True if called via fLoot_RollRndTreasure (default: false).
+// Outputs -> None. Posts selected gem or error message to sidebar and GMScreen/PS.
+async function fLoot_RollSocketGem(isRandomRoll = false) {
     const funcName = "fLoot_RollSocketGem";
-    const lootType = "Socket Gem"; // Define loot type for messages
-    fMyConsoleLog(`⚙️ ${funcName}: Triggered placeholder for ${lootType}...`);
+    const lootType = "Socket Gem";
+    fMyConsoleLog(`⚙️ ${funcName}: Triggered for ${lootType} (isRandomRoll: ${isRandomRoll})...`);
 
-    // Format message
-    const titleHtml = `<span class="blue-bold">Loot ${lootType}:</span>`;
-    const titleText = `Loot ${lootType}:`;
-    const messageBody = `Future loot roll here`;
+    // === 1. Get Prerequisites ===
+    const charLvl = Number(gUI.characterInfo?.level) || 0;
+    const socketColors = gUI.list?.metaColor; // Expect ['R', 'O', 'Y', 'G', 'B']
+    const cacheKey = 'dbCritFSData';
+    const critCache = gUI[cacheKey];
 
-    const sidebarMsgHtml = `${titleHtml}<br>${messageBody}`;
-    const sidebarMsgText = `${titleText}\n${messageBody}`;
+    // === 2. Validate Prerequisites ===
+    if (!Array.isArray(socketColors) || socketColors.length !== 5) {
+        const errorMsg = `Socket color list (gUI.list.metaColor) is missing or invalid.`;
+        console.error(`${funcName}: ${errorMsg}`);
+        fMyConsoleLog(`   -> ❌ ${funcName} Error: ${errorMsg}`);
+        await fShowMessage(`Error: ${errorMsg}`);
+        return;
+    }
+    if (!critCache || !critCache.text || !Array.isArray(critCache.text) ||
+        !critCache.colTagsMap || typeof critCache.colTagsMap !== 'object' ||
+        !critCache.rowTagsMap || typeof critCache.rowTagsMap !== 'object') {
+        const errorMsg = `Required cache ${cacheKey} is not loaded or invalid.`;
+        console.error(`${funcName}: ${errorMsg}`);
+        fMyConsoleLog(`   -> ❌ ${funcName} Error: ${errorMsg}`);
+        await fShowMessage(`Error: ${errorMsg}`);
+        return;
+    }
 
-    // Post to sidebar and ensure it's visible
+    // === 3. Resolve Tags & Indices ===
+    const gemColor_C = fResolveFSDataCol(cacheKey, 'GemColor');
+    const gemDesc_C = fResolveFSDataCol(cacheKey, 'GemDesc');
+    const startRowTag = 'FirstDataRow'; // Use standard start tag
+    const dataFirst_R_idx = fResolveFSDataRow(cacheKey, startRowTag);
+    const dataLast_R_idx = critCache.text.length - 1;
+
+    const failedTags = [];
+    if (isNaN(gemColor_C)) failedTags.push('GemColor');
+    if (isNaN(gemDesc_C)) failedTags.push('GemDesc');
+    if (isNaN(dataFirst_R_idx)) failedTags.push(startRowTag);
+
+    if (failedTags.length > 0) {
+        const errorMsg = `Could not resolve required tags in ${cacheKey}: ${failedTags.join(', ')}.`;
+        console.error(`${funcName}: ${errorMsg}`);
+        fMyConsoleLog(`   -> ❌ ${funcName} Error: ${errorMsg}`);
+        await fShowMessage(`Error: ${errorMsg}`);
+        return;
+    }
+
+    if (dataFirst_R_idx > dataLast_R_idx) {
+        const errorMsg = `Start row index (${dataFirst_R_idx}) is after last row index (${dataLast_R_idx}) in ${cacheKey}.`;
+        console.error(`${funcName}: ${errorMsg}`);
+        fMyConsoleLog(`   -> ❌ ${funcName} Error: ${errorMsg}`);
+        await fShowMessage(`Error: ${errorMsg}`);
+        return;
+    }
+    fMyConsoleLog(`   -> Resolved Tags: GemColor=${gemColor_C}, GemDesc=${gemDesc_C}. Data Range: ${dataFirst_R_idx}-${dataLast_R_idx}. CharLvl=${charLvl}.`);
+
+    // === 4. Determine Max Gem Color Index based on Level & Random Rolls ===
+    let maxGemColorIndexBase;
+    if (charLvl <= 4) maxGemColorIndexBase = 2;      // Up to Yellow (index 2)
+    else if (charLvl <= 9) maxGemColorIndexBase = 3; // Up to Green (index 3)
+    else maxGemColorIndexBase = 4;                   // Up to Blue (index 4)
+
+    // Roll d(Index + 1) twice and take the minimum result - 1 to get the final index
+    const roll1 = fdRoll(maxGemColorIndexBase + 1);
+    const roll2 = fdRoll(maxGemColorIndexBase + 1);
+    const maxGemColorIndex = Math.min(roll1, roll2) - 1;
+
+    fMyConsoleLog(`   -> Base Max Index=${maxGemColorIndexBase}. Rolls=(${roll1}, ${roll2}). Final Max Index=${maxGemColorIndex} (${socketColors[maxGemColorIndex]}).`);
+
+    // === 5. Filter Eligible Gems ===
+    const eligibleGems = [];
+    for (let r = dataFirst_R_idx; r <= dataLast_R_idx; r++) {
+        const rowData = critCache.text[r];
+        if (!Array.isArray(rowData)) continue;
+
+        const gemColor = String(rowData[gemColor_C] ?? '').toUpperCase();
+        const gemDesc = String(rowData[gemDesc_C] ?? '').trim();
+        const gemColorIndex = socketColors.indexOf(gemColor); // Find index of this gem's color
+
+        // Check if valid color, below max index, and has description
+        if (gemColorIndex !== -1 && gemColorIndex <= maxGemColorIndex && gemDesc !== '') {
+            eligibleGems.push({
+                index: r,
+                color: gemColor,
+                description: gemDesc
+            });
+        }
+    }
+
+    if (eligibleGems.length === 0) {
+        const errorMsg = `No socket gems found matching level ${charLvl} criteria (Max Color: ${socketColors[maxGemColorIndex]}).`;
+        fMyConsoleLog(`   -> ⚠️ ${funcName} Warning: ${errorMsg}`);
+        await fShowMessage(`Warning: ${errorMsg}`);
+        return; // Halt execution
+    }
+    fMyConsoleLog(`   -> Found ${eligibleGems.length} eligible gems.`);
+
+    // === 6. Select Random Eligible Gem ===
+    const randomIndex = Math.floor(Math.random() * eligibleGems.length);
+    const selectedGem = eligibleGems[randomIndex];
+    fMyConsoleLog(`   -> Selected Gem: Color=${selectedGem.color}, Desc="${selectedGem.description}"`);
+
+    // === 7. Format and Post Result ===
+    let titleHtml, titleText;
+    if (isRandomRoll) {
+        titleHtml = `<span class="blue-bold">Loot ${lootType}:</span>`;
+        titleText = `Loot ${lootType}:`;
+    } else {
+        titleHtml = `<span class="red-bold">SPECIFIC</span> <span class="blue-bold">Loot ${lootType}:</span>`;
+        titleText = `SPECIFIC Loot ${lootType}:`;
+    }
+    // Format message body
+    const messageBodyHtml = `${selectedGem.color} Gem:<br>${selectedGem.description}`;
+    const messageBodyText = `${selectedGem.color} Gem:\n${selectedGem.description}`;
+
+    const sidebarMsgHtml = `${titleHtml}<br>${messageBodyHtml}`;
+    const sidebarMsgText = `${titleText}\n${messageBodyText}`;
+
     fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
     fShowSidebar();
 
     // Ensure log is sent
     setTimeout(() => fSendLogToGMScreenAndPS(), 0);
 
-    fMyConsoleLog(`✅ ${funcName}: Placeholder message posted for ${lootType}.`);
+    fMyConsoleLog(`✅ ${funcName}: Socket Gem loot posted.`);
 
 } // END fLoot_RollSocketGem
 
@@ -5171,30 +5595,127 @@ function fLoot_RollSocketGem() {
 
 
 // fLoot_RollArtifact //////////////////////////////////////////////////////////
-// Purpose -> Placeholder for rolling Artifact loot. Logs message to sidebar.
-// Inputs  -> None.
-// Outputs -> None. Posts placeholder message to sidebar and GMScreen/PS.
-function fLoot_RollArtifact() {
+// Purpose -> Rolls an Artifact from the dbGearFSData cache, filtering by the
+//            'IsArtifact' flag and character level vs AP cost. Logs result to sidebar.
+// Inputs  -> isRandomRoll (Boolean, optional): True if called via fLoot_RollRndTreasure (default: false).
+// Outputs -> None. Posts selected artifact or error message to sidebar and GMScreen/PS.
+async function fLoot_RollArtifact(isRandomRoll = false) {
     const funcName = "fLoot_RollArtifact";
-    const lootType = "Artifact"; // Define loot type for messages
-    fMyConsoleLog(`⚙️ ${funcName}: Triggered placeholder for ${lootType}...`);
+    const lootType = "Artifact";
+    fMyConsoleLog(`⚙️ ${funcName}: Triggered placeholder for ${lootType} (isRandomRoll: ${isRandomRoll})...`);
 
-    // Format message
-    const titleHtml = `<span class="blue-bold">Loot ${lootType}:</span>`;
-    const titleText = `Loot ${lootType}:`;
-    const messageBody = `Future loot roll here`;
+    // === 1. Get Prerequisites ===
+    const charLvl = Number(gUI.characterInfo?.level) || 0; // Default to 0 if missing/invalid
+    const cacheKey = 'dbGearFSData';
+    const gearCache = gUI[cacheKey];
 
-    const sidebarMsgHtml = `${titleHtml}<br>${messageBody}`;
-    const sidebarMsgText = `${titleText}\n${messageBody}`;
+    // === 2. Validate Cache ===
+    if (!gearCache || !gearCache.text || !Array.isArray(gearCache.text) ||
+        !gearCache.colTagsMap || typeof gearCache.colTagsMap !== 'object' ||
+        !gearCache.rowTagsMap || typeof gearCache.rowTagsMap !== 'object') {
+        const errorMsg = `Required cache ${cacheKey} is not loaded or invalid.`;
+        console.error(`${funcName}: ${errorMsg}`);
+        fMyConsoleLog(`   -> ❌ ${funcName} Error: ${errorMsg}`);
+        await fShowMessage(`Error: ${errorMsg}`);
+        return; // Halt execution
+    }
 
-    // Post to sidebar and ensure it's visible
+    // === 3. Resolve Tags & Indices ===
+    const isArtifact_C = fResolveFSDataCol(cacheKey, 'IsArtifact');
+    const artName_C = fResolveFSDataCol(cacheKey, 'Name');
+    const apCost_C = fResolveFSDataCol(cacheKey, 'AP');
+    const artDataFirst_R = fResolveFSDataRow(cacheKey, 'The ID'); // Resolve 'The ID' tag row
+    const artDataLast_R = gearCache.text.length - 1; // Last row index
+
+    // Validate resolved tags/indices
+    const failedTags = [];
+    if (isNaN(isArtifact_C)) failedTags.push('IsArtifact');
+    if (isNaN(artName_C)) failedTags.push('Name');
+    if (isNaN(apCost_C)) failedTags.push('AP');
+    if (isNaN(artDataFirst_R)) failedTags.push('The ID (start row)');
+
+    if (failedTags.length > 0) {
+        const errorMsg = `Could not resolve required tags in ${cacheKey}: ${failedTags.join(', ')}.`;
+        console.error(`${funcName}: ${errorMsg}`);
+        fMyConsoleLog(`   -> ❌ ${funcName} Error: ${errorMsg}`);
+        await fShowMessage(`Error: ${errorMsg}`);
+        return; // Halt execution
+    }
+
+    const firstDataRowIndex = artDataFirst_R + 1; // Actual first data row is one below 'The ID'
+    fMyConsoleLog(`   -> Resolved Tags: IsArtifact=${isArtifact_C}, Name=${artName_C}, AP=${apCost_C}. Data Range: ${firstDataRowIndex}-${artDataLast_R}. CharLvl=${charLvl}.`);
+
+    // === 4. Filter Artifacts ===
+    const artifactRows = [];
+    for (let r = firstDataRowIndex; r <= artDataLast_R; r++) {
+        const rowData = gearCache.text[r];
+        if (!Array.isArray(rowData)) continue; // Skip malformed rows
+
+        const isArtifactVal = rowData[isArtifact_C];
+        const isTrulyArtifact = (isArtifactVal === true || String(isArtifactVal).toUpperCase() === 'TRUE');
+
+        if (isTrulyArtifact) {
+            artifactRows.push({ index: r, data: rowData }); // Store index and data
+        }
+    }
+
+    if (artifactRows.length === 0) {
+        const errorMsg = `No items marked as Artifact found in ${cacheKey}.`;
+        fMyConsoleLog(`   -> ⚠️ ${funcName} Warning: ${errorMsg}`);
+        await fShowMessage(`Warning: ${errorMsg}`);
+        return; // Halt execution
+    }
+    fMyConsoleLog(`   -> Found ${artifactRows.length} total artifacts.`);
+
+    // === 5. Filter by AP Cost ===
+    const maxAPCost = Math.max(5, charLvl);
+    fMyConsoleLog(`   -> Filtering artifacts by Max AP Cost <= ${maxAPCost} (based on charLvl ${charLvl}).`);
+    const eligibleArtifacts = artifactRows.filter(artifact => {
+        const apCost = Number(artifact.data[apCost_C]) || Infinity; // Default to Infinity if not a number
+        return apCost <= maxAPCost;
+    });
+
+    if (eligibleArtifacts.length === 0) {
+        const errorMsg = `No artifacts found with AP Cost <= ${maxAPCost}.`;
+        fMyConsoleLog(`   -> ⚠️ ${funcName} Warning: ${errorMsg}`);
+        // Modify the message slightly for user display
+        const userMsg = `No artifacts found suitable for character level ${charLvl} (Max AP Cost: ${maxAPCost}).`;
+        await fShowMessage(userMsg);
+        return; // Halt execution
+    }
+    fMyConsoleLog(`   -> Found ${eligibleArtifacts.length} eligible artifacts.`);
+
+    // === 6. Select Random Eligible Artifact ===
+    const randomIndex = Math.floor(Math.random() * eligibleArtifacts.length);
+    const selectedArtifact = eligibleArtifacts[randomIndex];
+    const selectedRowData = selectedArtifact.data;
+
+    const artName = String(selectedRowData[artName_C] || 'Unknown Artifact').trim();
+    const apCost = selectedRowData[apCost_C] ?? '?'; // Keep AP cost as string/number from cache
+    fMyConsoleLog(`   -> Selected Artifact: "${artName}" (AP: ${apCost}) at original index ${selectedArtifact.index}.`);
+
+    // === 7. Format and Post Result ===
+    let titleHtml, titleText;
+    if (isRandomRoll) {
+        titleHtml = `<span class="blue-bold">Loot ${lootType}:</span>`;
+        titleText = `Loot ${lootType}:`;
+    } else {
+        titleHtml = `<span class="red-bold">SPECIFIC</span> <span class="blue-bold">Loot ${lootType}:</span>`;
+        titleText = `SPECIFIC Loot ${lootType}:`;
+    }
+    const messageBodyHtml = `${artName} (${apCost}AP)`; // Use HTML compatible string
+    const messageBodyText = `${artName} (${apCost}AP)`; // Plain text version
+
+    const sidebarMsgHtml = `${titleHtml}<br>${messageBodyHtml}`;
+    const sidebarMsgText = `${titleText}\n${messageBodyText}`;
+
     fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
     fShowSidebar();
 
     // Ensure log is sent
     setTimeout(() => fSendLogToGMScreenAndPS(), 0);
 
-    fMyConsoleLog(`✅ ${funcName}: Placeholder message posted for ${lootType}.`);
+    fMyConsoleLog(`✅ ${funcName}: Artifact loot posted.`);
 
 } // END fLoot_RollArtifact
 
@@ -5202,30 +5723,88 @@ function fLoot_RollArtifact() {
 
 
 // fLoot_RollSockets ///////////////////////////////////////////////////////////
-// Purpose -> Placeholder for rolling Socketed Gear loot. Logs message to sidebar.
-// Inputs  -> None.
-// Outputs -> None. Posts placeholder message to sidebar and GMScreen/PS.
-function fLoot_RollSockets() {
+// Purpose -> Rolls a random socketed item type, determines the number and color
+//            of sockets based on character level, and logs the result to the sidebar.
+// Inputs  -> isRandomRoll (Boolean, optional): True if called via fLoot_RollRndTreasure (default: false).
+// Outputs -> None. Posts selected socketed item or error message to sidebar and GMScreen/PS.
+async function fLoot_RollSockets(isRandomRoll = false) {
     const funcName = "fLoot_RollSockets";
-    const lootType = "Socketed Gear"; // Define loot type for messages
-    fMyConsoleLog(`⚙️ ${funcName}: Triggered placeholder for ${lootType}...`);
+    const lootType = "Socketed Gear";
+    fMyConsoleLog(`⚙️ ${funcName}: Triggered for ${lootType} (isRandomRoll: ${isRandomRoll})...`);
 
-    // Format message
-    const titleHtml = `<span class="blue-bold">Loot ${lootType}:</span>`;
-    const titleText = `Loot ${lootType}:`;
-    const messageBody = `Future loot roll here`;
+    // === 1. Get Prerequisites ===
+    const charLvl = Number(gUI.characterInfo?.level) || 0;
+    const socketColors = gUI.list?.metaColor; // Expect ['R', 'O', 'Y', 'G', 'B']
 
-    const sidebarMsgHtml = `${titleHtml}<br>${messageBody}`;
-    const sidebarMsgText = `${titleText}\n${messageBody}`;
+    // === 2. Validate Prerequisites ===
+    if (!Array.isArray(socketColors) || socketColors.length !== 5) {
+        const errorMsg = `Socket color list (gUI.list.metaColor) is missing or invalid.`;
+        console.error(`${funcName}: ${errorMsg}`);
+        fMyConsoleLog(`   -> ❌ ${funcName} Error: ${errorMsg}`);
+        await fShowMessage(`Error: ${errorMsg}`);
+        return;
+    }
+    fMyConsoleLog(`   -> CharLvl=${charLvl}. Socket Colors: ${socketColors.join(',')}`);
 
-    // Post to sidebar and ensure it's visible
+    // === 3. Determine Max Gem Color Index based on Level ===
+    let maxGemColorIndexBase;
+    if (charLvl <= 4) maxGemColorIndexBase = 2;      // Up to Yellow (index 2)
+    else if (charLvl <= 9) maxGemColorIndexBase = 3; // Up to Green (index 3)
+    else maxGemColorIndexBase = 4;                   // Up to Blue (index 4)
+
+    // === 4. Determine Number of Gem Slots ===
+    // Calculate max slots based on cube root of level (min 1)
+    const maxGemSlots = Math.max(1, Math.floor(Math.cbrt(charLvl)));
+    // Roll twice and take the minimum
+    const numGemSlots = Math.min(fdRoll(maxGemSlots), fdRoll(maxGemSlots));
+    fMyConsoleLog(`   -> Max Slots based on Level ${charLvl}: ${maxGemSlots}. Actual Slots Rolled: ${numGemSlots}.`);
+
+    // === 5. Determine Slot Colors ===
+    const slotColorArr = [];
+    fMyConsoleLog(`   -> Determining ${numGemSlots} slot color(s) (Max Base Index: ${maxGemColorIndexBase})...`);
+    for (let i = 0; i < numGemSlots; i++) {
+        // Roll d(BaseIndex + 1) twice, take min, subtract 1 for index
+        const roll1 = fdRoll(maxGemColorIndexBase + 1);
+        const roll2 = fdRoll(maxGemColorIndexBase + 1);
+        let colorIndex = Math.min(roll1, roll2) - 1;
+        colorIndex = Math.max(0, colorIndex); // Ensure index is not negative
+        slotColorArr.push(socketColors[colorIndex]);
+        fMyConsoleLog(`      -> Slot ${i+1}: Rolls=(${roll1}, ${roll2}) => Index=${colorIndex} => Color=${socketColors[colorIndex]}`);
+    }
+    const slotColorsText = slotColorArr.join(', '); // Comma-separated string
+
+    // === 6. Select Item Type ===
+    const weaponArr = ['Rnd Owned Body Weapon', 'Selected Body Weapon', 'Rnd Owned Melee Weapon', 'Selected Melee Weapon', 'Rnd Owned Hurled Weapon', 'Selected Hurled Weapon', 'Rnd Owned Ranged Weapon', 'Selected Ranged Weapon'];
+    const itemArr = ['Boots', 'Gloves', 'Gauntlet', 'Rnd Owned Armor', 'Selected Armor', 'Pants', 'Belt', 'Tunic/Shirt', 'Ring', 'Arm Band', 'Helmet', 'Tiara', 'Necklace', 'Amulet', 'Pendant/Broach'];
+    const itemTypeRoll = fdRoll(3); // 1=Weapon, 2/3=Item
+    const selectedArray = (itemTypeRoll === 1) ? weaponArr : itemArr;
+    const itemRolled = selectedArray[Math.floor(Math.random() * selectedArray.length)];
+    fMyConsoleLog(`   -> Selected Item Type Roll (d3=${itemTypeRoll}): "${itemRolled}"`);
+
+    // === 7. Format and Post Result ===
+    let titleHtml, titleText;
+    if (isRandomRoll) {
+        titleHtml = `<span class="blue-bold">Loot ${lootType}:</span>`;
+        titleText = `Loot ${lootType}:`;
+    } else {
+        titleHtml = `<span class="red-bold">SPECIFIC</span> <span class="blue-bold">Loot ${lootType}:</span>`;
+        titleText = `SPECIFIC Loot ${lootType}:`;
+    }
+    // Format message body
+    const slotLabel = (numGemSlots === 1) ? 'slot' : 'slots';
+    const messageBodyHtml = `${itemRolled} with ${slotColorsText} ${slotLabel}`;
+    const messageBodyText = `${itemRolled} with ${slotColorsText} ${slotLabel}`;
+
+    const sidebarMsgHtml = `${titleHtml}<br>${messageBodyHtml}`;
+    const sidebarMsgText = `${titleText}\n${messageBodyText}`;
+
     fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
     fShowSidebar();
 
     // Ensure log is sent
     setTimeout(() => fSendLogToGMScreenAndPS(), 0);
 
-    fMyConsoleLog(`✅ ${funcName}: Placeholder message posted for ${lootType}.`);
+    fMyConsoleLog(`✅ ${funcName}: Socketed Gear loot posted.`);
 
 } // END fLoot_RollSockets
 
