@@ -3799,7 +3799,7 @@ async function fHandleNewLevelSlotName() {
         // gUI.characterInfo should now be populated/updated by the RaceClass refresh
         fMyConsoleLog("   -> Validating Slot Number from refreshed data...");
         const currentSlot = gUI.characterInfo?.slotNum;
-        const slotRegex = /^Slot\s+([1-9])$/i; // Expect "Slot#"
+        const slotRegex = /^Slot([1-9])$/i; // Expect "Slot#"
 
         if (!currentSlot || !slotRegex.test(currentSlot)) {
             const invalidSlotMsg = `Invalid or missing Slot # ("${currentSlot || 'null'}") found after cache refresh. Cannot send log or proceed.`;
