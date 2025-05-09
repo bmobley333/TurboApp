@@ -1820,6 +1820,7 @@ function fCalcGUIRollRoll() {
         case '':    // No type defined
              gUI.roll.roll = '';
              break;
+        case 'tc':  // tremendous/crit roll
         case 'sk':  // Standard Skill
         case 'atr': // Attribute
         case 'str': // Strength (currently uses Sk roll)
@@ -2535,9 +2536,9 @@ async function fNishTorCText(tOrC) {
     const titleHtml = `<span class="red-bold">${titleText}</span>`; // Use red-bold for both per request
 
     // --- 4. Resolve Tags & Indices ---
-    const startRowTag = 'FirstDataRow';
+    const startRowTag = 'RowBeforeFirstDataRow';
     const resultColIndex = fResolveFSDataCol(cacheKey, columnTag);
-    const startRowIndex = fResolveFSDataRow(cacheKey, startRowTag);
+    const startRowIndex = fResolveFSDataRow(cacheKey, startRowTag) + 1;
 
     if (isNaN(resultColIndex)) {
         fMyConsoleLog(`   -> ❌ ${funcName} Error: Column tag '${columnTag}' not found in ${cacheKey}.`);

@@ -257,7 +257,7 @@ const gUI = {
     monstersDB: { r1: 'MonTblFirst_R', c1: 'ActiveMonTF', r2: 'MonTblLast_R', c2: 'Notes' }
   },
   list: { // Static lists and values
-    skTyp: ['Atr','Sk','Atk','DMG','Def','AR','Str'], // Note free, luck, un, unSk are not skill Types and dealth with elsewhere
+    skTyp: ['Atr','Sk','Atk','DMG','Def','AR','Str','TC'], // Note free, luck, un, unSk are not skill Types and dealth with elsewhere
     metaColor: ['R','O','Y','G','B'],
     metaFull: [5,4,3,2,1], // Maximums for each meta color
     luckBoxMax: 5,
