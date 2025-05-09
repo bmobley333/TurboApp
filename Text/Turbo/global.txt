@@ -243,6 +243,7 @@ const gUI = {
     vit1stWnds: { r1: 'VitTbl', c1: 'vit1st', r2: 'VitTbl', c2: 'vit1st' },
     vit2ndWnds: { r1: 'VitTbl', c1: 'vit2nd', r2: 'VitTbl', c2: 'vit2nd' },
     vit3rdWnds: { r1: 'VitTbl', c1: 'vit3rd', r2: 'VitTbl', c2: 'vit3rd' },
+    vit1stTo3rd: { r1: 'VitTbl', c1: 'vit1st', r2: 'VitTbl', c2: 'vit3rd' },
     vitNow: { r1: 'VitTbl', c1: 'vitNow', r2: 'VitTbl', c2: 'vitNow' },
     vitNowPercent: { r1: 'VitTbl', c1: 'VitNowPercent', r2: 'VitTbl', c2: 'VitNowPercent' },
     chaosGems: { r1: 'Chaos1', c1: 'ChaosUses', r2: 'ChaosWrist', c2: 'ChaosAbility' },
