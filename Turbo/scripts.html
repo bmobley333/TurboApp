@@ -107,6 +107,7 @@ function fMakeCorrectCheckBoxType(r, c) {
 
 
 
+
 // fCreateAndFormatCell //////////////////////////////////////////////////////////////
 // Purpose -> Creates and formats a single grid cell div element. Handles content
 //            (text, checkbox, dropdown), URL/image/note tags, editability, and styling.
@@ -126,7 +127,7 @@ function fCreateAndFormatCell(r, c, value, rowFormat) {
 
     // === Set Base Attributes & Check Editability/Note ===
     const bgColor = rowFormat.bg?.[c];
-    const isEditable = fCheckIfEditable(bgColor, isCheckbox);
+    const isEditable = fCheckIfEditable(r, c, bgColor, isCheckbox); // Pass r and c
     fSetCellAttributes(cell, r, c, isEditable);
     fCheckAndTagNote(cell, r, c);
 
@@ -144,9 +145,9 @@ function fCreateAndFormatCell(r, c, value, rowFormat) {
 
     // === Apply Final Formatting ===
     fApplyCellFormatting(cell, c, bgColor, rowFormat);
-
     return cell;
 } // END fCreateAndFormatCell
+
 
 
 
@@ -218,17 +219,29 @@ function fMakeDropdown(r, c, config, currentVal) {
 
 
 
+
 // fCheckIfEditable //////////////////////////////////////////////////////////////
 // Purpose -> Determines if a cell should be contentEditable based on background
-//            color (must be white/default) and type (must not be a checkbox).
-// Inputs  -> bgColor (String | null): Background color hex string or null.
+//            color, type (not a checkbox), or if it's a designated Meta/Channel cell.
+// Inputs  -> r (Number): 0-based row index of the cell.
+//         -> c (Number): 0-based column index of the cell.
+//         -> bgColor (String | null): Background color hex string or null.
 //         -> isCheckbox (Boolean): True if the cell contains a checkbox.
 // Outputs -> (Boolean): True if the cell should be editable, false otherwise.
-function fCheckIfEditable(bgColor, isCheckbox) {
-    const isWhiteBg = (!bgColor || bgColor.toLowerCase() === '#ffffff' || bgColor === 'white');
+function fCheckIfEditable(r, c, bgColor, isCheckbox) {
+    // Check if the cell is within the Meta or Meta Channel ranges
+    const isMetaRange = gUI.range?.meta && fIsCellInRangeArray(r, c, [gUI.range.meta]);
+    const isMetaChannelRange = gUI.range?.metaChannel && fIsCellInRangeArray(r, c, [gUI.range.metaChannel]);
 
+    if (isMetaRange || isMetaChannelRange) {
+        return true; // Meta and Meta Channel cells are always editable (if not a checkbox, though they shouldn't be)
+    }
+
+    // Original logic for other cells
+    const isWhiteBg = (!bgColor || bgColor.toLowerCase() === '#ffffff' || bgColor === 'white');
     return isWhiteBg && !isCheckbox;
 } // END fCheckIfEditable
+
 
 
 
@@ -2726,15 +2739,16 @@ function fHandleUrlClick(cellDiv) {
 
 
 
-
 // fHandleGridCellEdit /////////////////////////////////////////////////////////////
 // Purpose -> Handles the 'blur' event delegated from the grid for contenteditable cells.
 //            Updates the underlying data model (gUI.arr) if the cell's text content
 //            has changed since it gained focus. Calls fCalcGearLine for specific
 //            gear columns and fCalc_VitMaxNowPerc for specific Vit-related columns.
+//            Handles special validation (including max values for Meta cells) and
+//            alerting (including showing sidebar and sending log) for Meta/Channel Meta cells.
 // Inputs  -> event (FocusEvent): The blur event object.
 // Outputs -> None (Modifies gUI.arr, potentially triggers calculations and auto-save).
-async function fHandleGridCellEdit(event) { // <<< MADE ASYNC
+async function fHandleGridCellEdit(event) {
     const cellDiv = event.target;
 
     // === 1. Validate Target Element ===
@@ -2752,93 +2766,166 @@ async function fHandleGridCellEdit(event) { // <<< MADE ASYNC
     }
 
     const newValue = cellDiv.textContent;
-    const oldValue = String(gUI.arr[r][c] ?? ''); // Coerce old value to string for comparison
+    const oldValueInModel = gUI.arr[r][c]; // Get value directly from model for comparison
+    const oldValueForDisplay = (oldValueInModel === '' || oldValueInModel === 0) ? '0' : String(oldValueInModel);
 
-    // === 3. Check if Value Changed ===
-    if (newValue === oldValue) {
-        // fMyConsoleLog(`Cell [${r}, ${c}] content unchanged.`); // Can be noisy
-        return; // Exit if content hasn't changed
+
+    // === 3. Check if Value Changed (Text Content vs Model) ===
+    let textChanged = true;
+    const isMetaOrChannelCellForChangeCheck =
+        (gUI.range?.meta && fIsCellInRangeArray(r, c, [gUI.range.meta])) ||
+        (gUI.range?.metaChannel && fIsCellInRangeArray(r, c, [gUI.range.metaChannel]));
+
+    if (isMetaOrChannelCellForChangeCheck) {
+        const normalizedNewValue = (newValue === "0") ? "" : newValue; // Treat "0" input as "" for comparison with model
+        if (normalizedNewValue === String(oldValueInModel ?? '')) { // Compare with stringified model value
+            textChanged = false;
+        }
+    } else {
+        if (newValue === String(oldValueInModel ?? '')) { // Standard comparison for non-meta
+            textChanged = false;
+        }
     }
+
+    if (!textChanged) {
+        // fMyConsoleLog(`Cell [${r}, ${c}] content effectively unchanged from model.`); // Can be noisy
+        if (cellDiv.textContent !== String(oldValueInModel ?? '')) { // Ensure DOM matches model if no change
+            cellDiv.textContent = String(oldValueInModel ?? '');
+        }
+        return;
+    }
+
 
     // === 4. Identify Edited Column & Handle Specific Calculations ===
     const gearColumnsToCalculate = ['PossNum', 'PossWorn', 'PossPerOff'];
     const editedColTag = Object.keys(gUI.colTag).find(tag => gUI.colTag[tag] === c);
-    let finalValueToStore = newValue; // Default to the raw new value
-    let shouldUpdateModel = true; // Assume update is needed initially
-    let specificCalcDone = false; // Flag to track if a specific calc was run
+    let finalValueToStore = newValue;
+    let shouldUpdateModelAndSave = true;
+    let specificCalcDone = false;
+    let metaOrChannelAlertPosted = false; // Flag to see if a Meta/Channel alert was generated
 
-    // --- Gear Calculations ---
-    if (gearColumnsToCalculate.includes(editedColTag)) {
-        fMyConsoleLog(`   -> Edit in gear calculation column: ${editedColTag} [${r}, ${c}]`);
-        // Call the calculation function, passing OLD value for potential revert
-        const validatedValue = await fCalcGearLine(r, c, newValue, oldValue);
-        if (validatedValue !== null) {
-            // fCalcGearLine succeeded and returned the validated value
-            finalValueToStore = validatedValue;
-            fMyConsoleLog(`   -> fCalcGearLine successful for [${r}, ${c}]. Value to store: "${finalValueToStore}"`);
+    // --- Meta and Meta Channel Cell Handling ---
+    const isMetaCell = gUI.range?.meta && fIsCellInRangeArray(r, c, [gUI.range.meta]);
+    const isMetaChannelCell = gUI.range?.metaChannel && fIsCellInRangeArray(r, c, [gUI.range.metaChannel]);
+
+    if (isMetaCell || isMetaChannelCell) {
+        fMyConsoleLog(`   -> Edit in Meta/Channel cell: ${editedColTag || `[${r},${c}]`}`);
+        const trimmedNewValue = newValue.trim();
+        let parsedNum = parseInt(trimmedNewValue, 10);
+        let isValidInput = false;
+
+        if (trimmedNewValue === "") {
+            finalValueToStore = ""; // Valid: blank represents 0
+            isValidInput = true;
+            fMyConsoleLog(`      -> Valid Meta/Channel input: Blank string, stored as "" (represents 0).`);
+        } else if (!isNaN(parsedNum) && parsedNum > 0 && String(parsedNum) === trimmedNewValue) {
+            // Positive integer, and no trailing non-numeric chars
+            if (isMetaCell) {
+                const colorIndex = gUI.list.metaColor.findIndex(tag => gUI.colTag[tag] === c);
+                if (colorIndex !== -1 && gUI.list.metaFull && colorIndex < gUI.list.metaFull.length) {
+                    const maxAllowed = gUI.list.metaFull[colorIndex];
+                    if (parsedNum <= maxAllowed) {
+                        finalValueToStore = parsedNum;
+                        isValidInput = true;
+                        fMyConsoleLog(`      -> Valid Meta input: Positive integer ${parsedNum} (Max: ${maxAllowed}).`);
+                    } else {
+                        fMyConsoleLog(`      -> Invalid Meta input: ${parsedNum} exceeds max ${maxAllowed} for ${gUI.list.metaColor[colorIndex]}. Reverting.`);
+                        // Invalid: exceeds max for Meta cells
+                    }
+                } else {
+                    fMyConsoleLog(`      -> Could not determine max for Meta cell ${gUI.list.metaColor[colorIndex]}. Treating as invalid.`);
+                    // Should not happen if gUI.list.metaColor and gUI.list.metaFull are synced
+                }
+            } else { // isMetaChannelCell
+                finalValueToStore = parsedNum; // Meta Channel has no upper cap beyond being positive integer
+                isValidInput = true;
+                fMyConsoleLog(`      -> Valid Meta Channel input: Positive integer ${parsedNum}.`);
+            }
         } else {
-            // fCalcGearLine failed validation or encountered an error
-            fMyConsoleLog(`   -> fCalcGearLine failed for [${r}, ${c}]. NOT updating data model for this cell.`);
-            shouldUpdateModel = false; // Prevent gUI.arr update
-            // fCalcGearLine should have reverted the DOM cell already
+            fMyConsoleLog(`      -> Invalid Meta/Channel input: "${newValue}" (not blank or not positive integer). Reverting.`);
+            // Invalid input (includes "0", negatives, decimals, non-numeric)
+        }
+
+        if (!isValidInput) {
+            cellDiv.textContent = String(oldValueInModel ?? ''); // Revert DOM
+            shouldUpdateModelAndSave = false;
+        }
+
+        if (shouldUpdateModelAndSave && finalValueToStore !== oldValueInModel) {
+            const metaType = isMetaCell ? "Meta Color" : "Meta Channel Color";
+            const colorTag = gUI.list.metaColor.find(tag => gUI.colTag[tag] === c) || `Col${c}`;
+            const newValueForDisplay = (finalValueToStore === '' || finalValueToStore === 0) ? '0' : String(finalValueToStore);
+
+            const alertPrefixHtml = `⚠️ <span class="red-bold">Alert:</span> `;
+            const alertPrefixText = `⚠️ Alert: `;
+
+            const alertMsgHtml = `${alertPrefixHtml}${metaType} ${colorTag} was changed from ${oldValueForDisplay} to ${newValueForDisplay}`;
+            const alertMsgText = `${alertPrefixText}${metaType} ${colorTag} was changed from ${oldValueForDisplay} to ${newValueForDisplay}`;
+            fPostToSidebar(alertMsgHtml, alertMsgText); // This updates gUI.plainTextLogEntries
+            fShowSidebar(); // Ensure sidebar is visible for these alerts
+            metaOrChannelAlertPosted = true; // Set flag
         }
         specificCalcDone = true;
     }
 
-    // --- Vitality Calculations (if not already handled by gear calc) ---
+
+    // --- Gear Calculations (if not already handled by meta/channel) ---
+    if (!specificCalcDone && gearColumnsToCalculate.includes(editedColTag)) {
+        fMyConsoleLog(`   -> Edit in gear calculation column: ${editedColTag} [${r}, ${c}]`);
+        const validatedValue = await fCalcGearLine(r, c, newValue, String(oldValueInModel ?? ''));
+        if (validatedValue !== null) {
+            finalValueToStore = validatedValue;
+            fMyConsoleLog(`   -> fCalcGearLine successful for [${r}, ${c}]. Value to store: "${finalValueToStore}"`);
+        } else {
+            fMyConsoleLog(`   -> fCalcGearLine failed for [${r}, ${c}]. NOT updating data model for this cell.`);
+            shouldUpdateModelAndSave = false;
+        }
+        specificCalcDone = true;
+    }
+
+    // --- Vitality Calculations (if not already handled) ---
     if (!specificCalcDone) {
-        const isVitMaxPlus = fIsCellInRangeArray(r, c, [gUI.range.vitMaxPlus]); // Pass as array
-        const isVit1stTo3rd = fIsCellInRangeArray(r, c, [gUI.range.vit1stTo3rd]); // Pass as array
+        const isVitMaxPlus = gUI.range?.vitMaxPlus && fIsCellInRangeArray(r, c, [gUI.range.vitMaxPlus]);
+        const isVit1stTo3rd = gUI.range?.vit1stTo3rd && fIsCellInRangeArray(r, c, [gUI.range.vit1stTo3rd]);
 
         if (isVitMaxPlus || isVit1stTo3rd) {
             fMyConsoleLog(`   -> Edit in Vit-related column: ${editedColTag || `[${r},${c}]`}. Triggering fCalc_VitMaxNowPerc...`);
-            // For Vit edits, we assume the newValue is what the user typed.
-            // fCalc_VitMaxNowPerc will read the (potentially invalid) new value from the grid
-            // and handle validation internally.
-            // We first update the model with the raw new value, then let fCalc_VitMaxNowPerc clean it up.
-            gUI.arr[r][c] = newValue; // Temporarily update model with raw input for fCalc_VitMaxNowPerc to read
-            await fCalc_VitMaxNowPerc();
-            // After fCalc_VitMaxNowPerc, gUI.arr[r][c] and DOM will have the *correctly calculated and validated* value.
-            // So, we re-read it for finalValueToStore to ensure consistency.
+            gUI.arr[r][c] = newValue;
+            await fCalc_VitMaxNowPerc(); // This function now calls fSendLogToGMScreenAndPS
             finalValueToStore = gUI.arr[r][c];
             fMyConsoleLog(`   -> fCalc_VitMaxNowPerc completed. Final value for [${r}, ${c}]: "${finalValueToStore}"`);
-            specificCalcDone = true;
-            // shouldUpdateModel remains true because we want to save the *result* of fCalc_VitMaxNowPerc
+            // No need to set metaOrChannelAlertPosted = true here, fCalc_VitMaxNowPerc handles its own logging
+        } else if (!specificCalcDone) {
+             fMyConsoleLog(`   -> Edit in standard column: ${editedColTag || 'Unknown'} [${r}, ${c}]`);
         }
-    }
-
-    if (!specificCalcDone) {
-         fMyConsoleLog(`   -> Edit in standard column: ${editedColTag || 'Unknown'} [${r}, ${c}]`);
-        // No special calculation needed for other columns
     }
 
     // === 5. Update Data Model & Trigger Save (if appropriate) ===
-    if (shouldUpdateModel) {
-        // Check again if the final value is actually different from the original model value
-        // (e.g., fCalcGearLine might return a coerced boolean that matches the original,
-        // or fCalc_VitMaxNowPerc might have cleaned the input back to its original state if invalid)
-        if (gUI.arr[r][c] !== finalValueToStore) { // Compare current model with finalValueToStore
-            gUI.arr[r][c] = finalValueToStore; // Update the data model if different
+    if (shouldUpdateModelAndSave) {
+        if (gUI.arr[r][c] !== finalValueToStore || (String(oldValueInModel ?? '') !== finalValueToStore && newValue !== String(oldValueInModel ?? '')) ) {
+            gUI.arr[r][c] = finalValueToStore;
             fMyConsoleLog(`   -> Data model gUI.arr[${r}][${c}] updated to: "${finalValueToStore}"`);
-            fHandleAutoSaveTextToFirestore(); // Trigger auto-save
-        } else if (newValue !== oldValue && gUI.arr[r][c] === finalValueToStore) {
-            // This case covers when the user's text input *was* different,
-            // but after specific calculations (like fCalc_VitMaxNowPerc cleaning it),
-            // the model value didn't *net* change from what fCalc_VitMaxNowPerc set it to.
-            // However, because an *edit* occurred that triggered a calculation, we should still save.
-            fMyConsoleLog(`   -> User input changed, and calculated final value "${finalValueToStore}" is now in model. Triggering save.`);
-            fHandleAutoSaveTextToFirestore(); // Trigger auto-save
+            fHandleAutoSaveTextToFirestore(); // Saves gUI.arr to Firestore
+
+            // If a Meta/Channel alert was just posted, ensure its text also gets sent to Sheets
+            if (metaOrChannelAlertPosted) {
+                fMyConsoleLog("   -> Meta/Channel alert posted. Triggering fSendLogToGMScreenAndPS for sheet update.");
+                setTimeout(() => fSendLogToGMScreenAndPS(), 0);
+            }
         } else {
-             fMyConsoleLog(`   -> Data model gUI.arr[${r}][${c}] already matches final value or no net change after calc. No explicit update needed, but save if initial user input was different.`);
-             // If newValue (user's text) was different from oldValue, a save should occur
-             // because an interaction leading to potential calculations happened.
-             if (newValue !== oldValue) {
-                 fHandleAutoSaveTextToFirestore();
-             }
+             fMyConsoleLog(`   -> Data model gUI.arr[${r}][${c}] already matches final value or no net change occurred. Save potentially skipped.`);
+             // Still, if a meta/channel alert was posted due to a "change" that resulted in the same validated value,
+             // we should send the log.
+            if (metaOrChannelAlertPosted) {
+                fMyConsoleLog("   -> Meta/Channel alert posted (even if model value is same after validation). Triggering fSendLogToGMScreenAndPS.");
+                setTimeout(() => fSendLogToGMScreenAndPS(), 0);
+            }
         }
     }
-
 } // END fHandleGridCellEdit
+
+
+
 
 
 

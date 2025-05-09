@@ -631,9 +631,7 @@ function fSetRangeOfGridValues(r1Ref, c1Ref, r2Ref, c2Ref, valueOrArray) {
 
 // fSetGridValue ///////////////////////////////////////////////////////////////////
 // Purpose -> Updates a value in the data model (gUI.arr) and the corresponding
-//            cell display in the DOM (gUI.grid2D). Handles special formatting for
-//            Meta/Channel Meta cells, and dynamically applies/removes URL styling
-//            and attributes based on the new value.
+//            cell display in the DOM (gUI.grid2D). Handles dynamic URL styling.
 // Inputs  -> rowRef (String|Number): Row tag or 0-based index.
 //         -> colRef (String|Number): Column tag or 0-based index.
 //         -> newValue (Any): The new value to set.
@@ -657,19 +655,11 @@ function fSetGridValue(rowRef, colRef, newValue) {
         return false;
     }
 
-    // === 3. Handle Special Meta Cell Formatting ===
-    const metaRowTags = ['meta', 'chnl'];
-    const metaColTags = gUI.list?.metaColor || ['R', 'O', 'Y', 'G', 'B'];
-    const isMetaCell = metaRowTags.includes(rowRef) && metaColTags.includes(colRef);
-    if (isMetaCell) {
-        const numericValue = Number(valueToSet);
-        if (valueToSet === null || typeof valueToSet === 'undefined' || (!isNaN(numericValue) && numericValue < 1)) {
-            valueToSet = '';
-        }
-    }
+    // === 3. REMOVED Special Meta Cell Formatting ===
+    // Validation and normalization for Meta/Channel cells are now handled in fHandleGridCellEdit
 
     // === 4. Update Data Model ===
-    // Store the potentially modified value (e.g., '' for meta < 1)
+    // Store the potentially modified value
     gUI.arr[r][c] = valueToSet;
 
     // === 5. Update DOM ===
@@ -688,7 +678,6 @@ function fSetGridValue(rowRef, colRef, newValue) {
     if (isUrl) {
         cell.classList.add('url-link');
         cell.dataset.url = valueStr;
-
         // Check for specific URL types (Drive image or standard image extension)
         const driveMatch = valueStr.match(/drive\.google\.com\/file\/d\/([-\w]+)/);
         const imgExts = /\.(png|jpg|jpeg|gif|webp|svg)$/i;
@@ -740,6 +729,7 @@ function fSetGridValue(rowRef, colRef, newValue) {
     return true; // Indicate success (data and DOM updated)
 
 } // END fSetGridValue
+
 
 
 
