@@ -15,19 +15,19 @@
 const gSrv = { // Using gSrv prefix for server-side globals
   ids: {
     sheets: {
-      db: '1m7-VRDey6rPFDm_ZHQy4GOGNRxR0Th2IVY9TUVQ5DdU',
-      mastercs: '1zVjGg2KKzEAdX6WezkatGPV0cahWXGIdlZASIUlhf_o',
-      masterkl: '1Gcbnggc9UnQrzAcGwSkKdb_jtwxF3u8x1Fb-BdsECZ0',
-      ps: '1cu4tsBeQg4l2czraYDjdVpn1zsIKPhYi5czbGf9ZeZg',
+      db: '1W00TbYmt9cJpgBmRgWkIeek3G4TkXMJHMUHU1vBKkNU',
+      mastercs: '19tPOKtbl5CioN0UVdZL76Ldg_xje2KYvhpgd9T56MxE',
+      masterkl: '1ahFn32jaZGGggq6_QbSV_QBAcMGiUs5-TYtyNMDJ2d4',
+      ps: '1EW5kF7k-_39bDPlAnKY-AbCgWdOE68d19BE6-FLbMmg',
       // Player-specific cs/kl will be handled dynamically via functions below
       cs: '',  // this is equal to the old myCS and is the ID from the player's CS (loaded via doGet)
       kl: ''  // this is equal to the old myKL and is the ID from the player's KL (loaded via doGet's call to fSrvGetMyKlId)
     },
     docs: {
-      cm: '1UuS-329gRi012k5nVtpmDltvrCO0yP04hjDIVoyoFwo',
-      em: '1YnTTuuOVaHRk2o_Wad2IPcIGaYQ-FYbK5H5GKuMDr6A',
-      rb: '1Ug7AvfuF12iPuCSMsQA_JfxtRHaEfY88-KvrNJK58PU',
-      sg: '190vk3Dcqdux_pFjuryvmMx2dWTnJyl23cZvTGhM3kgU'
+      cm: '1V56MUMmSdGRGshieHZAVsvjMcx64e0_bz9okGz8XTfU',
+      em: '1WJV_QZKqFqx83RDScFCEgL7trhpM7UVp16AIeVbgVDQ',
+      rb: '1JZYdkvBDPtvGBhdk_FU2TRFUXD8CQ-cbJbPMRFs7Rm4',
+      sg: '1sA749nIox0TWFMqka5sfGLpmHml_hEn8vBDxFpFVfC4'
     }
   },
   // Configuration values

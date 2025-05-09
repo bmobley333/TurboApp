@@ -2730,7 +2730,8 @@ function fHandleUrlClick(cellDiv) {
 // fHandleGridCellEdit /////////////////////////////////////////////////////////////
 // Purpose -> Handles the 'blur' event delegated from the grid for contenteditable cells.
 //            Updates the underlying data model (gUI.arr) if the cell's text content
-//            has changed since it gained focus. Calls fCalcGearLine for specific gear columns.
+//            has changed since it gained focus. Calls fCalcGearLine for specific
+//            gear columns and fCalc_VitMaxNowPerc for specific Vit-related columns.
 // Inputs  -> event (FocusEvent): The blur event object.
 // Outputs -> None (Modifies gUI.arr, potentially triggers calculations and auto-save).
 async function fHandleGridCellEdit(event) { // <<< MADE ASYNC
@@ -2759,17 +2760,18 @@ async function fHandleGridCellEdit(event) { // <<< MADE ASYNC
         return; // Exit if content hasn't changed
     }
 
-    // === 4. Identify Edited Column & Handle Gear Calculations ===
+    // === 4. Identify Edited Column & Handle Specific Calculations ===
     const gearColumnsToCalculate = ['PossNum', 'PossWorn', 'PossPerOff'];
     const editedColTag = Object.keys(gUI.colTag).find(tag => gUI.colTag[tag] === c);
     let finalValueToStore = newValue; // Default to the raw new value
     let shouldUpdateModel = true; // Assume update is needed initially
+    let specificCalcDone = false; // Flag to track if a specific calc was run
 
+    // --- Gear Calculations ---
     if (gearColumnsToCalculate.includes(editedColTag)) {
         fMyConsoleLog(`   -> Edit in gear calculation column: ${editedColTag} [${r}, ${c}]`);
         // Call the calculation function, passing OLD value for potential revert
         const validatedValue = await fCalcGearLine(r, c, newValue, oldValue);
-
         if (validatedValue !== null) {
             // fCalcGearLine succeeded and returned the validated value
             finalValueToStore = validatedValue;
@@ -2780,21 +2782,59 @@ async function fHandleGridCellEdit(event) { // <<< MADE ASYNC
             shouldUpdateModel = false; // Prevent gUI.arr update
             // fCalcGearLine should have reverted the DOM cell already
         }
-    } else {
+        specificCalcDone = true;
+    }
+
+    // --- Vitality Calculations (if not already handled by gear calc) ---
+    if (!specificCalcDone) {
+        const isVitMaxPlus = fIsCellInRangeArray(r, c, [gUI.range.vitMaxPlus]); // Pass as array
+        const isVit1stTo3rd = fIsCellInRangeArray(r, c, [gUI.range.vit1stTo3rd]); // Pass as array
+
+        if (isVitMaxPlus || isVit1stTo3rd) {
+            fMyConsoleLog(`   -> Edit in Vit-related column: ${editedColTag || `[${r},${c}]`}. Triggering fCalc_VitMaxNowPerc...`);
+            // For Vit edits, we assume the newValue is what the user typed.
+            // fCalc_VitMaxNowPerc will read the (potentially invalid) new value from the grid
+            // and handle validation internally.
+            // We first update the model with the raw new value, then let fCalc_VitMaxNowPerc clean it up.
+            gUI.arr[r][c] = newValue; // Temporarily update model with raw input for fCalc_VitMaxNowPerc to read
+            await fCalc_VitMaxNowPerc();
+            // After fCalc_VitMaxNowPerc, gUI.arr[r][c] and DOM will have the *correctly calculated and validated* value.
+            // So, we re-read it for finalValueToStore to ensure consistency.
+            finalValueToStore = gUI.arr[r][c];
+            fMyConsoleLog(`   -> fCalc_VitMaxNowPerc completed. Final value for [${r}, ${c}]: "${finalValueToStore}"`);
+            specificCalcDone = true;
+            // shouldUpdateModel remains true because we want to save the *result* of fCalc_VitMaxNowPerc
+        }
+    }
+
+    if (!specificCalcDone) {
          fMyConsoleLog(`   -> Edit in standard column: ${editedColTag || 'Unknown'} [${r}, ${c}]`);
-         // No special calculation needed for other columns
+        // No special calculation needed for other columns
     }
 
     // === 5. Update Data Model & Trigger Save (if appropriate) ===
     if (shouldUpdateModel) {
         // Check again if the final value is actually different from the original model value
-        // (e.g., fCalcGearLine might return a coerced boolean that matches the original)
-        if (gUI.arr[r][c] !== finalValueToStore) {
-            gUI.arr[r][c] = finalValueToStore; // Update the data model
+        // (e.g., fCalcGearLine might return a coerced boolean that matches the original,
+        // or fCalc_VitMaxNowPerc might have cleaned the input back to its original state if invalid)
+        if (gUI.arr[r][c] !== finalValueToStore) { // Compare current model with finalValueToStore
+            gUI.arr[r][c] = finalValueToStore; // Update the data model if different
             fMyConsoleLog(`   -> Data model gUI.arr[${r}][${c}] updated to: "${finalValueToStore}"`);
             fHandleAutoSaveTextToFirestore(); // Trigger auto-save
+        } else if (newValue !== oldValue && gUI.arr[r][c] === finalValueToStore) {
+            // This case covers when the user's text input *was* different,
+            // but after specific calculations (like fCalc_VitMaxNowPerc cleaning it),
+            // the model value didn't *net* change from what fCalc_VitMaxNowPerc set it to.
+            // However, because an *edit* occurred that triggered a calculation, we should still save.
+            fMyConsoleLog(`   -> User input changed, and calculated final value "${finalValueToStore}" is now in model. Triggering save.`);
+            fHandleAutoSaveTextToFirestore(); // Trigger auto-save
         } else {
-             fMyConsoleLog(`   -> Data model gUI.arr[${r}][${c}] already matches final value. No update needed.`);
+             fMyConsoleLog(`   -> Data model gUI.arr[${r}][${c}] already matches final value or no net change after calc. No explicit update needed, but save if initial user input was different.`);
+             // If newValue (user's text) was different from oldValue, a save should occur
+             // because an interaction leading to potential calculations happened.
+             if (newValue !== oldValue) {
+                 fHandleAutoSaveTextToFirestore();
+             }
         }
     }
 
@@ -4482,9 +4522,9 @@ async function fAct_SetToMax() {
 // Purpose -> Handles the <Game><Set to Max><Vit Max> menu action. Calculates the
 //            character's maximum vitality (Vit Max = Fortitude Sk1 + Vit Bonus),
 //            updates the Vit Max cell, then calls fVitNowNPercent_Calc to update
-//            the derived Vit Now and Vit Now Percent cells.
+//            the derived Vit Now and Vit Now Percent cells. Calls fSendLogToGMScreenAndPS.
 // Inputs  -> None.
-// Outputs -> None (Modifies grid data/DOM via helpers, potentially calls fShowMessage).
+// Outputs -> None (Modifies grid data/DOM via helpers, potentially calls fShowMessage, logs to GMScreen/PS).
 async function fCalc_VitMaxNowPerc() {
     fMyConsoleLog("⚙️ Menu Action: Setting Vit to Max...");
 
@@ -4547,9 +4587,13 @@ async function fCalc_VitMaxNowPerc() {
 
     // === 6. Update Derived Vit Values ===
     // Call helper to update Vit Now and Vit Now Percent based on the new Vit Max
-    await fVitNowNPercent_Calc();
+    await fVitNowNPercent_Calc(); // This function itself became async if it wasn't already
 
     fMyConsoleLog("✅ Vit Set to Max sequence complete.");
+
+    // === 7. Send Log to GM Screen & Party Sheet ===
+    fMyConsoleLog("   -> Calling fSendLogToGMScreenAndPS from fCalc_VitMaxNowPerc...");
+    setTimeout(() => fSendLogToGMScreenAndPS(), 0); // Call with a slight delay
 
 } // END fCalc_VitMaxNowPerc
 
