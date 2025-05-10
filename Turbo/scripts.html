@@ -4288,9 +4288,9 @@
     const funcName = "fHandleNewLevelSlotName";
     fMyConsoleLog(`⚙️ Menu Action: ${funcName} Triggered...`);
 
-    // === Show Initial Loading Message (MODIFIED) ===
-    fShowMessageNoClose(
-      "⏳ Refreshing Caches, Sending Log & Updating Grid...<br><br>This may take a minute.<br><br>Please wait."
+    // === Show Initial Loading Message ===
+    const updatingMsg = fShowMessage(
+      "⏳ Refreshing Caches, Sending Log & Updating Grid...<br><br>This may take a minute.<br><br>Do NOT Close unless program freezes."
     );
 
     try {
@@ -4365,7 +4365,7 @@
       }
       fMyConsoleLog(`   -> All user cache refreshes successful.`);
 
-      // === 3. Update Ability Dropdowns ===
+      // === 3. Update Ability Dropdowns === <<<--- ADDED STEP
       fMyConsoleLog(
         "   -> Updating Ability Dropdowns based on refreshed List cache..."
       );

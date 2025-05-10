@@ -1021,114 +1021,64 @@
   // Outputs -> (Promise<void>): Resolves when the modal is hidden. Rejects if modal
   //                             elements are not found.
   async function fShowMessage(message) {
-    const overlay = document.getElementById("messageModal");
-    const textElement = document.getElementById("messageText");
-    const closeButton = document.getElementById("closeMessageModal");
-
-    if (!overlay || !textElement || !closeButton) {
-      console.error(
-        "fShowMessage: One or more modal elements not found in DOM! Overlay:",
-        !!overlay,
-        "Text:",
-        !!textElement,
-        "Button:",
-        !!closeButton
-      );
-      // Fallback alert if critical elements are missing
-      alert(
-        "Error: Message display component is missing.\n\n" +
-          message.replace(/<br\s*\/?>/gi, "\n")
-      );
-      return Promise.reject(new Error("Message modal elements not found."));
+    // === Ensure Modal Elements are Cached ===
+    // Attempt to cache elements if not already done (e.g., on first call)
+    if (!gUI.messageModalOverlay) {
+      gUI.messageModalOverlay = document.getElementById("messageModal");
+      if (gUI.messageModalOverlay)
+        fMyConsoleLog("fShowMessage: Just-in-time cache for #messageModal");
+    }
+    if (!gUI.messageModalText) {
+      gUI.messageModalText = document.getElementById("messageText");
+      if (gUI.messageModalText)
+        fMyConsoleLog("fShowMessage: Just-in-time cache for #messageText");
     }
 
-    gUI.isCurrentMessageModalUserCloseable = true; // Standard messages are closeable by user
-    closeButton.style.display = ""; // Ensure button is visible (e.g., 'inline-block' or its default)
-    textElement.innerHTML = message;
-    overlay.style.display = "flex";
-    fMyConsoleLog(
-      `💬 Displayed user-closeable message: "${String(message).substring(
-        0,
-        50
-      )}..."`
-    );
+    // === Validate Elements ===
+    // Check if elements were successfully found/cached
+    if (!gUI.messageModalOverlay || !gUI.messageModalText) {
+      console.error("Message modal elements not cached or found in the DOM!");
+      if (!gUI.messageModalOverlay) console.error("Missing: #messageModal");
+      if (!gUI.messageModalText) console.error("Missing: #messageText");
+      // Fallback alert could be added here if critical
+      return Promise.reject(new Error("Message modal elements not found.")); // Reject promise
+    }
 
+    // === Display Modal ===
+    // Set message content (allows basic HTML like <br>)
+    gUI.messageModalText.innerHTML = message;
+    // Show the modal overlay
+    gUI.messageModalOverlay.style.display = "flex";
+
+    // === Return Promise ===
+    // Create and return a new Promise that will be resolved by fHideMessage
     return new Promise((resolve) => {
-      gUI.messagePromiseResolve = resolve;
+      gUI.messagePromiseResolve = resolve; // Store the resolve function globally
     });
   } // END fShowMessage
 
-  // fShowMessageNoClose ////////////////////////////////////////////////////////////
-  // Purpose -> Displays the message modal box with the provided message WITHOUT a
-  //            close button, and prevents closing via Escape or backdrop click.
-  //            This message must be closed programmatically by calling fHideMessage().
-  // Inputs  -> message (String): The text or HTML to display.
-  // Outputs -> None (Displays modal, sets state).
-  function fShowMessageNoClose(message) {
-    const overlay = document.getElementById("messageModal");
-    const textElement = document.getElementById("messageText");
-    const closeButton = document.getElementById("closeMessageModal");
-
-    if (!overlay || !textElement || !closeButton) {
-      console.error(
-        "fShowMessageNoClose: One or more modal elements not found in DOM! Overlay:",
-        !!overlay,
-        "Text:",
-        !!textElement,
-        "Button:",
-        !!closeButton
-      );
-      // Fallback alert if critical elements are missing
-      alert(
-        "Error: Message display component is missing.\n\n(NC) " +
-          message.replace(/<br\s*\/?>/gi, "\n")
-      );
-      return;
-    }
-
-    gUI.isCurrentMessageModalUserCloseable = false; // Mark as NOT user-closeable
-    closeButton.style.display = "none"; // Hide the close button
-    textElement.innerHTML = message;
-    overlay.style.display = "flex";
-    fMyConsoleLog(
-      `🔒 Displayed non-closeable message: "${String(message).substring(
-        0,
-        50
-      )}..."`
-    );
-  } // END fShowMessageNoClose
-
   // fHideMessage ///////////////////////////////////////////////////////////////////
   // Purpose -> Hides the message modal box and resolves the pending Promise created
-  //            by fShowMessage (if any). Resets closeable state and button visibility.
-  // Inputs  -> None
-  // Outputs -> None (Modifies modal style, resolves Promise, resets state).
+  //            by fShowMessage, signaling that the user has acknowledged the message.
+  // Inputs  -> None (Uses gUI.messageModalOverlay, gUI.messagePromiseResolve).
+  // Outputs -> None (Modifies modal style, resolves Promise).
   function fHideMessage() {
-    const overlay = document.getElementById("messageModal");
-    const closeButton = document.getElementById("closeMessageModal");
-
-    if (overlay) {
-      overlay.style.display = "none";
+    // Hide the modal overlay element if cached
+    if (gUI.messageModalOverlay) {
+      gUI.messageModalOverlay.style.display = "none";
     } else {
+      // Log error if element isn't found (should be rare)
       console.error(
-        "fHideMessage: Message modal overlay element (#messageModal) not found."
+        "Message modal overlay element (#messageModal) not found when trying to hide."
       );
     }
 
-    // Ensure the close button is visible for the next standard message
-    if (closeButton) {
-      closeButton.style.display = ""; // Or 'inline-block' or its default CSS display value
-    }
-
-    // Reset the closeable flag
-    gUI.isCurrentMessageModalUserCloseable = true;
-
-    // Resolve the pending promise if the resolve function exists (for fShowMessage)
+    // Resolve the pending promise if the resolve function exists
     if (typeof gUI.messagePromiseResolve === "function") {
-      gUI.messagePromiseResolve();
-      gUI.messagePromiseResolve = null;
+      gUI.messagePromiseResolve(); // Call the stored resolve function
+      gUI.messagePromiseResolve = null; // Clear the stored function
+      // fMyConsoleLog("Message Promise Resolved"); // Optional log
     }
-    fMyConsoleLog("Message modal hidden and state reset.");
   } // END fHideMessage
 
   // fSetupMessageModalListeners /////////////////////////////////////////////////////
