@@ -1,24 +1,23 @@
 <!-- index.html -->
 
-
 <html>
   <head>
-    <base target="_top">
+    <base target="_top" />
 
-<script>
-   // Inject csID, userEmail, and gameVer into a client-side object
-   const gIndex = {
-     CSID: "<?= csID ?>",      
-     Email: "<?= userEmail ?>", 
-     GameVer: "<?= gameVer ?>" 
-   }; // Note the commas and no trailing semicolon after the closing brace
+    <script>
+      // Inject csID, userEmail, and gameVer into a client-side object
+      const gIndex = {
+        CSID: "<?= csID ?>",
+        Email: "<?= userEmail ?>",
+        GameVer: "<?= gameVer ?>",
+      }; // Note the commas and no trailing semicolon after the closing brace
 
-   console.log("✅ INDEX LOADED: " + new Date().toLocaleTimeString());
-   // Now access properties like gIndex.CSID, gIndex.Email, gIndex.GameVer
-   console.log("🧪 gIndex.CSID param:", gIndex.CSID);
-   console.log("✉️ gIndex.Email param:", gIndex.Email);
-   console.log("🎮 gIndex.GameVer param:", gIndex.GameVer);
- </script>
+      console.log("✅ INDEX LOADED: " + new Date().toLocaleTimeString());
+      // Now access properties like gIndex.CSID, gIndex.Email, gIndex.GameVer
+      console.log("🧪 gIndex.CSID param:", gIndex.CSID);
+      console.log("✉️ gIndex.Email param:", gIndex.Email);
+      console.log("🎮 gIndex.GameVer param:", gIndex.GameVer);
+    </script>
 
     <style>
       <?!= HtmlService.createHtmlOutputFromFile('style').getContent(); ?>
@@ -27,13 +26,9 @@
 
   <body>
     <?!= HtmlService.createHtmlOutputFromFile('ui.html').getContent(); ?>
-
     <?!= HtmlService.createHtmlOutputFromFile('global.html').getContent(); ?>
-
     <?!= HtmlService.createHtmlOutputFromFile('utilities.html').getContent(); ?>
-
     <?!= HtmlService.createHtmlOutputFromFile('gamelogic.html').getContent(); ?>
-
     <?!= HtmlService.createHtmlOutputFromFile('scripts.html').getContent(); ?>
   </body>
 </html>
