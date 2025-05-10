@@ -1,6 +1,6 @@
 // turbo.gs //
 // 04.29.2025 //
-// Now using VS Code 7 //
+// Now using VS Code //
 // v29.0 //
 
 
