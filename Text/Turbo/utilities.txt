@@ -1,19 +1,15 @@
 <script>
-// utilities.html //
+  // utilities.html //
 
+  // ==========================================================================
+  // === Scripts Utilities ===
+  // ==========================================================================
 
-
-// ==========================================================================
-// === Scripts Utilities ===
-// ==========================================================================
-
-
-
-// fMyConsoleLog ///////////////////////////////////////////////////////////////////
-// Purpose -> Logs messages to the console with timestamps, only if gUI.isDebugMode is true.
-// Inputs  -> msg (String): The message to log.
-// Outputs -> None (Logs to console).
-function fMyConsoleLog(msg) {
+  // fMyConsoleLog ///////////////////////////////////////////////////////////////////
+  // Purpose -> Logs messages to the console with timestamps, only if gUI.isDebugMode is true.
+  // Inputs  -> msg (String): The message to log.
+  // Outputs -> None (Logs to console).
+  function fMyConsoleLog(msg) {
     if (!gUI.isDebugMode) return; // Exit early if debug mode is off
 
     // Calculate timestamps
@@ -24,211 +20,251 @@ function fMyConsoleLog(msg) {
 
     // Log the formatted message
     console.log(`Status Log: [${total}s] ${msg} (+${delta}s)`);
-} // END fMyConsoleLog
+  } // END fMyConsoleLog
 
-
-
-
-// fResolveRow ////////////////////////////////////////////////////////////////////
-// Purpose -> Converts a string tag (from gUI.rowTag) or numeric index to a 0-based row index.
-// Inputs  -> v (String | Number): Row tag string or 0-based numeric index.
-// Outputs -> (Number): The 0-based row index, or NaN if resolution fails.
-const fResolveRow = v => {
-    if (typeof v === 'string') return gUI.rowTag[v]; // Lookup tag
-    if (typeof v === 'number' && v >= 0) return v;   // Assume valid index
+  // fResolveRow ////////////////////////////////////////////////////////////////////
+  // Purpose -> Converts a string tag (from gUI.rowTag) or numeric index to a 0-based row index.
+  // Inputs  -> v (String | Number): Row tag string or 0-based numeric index.
+  // Outputs -> (Number): The 0-based row index, or NaN if resolution fails.
+  const fResolveRow = (v) => {
+    if (typeof v === "string") return gUI.rowTag[v]; // Lookup tag
+    if (typeof v === "number" && v >= 0) return v; // Assume valid index
 
     console.warn(`fResolveRow failed for value:`, v); // Log warning if invalid
     return NaN; // Return NaN for errors
-}; // END fResolveRow
+  }; // END fResolveRow
 
+  // fResolveCol ////////////////////////////////////////////////////////////////////
+  // Purpose -> Converts a string tag (from gUI.colTag) or numeric index to a 0-based col index.
+  // Inputs  -> v (String | Number): Column tag string or 0-based numeric index.
+  // Outputs -> (Number): The 0-based column index, or NaN if resolution fails.
+  const fResolveCol = (v) => {
+    if (typeof v === "string") return gUI.colTag[v]; // Lookup tag
+    if (typeof v === "number" && v >= 0) return v; // Assume valid index
 
+    console.warn(`fResolveCol failed for value:`, v); // Log warning if invalid
+    return NaN; // Return NaN for errors
+  }; // END fResolveCol
 
-
-// fResolveCol ////////////////////////////////////////////////////////////////////
-// Purpose -> Converts a string tag (from gUI.colTag) or numeric index to a 0-based col index.
-// Inputs  -> v (String | Number): Column tag string or 0-based numeric index.
-// Outputs -> (Number): The 0-based column index, or NaN if resolution fails.
-const fResolveCol = v => {
-     if (typeof v === 'string') return gUI.colTag[v]; // Lookup tag
-     if (typeof v === 'number' && v >= 0) return v;   // Assume valid index
-
-     console.warn(`fResolveCol failed for value:`, v); // Log warning if invalid
-     return NaN; // Return NaN for errors
-}; // END fResolveCol
-
-
-
-
-// fResolveFSDataRow /////////////////////////////////////////////////////////////
-// Purpose -> Resolve a row tag (String) or index (Number) against a specified
-//            Firestore data cache object (gUI[fsDataObjKey]) and validate against
-//            the cache's row bounds.
-// Inputs  -> fsDataObjKey (String): Key name of the cache object in gUI.
-//         -> tagOrIndex (String | Number): Row tag or 0-based index to resolve.
-// Outputs -> (Number): The resolved 0-based numeric row index, or NaN on failure.
-function fResolveFSDataRow(fsDataObjKey, tagOrIndex) {
+  // fResolveFSDataRow /////////////////////////////////////////////////////////////
+  // Purpose -> Resolve a row tag (String) or index (Number) against a specified
+  //            Firestore data cache object (gUI[fsDataObjKey]) and validate against
+  //            the cache's row bounds.
+  // Inputs  -> fsDataObjKey (String): Key name of the cache object in gUI.
+  //         -> tagOrIndex (String | Number): Row tag or 0-based index to resolve.
+  // Outputs -> (Number): The resolved 0-based numeric row index, or NaN on failure.
+  function fResolveFSDataRow(fsDataObjKey, tagOrIndex) {
     const funcName = "fResolveFSDataRow";
     const cache = gUI[fsDataObjKey];
 
     // Validate Cache Object Structure
-    if (!cache || typeof cache !== 'object' ||
-        !cache.text || !Array.isArray(cache.text) ||
-        !cache.rowTagsMap || typeof cache.rowTagsMap !== 'object') {
-        console.warn(`${funcName}: Cache object gUI['${fsDataObjKey}'] is missing, invalid, or incomplete (missing text/rowTagsMap).`);
-        return NaN;
+    if (
+      !cache ||
+      typeof cache !== "object" ||
+      !cache.text ||
+      !Array.isArray(cache.text) ||
+      !cache.rowTagsMap ||
+      typeof cache.rowTagsMap !== "object"
+    ) {
+      console.warn(
+        `${funcName}: Cache object gUI['${fsDataObjKey}'] is missing, invalid, or incomplete (missing text/rowTagsMap).`
+      );
+      return NaN;
     }
 
     const textData = cache.text;
     const numRows = textData.length;
 
     // Handle String Input (Tag)
-    if (typeof tagOrIndex === 'string') {
-        const resolvedIndex = cache.rowTagsMap[tagOrIndex];
+    if (typeof tagOrIndex === "string") {
+      const resolvedIndex = cache.rowTagsMap[tagOrIndex];
 
-        if (resolvedIndex === undefined) {
-            console.warn(`${funcName}: Row tag "${tagOrIndex}" not found in rowTagsMap for cache '${fsDataObjKey}'.`);
-            return NaN;
-        }
-
-        // Validate resolved index against bounds
-        if (typeof resolvedIndex !== 'number' || isNaN(resolvedIndex) || resolvedIndex < 0 || resolvedIndex >= numRows) {
-            console.warn(`${funcName}: Resolved row index ${resolvedIndex} for tag "${tagOrIndex}" in cache '${fsDataObjKey}' is out of bounds (0-${numRows - 1}).`);
-            return NaN;
-        }
-        return resolvedIndex;
-
-    // Handle Number Input (Index)
-    } else if (typeof tagOrIndex === 'number') {
-        // Validate input index is a valid number and within bounds
-        if (isNaN(tagOrIndex) || tagOrIndex < 0 || tagOrIndex >= numRows) {
-            console.warn(`${funcName}: Input row index ${tagOrIndex} for cache '${fsDataObjKey}' is invalid or out of bounds (0-${numRows - 1}).`);
-            return NaN;
-        }
-        return tagOrIndex; // Return the validated numeric index
-
-    // Handle Invalid Input Type
-    } else {
-        console.warn(`${funcName}: Invalid tagOrIndex type (${typeof tagOrIndex}) provided for cache '${fsDataObjKey}'. Must be string or number.`);
+      if (resolvedIndex === undefined) {
+        console.warn(
+          `${funcName}: Row tag "${tagOrIndex}" not found in rowTagsMap for cache '${fsDataObjKey}'.`
+        );
         return NaN;
+      }
+
+      // Validate resolved index against bounds
+      if (
+        typeof resolvedIndex !== "number" ||
+        isNaN(resolvedIndex) ||
+        resolvedIndex < 0 ||
+        resolvedIndex >= numRows
+      ) {
+        console.warn(
+          `${funcName}: Resolved row index ${resolvedIndex} for tag "${tagOrIndex}" in cache '${fsDataObjKey}' is out of bounds (0-${
+            numRows - 1
+          }).`
+        );
+        return NaN;
+      }
+      return resolvedIndex;
+
+      // Handle Number Input (Index)
+    } else if (typeof tagOrIndex === "number") {
+      // Validate input index is a valid number and within bounds
+      if (isNaN(tagOrIndex) || tagOrIndex < 0 || tagOrIndex >= numRows) {
+        console.warn(
+          `${funcName}: Input row index ${tagOrIndex} for cache '${fsDataObjKey}' is invalid or out of bounds (0-${
+            numRows - 1
+          }).`
+        );
+        return NaN;
+      }
+      return tagOrIndex; // Return the validated numeric index
+
+      // Handle Invalid Input Type
+    } else {
+      console.warn(
+        `${funcName}: Invalid tagOrIndex type (${typeof tagOrIndex}) provided for cache '${fsDataObjKey}'. Must be string or number.`
+      );
+      return NaN;
     }
-} // END fResolveFSDataRow
+  } // END fResolveFSDataRow
 
-
-
-
-// fResolveFSDataCol /////////////////////////////////////////////////////////////
-// Purpose -> Resolve a column tag (String) or index (Number) against a specified
-//            Firestore data cache object (gUI[fsDataObjKey]) and validate against
-//            the cache's column bounds.
-// Inputs  -> fsDataObjKey (String): Key name of the cache object in gUI.
-//         -> tagOrIndex (String | Number): Column tag or 0-based index to resolve.
-// Outputs -> (Number): The resolved 0-based numeric column index, or NaN on failure.
-function fResolveFSDataCol(fsDataObjKey, tagOrIndex) {
+  // fResolveFSDataCol /////////////////////////////////////////////////////////////
+  // Purpose -> Resolve a column tag (String) or index (Number) against a specified
+  //            Firestore data cache object (gUI[fsDataObjKey]) and validate against
+  //            the cache's column bounds.
+  // Inputs  -> fsDataObjKey (String): Key name of the cache object in gUI.
+  //         -> tagOrIndex (String | Number): Column tag or 0-based index to resolve.
+  // Outputs -> (Number): The resolved 0-based numeric column index, or NaN on failure.
+  function fResolveFSDataCol(fsDataObjKey, tagOrIndex) {
     const funcName = "fResolveFSDataCol";
     const cache = gUI[fsDataObjKey];
 
     // Validate Cache Object Structure (including check for first row if data exists)
-    if (!cache || typeof cache !== 'object' ||
-        !cache.text || !Array.isArray(cache.text) ||
-        !cache.colTagsMap || typeof cache.colTagsMap !== 'object' ||
-        (cache.text.length > 0 && !Array.isArray(cache.text[0])) ) { // Check first row if data exists
-        console.warn(`${funcName}: Cache object gUI['${fsDataObjKey}'] is missing, invalid, or incomplete (missing text/colTagsMap or invalid text[0]).`);
-        return NaN;
+    if (
+      !cache ||
+      typeof cache !== "object" ||
+      !cache.text ||
+      !Array.isArray(cache.text) ||
+      !cache.colTagsMap ||
+      typeof cache.colTagsMap !== "object" ||
+      (cache.text.length > 0 && !Array.isArray(cache.text[0]))
+    ) {
+      // Check first row if data exists
+      console.warn(
+        `${funcName}: Cache object gUI['${fsDataObjKey}'] is missing, invalid, or incomplete (missing text/colTagsMap or invalid text[0]).`
+      );
+      return NaN;
     }
 
     const textData = cache.text;
     const numCols = textData[0]?.length || 0; // Get column count from first row, or 0 if no rows
 
     // Handle String Input (Tag)
-    if (typeof tagOrIndex === 'string') {
-        const resolvedIndex = cache.colTagsMap[tagOrIndex];
+    if (typeof tagOrIndex === "string") {
+      const resolvedIndex = cache.colTagsMap[tagOrIndex];
 
-        if (resolvedIndex === undefined) {
-            console.warn(`${funcName}: Col tag "${tagOrIndex}" not found in colTagsMap for cache '${fsDataObjKey}'.`);
-            return NaN;
-        }
-
-        // Validate resolved index against bounds
-        if (typeof resolvedIndex !== 'number' || isNaN(resolvedIndex) || resolvedIndex < 0 || resolvedIndex >= numCols) {
-            console.warn(`${funcName}: Resolved col index ${resolvedIndex} for tag "${tagOrIndex}" in cache '${fsDataObjKey}' is out of bounds (0-${numCols - 1}).`);
-            return NaN;
-        }
-        return resolvedIndex;
-
-    // Handle Number Input (Index)
-    } else if (typeof tagOrIndex === 'number') {
-        // Validate input index is a valid number and within bounds
-        if (isNaN(tagOrIndex) || tagOrIndex < 0 || tagOrIndex >= numCols) {
-            console.warn(`${funcName}: Input col index ${tagOrIndex} for cache '${fsDataObjKey}' is invalid or out of bounds (0-${numCols - 1}).`);
-            return NaN;
-        }
-        return tagOrIndex; // Return the validated numeric index
-
-    // Handle Invalid Input Type
-    } else {
-        console.warn(`${funcName}: Invalid tagOrIndex type (${typeof tagOrIndex}) provided for cache '${fsDataObjKey}'. Must be string or number.`);
+      if (resolvedIndex === undefined) {
+        console.warn(
+          `${funcName}: Col tag "${tagOrIndex}" not found in colTagsMap for cache '${fsDataObjKey}'.`
+        );
         return NaN;
+      }
+
+      // Validate resolved index against bounds
+      if (
+        typeof resolvedIndex !== "number" ||
+        isNaN(resolvedIndex) ||
+        resolvedIndex < 0 ||
+        resolvedIndex >= numCols
+      ) {
+        console.warn(
+          `${funcName}: Resolved col index ${resolvedIndex} for tag "${tagOrIndex}" in cache '${fsDataObjKey}' is out of bounds (0-${
+            numCols - 1
+          }).`
+        );
+        return NaN;
+      }
+      return resolvedIndex;
+
+      // Handle Number Input (Index)
+    } else if (typeof tagOrIndex === "number") {
+      // Validate input index is a valid number and within bounds
+      if (isNaN(tagOrIndex) || tagOrIndex < 0 || tagOrIndex >= numCols) {
+        console.warn(
+          `${funcName}: Input col index ${tagOrIndex} for cache '${fsDataObjKey}' is invalid or out of bounds (0-${
+            numCols - 1
+          }).`
+        );
+        return NaN;
+      }
+      return tagOrIndex; // Return the validated numeric index
+
+      // Handle Invalid Input Type
+    } else {
+      console.warn(
+        `${funcName}: Invalid tagOrIndex type (${typeof tagOrIndex}) provided for cache '${fsDataObjKey}'. Must be string or number.`
+      );
+      return NaN;
     }
-} // END fResolveFSDataCol
+  } // END fResolveFSDataCol
 
-
-
-// fGetContrastColor ///////////////////////////////////////////////////////////////
-// Purpose -> Determines if black ('#000000') or white ('#ffffff') text has better
-//            contrast against a given background hex color.
-// Inputs  -> hexColor (String): The background color (e.g., '#FF0000', '03F').
-// Outputs -> (String): '#000000' or '#ffffff' for the best contrast.
-function fGetContrastColor(hexColor) {
-    const defaultColor = '#000000'; // Default to black text
+  // fGetContrastColor ///////////////////////////////////////////////////////////////
+  // Purpose -> Determines if black ('#000000') or white ('#ffffff') text has better
+  //            contrast against a given background hex color.
+  // Inputs  -> hexColor (String): The background color (e.g., '#FF0000', '03F').
+  // Outputs -> (String): '#000000' or '#ffffff' for the best contrast.
+  function fGetContrastColor(hexColor) {
+    const defaultColor = "#000000"; // Default to black text
 
     // Basic validation
-    if (!hexColor || typeof hexColor !== 'string') return defaultColor;
+    if (!hexColor || typeof hexColor !== "string") return defaultColor;
 
     try {
-        // Remove # if present
-        let hex = hexColor.startsWith('#') ? hexColor.substring(1) : hexColor;
+      // Remove # if present
+      let hex = hexColor.startsWith("#") ? hexColor.substring(1) : hexColor;
 
-        // Expand shorthand hex (e.g., "03F" -> "0033FF")
-        if (hex.length === 3) {
-            hex = hex.split('').map(char => char + char).join('');
-        } else if (hex.length !== 6) {
-            return defaultColor; // Invalid hex length
-        }
+      // Expand shorthand hex (e.g., "03F" -> "0033FF")
+      if (hex.length === 3) {
+        hex = hex
+          .split("")
+          .map((char) => char + char)
+          .join("");
+      } else if (hex.length !== 6) {
+        return defaultColor; // Invalid hex length
+      }
 
-        // Convert hex to RGB
-        const r = parseInt(hex.substring(0, 2), 16);
-        const g = parseInt(hex.substring(2, 4), 16);
-        const b = parseInt(hex.substring(4, 6), 16);
+      // Convert hex to RGB
+      const r = parseInt(hex.substring(0, 2), 16);
+      const g = parseInt(hex.substring(2, 4), 16);
+      const b = parseInt(hex.substring(4, 6), 16);
 
-        if (isNaN(r) || isNaN(g) || isNaN(b)) return defaultColor; // Invalid hex characters
+      if (isNaN(r) || isNaN(g) || isNaN(b)) return defaultColor; // Invalid hex characters
 
-        // Calculate luminance using the YIQ formula
-        const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+      // Calculate luminance using the YIQ formula
+      const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
 
-        // Return black text for light backgrounds (luminance > 0.5), white text for dark backgrounds
-        return luminance > 0.5 ? '#000000' : '#ffffff';
-
+      // Return black text for light backgrounds (luminance > 0.5), white text for dark backgrounds
+      return luminance > 0.5 ? "#000000" : "#ffffff";
     } catch (e) {
-        console.error("Error calculating contrast color for:", hexColor, e);
-        return defaultColor; // Fallback on error
+      console.error("Error calculating contrast color for:", hexColor, e);
+      return defaultColor; // Fallback on error
     }
-} // END fGetContrastColor
+  } // END fGetContrastColor
 
-
-
-// fIsCellInRangeArray /////////////////////////////////////////////////////////////
-// Purpose -> Checks if given coordinates (r, c) fall within ANY of the range objects
-//            defined in the provided rangeArray.
-// Inputs  -> r (Number): 0-based row index.
-//         -> c (Number): 0-based column index.
-//         -> rangeArray (Array<Object> | Object): An array of range definition objects,
-//                                                 or a single range object.
-// Outputs -> (Boolean): True if (r, c) is inside any valid range, false otherwise.
-function fIsCellInRangeArray(r, c, rangeArray) {
+  // fIsCellInRangeArray /////////////////////////////////////////////////////////////
+  // Purpose -> Checks if given coordinates (r, c) fall within ANY of the range objects
+  //            defined in the provided rangeArray.
+  // Inputs  -> r (Number): 0-based row index.
+  //         -> c (Number): 0-based column index.
+  //         -> rangeArray (Array<Object> | Object): An array of range definition objects,
+  //                                                 or a single range object.
+  // Outputs -> (Boolean): True if (r, c) is inside any valid range, false otherwise.
+  function fIsCellInRangeArray(r, c, rangeArray) {
     // Validate input coordinates
-    if (typeof r !== 'number' || typeof c !== 'number' || isNaN(r) || isNaN(c)) {
-        console.warn("fIsCellInRangeArray: Invalid input coordinates provided.");
-        return false;
+    if (
+      typeof r !== "number" ||
+      typeof c !== "number" ||
+      isNaN(r) ||
+      isNaN(c)
+    ) {
+      console.warn("fIsCellInRangeArray: Invalid input coordinates provided.");
+      return false;
     }
 
     // Handle if rangeArray is a single range object OR an array
@@ -236,66 +272,76 @@ function fIsCellInRangeArray(r, c, rangeArray) {
 
     // Check if there are any ranges to process
     if (rangesToCheck.length === 0 || !rangesToCheck[0]) {
-        return false;
+      return false;
     }
 
     // Iterate through each range definition
     for (const rangeDef of rangesToCheck) {
-        // Validate the range definition object structure
-        if (!fDoesObjectHaveR1C1R2C2Properties(rangeDef)) {
-             console.warn("fIsCellInRangeArray: Skipping invalid range definition object:", rangeDef);
-             continue;
-        }
+      // Validate the range definition object structure
+      if (!fDoesObjectHaveR1C1R2C2Properties(rangeDef)) {
+        console.warn(
+          "fIsCellInRangeArray: Skipping invalid range definition object:",
+          rangeDef
+        );
+        continue;
+      }
 
-        // Resolve tags/indices for the current range
-        const resolved = fConvertsR1C1R2C2TagOrNumToIndices(rangeDef);
-        if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
-             console.warn("fIsCellInRangeArray: Skipping range due to unresolved indices:", rangeDef);
-             continue;
-        }
+      // Resolve tags/indices for the current range
+      const resolved = fConvertsR1C1R2C2TagOrNumToIndices(rangeDef);
+      if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
+        console.warn(
+          "fIsCellInRangeArray: Skipping range due to unresolved indices:",
+          rangeDef
+        );
+        continue;
+      }
 
-        // Determine min/max row and column for the current range
-        const rMin = Math.min(resolved.r1, resolved.r2);
-        const rMax = Math.max(resolved.r1, resolved.r2);
-        const cMin = Math.min(resolved.c1, resolved.c2);
-        const cMax = Math.max(resolved.c1, resolved.c2);
+      // Determine min/max row and column for the current range
+      const rMin = Math.min(resolved.r1, resolved.r2);
+      const rMax = Math.max(resolved.r1, resolved.r2);
+      const cMin = Math.min(resolved.c1, resolved.c2);
+      const cMax = Math.max(resolved.c1, resolved.c2);
 
-        // Check if the input (r, c) falls within this resolved range
-        if (r >= rMin && r <= rMax && c >= cMin && c <= cMax) {
-            return true; // Found a match
-        }
+      // Check if the input (r, c) falls within this resolved range
+      if (r >= rMin && r <= rMax && c >= cMin && c <= cMax) {
+        return true; // Found a match
+      }
     }
 
     // No range contained the cell after checking all of them
     return false;
-} // END fIsCellInRangeArray
+  } // END fIsCellInRangeArray
 
-
-
-
-// fGetVal_GUICache ////////////////////////////////////////////////////////////////
-// Purpose -> Retrieves a value from a cached FSData object's text property using
-//            original sheet tags or absolute indices. Handles relative index calculation.
-// Inputs  -> rRef (String|Number): Row tag or 0-based absolute index from original sheet.
-//         -> cRef (String|Number): Column tag or 0-based absolute index from original sheet.
-//         -> dataCacheObject (Object): The cached FSData object, expected to have
-//                                   { text: Array[][], rowTagsMap: Object, colTagsMap: Object }.
-//                                   Note: This cache uses 0-based absolute indices in its maps.
-// Outputs -> (Any | undefined): The value found at the resolved position within
-//                              dataCacheObject.text, or undefined if not found or on error.
-function fGetVal_GUICache(rRef, cRef, dataCacheObject) {
+  // fGetVal_GUICache ////////////////////////////////////////////////////////////////
+  // Purpose -> Retrieves a value from a cached FSData object's text property using
+  //            original sheet tags or absolute indices. Handles relative index calculation.
+  // Inputs  -> rRef (String|Number): Row tag or 0-based absolute index from original sheet.
+  //         -> cRef (String|Number): Column tag or 0-based absolute index from original sheet.
+  //         -> dataCacheObject (Object): The cached FSData object, expected to have
+  //                                   { text: Array[][], rowTagsMap: Object, colTagsMap: Object }.
+  //                                   Note: This cache uses 0-based absolute indices in its maps.
+  // Outputs -> (Any | undefined): The value found at the resolved position within
+  //                              dataCacheObject.text, or undefined if not found or on error.
+  function fGetVal_GUICache(rRef, cRef, dataCacheObject) {
     const funcName = "fGetVal_GUICache";
 
     // === 1. Validate Cache Object ===
     // Updated validation to check for text, rowTagsMap, colTagsMap (removed r1/c1 check)
-    if (!dataCacheObject || typeof dataCacheObject !== 'object' ||
-        !dataCacheObject.text || !Array.isArray(dataCacheObject.text) ||
-        !dataCacheObject.rowTagsMap || typeof dataCacheObject.rowTagsMap !== 'object' ||
-        !dataCacheObject.colTagsMap || typeof dataCacheObject.colTagsMap !== 'object')
-    {
-        console.warn(`${funcName}: Invalid or incomplete dataCacheObject provided.`);
-        fMyConsoleLog(`⚠️ ${funcName}: Invalid dataCacheObject input.`);
-        return undefined;
+    if (
+      !dataCacheObject ||
+      typeof dataCacheObject !== "object" ||
+      !dataCacheObject.text ||
+      !Array.isArray(dataCacheObject.text) ||
+      !dataCacheObject.rowTagsMap ||
+      typeof dataCacheObject.rowTagsMap !== "object" ||
+      !dataCacheObject.colTagsMap ||
+      typeof dataCacheObject.colTagsMap !== "object"
+    ) {
+      console.warn(
+        `${funcName}: Invalid or incomplete dataCacheObject provided.`
+      );
+      fMyConsoleLog(`⚠️ ${funcName}: Invalid dataCacheObject input.`);
+      return undefined;
     }
 
     const { text, rowTagsMap, colTagsMap } = dataCacheObject;
@@ -303,92 +349,90 @@ function fGetVal_GUICache(rRef, cRef, dataCacheObject) {
     let absolute_c = NaN;
 
     // === 2. Resolve Row Reference to Absolute Index ===
-    if (typeof rRef === 'string') {
-        absolute_r = rowTagsMap[rRef];
-        if (absolute_r === undefined) {
-            // console.warn(`${funcName}: Row tag "${rRef}" not found in rowTagsMap.`);
-            // Can be noisy
-            return undefined;
-        }
-    } else if (typeof rRef === 'number' && !isNaN(rRef) && rRef >= 0) {
-        absolute_r = rRef;
-    } else {
-        // console.warn(`${funcName}: Invalid row reference provided: ${rRef}.`);
+    if (typeof rRef === "string") {
+      absolute_r = rowTagsMap[rRef];
+      if (absolute_r === undefined) {
+        // console.warn(`${funcName}: Row tag "${rRef}" not found in rowTagsMap.`);
         // Can be noisy
         return undefined;
+      }
+    } else if (typeof rRef === "number" && !isNaN(rRef) && rRef >= 0) {
+      absolute_r = rRef;
+    } else {
+      // console.warn(`${funcName}: Invalid row reference provided: ${rRef}.`);
+      // Can be noisy
+      return undefined;
     }
 
     // === 3. Resolve Column Reference to Absolute Index ===
-    if (typeof cRef === 'string') {
-        absolute_c = colTagsMap[cRef];
-        if (absolute_c === undefined) {
-            // console.warn(`${funcName}: Col tag "${cRef}" not found in colTagsMap.`);
-            // Can be noisy
-            return undefined;
-        }
-    } else if (typeof cRef === 'number' && !isNaN(cRef) && cRef >= 0) {
-        absolute_c = cRef;
-    } else {
-        // console.warn(`${funcName}: Invalid col reference provided: ${cRef}.`);
+    if (typeof cRef === "string") {
+      absolute_c = colTagsMap[cRef];
+      if (absolute_c === undefined) {
+        // console.warn(`${funcName}: Col tag "${cRef}" not found in colTagsMap.`);
         // Can be noisy
         return undefined;
+      }
+    } else if (typeof cRef === "number" && !isNaN(cRef) && cRef >= 0) {
+      absolute_c = cRef;
+    } else {
+      // console.warn(`${funcName}: Invalid col reference provided: ${cRef}.`);
+      // Can be noisy
+      return undefined;
     }
 
     // === 4. Validate Resolved Absolute Indices & Retrieve Value ===
     if (isNaN(absolute_r) || isNaN(absolute_c)) {
-        // console.warn(`${funcName}: Failed to resolve valid absolute indices for (${rRef}, ${cRef}).`);
-        return undefined;
+      // console.warn(`${funcName}: Failed to resolve valid absolute indices for (${rRef}, ${cRef}).`);
+      return undefined;
     }
 
     // Retrieve value using absolute indices from the cached text array
     const value = text?.[absolute_r]?.[absolute_c];
 
     if (value === undefined) {
-        // console.warn(`${funcName}: Value not found at resolved index [${absolute_r}, ${absolute_c}] for ref (${rRef}, ${cRef}).`);
-        // Can be noisy
+      // console.warn(`${funcName}: Value not found at resolved index [${absolute_r}, ${absolute_c}] for ref (${rRef}, ${cRef}).`);
+      // Can be noisy
     }
 
     return value;
-} // END fGetVal_GUICache
+  } // END fGetVal_GUICache
 
-
-
-
-// fGetIDFromNameID ////////////////////////////////////////////////////////////////
-// Purpose -> Extracts the 6-character ID from the end of a Name_ID string.
-// Inputs  -> nameIdString (String): The string containing the name and ID (e.g., "Long Sword_A1B2C3").
-// Outputs -> (String | null): The 6-character ID if found and valid, otherwise null.
-function fGetIDFromNameID(nameIdString) {
-    if (typeof nameIdString !== 'string' || !nameIdString) {
-        return null; // Return null if input is not a valid string
+  // fGetIDFromNameID ////////////////////////////////////////////////////////////////
+  // Purpose -> Extracts the 6-character ID from the end of a Name_ID string.
+  // Inputs  -> nameIdString (String): The string containing the name and ID (e.g., "Long Sword_A1B2C3").
+  // Outputs -> (String | null): The 6-character ID if found and valid, otherwise null.
+  function fGetIDFromNameID(nameIdString) {
+    if (typeof nameIdString !== "string" || !nameIdString) {
+      return null; // Return null if input is not a valid string
     }
 
-    const lastUnderscoreIndex = nameIdString.lastIndexOf('_');
+    const lastUnderscoreIndex = nameIdString.lastIndexOf("_");
 
     // Check if underscore exists and if there are at least 6 characters after it
-    if (lastUnderscoreIndex !== -1 && nameIdString.length - lastUnderscoreIndex - 1 >= 6) {
-        const potentialId = nameIdString.substring(lastUnderscoreIndex + 1);
-        // Optional: Add more validation here if IDs have a specific format (e.g., alphanumeric)
-        if (potentialId.length === 6) { // Ensure exactly 6 characters for stricter validation
-             return potentialId;
-        }
+    if (
+      lastUnderscoreIndex !== -1 &&
+      nameIdString.length - lastUnderscoreIndex - 1 >= 6
+    ) {
+      const potentialId = nameIdString.substring(lastUnderscoreIndex + 1);
+      // Optional: Add more validation here if IDs have a specific format (e.g., alphanumeric)
+      if (potentialId.length === 6) {
+        // Ensure exactly 6 characters for stricter validation
+        return potentialId;
+      }
     }
 
     // Log warning if ID extraction failed
     // fMyConsoleLog(`⚠️ fGetIDFromNameID: Could not extract valid 6-char ID from "${nameIdString}".`); // Can be noisy
     return null; // Return null if no valid ID found
-} // END fGetIDFromNameID
+  } // END fGetIDFromNameID
 
-
-
-
-// fSetGridTagsFromHeaders /////////////////////////////////////////////////////////
-// Purpose -> Populates gUI.rowTag and gUI.colTag map objects by reading tag strings
-//            from column 0 (for rows) and row 0 (for columns) of gUI.arr.
-//            Handles comma-separated tags within a single cell.
-// Inputs  -> None (Uses gUI.arr).
-// Outputs -> None (Modifies gUI.rowTag, gUI.colTag).
-function fSetGridTagsFromHeaders() {
+  // fSetGridTagsFromHeaders /////////////////////////////////////////////////////////
+  // Purpose -> Populates gUI.rowTag and gUI.colTag map objects by reading tag strings
+  //            from column 0 (for rows) and row 0 (for columns) of gUI.arr.
+  //            Handles comma-separated tags within a single cell.
+  // Inputs  -> None (Uses gUI.arr).
+  // Outputs -> None (Modifies gUI.rowTag, gUI.colTag).
+  function fSetGridTagsFromHeaders() {
     fMyConsoleLog("⚙️ Parsing Grid Tags...");
     gUI.rowTag = {}; // Initialize/clear row tag map
     gUI.colTag = {}; // Initialize/clear column tag map
@@ -397,9 +441,11 @@ function fSetGridTagsFromHeaders() {
 
     // === Validate Data ===
     if (!gameArr || gameArr.length === 0 || !gameArr[0]) {
-        console.warn("fSetGridTagsFromHeaders: Cannot parse tags, gUI.arr is empty or malformed.");
-        fMyConsoleLog("⚠️ Grid Tags: Data empty.");
-        return;
+      console.warn(
+        "fSetGridTagsFromHeaders: Cannot parse tags, gUI.arr is empty or malformed."
+      );
+      fMyConsoleLog("⚠️ Grid Tags: Data empty.");
+      return;
     }
 
     const rows = gameArr.length;
@@ -407,58 +453,57 @@ function fSetGridTagsFromHeaders() {
 
     // === Process Row Tags (Column 0) ===
     for (let r = 0; r < rows; r++) {
-        // Check if value in column 0 is a non-empty string
-        const rowCell = gameArr[r]?.[0]; // Use optional chaining for safety
-        if (typeof rowCell === 'string' && rowCell) {
-            // Split potentially comma-separated tags
-            rowCell.split(',').forEach(tag => {
-                const trimmedTag = tag.trim();
-                // Map the trimmed tag to the current row index (r)
-                if (trimmedTag) gUI.rowTag[trimmedTag] = r;
-            });
-        }
+      // Check if value in column 0 is a non-empty string
+      const rowCell = gameArr[r]?.[0]; // Use optional chaining for safety
+      if (typeof rowCell === "string" && rowCell) {
+        // Split potentially comma-separated tags
+        rowCell.split(",").forEach((tag) => {
+          const trimmedTag = tag.trim();
+          // Map the trimmed tag to the current row index (r)
+          if (trimmedTag) gUI.rowTag[trimmedTag] = r;
+        });
+      }
     }
 
     // === Process Column Tags (Row 0) ===
     const colHeaderRow = gameArr[0]; // Already validated that gameArr[0] exists
     if (colHeaderRow) {
-        for (let c = 0; c < cols; c++) {
-            // Check if value in row 0 is a non-empty string
-            const colCell = colHeaderRow[c];
-            if (typeof colCell === 'string' && colCell) {
-                // Split potentially comma-separated tags
-                colCell.split(',').forEach(tag => {
-                    const trimmedTag = tag.trim();
-                    // Map the trimmed tag to the current column index (c)
-                    if (trimmedTag) gUI.colTag[trimmedTag] = c;
-                });
-            }
+      for (let c = 0; c < cols; c++) {
+        // Check if value in row 0 is a non-empty string
+        const colCell = colHeaderRow[c];
+        if (typeof colCell === "string" && colCell) {
+          // Split potentially comma-separated tags
+          colCell.split(",").forEach((tag) => {
+            const trimmedTag = tag.trim();
+            // Map the trimmed tag to the current column index (c)
+            if (trimmedTag) gUI.colTag[trimmedTag] = c;
+          });
         }
+      }
     }
 
     fMyConsoleLog("✅ Grid Tags Parsed");
-} // END fSetGridTagsFromHeaders
+  } // END fSetGridTagsFromHeaders
 
-
-
-
-// fGetGridValue ///////////////////////////////////////////////////////////////////
-// Purpose -> Retrieves a value from gUI.arr using tags or indices. Optionally
-//            attempts to convert the retrieved value to a number.
-// Inputs  -> rowRef (String|Number): Row tag or 0-based index.
-//         -> colRef (String|Number): Column tag or 0-based index.
-//         -> asNumber (Boolean): If true, attempt to parse value as a Number (default: false).
-// Outputs -> (Any|Number|undefined|NaN): The value from the grid, potentially coerced
-//            to a Number, or undefined/NaN if resolution or coercion fails.
-function fGetGridValue(rowRef, colRef, asNumber = false) {
+  // fGetGridValue ///////////////////////////////////////////////////////////////////
+  // Purpose -> Retrieves a value from gUI.arr using tags or indices. Optionally
+  //            attempts to convert the retrieved value to a number.
+  // Inputs  -> rowRef (String|Number): Row tag or 0-based index.
+  //         -> colRef (String|Number): Column tag or 0-based index.
+  //         -> asNumber (Boolean): If true, attempt to parse value as a Number (default: false).
+  // Outputs -> (Any|Number|undefined|NaN): The value from the grid, potentially coerced
+  //            to a Number, or undefined/NaN if resolution or coercion fails.
+  function fGetGridValue(rowRef, colRef, asNumber = false) {
     // === Resolve Coordinates ===
     const r = fResolveRow(rowRef);
     const c = fResolveCol(colRef);
 
     // Validate resolved indices
     if (isNaN(r) || isNaN(c)) {
-        console.warn(`fGetGridValue: Could not resolve (${rowRef}, ${colRef}) to valid indices.`);
-        return NaN; // Return NaN for unresolved references
+      console.warn(
+        `fGetGridValue: Could not resolve (${rowRef}, ${colRef}) to valid indices.`
+      );
+      return NaN; // Return NaN for unresolved references
     }
 
     // === Retrieve Value ===
@@ -466,46 +511,42 @@ function fGetGridValue(rowRef, colRef, asNumber = false) {
 
     // === Handle Empty/Null/Undefined ===
     // Treat empty/null/undefined as 0 if number requested, otherwise undefined
-    if (value === undefined || value === null || value === '') {
-        return asNumber ? 0 : undefined;
+    if (value === undefined || value === null || value === "") {
+      return asNumber ? 0 : undefined;
     }
 
     // === Handle Numeric Conversion (if requested) ===
     if (asNumber) {
-        const numValue = Number(value);
-        // Check if conversion resulted in NaN
-        if (isNaN(numValue)) {
-            console.warn(`fGetGridValue: Value at (${rowRef}, ${colRef}) -> [${r}, ${c}] ("${value}") is not a valid number.`);
-            return NaN; // Return NaN if conversion failed
-        }
-        // Return the successfully converted number
-        return numValue;
+      const numValue = Number(value);
+      // Check if conversion resulted in NaN
+      if (isNaN(numValue)) {
+        console.warn(
+          `fGetGridValue: Value at (${rowRef}, ${colRef}) -> [${r}, ${c}] ("${value}") is not a valid number.`
+        );
+        return NaN; // Return NaN if conversion failed
+      }
+      // Return the successfully converted number
+      return numValue;
     }
 
     // === Return Original Value ===
     // If no numeric conversion requested, return the value as is
     return value;
-} // END fGetGridValue
+  } // END fGetGridValue
 
-
-
-
-
-
-
-
-
-// fSetRangeOfGridValues /////////////////////////////////////////////////////////////////
-// Purpose -> Updates values in a specified grid range (both gUI.arr and DOM) using
-//            either a single value (fill) or a 1D/2D array matching the range dimensions.
-// Inputs  -> r1Ref (String|Number): Starting row tag or 0-based index.
-//         -> c1Ref (String|Number): Starting column tag or 0-based index.
-//         -> r2Ref (String|Number): Ending row tag or 0-based index.
-//         -> c2Ref (String|Number): Ending column tag or 0-based index.
-//         -> valueOrArray (Array|Any): 1D/2D array matching range dimensions, OR a single value.
-// Outputs -> (Boolean): True if all updates were successful, false otherwise.
-function fSetRangeOfGridValues(r1Ref, c1Ref, r2Ref, c2Ref, valueOrArray) {
-    fMyConsoleLog(`⚙️ Setting range values: ${r1Ref},${c1Ref} to ${r2Ref},${c2Ref}...`);
+  // fSetRangeOfGridValues /////////////////////////////////////////////////////////////////
+  // Purpose -> Updates values in a specified grid range (both gUI.arr and DOM) using
+  //            either a single value (fill) or a 1D/2D array matching the range dimensions.
+  // Inputs  -> r1Ref (String|Number): Starting row tag or 0-based index.
+  //         -> c1Ref (String|Number): Starting column tag or 0-based index.
+  //         -> r2Ref (String|Number): Ending row tag or 0-based index.
+  //         -> c2Ref (String|Number): Ending column tag or 0-based index.
+  //         -> valueOrArray (Array|Any): 1D/2D array matching range dimensions, OR a single value.
+  // Outputs -> (Boolean): True if all updates were successful, false otherwise.
+  function fSetRangeOfGridValues(r1Ref, c1Ref, r2Ref, c2Ref, valueOrArray) {
+    fMyConsoleLog(
+      `⚙️ Setting range values: ${r1Ref},${c1Ref} to ${r2Ref},${c2Ref}...`
+    );
 
     // === 1. Resolve Indices & Validate ===
     const r1 = fResolveRow(r1Ref);
@@ -514,9 +555,13 @@ function fSetRangeOfGridValues(r1Ref, c1Ref, r2Ref, c2Ref, valueOrArray) {
     const c2 = fResolveCol(c2Ref);
 
     if ([r1, c1, r2, c2].some(isNaN)) {
-        console.warn(`fSetRangeOfGridValues: Could not resolve one or more references: (${r1Ref}, ${c1Ref}, ${r2Ref}, ${c2Ref}) -> (${r1}, ${c1}, ${r2}, ${c2}).`);
-        fMyConsoleLog(`❌ fSetRangeOfGridValues failed: Invalid range references.`);
-        return false;
+      console.warn(
+        `fSetRangeOfGridValues: Could not resolve one or more references: (${r1Ref}, ${c1Ref}, ${r2Ref}, ${c2Ref}) -> (${r1}, ${c1}, ${r2}, ${c2}).`
+      );
+      fMyConsoleLog(
+        `❌ fSetRangeOfGridValues failed: Invalid range references.`
+      );
+      return false;
     }
 
     // === 2. Determine Mode (Fill vs Array) ===
@@ -525,9 +570,9 @@ function fSetRangeOfGridValues(r1Ref, c1Ref, r2Ref, c2Ref, valueOrArray) {
     const newValArr = isSingleValueFill ? null : valueOrArray;
 
     if (isSingleValueFill) {
-        fMyConsoleLog(`   -> Mode: Single value fill ('${singleFillValue}')`);
+      fMyConsoleLog(`   -> Mode: Single value fill ('${singleFillValue}')`);
     } else {
-        fMyConsoleLog(`   -> Mode: Array mapping`);
+      fMyConsoleLog(`   -> Mode: Array mapping`);
     }
 
     // === 3. Determine Range Dimensions ===
@@ -540,104 +585,125 @@ function fSetRangeOfGridValues(r1Ref, c1Ref, r2Ref, c2Ref, valueOrArray) {
 
     // === 4. Validate Input Array Dimensions (if not filling) ===
     if (!isSingleValueFill) {
-        let arrRows = 0;
-        let arrCols = 0;
+      let arrRows = 0;
+      let arrCols = 0;
 
-        if (newValArr.length > 0) {
-            const isInputArray2D = Array.isArray(newValArr[0]);
-            if (isInputArray2D) {
-                // Handle 2D array input
-                arrRows = newValArr.length;
-                arrCols = newValArr[0]?.length || 0; // Handle empty inner array edge case
-                // Check for consistent column lengths in 2D array
-                if (!newValArr.every(row => Array.isArray(row) && row.length === arrCols)) {
-                    console.warn(`fSetRangeOfGridValues: Input 2D array has inconsistent column lengths.`);
-                    fMyConsoleLog(`❌ fSetRangeOfGridValues failed: Input 2D array malformed.`);
-                    return false;
-                }
-            } else {
-                // Handle 1D array input (assume it matches either row or column count)
-                if (rangeRows === 1) { // Target is a single row
-                    arrRows = 1;
-                    arrCols = newValArr.length;
-                } else if (rangeCols === 1) { // Target is a single column
-                    arrRows = newValArr.length;
-                    arrCols = 1;
-                } else {
-                    // Ambiguous: Target is multi-row/col but input is 1D
-                    // Defaulting to matching columns if range is wider than tall, else rows
-                    if(rangeCols >= rangeRows) {
-                        arrRows = 1;
-                        arrCols = newValArr.length;
-                    } else {
-                         arrRows = newValArr.length;
-                         arrCols = 1;
-                    }
-                    console.warn(`fSetRangeOfGridValues: Ambiguous 1D array input for multi-dimensional range (${rangeRows}x${rangeCols}). Assuming ${arrRows}x${arrCols}.`);
-                }
-            }
-        }
-        // Else: newValArr is empty array, dimensions remain 0
-
-        // Check if calculated array dimensions match range dimensions
-        if (rangeRows !== arrRows || rangeCols !== arrCols) {
-            console.warn(`fSetRangeOfGridValues: Dimension mismatch. Range: ${rangeRows}x${rangeCols}, Array: ${arrRows}x${arrCols}.`);
-            fMyConsoleLog(`❌ fSetRangeOfGridValues failed: Dimension mismatch.`);
+      if (newValArr.length > 0) {
+        const isInputArray2D = Array.isArray(newValArr[0]);
+        if (isInputArray2D) {
+          // Handle 2D array input
+          arrRows = newValArr.length;
+          arrCols = newValArr[0]?.length || 0; // Handle empty inner array edge case
+          // Check for consistent column lengths in 2D array
+          if (
+            !newValArr.every(
+              (row) => Array.isArray(row) && row.length === arrCols
+            )
+          ) {
+            console.warn(
+              `fSetRangeOfGridValues: Input 2D array has inconsistent column lengths.`
+            );
+            fMyConsoleLog(
+              `❌ fSetRangeOfGridValues failed: Input 2D array malformed.`
+            );
             return false;
+          }
+        } else {
+          // Handle 1D array input (assume it matches either row or column count)
+          if (rangeRows === 1) {
+            // Target is a single row
+            arrRows = 1;
+            arrCols = newValArr.length;
+          } else if (rangeCols === 1) {
+            // Target is a single column
+            arrRows = newValArr.length;
+            arrCols = 1;
+          } else {
+            // Ambiguous: Target is multi-row/col but input is 1D
+            // Defaulting to matching columns if range is wider than tall, else rows
+            if (rangeCols >= rangeRows) {
+              arrRows = 1;
+              arrCols = newValArr.length;
+            } else {
+              arrRows = newValArr.length;
+              arrCols = 1;
+            }
+            console.warn(
+              `fSetRangeOfGridValues: Ambiguous 1D array input for multi-dimensional range (${rangeRows}x${rangeCols}). Assuming ${arrRows}x${arrCols}.`
+            );
+          }
         }
+      }
+      // Else: newValArr is empty array, dimensions remain 0
+
+      // Check if calculated array dimensions match range dimensions
+      if (rangeRows !== arrRows || rangeCols !== arrCols) {
+        console.warn(
+          `fSetRangeOfGridValues: Dimension mismatch. Range: ${rangeRows}x${rangeCols}, Array: ${arrRows}x${arrCols}.`
+        );
+        fMyConsoleLog(`❌ fSetRangeOfGridValues failed: Dimension mismatch.`);
+        return false;
+      }
     } // End array dimension validation
 
     // === 5. Update Data and DOM ===
     let updateCount = 0;
     let updateErrors = 0;
     for (let r = rMin; r <= rMax; r++) {
-        // Skip if row doesn't exist in data model or DOM cache
-        if (!gUI.arr[r] || !gUI.grid2D[r]) {
-            console.warn(`fSetRangeOfGridValues: Row ${r} does not exist in gUI.arr or gUI.grid2D. Skipping row.`);
-            updateErrors += rangeCols; // Count all columns in this row as errors
-            continue;
+      // Skip if row doesn't exist in data model or DOM cache
+      if (!gUI.arr[r] || !gUI.grid2D[r]) {
+        console.warn(
+          `fSetRangeOfGridValues: Row ${r} does not exist in gUI.arr or gUI.grid2D. Skipping row.`
+        );
+        updateErrors += rangeCols; // Count all columns in this row as errors
+        continue;
+      }
+
+      for (let c = cMin; c <= cMax; c++) {
+        let newValue;
+        // Determine the value to set based on mode
+        if (isSingleValueFill) {
+          newValue = singleFillValue;
+        } else {
+          // Calculate corresponding index in newValArr based on dimensions
+          const arrRowIdx = rangeRows === 1 ? 0 : r - rMin;
+          const arrColIdx = rangeCols === 1 ? 0 : c - cMin;
+          newValue = Array.isArray(newValArr[0])
+            ? newValArr[arrRowIdx]?.[arrColIdx] // 2D access
+            : rangeCols === 1
+            ? newValArr[arrRowIdx]
+            : newValArr[arrColIdx]; // 1D access (column or row)
         }
 
-        for (let c = cMin; c <= cMax; c++) {
-            let newValue;
-            // Determine the value to set based on mode
-            if (isSingleValueFill) {
-                newValue = singleFillValue;
-            } else {
-                // Calculate corresponding index in newValArr based on dimensions
-                const arrRowIdx = (rangeRows === 1) ? 0 : r - rMin;
-                const arrColIdx = (rangeCols === 1) ? 0 : c - cMin;
-                newValue = Array.isArray(newValArr[0])
-                         ? newValArr[arrRowIdx]?.[arrColIdx] // 2D access
-                         : (rangeCols === 1 ? newValArr[arrRowIdx] : newValArr[arrColIdx]); // 1D access (column or row)
-            }
-
-            // Update data model and DOM using fSetGridValue (handles DOM types)
-            if (!fSetGridValue(r, c, newValue)) {
-                // fSetGridValue logs specific errors
-                updateErrors++;
-            } else {
-                updateCount++;
-            }
-        } // End col loop
+        // Update data model and DOM using fSetGridValue (handles DOM types)
+        if (!fSetGridValue(r, c, newValue)) {
+          // fSetGridValue logs specific errors
+          updateErrors++;
+        } else {
+          updateCount++;
+        }
+      } // End col loop
     } // End row loop
 
-    fMyConsoleLog(`✅ fSetRangeOfGridValues: ${isSingleValueFill ? 'Filled' : 'Updated'} ${updateCount} cells. ${updateErrors > 0 ? `(${updateErrors} errors)` : ''}`);
+    fMyConsoleLog(
+      `✅ fSetRangeOfGridValues: ${
+        isSingleValueFill ? "Filled" : "Updated"
+      } ${updateCount} cells. ${
+        updateErrors > 0 ? `(${updateErrors} errors)` : ""
+      }`
+    );
     return updateErrors === 0; // Return true only if no errors occurred
+  } // END fSetRangeOfGridValues
 
-} // END fSetRangeOfGridValues
-
-
-
-// fSetGridValue ///////////////////////////////////////////////////////////////////
-// Purpose -> Updates a value in the data model (gUI.arr) and the corresponding
-//            cell display in the DOM (gUI.grid2D). Handles dynamic URL styling.
-// Inputs  -> rowRef (String|Number): Row tag or 0-based index.
-//         -> colRef (String|Number): Column tag or 0-based index.
-//         -> newValue (Any): The new value to set.
-// Outputs -> (Boolean): True if the update was successful (data and optionally DOM),
-//                       false if resolution failed or row/cell doesn't exist.
-function fSetGridValue(rowRef, colRef, newValue) {
+  // fSetGridValue ///////////////////////////////////////////////////////////////////
+  // Purpose -> Updates a value in the data model (gUI.arr) and the corresponding
+  //            cell display in the DOM (gUI.grid2D). Handles dynamic URL styling.
+  // Inputs  -> rowRef (String|Number): Row tag or 0-based index.
+  //         -> colRef (String|Number): Column tag or 0-based index.
+  //         -> newValue (Any): The new value to set.
+  // Outputs -> (Boolean): True if the update was successful (data and optionally DOM),
+  //                       false if resolution failed or row/cell doesn't exist.
+  function fSetGridValue(rowRef, colRef, newValue) {
     // === 1. Resolve Coordinates ===
     const r = fResolveRow(rowRef);
     const c = fResolveCol(colRef);
@@ -645,14 +711,16 @@ function fSetGridValue(rowRef, colRef, newValue) {
 
     // Validate resolved indices
     if (isNaN(r) || isNaN(c)) {
-        console.warn(`fSetGridValue: Could not resolve (${rowRef}, ${colRef}) to valid indices [${r}, ${c}].`);
-        return false;
+      console.warn(
+        `fSetGridValue: Could not resolve (${rowRef}, ${colRef}) to valid indices [${r}, ${c}].`
+      );
+      return false;
     }
 
     // === 2. Validate Row Existence in Data Model ===
     if (!gUI.arr?.[r]) {
-        console.warn(`fSetGridValue: Row ${r} does not exist in gUI.arr.`);
-        return false;
+      console.warn(`fSetGridValue: Row ${r} does not exist in gUI.arr.`);
+      return false;
     }
 
     // === 3. REMOVED Special Meta Cell Formatting ===
@@ -665,251 +733,228 @@ function fSetGridValue(rowRef, colRef, newValue) {
     // === 5. Update DOM ===
     const cell = gUI.grid2D?.[r]?.[c];
     if (!cell) {
-        // Log warning if DOM element wasn't found
-        console.warn(`fSetGridValue: Cell element not found in gUI.grid2D at [${r}, ${c}]. Data model updated, DOM not.`);
-        // Depending on requirements, you might return false here if DOM update is critical
-        return true; // For now, return true as data model was updated
+      // Log warning if DOM element wasn't found
+      console.warn(
+        `fSetGridValue: Cell element not found in gUI.grid2D at [${r}, ${c}]. Data model updated, DOM not.`
+      );
+      // Depending on requirements, you might return false here if DOM update is critical
+      return true; // For now, return true as data model was updated
     }
 
     // === 6. Handle Dynamic URL Styling & Attributes ===
-    const valueStr = String(valueToSet ?? '').trim(); // Use string version for checks
-    const isUrl = valueStr.startsWith('http://') || valueStr.startsWith('https://');
+    const valueStr = String(valueToSet ?? "").trim(); // Use string version for checks
+    const isUrl =
+      valueStr.startsWith("http://") || valueStr.startsWith("https://");
 
     if (isUrl) {
-        cell.classList.add('url-link');
-        cell.dataset.url = valueStr;
-        // Check for specific URL types (Drive image or standard image extension)
-        const driveMatch = valueStr.match(/drive\.google\.com\/file\/d\/([-\w]+)/);
-        const imgExts = /\.(png|jpg|jpeg|gif|webp|svg)$/i;
+      cell.classList.add("url-link");
+      cell.dataset.url = valueStr;
+      // Check for specific URL types (Drive image or standard image extension)
+      const driveMatch = valueStr.match(
+        /drive\.google\.com\/file\/d\/([-\w]+)/
+      );
+      const imgExts = /\.(png|jpg|jpeg|gif|webp|svg)$/i;
 
-        if (driveMatch && driveMatch[1]) {
-            // Handle Google Drive image link
-            const fileId = driveMatch[1];
-            const imageUrl = 'https://drive.google.com/uc?export=view&id=' + fileId;
-            cell.classList.add('image-link');
-            cell.dataset.imageSrc = imageUrl;
-        } else if (imgExts.test(valueStr)) {
-            // Handle standard image link (by extension)
-            cell.classList.add('image-link');
-            cell.dataset.imageSrc = valueStr;
-        } else {
-            // It's a URL, but not identified as an image link - remove image attributes
-            cell.classList.remove('image-link');
-            delete cell.dataset.imageSrc; // Use delete operator for dataset properties
-        }
+      if (driveMatch && driveMatch[1]) {
+        // Handle Google Drive image link
+        const fileId = driveMatch[1];
+        const imageUrl = "https://drive.google.com/uc?export=view&id=" + fileId;
+        cell.classList.add("image-link");
+        cell.dataset.imageSrc = imageUrl;
+      } else if (imgExts.test(valueStr)) {
+        // Handle standard image link (by extension)
+        cell.classList.add("image-link");
+        cell.dataset.imageSrc = valueStr;
+      } else {
+        // It's a URL, but not identified as an image link - remove image attributes
+        cell.classList.remove("image-link");
+        delete cell.dataset.imageSrc; // Use delete operator for dataset properties
+      }
     } else {
-        // Not a URL - remove all link-related classes and attributes
-        cell.classList.remove('url-link', 'image-link');
-        delete cell.dataset.url;
-        delete cell.dataset.imageSrc;
+      // Not a URL - remove all link-related classes and attributes
+      cell.classList.remove("url-link", "image-link");
+      delete cell.dataset.url;
+      delete cell.dataset.imageSrc;
     }
 
     // === 7. Update Cell Visual Content ===
     const checkbox = cell.querySelector('input[type="checkbox"]');
-    const dropdown = cell.querySelector('select.grid-dropdown');
+    const dropdown = cell.querySelector("select.grid-dropdown");
 
     if (checkbox) {
-        // Update checkbox state
-        const valUpper = String(valueToSet).toUpperCase();
-        checkbox.checked = valueToSet === true || valUpper === "TRUE";
+      // Update checkbox state
+      const valUpper = String(valueToSet).toUpperCase();
+      checkbox.checked = valueToSet === true || valUpper === "TRUE";
     } else if (dropdown) {
-        // Update dropdown selection
-        dropdown.value = String(valueToSet ?? '');
+      // Update dropdown selection
+      dropdown.value = String(valueToSet ?? "");
     } else {
-        // Update text content (stripping ID if present)
-        // Ensure the correct value (valueToSet) is used here
-        const idPattern = /\s{2,}_\w{6}$/;
-        const text = (typeof valueToSet === 'string' && idPattern.test(valueToSet))
-                     ? valueToSet.replace(idPattern, '')
-                     : valueToSet;
-        cell.textContent = text ?? ''; // Use empty string for null/undefined
+      // Update text content (stripping ID if present)
+      // Ensure the correct value (valueToSet) is used here
+      const idPattern = /\s{2,}_\w{6}$/;
+      const text =
+        typeof valueToSet === "string" && idPattern.test(valueToSet)
+          ? valueToSet.replace(idPattern, "")
+          : valueToSet;
+      cell.textContent = text ?? ""; // Use empty string for null/undefined
     }
 
     // Optional log: fMyConsoleLog(`Grid updated [${r}, ${c}] = ${valueToSet}`);
     return true; // Indicate success (data and DOM updated)
+  } // END fSetGridValue
 
-} // END fSetGridValue
+  // ==========================================================================
+  // === Die Rolling Utilities
+  // ==========================================================================
 
+  // fdRoll //////////////////////////////////////////////////////////////////////
+  // Purpose -> Standard linear distribution die roll (e.g., 1d6).
+  // Inputs  -> die (Number): The number of sides on the die.
+  // Outputs -> (Number): The result of the roll (integer from 1 to die).
+  function fdRoll(die) {
+    const numDie = Number(die); // Ensure input is treated as a number
 
+    // Validate input
+    if (isNaN(numDie) || numDie < 1) {
+      console.error(`fdRoll received invalid die size: ${die}`);
+      return 1; // Return 1 for invalid input
+    }
 
+    // Calculate and return random integer between 1 and numDie (inclusive)
+    return Math.floor(Math.random() * numDie) + 1;
+  } // END fdRoll
 
-// ==========================================================================
-// === Die Rolling Utilities 
-// ==========================================================================
+  // fMetaDieRoll //////////////////////////////////////////////////////////////////////
+  // Purpose -> Performs a non-linear "exploding" dice roll common in MetaScape,
+  //            weighted towards lower results but with potential for high values.
+  //            Used for skill/attribute checks (Sk, Atr, Atk, Def). No T/C.
+  // Inputs  -> die (Number): The base value (skill/attribute) for the roll.
+  // Outputs -> (Number): The integer result of the roll (minimum 1).
+  function fMetaDieRoll(die) {
+    const numDie = Number(die); // Ensure input is treated as a number
 
+    // Validate input
+    if (isNaN(numDie) || numDie < 1) {
+      console.error(`fMetaDieRoll received invalid die value: ${die}`);
+      return 1; // Return 1 for invalid input
+    }
 
+    // Generate two random numbers
+    const rand1 = Math.random();
+    let rand2 = Math.random();
 
+    // Prevent division by zero or near-zero for the second random number
+    if (rand2 < 0.0001) rand2 = 0.0001; // Set a minimum divisor
 
-// fdRoll //////////////////////////////////////////////////////////////////////
-// Purpose -> Standard linear distribution die roll (e.g., 1d6).
-// Inputs  -> die (Number): The number of sides on the die.
-// Outputs -> (Number): The result of the roll (integer from 1 to die).
-function fdRoll(die) {
-  const numDie = Number(die); // Ensure input is treated as a number
+    // Calculate result: (die * rand1) / rand2 + 1, floored
+    return Math.floor((numDie * rand1) / rand2) + 1;
+  } // END fMetaDieRoll
 
-  // Validate input
-  if (isNaN(numDie) || numDie < 1) {
-    console.error(`fdRoll received invalid die size: ${die}`);
-    return 1; // Return 1 for invalid input
-  }
+  // fTC /////////////////////////////////////////////////////////////////////
+  // Purpose -> Rolls 1d16 to determine Tremendous ('T', roll 1) or Critical ('C', roll 2)
+  //            result suffix for sidebar logging.
+  // Inputs  -> None.
+  // Outputs -> (String): Formatted "T", "C", or "" (empty string).
+  function fTC() {
+    const roll = fdRoll(16); // Standard d16 roll
 
-  // Calculate and return random integer between 1 and numDie (inclusive)
-  return Math.floor(Math.random() * numDie) + 1;
-} // END fdRoll
+    // Return formatted string based on roll result
+    return roll === 1
+      ? `<span class="tremendous">T</span>` // Roll of 1 is Tremendous
+      : roll === 2
+      ? `<span class="red-bold">C</span>` // Roll of 2 is Critical
+      : ""; // Other rolls result in no suffix
+  } // END fTC
 
+  // fSkRoll ////////////////////////////////////////////////////////////////////
+  // Purpose -> Performs a standard MetaScape Skill roll (used for Sk, Atr, Str).
+  //            Averages a linear d(die*2) roll and a non-linear fMetaDieRoll(die) roll.
+  // Inputs  -> die (Number): The base skill value.
+  // Outputs -> (Number): The rounded integer result of the skill roll.
+  function fSkRoll(die) {
+    const numDie = Number(die); // Ensure input is treated as a number
 
+    // Validate input
+    if (isNaN(numDie) || numDie < 1) {
+      console.error(`fSkRoll received invalid die value: ${die}`);
+      return 1; // Return 1 for invalid input
+    }
 
+    // Calculate average of a linear d(2*die) and a non-linear fMetaDieRoll(die)
+    return Math.round((fdRoll(numDie * 2) + fMetaDieRoll(numDie)) / 2);
+  } // END fSkRoll
 
-// fMetaDieRoll //////////////////////////////////////////////////////////////////////
-// Purpose -> Performs a non-linear "exploding" dice roll common in MetaScape,
-//            weighted towards lower results but with potential for high values.
-//            Used for skill/attribute checks (Sk, Atr, Atk, Def). No T/C.
-// Inputs  -> die (Number): The base value (skill/attribute) for the roll.
-// Outputs -> (Number): The integer result of the roll (minimum 1).
-function fMetaDieRoll(die) {
-  const numDie = Number(die); // Ensure input is treated as a number
+  // fAtkRoll ////////////////////////////////////////////////////////////////////
+  // Purpose -> Performs a MetaScape Attack roll. Currently identical to fSkRoll.
+  // Inputs  -> die (Number): The base attack skill value.
+  // Outputs -> (Number): The rounded integer result of the attack roll.
+  function fAtkRoll(die) {
+    const numDie = Number(die); // Ensure input is treated as a number
 
-  // Validate input
-  if (isNaN(numDie) || numDie < 1) {
-    console.error(`fMetaDieRoll received invalid die value: ${die}`);
-    return 1; // Return 1 for invalid input
-  }
+    // Validate input
+    if (isNaN(numDie) || numDie < 1) {
+      console.error(`fAtkRoll received invalid die value: ${die}`);
+      return 1; // Return 1 for invalid input
+    }
 
-  // Generate two random numbers
-  const rand1 = Math.random();
-  let rand2 = Math.random();
+    // Currently uses the same calculation as fSkRoll
+    return Math.round((fdRoll(numDie * 2) + fMetaDieRoll(numDie)) / 2);
+  } // END fAtkRoll
 
-  // Prevent division by zero or near-zero for the second random number
-  if (rand2 < 0.0001) rand2 = 0.0001; // Set a minimum divisor
+  // fDefRoll ////////////////////////////////////////////////////////////////////
+  // Purpose -> Performs a MetaScape Defense roll. Based on fMetaDieRoll(die) * 0.75.
+  // Inputs  -> die (Number): The base defense value.
+  // Outputs -> (Number): The rounded integer result of the defense roll.
+  function fDefRoll(die) {
+    const numDie = Number(die); // Ensure input is treated as a number
 
-  // Calculate result: (die * rand1) / rand2 + 1, floored
-  return Math.floor((numDie * rand1) / rand2) + 1;
-} // END fMetaDieRoll
+    // Validate input
+    if (isNaN(numDie) || numDie < 1) {
+      console.error(`fDefRoll received invalid die value: ${die}`);
+      return 1; // Return 1 for invalid input
+    }
 
+    // Calculate based on the non-linear roll, scaled down
+    return Math.round(fMetaDieRoll(numDie) * 0.75);
+  } // END fDefRoll
 
+  // fDmgRoll ///////////////////////////////////////////////////////////////////
+  // Purpose -> Rolls standard PC Damage. Currently identical to fSkRoll.
+  // Inputs  -> pcDmg (Number): The base damage value.
+  // Outputs -> (Number): The result of the damage roll.
+  function fDmgRoll(pcDmg) {
+    // Currently just calls the standard skill roll function
+    return fSkRoll(pcDmg);
+  } // END fDmgRoll
 
+  // fARRoll /////////////////////////////////////////////////////////////////
+  // Purpose -> Rolls standard PC Armor. Uses fSkRoll result divided by 15,
+  //            truncated to two decimal places, with a minimum result of 1.0.
+  // Inputs  -> pcAR (Number): The base armor value.
+  // Outputs -> (Number): The result of the armor roll (min 1.0, rounded to two decimals).
+  function fARRoll(pcAR) {
+    // Get the base skill roll result for the armor value
+    const skillRoll = fSkRoll(pcAR);
 
-// fTC /////////////////////////////////////////////////////////////////////
-// Purpose -> Rolls 1d16 to determine Tremendous ('T', roll 1) or Critical ('C', roll 2)
-//            result suffix for sidebar logging.
-// Inputs  -> None.
-// Outputs -> (String): Formatted "T", "C", or "" (empty string).
-function fTC() {
-  const roll = fdRoll(16); // Standard d16 roll
+    // Formula: max(1, floor( (SkillRoll / 15) * 100 ) / 100 )
+    const result = Math.trunc((skillRoll / 15) * 100) / 100;
 
-  // Return formatted string based on roll result
-  return roll === 1
-    ? `<span class="tremendous">T</span>` // Roll of 1 is Tremendous
-    : roll === 2
-    ? `<span class="red-bold">C</span>`   // Roll of 2 is Critical
-    : "";                                // Other rolls result in no suffix
-} // END fTC
+    // Ensure a minimum result of 1.0
+    return Math.max(1, result);
+  } // END fARRoll
 
-
-
-
-// fSkRoll ////////////////////////////////////////////////////////////////////
-// Purpose -> Performs a standard MetaScape Skill roll (used for Sk, Atr, Str).
-//            Averages a linear d(die*2) roll and a non-linear fMetaDieRoll(die) roll.
-// Inputs  -> die (Number): The base skill value.
-// Outputs -> (Number): The rounded integer result of the skill roll.
-function fSkRoll(die) {
-  const numDie = Number(die); // Ensure input is treated as a number
-
-  // Validate input
-  if (isNaN(numDie) || numDie < 1) {
-    console.error(`fSkRoll received invalid die value: ${die}`);
-    return 1; // Return 1 for invalid input
-  }
-
-  // Calculate average of a linear d(2*die) and a non-linear fMetaDieRoll(die)
-  return Math.round((fdRoll(numDie * 2) + fMetaDieRoll(numDie)) / 2);
-} // END fSkRoll
-
-
-
-
-// fAtkRoll ////////////////////////////////////////////////////////////////////
-// Purpose -> Performs a MetaScape Attack roll. Currently identical to fSkRoll.
-// Inputs  -> die (Number): The base attack skill value.
-// Outputs -> (Number): The rounded integer result of the attack roll.
-function fAtkRoll(die) {
-  const numDie = Number(die); // Ensure input is treated as a number
-
-  // Validate input
-  if (isNaN(numDie) || numDie < 1) {
-    console.error(`fAtkRoll received invalid die value: ${die}`);
-    return 1; // Return 1 for invalid input
-  }
-
-  // Currently uses the same calculation as fSkRoll
-  return Math.round((fdRoll(numDie * 2) + fMetaDieRoll(numDie)) / 2);
-} // END fAtkRoll
-
-
-
-
-// fDefRoll ////////////////////////////////////////////////////////////////////
-// Purpose -> Performs a MetaScape Defense roll. Based on fMetaDieRoll(die) * 0.75.
-// Inputs  -> die (Number): The base defense value.
-// Outputs -> (Number): The rounded integer result of the defense roll.
-function fDefRoll(die) {
-  const numDie = Number(die); // Ensure input is treated as a number
-
-  // Validate input
-  if (isNaN(numDie) || numDie < 1) {
-    console.error(`fDefRoll received invalid die value: ${die}`);
-    return 1; // Return 1 for invalid input
-  }
-
-  // Calculate based on the non-linear roll, scaled down
-  return Math.round(fMetaDieRoll(numDie) * 0.75);
-} // END fDefRoll
-
-
-
-
-// fDmgRoll ///////////////////////////////////////////////////////////////////
-// Purpose -> Rolls standard PC Damage. Currently identical to fSkRoll.
-// Inputs  -> pcDmg (Number): The base damage value.
-// Outputs -> (Number): The result of the damage roll.
-function fDmgRoll(pcDmg) {
-  // Currently just calls the standard skill roll function
-  return fSkRoll(pcDmg);
-} // END fDmgRoll
-
-
-
-
-// fARRoll /////////////////////////////////////////////////////////////////
-// Purpose -> Rolls standard PC Armor. Uses fSkRoll result divided by 15,
-//            truncated to two decimal places, with a minimum result of 1.0.
-// Inputs  -> pcAR (Number): The base armor value.
-// Outputs -> (Number): The result of the armor roll (min 1.0, rounded to two decimals).
-function fARRoll(pcAR) {
-  // Get the base skill roll result for the armor value
-  const skillRoll = fSkRoll(pcAR);
-
-  // Formula: max(1, floor( (SkillRoll / 15) * 100 ) / 100 )
-  const result = Math.trunc((skillRoll / 15) * 100) / 100;
-
-  // Ensure a minimum result of 1.0
-  return Math.max(1, result);
-} // END fARRoll
-
-
-
-
-// fRollRPGDieString //////////////////////////////////////////////////////////////////
-// Purpose -> Parses a standard RPG die string (e.g., "d6", "2d8", "3d10+5", "1d12-2")
-//            and rolls the dice using fdRoll (linear distribution), returning the total.
-// Inputs  -> dieString (String): The dice notation string.
-// Outputs -> (Number | null): The numerical result of the roll, or null if parsing fails.
-function fRollRPGDieString(dieString) {
+  // fRollRPGDieString //////////////////////////////////////////////////////////////////
+  // Purpose -> Parses a standard RPG die string (e.g., "d6", "2d8", "3d10+5", "1d12-2")
+  //            and rolls the dice using fdRoll (linear distribution), returning the total.
+  // Inputs  -> dieString (String): The dice notation string.
+  // Outputs -> (Number | null): The numerical result of the roll, or null if parsing fails.
+  function fRollRPGDieString(dieString) {
     // === Validate Input ===
-    if (typeof dieString !== 'string' || !dieString.trim()) {
-        console.warn("fRollRPGDieString: Invalid input - requires a non-empty string.");
-        return null;
+    if (typeof dieString !== "string" || !dieString.trim()) {
+      console.warn(
+        "fRollRPGDieString: Invalid input - requires a non-empty string."
+      );
+      return null;
     }
 
     // === Define Regex ===
@@ -919,8 +964,8 @@ function fRollRPGDieString(dieString) {
 
     // === Validate Match ===
     if (!match) {
-        // console.warn(`fRollRPGDieString: Failed to parse die string: "${dieString}"`); // Can be noisy
-        return null; // String doesn't match expected format
+      // console.warn(`fRollRPGDieString: Failed to parse die string: "${dieString}"`); // Can be noisy
+      return null; // String doesn't match expected format
     }
 
     // === Extract & Validate Components ===
@@ -929,264 +974,387 @@ function fRollRPGDieString(dieString) {
     const modifierSign = match[3]; // '+' or '-' or undefined
     const modifierValue = match[4] ? parseInt(match[4], 10) : 0; // Default 0 modifier
 
-    if (isNaN(numDice) || numDice < 1 || isNaN(numSides) || numSides < 1 || isNaN(modifierValue)) {
-        console.warn(`fRollRPGDieString: Invalid numeric components in parsed string "${dieString}"`);
-        return null; // Invalid numbers parsed
+    if (
+      isNaN(numDice) ||
+      numDice < 1 ||
+      isNaN(numSides) ||
+      numSides < 1 ||
+      isNaN(modifierValue)
+    ) {
+      console.warn(
+        `fRollRPGDieString: Invalid numeric components in parsed string "${dieString}"`
+      );
+      return null; // Invalid numbers parsed
     }
 
     // === Roll Dice ===
     let total = 0;
     fMyConsoleLog(`   -> Rolling Die String: ${numDice}d${numSides}`);
     for (let i = 0; i < numDice; i++) {
-        const roll = fdRoll(numSides); // Use standard linear roll
-        total += roll;
-        // fMyConsoleLog(`      - Roll ${i+1}: ${roll}`); // Optional: Log individual rolls
+      const roll = fdRoll(numSides); // Use standard linear roll
+      total += roll;
+      // fMyConsoleLog(`      - Roll ${i+1}: ${roll}`); // Optional: Log individual rolls
     }
     fMyConsoleLog(`   -> Base Roll Total: ${total}`);
 
     // === Apply Modifier ===
-    if (modifierSign === '+') {
-        total += modifierValue;
-        fMyConsoleLog(`   -> Applying Modifier: +${modifierValue} => ${total}`);
-    } else if (modifierSign === '-') {
-        total -= modifierValue;
-        fMyConsoleLog(`   -> Applying Modifier: -${modifierValue} => ${total}`);
+    if (modifierSign === "+") {
+      total += modifierValue;
+      fMyConsoleLog(`   -> Applying Modifier: +${modifierValue} => ${total}`);
+    } else if (modifierSign === "-") {
+      total -= modifierValue;
+      fMyConsoleLog(`   -> Applying Modifier: -${modifierValue} => ${total}`);
     }
 
     return total;
-} // END fRollRPGDieString
+  } // END fRollRPGDieString
 
+  // ==========================================================================
+  // === Message & Prompt Modals ===
+  // ==========================================================================
 
+  // fShowMessage ///////////////////////////////////////////////////////////////////
+  // Purpose -> Displays the message modal box with the provided message and returns
+  //            a Promise that resolves when the modal's 'Close' button is clicked
+  //            or the modal is closed via other means (handled by fHideMessage).
+  // Inputs  -> message (String): The text or HTML to display.
+  // Outputs -> (Promise<void>): Resolves when the modal is hidden. Rejects if modal
+  //                             elements are not found.
+  async function fShowMessage(message) {
+    const overlay = document.getElementById("messageModal");
+    const textElement = document.getElementById("messageText");
+    const closeButton = document.getElementById("closeMessageModal");
 
-
-// ==========================================================================
-// === Message & Prompt Modals ===
-// ==========================================================================
-
-
-
-
-// fShowMessage ///////////////////////////////////////////////////////////////////
-// Purpose -> Displays the message modal box with the provided message and returns
-//            a Promise that resolves when the modal's 'Close' button is clicked
-//            or the modal is closed via other means (handled by fHideMessage).
-// Inputs  -> message (String): The text or HTML to display.
-// Outputs -> (Promise<void>): Resolves when the modal is hidden. Rejects if modal
-//                             elements are not found.
-async function fShowMessage(message) {
-    // === Ensure Modal Elements are Cached ===
-    // Attempt to cache elements if not already done (e.g., on first call)
-    if (!gUI.messageModalOverlay) {
-        gUI.messageModalOverlay = document.getElementById('messageModal');
-        if (gUI.messageModalOverlay) fMyConsoleLog("fShowMessage: Just-in-time cache for #messageModal");
-    }
-    if (!gUI.messageModalText) {
-        gUI.messageModalText = document.getElementById('messageText');
-        if (gUI.messageModalText) fMyConsoleLog("fShowMessage: Just-in-time cache for #messageText");
-    }
-
-    // === Validate Elements ===
-    // Check if elements were successfully found/cached
-    if (!gUI.messageModalOverlay || !gUI.messageModalText) {
-        console.error("Message modal elements not cached or found in the DOM!");
-        if (!gUI.messageModalOverlay) console.error("Missing: #messageModal");
-        if (!gUI.messageModalText) console.error("Missing: #messageText");
-        // Fallback alert could be added here if critical
-        return Promise.reject(new Error("Message modal elements not found.")); // Reject promise
+    if (!overlay || !textElement || !closeButton) {
+      console.error(
+        "fShowMessage: One or more modal elements not found in DOM! Overlay:",
+        !!overlay,
+        "Text:",
+        !!textElement,
+        "Button:",
+        !!closeButton
+      );
+      // Fallback alert if critical elements are missing
+      alert(
+        "Error: Message display component is missing.\n\n" +
+          message.replace(/<br\s*\/?>/gi, "\n")
+      );
+      return Promise.reject(new Error("Message modal elements not found."));
     }
 
-    // === Display Modal ===
-    // Set message content (allows basic HTML like <br>)
-    gUI.messageModalText.innerHTML = message;
-    // Show the modal overlay
-    gUI.messageModalOverlay.style.display = 'flex';
+    gUI.isCurrentMessageModalUserCloseable = true; // Standard messages are closeable by user
+    closeButton.style.display = ""; // Ensure button is visible (e.g., 'inline-block' or its default)
+    textElement.innerHTML = message;
+    overlay.style.display = "flex";
+    fMyConsoleLog(
+      `💬 Displayed user-closeable message: "${String(message).substring(
+        0,
+        50
+      )}..."`
+    );
 
-    // === Return Promise ===
-    // Create and return a new Promise that will be resolved by fHideMessage
     return new Promise((resolve) => {
-        gUI.messagePromiseResolve = resolve; // Store the resolve function globally
+      gUI.messagePromiseResolve = resolve;
     });
-} // END fShowMessage
+  } // END fShowMessage
 
+  // fShowMessageNoClose ////////////////////////////////////////////////////////////
+  // Purpose -> Displays the message modal box with the provided message WITHOUT a
+  //            close button, and prevents closing via Escape or backdrop click.
+  //            This message must be closed programmatically by calling fHideMessage().
+  // Inputs  -> message (String): The text or HTML to display.
+  // Outputs -> None (Displays modal, sets state).
+  function fShowMessageNoClose(message) {
+    const overlay = document.getElementById("messageModal");
+    const textElement = document.getElementById("messageText");
+    const closeButton = document.getElementById("closeMessageModal");
 
+    if (!overlay || !textElement || !closeButton) {
+      console.error(
+        "fShowMessageNoClose: One or more modal elements not found in DOM! Overlay:",
+        !!overlay,
+        "Text:",
+        !!textElement,
+        "Button:",
+        !!closeButton
+      );
+      // Fallback alert if critical elements are missing
+      alert(
+        "Error: Message display component is missing.\n\n(NC) " +
+          message.replace(/<br\s*\/?>/gi, "\n")
+      );
+      return;
+    }
 
+    gUI.isCurrentMessageModalUserCloseable = false; // Mark as NOT user-closeable
+    closeButton.style.display = "none"; // Hide the close button
+    textElement.innerHTML = message;
+    overlay.style.display = "flex";
+    fMyConsoleLog(
+      `🔒 Displayed non-closeable message: "${String(message).substring(
+        0,
+        50
+      )}..."`
+    );
+  } // END fShowMessageNoClose
 
-// fHideMessage ///////////////////////////////////////////////////////////////////
-// Purpose -> Hides the message modal box and resolves the pending Promise created
-//            by fShowMessage, signaling that the user has acknowledged the message.
-// Inputs  -> None (Uses gUI.messageModalOverlay, gUI.messagePromiseResolve).
-// Outputs -> None (Modifies modal style, resolves Promise).
-function fHideMessage() {
-    // Hide the modal overlay element if cached
-    if (gUI.messageModalOverlay) {
-        gUI.messageModalOverlay.style.display = 'none';
+  // fHideMessage ///////////////////////////////////////////////////////////////////
+  // Purpose -> Hides the message modal box and resolves the pending Promise created
+  //            by fShowMessage (if any). Resets closeable state and button visibility.
+  // Inputs  -> None
+  // Outputs -> None (Modifies modal style, resolves Promise, resets state).
+  function fHideMessage() {
+    const overlay = document.getElementById("messageModal");
+    const closeButton = document.getElementById("closeMessageModal");
+
+    if (overlay) {
+      overlay.style.display = "none";
     } else {
-        // Log error if element isn't found (should be rare)
-        console.error("Message modal overlay element (#messageModal) not found when trying to hide.");
+      console.error(
+        "fHideMessage: Message modal overlay element (#messageModal) not found."
+      );
     }
 
-    // Resolve the pending promise if the resolve function exists
-    if (typeof gUI.messagePromiseResolve === 'function') {
-        gUI.messagePromiseResolve(); // Call the stored resolve function
-        gUI.messagePromiseResolve = null; // Clear the stored function
-        // fMyConsoleLog("Message Promise Resolved"); // Optional log
+    // Ensure the close button is visible for the next standard message
+    if (closeButton) {
+      closeButton.style.display = ""; // Or 'inline-block' or its default CSS display value
     }
-} // END fHideMessage
 
+    // Reset the closeable flag
+    gUI.isCurrentMessageModalUserCloseable = true;
 
+    // Resolve the pending promise if the resolve function exists (for fShowMessage)
+    if (typeof gUI.messagePromiseResolve === "function") {
+      gUI.messagePromiseResolve();
+      gUI.messagePromiseResolve = null;
+    }
+    fMyConsoleLog("Message modal hidden and state reset.");
+  } // END fHideMessage
 
-
-// fSetupMessageModalListeners /////////////////////////////////////////////////////
-// Purpose -> Sets up event listeners for closing the message modal:
-//            - Click on the 'Close' button.
-//            - Click on the background overlay.
-//            - Pressing the 'Escape' key.
-//            All actions trigger fHideMessage, which resolves the promise.
-// Inputs  -> None.
-// Outputs -> None (Attaches event listeners).
-function fSetupMessageModalListeners() {
+  // fSetupMessageModalListeners /////////////////////////////////////////////////////
+  // Purpose -> Sets up event listeners for closing the message modal:
+  //            - Click on the 'Close' button.
+  //            - Click on the background overlay.
+  //            - Pressing the 'Escape' key.
+  //            All actions trigger fHideMessage, which resolves the promise.
+  // Inputs  -> None.
+  // Outputs -> None (Attaches event listeners).
+  function fSetupMessageModalListeners() {
     fMyConsoleLog("🖱️ Setting up Message Modal Listeners...");
 
     // === Get Required Elements ===
     // Fetch elements directly during setup for reliability
-    const overlayElement = document.getElementById('messageModal');
-    const closeButtonElement = document.getElementById('closeMessageModal');
+    const overlayElement = document.getElementById("messageModal");
+    const closeButtonElement = document.getElementById("closeMessageModal");
 
     // === Validate Elements ===
     if (!overlayElement) {
-        console.error("Setup failed: Message modal overlay element (#messageModal) not found *during listener setup*.");
-        fMyConsoleLog("⚠️ Message Modal Listeners NOT Attached (overlay missing).");
-        return;
+      console.error(
+        "Setup failed: Message modal overlay element (#messageModal) not found *during listener setup*."
+      );
+      fMyConsoleLog(
+        "⚠️ Message Modal Listeners NOT Attached (overlay missing)."
+      );
+      return;
     }
     if (!closeButtonElement) {
-        console.error("Setup failed: Message modal close button (#closeMessageModal) not found *during listener setup*.");
-        fMyConsoleLog("⚠️ Message Modal Listeners NOT Attached (button missing).");
-        return;
+      console.error(
+        "Setup failed: Message modal close button (#closeMessageModal) not found *during listener setup*."
+      );
+      fMyConsoleLog(
+        "⚠️ Message Modal Listeners NOT Attached (button missing)."
+      );
+      return;
     }
 
     // === Attach Listeners ===
     // Listener for the close button click
-    closeButtonElement.addEventListener('click', fHideMessage);
+    closeButtonElement.addEventListener("click", fHideMessage);
 
     // Listener for clicking the background overlay
-    overlayElement.addEventListener('click', (event) => {
-        // Only hide if the click target is the overlay itself, not its content
-        if (event.target === overlayElement) {
-            fHideMessage();
-        }
+    overlayElement.addEventListener("click", (event) => {
+      // Only hide if the click target is the overlay itself, not its content
+      if (event.target === overlayElement) {
+        fHideMessage();
+      }
     });
 
     // Listener for the Escape key
-    document.addEventListener('keydown', (event) => {
-        // Only hide if the modal is visible and Escape key is pressed
-        if (overlayElement.style.display !== 'none' && event.key === 'Escape') {
-             fHideMessage();
-        }
+    document.addEventListener("keydown", (event) => {
+      // Only hide if the modal is visible and Escape key is pressed
+      if (overlayElement.style.display !== "none" && event.key === "Escape") {
+        fHideMessage();
+      }
     });
 
     fMyConsoleLog("✅ Message Modal Listeners Attached.");
+  } // END fSetupMessageModalListeners// fSetupMessageModalListeners /////////////////////////////////////////////////////
+  // Purpose -> Sets up event listeners for closing the message modal:
+  //            - Click on the 'Close' button.
+  //            - Click on the background overlay (if closeable).
+  //            - Pressing the 'Escape' key (if closeable).
+  // Inputs  -> None.
+  // Outputs -> None (Attaches event listeners).
+  function fSetupMessageModalListeners() {
+    fMyConsoleLog("🖱️ Setting up Message Modal Listeners...");
 
-} // END fSetupMessageModalListeners
+    // === Get Required Elements ===
+    const overlayElement = document.getElementById("messageModal");
+    const closeButtonElement = document.getElementById("closeMessageModal");
 
+    // === Validate Elements ===
+    if (!overlayElement) {
+      console.error(
+        "Setup failed: Message modal overlay element (#messageModal) not found *during listener setup*."
+      );
+      fMyConsoleLog(
+        "⚠️ Message Modal Listeners NOT Attached (overlay missing)."
+      );
+      return;
+    }
+    if (!closeButtonElement) {
+      console.error(
+        "Setup failed: Message modal close button (#closeMessageModal) not found *during listener setup*."
+      );
+      fMyConsoleLog(
+        "⚠️ Message Modal Listeners NOT Attached (button missing)."
+      );
+      return;
+    }
 
+    // === Attach Listeners ===
+    // Listener for the close button click (always works, button hidden if not closeable)
+    closeButtonElement.addEventListener("click", fHideMessage);
 
+    // Listener for clicking the background overlay
+    overlayElement.addEventListener("click", (event) => {
+      if (!gUI.isCurrentMessageModalUserCloseable) return; // ADDED: Check flag
+      if (event.target === overlayElement) {
+        fHideMessage();
+      }
+    });
 
-// fShowPrompt ///////////////////////////////////////////////////////////////////
-// Purpose -> Displays the prompt modal box with a message and Yes/No buttons. Returns
-//            a Promise that resolves with true (Yes) or false (No) based on user choice.
-// Inputs  -> message (String): The text or HTML question/prompt to display.
-// Outputs -> (Promise<Boolean>): Resolves true for 'Yes', false for 'No'. Rejects if
-//                                modal elements are not found.
-async function fShowPrompt(message) {
+    // Listener for the Escape key
+    document.addEventListener("keydown", (event) => {
+      if (!gUI.isCurrentMessageModalUserCloseable) return; // ADDED: Check flag
+      if (overlayElement.style.display !== "none" && event.key === "Escape") {
+        fHideMessage();
+      }
+    });
+
+    fMyConsoleLog("✅ Message Modal Listeners Attached.");
+  } // END fSetupMessageModalListeners
+
+  // fShowPrompt ///////////////////////////////////////////////////////////////////
+  // Purpose -> Displays the prompt modal box with a message and Yes/No buttons. Returns
+  //            a Promise that resolves with true (Yes) or false (No) based on user choice.
+  // Inputs  -> message (String): The text or HTML question/prompt to display.
+  // Outputs -> (Promise<Boolean>): Resolves true for 'Yes', false for 'No'. Rejects if
+  //                                modal elements are not found.
+  async function fShowPrompt(message) {
     // === Ensure Modal Elements are Cached ===
-    if (!gUI.promptModalOverlay) gUI.promptModalOverlay = document.getElementById('promptModal');
-    if (!gUI.promptModalText) gUI.promptModalText = document.getElementById('promptText');
+    if (!gUI.promptModalOverlay)
+      gUI.promptModalOverlay = document.getElementById("promptModal");
+    if (!gUI.promptModalText)
+      gUI.promptModalText = document.getElementById("promptText");
 
     // === Validate Elements ===
     if (!gUI.promptModalOverlay || !gUI.promptModalText) {
-        console.error("Prompt modal elements not cached or found in the DOM!");
-        if (!gUI.promptModalOverlay) console.error("Missing: #promptModal");
-        if (!gUI.promptModalText) console.error("Missing: #promptText");
-        return Promise.reject(new Error("Prompt modal elements not found.")); // Reject promise
+      console.error("Prompt modal elements not cached or found in the DOM!");
+      if (!gUI.promptModalOverlay) console.error("Missing: #promptModal");
+      if (!gUI.promptModalText) console.error("Missing: #promptText");
+      return Promise.reject(new Error("Prompt modal elements not found.")); // Reject promise
     }
 
     // === Display Modal ===
     // Set prompt content (allows HTML)
     gUI.promptModalText.innerHTML = message;
     // Show the modal overlay
-    gUI.promptModalOverlay.style.display = 'flex';
+    gUI.promptModalOverlay.style.display = "flex";
 
     // === Return Promise ===
     // Create and return a new Promise; store resolve/reject functions globally
     return new Promise((resolve, reject) => {
-        gUI.promptPromiseResolve = resolve; // Store the resolve function
-        gUI.promptPromiseReject = reject;   // Store the reject function (optional usage)
+      gUI.promptPromiseResolve = resolve; // Store the resolve function
+      gUI.promptPromiseReject = reject; // Store the reject function (optional usage)
     });
-} // END fShowPrompt
+  } // END fShowPrompt
 
-
-
-
-// fHandlePromptResponse ///////////////////////////////////////////////////////////
-// Purpose -> Hides the prompt modal and resolves the pending Promise created by
-//            fShowPrompt with the user's boolean response (true for Yes, false for No).
-// Inputs  -> userResponse (Boolean): The user's choice (true/false).
-// Outputs -> None (Modifies modal style, resolves Promise).
-function fHandlePromptResponse(userResponse) {
+  // fHandlePromptResponse ///////////////////////////////////////////////////////////
+  // Purpose -> Hides the prompt modal and resolves the pending Promise created by
+  //            fShowPrompt with the user's boolean response (true for Yes, false for No).
+  // Inputs  -> userResponse (Boolean): The user's choice (true/false).
+  // Outputs -> None (Modifies modal style, resolves Promise).
+  function fHandlePromptResponse(userResponse) {
     // Hide the modal overlay element if cached
     if (gUI.promptModalOverlay) {
-        gUI.promptModalOverlay.style.display = 'none';
+      gUI.promptModalOverlay.style.display = "none";
     } else {
-        console.error("Prompt modal overlay element (#promptModal) not found when trying to hide.");
+      console.error(
+        "Prompt modal overlay element (#promptModal) not found when trying to hide."
+      );
     }
 
     // Resolve the pending promise if the resolve function exists
-    if (typeof gUI.promptPromiseResolve === 'function') {
-        gUI.promptPromiseResolve(userResponse); // Resolve with the user's boolean choice
-        fMyConsoleLog(`Prompt Promise Resolved with: ${userResponse}`);
+    if (typeof gUI.promptPromiseResolve === "function") {
+      gUI.promptPromiseResolve(userResponse); // Resolve with the user's boolean choice
+      fMyConsoleLog(`Prompt Promise Resolved with: ${userResponse}`);
     } else {
-        // This shouldn't happen if fShowPrompt was called correctly
-        console.error("Prompt promise resolve function not found when trying to resolve.");
+      // This shouldn't happen if fShowPrompt was called correctly
+      console.error(
+        "Prompt promise resolve function not found when trying to resolve."
+      );
     }
 
     // Clear the stored resolve/reject functions after use
     gUI.promptPromiseResolve = null;
     gUI.promptPromiseReject = null;
-} // END fHandlePromptResponse
+  } // END fHandlePromptResponse
 
-
-
-
-// fSetupPromptModalListeners //////////////////////////////////////////////////////
-// Purpose -> Sets up event listeners for the prompt modal 'Yes' and 'No' buttons.
-//            Clicks call fHandlePromptResponse with true or false respectively.
-// Inputs  -> None.
-// Outputs -> None (Attaches event listeners).
-function fSetupPromptModalListeners() {
+  // fSetupPromptModalListeners //////////////////////////////////////////////////////
+  // Purpose -> Sets up event listeners for the prompt modal 'Yes' and 'No' buttons.
+  //            Clicks call fHandlePromptResponse with true or false respectively.
+  // Inputs  -> None.
+  // Outputs -> None (Attaches event listeners).
+  function fSetupPromptModalListeners() {
     fMyConsoleLog("🖱️ Setting up Prompt Modal Listeners...");
 
     // === Cache/Get Button Elements ===
-    if (!gUI.promptYesButton) gUI.promptYesButton = document.getElementById('promptYesButton');
-    if (!gUI.promptNoButton) gUI.promptNoButton = document.getElementById('promptNoButton');
+    if (!gUI.promptYesButton)
+      gUI.promptYesButton = document.getElementById("promptYesButton");
+    if (!gUI.promptNoButton)
+      gUI.promptNoButton = document.getElementById("promptNoButton");
 
     // === Validate Elements ===
     if (!gUI.promptYesButton) {
-        console.error("Setup failed: Prompt 'Yes' button (#promptYesButton) not found *during listener setup*.");
-        fMyConsoleLog("⚠️ Prompt Modal Listeners NOT Attached (Yes button missing).");
-        return;
+      console.error(
+        "Setup failed: Prompt 'Yes' button (#promptYesButton) not found *during listener setup*."
+      );
+      fMyConsoleLog(
+        "⚠️ Prompt Modal Listeners NOT Attached (Yes button missing)."
+      );
+      return;
     }
     if (!gUI.promptNoButton) {
-        console.error("Setup failed: Prompt 'No' button (#promptNoButton) not found *during listener setup*.");
-        fMyConsoleLog("⚠️ Prompt Modal Listeners NOT Attached (No button missing).");
-        return;
+      console.error(
+        "Setup failed: Prompt 'No' button (#promptNoButton) not found *during listener setup*."
+      );
+      fMyConsoleLog(
+        "⚠️ Prompt Modal Listeners NOT Attached (No button missing)."
+      );
+      return;
     }
 
     // === Attach Listeners ===
     // Listener for the 'Yes' button -> calls handler with true
-    gUI.promptYesButton.addEventListener('click', () => fHandlePromptResponse(true));
+    gUI.promptYesButton.addEventListener("click", () =>
+      fHandlePromptResponse(true)
+    );
 
     // Listener for the 'No' button -> calls handler with false
-    gUI.promptNoButton.addEventListener('click', () => fHandlePromptResponse(false));
+    gUI.promptNoButton.addEventListener("click", () =>
+      fHandlePromptResponse(false)
+    );
 
     // Optional: Add Escape key listener to default to No?
     // document.addEventListener('keydown', (event) => {
@@ -1197,12 +1365,5 @@ function fSetupPromptModalListeners() {
     // });
 
     fMyConsoleLog("✅ Prompt Modal Listeners Attached.");
-} // END fSetupPromptModalListeners
-
-
-
-
-
-
-
+  } // END fSetupPromptModalListeners
 </script>
