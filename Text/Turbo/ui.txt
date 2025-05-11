@@ -1,18 +1,17 @@
 <div id="menu-bar">
-
   <button id="btn-nish"><span class="button-icon">▶️</span> Nish</button>
   <button id="btn-roll"><span class="button-icon">🎲</span> Roll</button>
   <button id="btn-free"><span class="button-icon">🆓</span> Free</button>
   <button id="btn-luck"><span class="button-icon">🍀</span> Luck</button>
 
-
-<div id="game-menu-item" class="menu-item">
+  <div id="game-menu-item" class="menu-item">
     <button id="btn-game-menu"><span class="button-icon">🎮</span> Game</button>
     <div id="dropdown-game" class="dropdown-content">
-
       <a href="#" data-action="game-nishStartEnd">Nish Start or End</a>
       <a href="#" data-action="game-toggleSidebar">Sidebar (Show/Hide)</a>
-      <a href="#" data-action="game-updateLevelSlotName">Update (Level, Slot, Names)</a>
+      <a href="#" data-action="game-updateLevelSlotName"
+        >Update (Level, Slot, Names)</a
+      >
       <a href="#" data-action="game-gmAward">GM Award</a>
 
       <div class="sub-menu-item">
@@ -43,7 +42,9 @@
         <a href="#">Clear</a>
         <div class="dropdown-content sub-menu">
           <a href="#" data-action="game-clearChanneled">Channeled Meta</a>
-          <a href="#" data-action="game-clearCheckboxes">All Check Boxes of Sk1 and Sk2</a>
+          <a href="#" data-action="game-clearCheckboxes"
+            >All Check Boxes of Sk1 and Sk2</a
+          >
           <a href="#" data-action="game-clearMonsters">Monsters</a>
           <a href="#" data-action="game-clearMorphs">Morphs</a>
           <a href="#" data-action="game-clearNish">Nish</a>
@@ -63,51 +64,29 @@
     </div>
   </div>
 
-
-<div id="gear-menu-item" class="menu-item">
+  <div id="gear-menu-item" class="menu-item">
     <button id="btn-gear-menu">
-      <span class="button-icon">
-        🛠️
-      </span>
-       Gear
+      <span class="button-icon"> 🛠️ </span>
+      Gear
     </button>
     <div id="dropdown-gear" class="dropdown-content">
-      <a href="#" data-action="gear-toggleGear">
-        Gear (Show/Hide)
-      </a>
-      <a href="#" data-action="fLoot_RollRndTreasure">
-        Loot
-      </a>
+      <a href="#" data-action="gear-toggleGear"> Gear (Show/Hide) </a>
+      <a href="#" data-action="fLoot_RollRndTreasure"> Loot </a>
       <div class="sub-menu-item">
-        <a href="#">
-          Specific Loot
-        </a>
+        <a href="#"> Specific Loot </a>
         <div class="dropdown-content sub-menu">
-          <a href="#" data-action="fLoot_RollArtifact">
-            Artifact
-          </a>
-          <a href="#" data-action="fLoot_ChaosCrystal">
-            Chaos Crystal
-          </a>
-          <a href="#" data-action="fLoot_RollGear">
-            Gear
-          </a>
-          <a href="#" data-action="fLoot_RollSocketGem">
-            Gem (for socket)
-          </a>
-          <a href="#" data-action="fLoot_RollSockets">
-            Socketed Gear
-          </a>
-          <a href="#" data-action="fLoot_RollValuables">
-            Valuables
-          </a>
+          <a href="#" data-action="fLoot_RollArtifact"> Artifact </a>
+          <a href="#" data-action="fLoot_ChaosCrystal"> Chaos Crystal </a>
+          <a href="#" data-action="fLoot_RollGear"> Gear </a>
+          <a href="#" data-action="fLoot_RollSocketGem"> Gem (for socket) </a>
+          <a href="#" data-action="fLoot_RollSockets"> Socketed Gear </a>
+          <a href="#" data-action="fLoot_RollValuables"> Valuables </a>
         </div>
       </div>
     </div>
   </div>
 
-
-<div id="data-menu-item" class="menu-item">
+  <div id="data-menu-item" class="menu-item">
     <button id="btn-data-menu"><span class="button-icon">💾</span> Data</button>
     <div id="dropdown-data" class="dropdown-content">
       <a href="#" data-action="data-saveNow">Save Now</a>
@@ -116,35 +95,34 @@
   </div>
 
   <div id="designer-menu-item" class="menu-item">
-      <button id="btn-designer-menu" style="display: none; margin-left: var(--gap-data-designer);">
-        <span class="button-icon">⚙️</span> Designer
-      </button>
-      <div id="dropdown-designer" class="dropdown-content">
-        <a href="#" data-action="designer-saveDbSheetVer">Save SS Sheet & Ver</a>
-      </div>
+    <button
+      id="btn-designer-menu"
+      style="display: none; margin-left: var(--gap-data-designer)"
+    >
+      <span class="button-icon">⚙️</span> Designer
+    </button>
+    <div id="dropdown-designer" class="dropdown-content">
+      <a href="#" data-action="designer-saveDbSheetVer">Save SS Sheet & Ver</a>
+    </div>
   </div>
-  </div> <div id="grid"></div>
+</div>
+<div id="grid"></div>
 <div id="cell-tooltip"></div>
 
-<div id="image-modal" style="display: none;">
+<div id="image-modal" style="display: none">
   <div id="modal-backdrop"></div>
   <div id="modal-content">
     <span id="modal-close-btn">&times;</span>
-    <img id="modal-image" src="" alt="Image Preview">
+    <img id="modal-image" src="" alt="Image Preview" />
   </div>
 </div>
 
-
-
-
-<div id="messageModal" class="modal-overlay"> <div class="modal-content">
+<div id="messageModal" class="modal-overlay">
+  <div class="modal-content">
     <p id="messageText">Default Message</p>
     <button id="closeMessageModal">Close</button>
   </div>
 </div>
-
-
-
 
 <div id="promptModal" class="modal-overlay">
   <div class="modal-content">
@@ -156,13 +134,15 @@
   </div>
 </div>
 
-
-
 <div id="roll-log-sidebar">
   <div class="sidebar-header">
     <h4 class="sidebar-title">Roll Log</h4>
-    <button id="sidebar-roll-btn" title="Simulate Main Roll Button">🎲 Roll</button>
-    <button id="sidebar-refresh-log-btn" title="Resend Log to GM/Party">🔄</button>
+    <button id="sidebar-roll-btn" title="Simulate Main Roll Button">
+      🎲 Roll
+    </button>
+    <button id="sidebar-refresh-log-btn" title="Resend Log to GM/Party">
+      🔄
+    </button>
     <button id="sidebar-close-btn" title="Close Sidebar">&times;</button>
   </div>
   <div id="sidebar-content">
