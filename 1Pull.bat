@@ -22,8 +22,3 @@ for %%F in (=*) do (
 )
 
 cd ..
-<<<<<<< HEAD
-
-pause
-=======
->>>>>>> tryAuthentication
