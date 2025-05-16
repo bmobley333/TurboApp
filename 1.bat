@@ -180,4 +180,8 @@ echo Please check the messages above.
 echo ============================================================
 echo  Combined Script finished.
 echo ============================================================
+<<<<<<< HEAD
 pause
+=======
+pause
+>>>>>>> tryAuthentication
