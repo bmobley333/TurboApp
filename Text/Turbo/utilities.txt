@@ -1021,6 +1021,66 @@
   // Outputs -> (Promise<void>): Resolves when the modal is hidden. Rejects if modal
   //                             elements are not found.
   async function fShowMessage(message) {
+<<<<<<< HEAD
+    // === Ensure Modal Elements are Cached ===
+    // Attempt to cache elements if not already done (e.g., on first call)
+    if (!gUI.messageModalOverlay) {
+      gUI.messageModalOverlay = document.getElementById("messageModal");
+      if (gUI.messageModalOverlay)
+        fMyConsoleLog("fShowMessage: Just-in-time cache for #messageModal");
+    }
+    if (!gUI.messageModalText) {
+      gUI.messageModalText = document.getElementById("messageText");
+      if (gUI.messageModalText)
+        fMyConsoleLog("fShowMessage: Just-in-time cache for #messageText");
+    }
+
+    // === Validate Elements ===
+    // Check if elements were successfully found/cached
+    if (!gUI.messageModalOverlay || !gUI.messageModalText) {
+      console.error("Message modal elements not cached or found in the DOM!");
+      if (!gUI.messageModalOverlay) console.error("Missing: #messageModal");
+      if (!gUI.messageModalText) console.error("Missing: #messageText");
+      // Fallback alert could be added here if critical
+      return Promise.reject(new Error("Message modal elements not found.")); // Reject promise
+    }
+
+    // === Display Modal ===
+    // Set message content (allows basic HTML like <br>)
+    gUI.messageModalText.innerHTML = message;
+    // Show the modal overlay
+    gUI.messageModalOverlay.style.display = "flex";
+
+    // === Return Promise ===
+    // Create and return a new Promise that will be resolved by fHideMessage
+    return new Promise((resolve) => {
+      gUI.messagePromiseResolve = resolve; // Store the resolve function globally
+    });
+  } // END fShowMessage
+
+  // fHideMessage ///////////////////////////////////////////////////////////////////
+  // Purpose -> Hides the message modal box and resolves the pending Promise created
+  //            by fShowMessage, signaling that the user has acknowledged the message.
+  // Inputs  -> None (Uses gUI.messageModalOverlay, gUI.messagePromiseResolve).
+  // Outputs -> None (Modifies modal style, resolves Promise).
+  function fHideMessage() {
+    // Hide the modal overlay element if cached
+    if (gUI.messageModalOverlay) {
+      gUI.messageModalOverlay.style.display = "none";
+    } else {
+      // Log error if element isn't found (should be rare)
+      console.error(
+        "Message modal overlay element (#messageModal) not found when trying to hide."
+      );
+    }
+
+    // Resolve the pending promise if the resolve function exists
+    if (typeof gUI.messagePromiseResolve === "function") {
+      gUI.messagePromiseResolve(); // Call the stored resolve function
+      gUI.messagePromiseResolve = null; // Clear the stored function
+      // fMyConsoleLog("Message Promise Resolved"); // Optional log
+    }
+=======
     const overlay = document.getElementById("messageModal");
     const textElement = document.getElementById("messageText");
     const closeButton = document.getElementById("closeMessageModal");
@@ -1129,6 +1189,7 @@
       gUI.messagePromiseResolve = null;
     }
     fMyConsoleLog("Message modal hidden and state reset.");
+>>>>>>> tryAuthentication
   } // END fHideMessage
 
   // fSetupMessageModalListeners /////////////////////////////////////////////////////
