@@ -1,7 +1,7 @@
 // turbo.gs //
-// 04.29.2025 //
-// New Main for 29.0 //
-// v29.0 //
+// 07.21.2025 //
+// New Main for 30.0 //
+// v30.0 //
 
 // ==========================================================================
 // === Global Variables & doGet ===
@@ -13,19 +13,19 @@ const gSrv = {
   // Using gSrv prefix for server-side globals
   ids: {
     sheets: {
-      db: "1e24Fn9Bk6ZVlB1-eEgUltQxIP7liNLsjuvV7gefom08",
-      mastercs: "12DK4sg_htKJHgf8xPTwk2sydRA1dkfwy8fobDbuNqfU",
-      masterkl: "17pZCTqY-dGwAYlNPZiNvbkNl8jkg_Rr3daYDVwQLxF0",
-      ps: "1jiiOeKaR9lp_Fnj6twcx-KHEPclqbjw3BlO67yn4xOU",
+      db: "1IOmKLX_WoU0xO4H3btrte5YrGiJZg-ESn8dcp3PVH98",
+      mastercs: "1ALFdCHU1h78f_D4pRPFwNwJHRTlundxZqRc1MsgQZo4",
+      masterkl: "10Lky3AYqosxAYmUH-ZBwX9MQ2G6LuMuNuPFE_a2cjHU",
+      ps: "1oKvsWrXXu2agRqvaxHEl8_0klMeQomXsT6v2JPvPu3w",
       // Player-specific cs/kl will be handled dynamically via functions below
       cs: "", // this is equal to the old myCS and is the ID from the player's CS (loaded via doGet)
       kl: "", // this is equal to the old myKL and is the ID from the player's KL (loaded via doGet's call to fSrvGetMyKlId)
     },
     docs: {
-      cm: "1MVTQJFGuSvD1SnJaJDsi2Ezn2_I6psgjXwgkvhBsCHw",
-      em: "1QABLfJwI6OLKxWblruLajjLrThTD7DHlNiCYbNrBnIA",
-      rb: "1Zyom-Wt1L4FxiD_wWro6H4nTgR5fyQuyErUReRQt2s0",
-      sg: "1RccVkB0FAIEB6ItNjvlQewR_Kr48rW5SZDqRdAJwJhk",
+      cm: "1X9spxfuNS84V2jnLHXUP8jQ1MviOx1ZHv5tdSeIfmGo",
+      em: "1v7CzSaAzzhVonWBs68nTjuSfIax_ikHY7J9dC0RadKY",
+      rb: "1TX2YYTu7jAuxnYYxybmS9ef7wA6t0vFCUjBs4roXxpE",
+      sg: "18tistnwfbIT262cQB7fvyLOMBjATPEiSLr43p-K2wSk",
     },
   },
   // Configuration values
