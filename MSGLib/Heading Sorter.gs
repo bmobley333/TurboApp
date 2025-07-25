@@ -4,11 +4,14 @@
 ////////////////////                                  Menu ()
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+
 // // onInstall //////////////////////////////////////////////////////////////////////////////////////////////////
 // // onInstall trigger
 // function onInstall() {
 //     onOpen();
 // } // End onInstall
+
+
 
 // // onOpen //////////////////////////////////////////////////////////////////////////////////////////////////
 // // onOpen trigger
@@ -16,72 +19,68 @@
 //     fDOCCreateMenu();
 // } // End onOpen
 
+
 // fDOCCreateMenu //////////////////////////////////////////////////////////////////////////////////////////////////
 // Purpose: Add options to the Extensions Menu
 function fDOCCreateMenu() {
   const ui = DocumentApp.getUi();
   ui.createAddonMenu() // This creates an "Add-ons" menu
     .addSubMenu(
-      ui
-        .createMenu("Sort Headings")
-        .addItem("Sort Headings A to Z", "fDOCMenuSortHeadingsAtoZ")
-        .addItem("Sort Headings Z to A", "fDOCMenuSortHeadingsZtoA")
+      ui.createMenu('Sort Headings')
+        .addItem('Sort Headings A to Z', 'fDOCMenuSortHeadingsAtoZ')
+        .addItem('Sort Headings Z to A', 'fDOCMenuSortHeadingsZtoA')
     )
     .addToUi();
 } // End fDOCCreateMenu
 
+
+
+
+
 // Menu Functions //////////////////////////////////////////////////////////////////////////////////////////////////
 // Headings Menu
-function fDOCMenuSortHeadingsAtoZ() {
-  fDOCRunMenuOrButton("SortHeadingsAtoZ");
-}
-function fDOCMenuSortHeadingsZtoA() {
-  fDOCRunMenuOrButton("SortHeadingsZtoA");
-}
+function fDOCMenuSortHeadingsAtoZ() { fDOCRunMenuOrButton('SortHeadingsAtoZ'); }
+function fDOCMenuSortHeadingsZtoA() { fDOCRunMenuOrButton('SortHeadingsZtoA'); }
 // End Menu Functions
 
 // fDOCRunMenuOrButton //////////////////////////////////////////////////////////////////////////////////////////////////
 // Purpose -> To run all menu & button choices inside a try-catch-error
-function fDOCRunMenuOrButton(menuChoice) {
+function fDOCRunMenuOrButton(menuChoice) { 
   try {
     switch (menuChoice) {
       // Headings Menu
-      case "SortHeadingsAtoZ":
-        fDOCSortOnHeader("AtoZ");
-        break;
-      case "SortHeadingsZtoA":
-        fDOCSortOnHeader("ZtoA");
-        break;
+      case 'SortHeadingsAtoZ': fDOCSortOnHeader('AtoZ'); break;
+      case 'SortHeadingsZtoA': fDOCSortOnHeader('ZtoA'); break;
     }
   } catch (error) {
     DocumentApp.getUi().alert(error); // NOTE: an error of End or end will simply end the program.
   }
 } // End fDOCRunMenuOrButton
 
+
+
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////                                  Headings  (end Data)
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
 
 // fDOCSortOnHeader //////////////////////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Sorts on the header level at cursor or selection between headers of one type closer to HEADER1
 function fDOCSortOnHeader(sortOrder) {
   const doc = DocumentApp.getActiveDocument();
   let body = doc.getBody();
-  let { headerAboveIndex, headerBelowIndex, targetHeaderLevel } =
-    fDOCFindHeaderLevelAndSurroundingLargerHeaderIndex();
+  let { headerAboveIndex, headerBelowIndex, targetHeaderLevel } = fDOCFindHeaderLevelAndSurroundingLargerHeaderIndex();
 
-  const headers = fDOCSaveHeadersAndBodyStartEndIndex(
-    body,
-    headerAboveIndex,
-    headerBelowIndex,
-    targetHeaderLevel
-  );
-  if (sortOrder === "AtoZ") {
+  const headers = fDOCSaveHeadersAndBodyStartEndIndex(body, headerAboveIndex, headerBelowIndex, targetHeaderLevel);
+  if (sortOrder === 'AtoZ') {
     headers.sort((a, b) => a.headerText.localeCompare(b.headerText));
   } else {
     headers.sort((a, b) => b.headerText.localeCompare(a.headerText));
   }
-
+  
   // Insert the new sorted headings (and heading's body) below the last of the existing selected headings
   fDocInstertSortedHeadersAndBody(body, headers, headerBelowIndex);
 
@@ -89,9 +88,12 @@ function fDOCSortOnHeader(sortOrder) {
   fDocRemoveOriginalSections(body, headerAboveIndex, headerBelowIndex);
 } // END fDOCSortOnHeader
 
+
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////                                  Helper Functions  (end Headings)
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 
 // fDOCFindHeaderLevelAndSurroundingLargerHeaderIndex //////////////////////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Finds the paragraph index of the header above and below the cursor (or selected text) that is one header closer to Heading1 from the current header
@@ -110,33 +112,31 @@ function fDOCFindHeaderLevelAndSurroundingLargerHeaderIndex() {
     if (elements.length > 0) {
       element = elements[0].getElement();
     } else {
-      throw new Error("Please click on a heading.");
+      throw new Error('Please click on a heading.');
     }
   } else {
-    throw new Error("Please click on a heading.");
+    throw new Error('Please click on a heading.');
   }
 
   // Find the index of the element's parent in the body
-  while (
-    element.getParent() &&
-    element.getParent().getType() !== DocumentApp.ElementType.BODY_SECTION
-  ) {
+  while (element.getParent() && element.getParent().getType() !== DocumentApp.ElementType.BODY_SECTION) {
     element = element.getParent();
   }
   cursorIndex = body.getChildIndex(element);
 
+
   let headerAboveIndex = cursorIndex;
-  let headerBelowIndex = body.getNumChildren() - 1;
+  let headerBelowIndex = body.getNumChildren()-1;
 
   let targetHeaderLevel = 7;
-  const headingMap = {
-    [DocumentApp.ParagraphHeading.HEADING1]: 1,
-    [DocumentApp.ParagraphHeading.HEADING2]: 2,
-    [DocumentApp.ParagraphHeading.HEADING3]: 3,
-    [DocumentApp.ParagraphHeading.HEADING4]: 4,
-    [DocumentApp.ParagraphHeading.HEADING5]: 5,
-    [DocumentApp.ParagraphHeading.HEADING6]: 6,
-  };
+    const headingMap = {
+      [DocumentApp.ParagraphHeading.HEADING1]: 1,
+      [DocumentApp.ParagraphHeading.HEADING2]: 2,
+      [DocumentApp.ParagraphHeading.HEADING3]: 3,
+      [DocumentApp.ParagraphHeading.HEADING4]: 4,
+      [DocumentApp.ParagraphHeading.HEADING5]: 5,
+      [DocumentApp.ParagraphHeading.HEADING6]: 6
+    };
 
   // Find the header type at the cursor or selection
   if (element.getType() === DocumentApp.ElementType.PARAGRAPH) {
@@ -155,8 +155,7 @@ function fDOCFindHeaderLevelAndSurroundingLargerHeaderIndex() {
       const style = paragraph.getHeading();
       const headingLevel = headingMap[style] || 7;
       if (headingLevel >= targetHeaderLevel) {
-        if (headingLevel !== 7 && headingLevel === targetHeaderLevel)
-          headerAboveIndex = i;
+        if (headingLevel !== 7 && headingLevel === targetHeaderLevel) headerAboveIndex = i;
       } else {
         break;
       }
@@ -180,6 +179,9 @@ function fDOCFindHeaderLevelAndSurroundingLargerHeaderIndex() {
   return { headerAboveIndex, headerBelowIndex, targetHeaderLevel };
 } // END fDOCFindHeaderLevelAndSurroundingLargerHeaderIndex
 
+
+
+
 // fDOCGetElementsBetweenIndexes //////////////////////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Grabs all elements (text, headers, formatting, charts, images, pictures, line breaks, etc.) between element index a and b and stores them in an array
 function fDOCGetElementsBetweenIndexes(body, a, b) {
@@ -194,15 +196,16 @@ function fDOCGetElementsBetweenIndexes(body, a, b) {
   return elements;
 } // END fDOCGetElementsBetweenIndexes
 
+
+
+
 // fDocInstertSortedHeadersAndBody //////////////////////////////////////////////////////////////////////////////////////////////////
 // Purpose -> starting at body index of insertAt, insert all headers in the order found in headers array, and copies all elements from body between headers[] object names of headerIndex + 1 and lastIndex
 function fDocInstertSortedHeadersAndBody(body, headers, insertAt) {
-  headers.forEach((header) => {
+  headers.forEach(header => {
     // Insert the header
     const newHeader = body.insertParagraph(insertAt, header.headerText);
-    newHeader.setHeading(
-      body.getChild(header.headerIndex).asParagraph().getHeading()
-    );
+    newHeader.setHeading(body.getChild(header.headerIndex).asParagraph().getHeading());
     insertAt++;
 
     // Insert all elements between headerIndex + 1 and lastIndex
@@ -236,14 +239,14 @@ function fDocInstertSortedHeadersAndBody(body, headers, insertAt) {
   });
 } // END fDocInstertSortedHeadersAndBody
 
+
+
+
+
 // fDOCSaveHeadersAndBodyStartEndIndex //////////////////////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Extracts headers within a specified range, and returns an array of objects {headerText, headerIndex, lastIndex}
-function fDOCSaveHeadersAndBodyStartEndIndex(
-  body,
-  headerAboveIndex,
-  headerBelowIndex,
-  targetHeaderLevel
-) {
+function fDOCSaveHeadersAndBodyStartEndIndex(body, headerAboveIndex, headerBelowIndex, targetHeaderLevel) {
+
   const mapHeadingTextToLevel = fDOCgetHeadingTextToLevelMap();
 
   const headers = [];
@@ -257,12 +260,7 @@ function fDOCSaveHeadersAndBodyStartEndIndex(
       const styleLevel = mapHeadingTextToLevel[paragraph.getHeading()];
 
       if (styleLevel === targetHeaderLevel) {
-        if (currentHeader)
-          headers.push({
-            headerText: currentHeader.header.getText(),
-            headerIndex: currentHeader.index,
-            lastIndex: i - 1,
-          }); // Save the previous header and its indexes
+        if (currentHeader) headers.push({ headerText: currentHeader.header.getText(), headerIndex: currentHeader.index, lastIndex: i - 1 }); // Save the previous header and its indexes
         currentHeader = { header: paragraph.copy(), body: [], index: i };
       } else if (currentHeader) {
         currentHeader.body.push(element.copy());
@@ -271,15 +269,11 @@ function fDOCSaveHeadersAndBodyStartEndIndex(
       currentHeader.body.push(element.copy());
     }
   }
-  if (currentHeader)
-    headers.push({
-      headerText: currentHeader.header.getText(),
-      headerIndex: currentHeader.index,
-      lastIndex: headerBelowIndex - 1,
-    }); // Save the last header and its indexes
+  if (currentHeader) headers.push({ headerText: currentHeader.header.getText(), headerIndex: currentHeader.index, lastIndex: headerBelowIndex - 1 }); // Save the last header and its indexes
 
   return headers;
 } // END fDOCSaveHeadersAndBodyStartEndIndex
+
 
 function fDOCgetHeadingTextToLevelMap() {
   return {
@@ -288,9 +282,13 @@ function fDOCgetHeadingTextToLevelMap() {
     [DocumentApp.ParagraphHeading.HEADING3]: 3,
     [DocumentApp.ParagraphHeading.HEADING4]: 4,
     [DocumentApp.ParagraphHeading.HEADING5]: 5,
-    [DocumentApp.ParagraphHeading.HEADING6]: 6,
+    [DocumentApp.ParagraphHeading.HEADING6]: 6
   };
 }
+
+
+
+
 
 // fDocRemoveOriginalSections //////////////////////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Deletes all body elements from index headerAboveIndex for another (headerBelowIndex - headerAboveIndex)

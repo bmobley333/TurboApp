@@ -51,6 +51,79 @@ function getObjKLAllAbilities(forceLoad = false) {
   return newObj;
 } // End getObjKLAllAbilities
 
+// getObjKL_KLTab //////////////////////////////////////////////////////////////////////////////////////////////////
+/**
+ * Performs a gLoadTable if necessary (or if forceLoad is true), then creates or updates the
+ * g.obj[ss][sheetName] object with pre-calculated references to its data table.
+ * This acts as a factory/singleton, ensuring only one object is created per sheetName and is updated in place.
+ * * @param {string} tabName The name of the sheet/tab to process.
+ * @param {boolean} [forceLoad=false] If true, forces a reload of the data table and the object.
+ * @returns {object} The object containing references for the specified sheet.
+ */
+function getObjKL_KLTab(tabName, forceLoad = false) {
+  const ss = "mykl";
+
+  // Validate that tabName is a non-empty string.
+  if (typeof tabName !== "string" || tabName.length === 0) {
+    throw new Error(
+      `getObjKL_KLTab was passed an invalid tab name of "${tabName}"`
+    );
+  }
+
+  const sheetName = tabName;
+
+  // Load Table (note: if g[ss][sheetName] already exists it will not be reloaded unless forceLoad = true)
+  gLoadTable(ss, sheetName, forceLoad);
+
+  // If the object already exists and a reload is not forced, return the existing object to save processing time.
+  if (!forceLoad && g?.obj?.[ss]?.[sheetName]) {
+    return g.obj[ss][sheetName];
+  }
+
+  // Create or get a reference to the sheet object.
+  // This ensures that g.obj[ss][sheetName] is always the same object.
+  // If it's new, the object is created; if it exists, it's updated.
+  const newObj = g?.obj?.[ss]?.[sheetName] || {};
+
+  // Assign common properties to the object.
+  Object.assign(newObj, {
+    ref: gSheetRef(ss, sheetName),
+    arr: gArr(ss, sheetName),
+    dataFirst_R: gDataFirst_R(ss, sheetName),
+    dataLast_R: gDataLast_R(ss, sheetName),
+
+    myLvl_C: gHeaderC(ss, sheetName, "MyLvl"),
+    tier_C: gHeaderC(ss, sheetName, "Tier"),
+    apCount_C: gHeaderC(ss, sheetName, "APCount"),
+    apTotal_C: gHeaderC(ss, sheetName, "APTotal"),
+    apSpent_C: gHeaderC(ss, sheetName, "APSpent"),
+    apRemaining_C: gHeaderC(ss, sheetName, "APRemaining"),
+
+    myLvl_R: gKeyR(ss, sheetName, "MyLvl"),
+    tier_R: gKeyR(ss, sheetName, "Tier"),
+    levelAP_R: gKeyR(ss, sheetName, "LevelAP"),
+    bnsAP_R: gKeyR(ss, sheetName, "BnsAP"),
+    totalAP_R: gKeyR(ss, sheetName, "TotalAP"),
+    apCombat_R: gKeyR(ss, sheetName, "APCombat"),
+    apBase_R: gKeyR(ss, sheetName, "APBase"),
+  });
+
+  // Conditionally add properties only if the sheetName is 'All'.
+  if (sheetName === "All") {
+    newObj.rc_R = gKeyR(ss, sheetName, "RC");
+    newObj.rc_C = gHeaderC(ss, sheetName, "RC");
+  }
+
+  // Ensure the global object structure exists before assignment.
+  g.obj = g.obj || {};
+  g.obj[ss] = g.obj[ss] || {};
+
+  // Assign the new or updated object to the global namespace.
+  g.obj[ss][sheetName] = newObj;
+
+  return newObj;
+} // End getObjKL_KLTab
+
 // getObjKLMyAbilities //////////////////////////////////////////////////////////////////////////////////////////////////
 // Purpose -> performs a gLoadTable if necessary (or forceLoad), then if necessary (or forceLoad) reloads the g.obj[ss][sheetname]
 function getObjKLMyAbilities(forceLoad = false) {

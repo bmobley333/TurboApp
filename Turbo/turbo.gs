@@ -175,7 +175,7 @@ function doGet(e) {
     // Evaluate and return the HTML
     return template
       .evaluate()
-      .setTitle("MetaScape") // Updated Title
+      .setTitle("MetaScape Turbo") // Updated Title
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   } catch (error) {
     // Log detailed error and return user-friendly error message
