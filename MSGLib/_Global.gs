@@ -271,8 +271,10 @@ function gSaveRow(ss, sheetName, keyOrR, rowArr) {
 
 
 // gSaveSheet //////////////////////////////////////////////////////////////////////////////////////////////////
-// Purpose: if Table not already loaded, then LoadTable then...
-// Purpose: Save the ss.sheetname.arr to the actual sheet
+/**
+ * Purpose: Save the ss.sheetname.arr to the actual sheet after robust data validation.
+ * NOTE: Sheets cannot contain images in cells ONLY over cells
+ */
 function gSaveSheet(ss, sheetName) {
   ss = ss.toLowerCase();
   sheetName = sheetName.toLowerCase();
@@ -281,10 +283,52 @@ function gSaveSheet(ss, sheetName) {
   gLoadTable(ss, sheetName);
 
   const sheetRef = g[ss][sheetName].ref;
-  const sheetArr = g[ss][sheetName].arr
+  const sheetArr = g[ss][sheetName].arr;
+
+  // --- BULLETPROOF DEBUGGING BLOCK ---
+  if (!sheetArr || sheetArr.length === 0) {
+    console.log(`Aborting save for "${sheetName}" because sheetArr is empty.`);
+    return;
+  }
+  const expectedCols = sheetArr[0].length;
+  let hasError = false;
+
+  for (let r = 0; r < sheetArr.length; r++) {
+    // 1. Check for ragged rows (rows with a different number of columns)
+    if (sheetArr[r].length !== expectedCols) {
+      console.error(`ERROR in sheetArr for "${sheetName}": Row ${r} has ${sheetArr[r].length} columns, but expected ${expectedCols}.`);
+      hasError = true;
+    }
+
+    for (let c = 0; c < sheetArr[r].length; c++) {
+      const cellValue = sheetArr[r][c];
+      const cellType = typeof cellValue;
+
+      // 2. Check for invalid data types (specifically complex objects)
+      if (cellType === 'object' && cellValue !== null && !(cellValue instanceof Date)) {
+        console.error(`ERROR in sheetArr for "${sheetName}": Found a complex object at [row][col]: [${r}][${c}]. Value: ${JSON.stringify(cellValue)}`);
+        hasError = true;
+      }
+      
+      // 3. Check for undefined (as a fallback)
+      if (cellType === 'undefined') {
+        console.error(`ERROR in sheetArr for "${sheetName}": Found an undefined value at [row][col]: [${r}][${c}].`);
+        hasError = true;
+      }
+    }
+  }
+
+  // If any error was found, stop the function before it can fail at setValues().
+  if (hasError) {
+    throw new Error(`Data validation failed for sheet "${sheetName}". Check the logs for specific errors.`);
+  }
+  // --- END DEBUGGING BLOCK ---
 
   // Update the actual Google Sheet
-  sheetRef.getRange(1, 1, sheetArr.length, sheetArr[0].length).setValues(sheetArr);
+  const ssRange = sheetRef.getRange(1, 1, sheetArr.length, sheetArr[0].length);
+  ssRange.setValues(sheetArr);
+  console.log(`Save to ${sheetName} successful.`);
+
 } // End gSaveSheet
 
 

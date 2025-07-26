@@ -135,7 +135,7 @@ function fUpdateKLElementNames() {
           
           const cardText = currentTab.arr[r][c+1]; // Get value from the next column
 
-          const klCard = fGetKLCardObj(cardText);
+          const klCard = fGetKLCardObj(cardText,tabName,r,c+1);
           
           // Check if the card's ID exists in the 'Elements' database.
           if (gTestID('db', 'Elements', klCard.id)) {
@@ -143,7 +143,7 @@ function fUpdateKLElementNames() {
             const newName = gGetVal('db', 'Elements', klCard.id, 'Name');
             
             // Write the new name back to the sheet.
-            fNewKLName(tabName, newName, r, c+1); 
+            fNewKLName(currentTab, klCard, newName, r, c+1);
           } else {
             // If the ID is not found, throw a detailed error.
             throw new Error(`ID lookup failed for sheet "${tabName}". The ID "${klCard.id}" (derived from cell ${r+1},${c+2} with value "${cardText}") was not found in the 'Elements' database.`);
@@ -151,6 +151,7 @@ function fUpdateKLElementNames() {
         }
       }
     }
+    gSaveSheet('mykl', tabName);
   });
 
 } // End fUpdateKLElementNames
@@ -158,6 +159,118 @@ function fUpdateKLElementNames() {
 
 
 
+/**
+ * Purpose: Parses a formatted 3-line string from a "KL Card" into a structured object.
+ * Assumptions: cardText must be a string with exactly two newline characters, creating three lines of text.
+ * Input: 
+ *   cardText - A formatted string containing the card's name, cost, tier, ID, and buff info.
+ *   tabName - The name of the sheet where the cardText is located.
+ *   r - The 0-indexed row of the cell.
+ *   c - The 0-indexed column of the cell.
+ * Output: A structured object (cardObj) with properties for name, apType, apCost, tier, id, buffVerType, and buffVerNum.
+ */
+function fGetKLCardObj(cardText, tabName, r, c) {
+
+  // Input Validation
+  if (typeof cardText !== 'string' || !cardText.trim()) {
+    throw new Error(`In fGetKLCardObj, the cardText from sheet "${tabName}" at cell ${r},${c} was empty or not a string.`);
+  }
+
+  // Test for exactly two newline characters, which creates an array of three lines.
+  const lines = cardText.split('\n');
+  if (lines.length !== 3) {
+    throw new Error(`In fGetKLCardObj, KLCard from sheet "${tabName}" at cell ${r},${c} does not contain exactly two newline characters. It must be three separate lines.`);
+  }
+
+  // Store each line in its own variable for simpler parsing.
+  const nameLine = lines[0];
+  const costTierLine = lines[1];
+  const idVerLine = lines[2];
+
+  const cardObj = {};
+  
+  // --- Parse each line individually ---
+
+  // Parse Name (from the first line)
+  cardObj.name = nameLine.trim();
+
+  // Parse AP Type and Cost (from the second line)
+  // Updated regex to handle 'Free' as well as 'F', 'C', and 'B' (case-insensitive)
+  const apMatch = costTierLine.match(/\$(Free|[CBF])(\d{1,3})?/i);
+  if (!apMatch) throw new Error(`In fGetKLCardObj, the cost/tier line from sheet "${tabName}" at cell ${r},${c} ("${costTierLine}") has an invalid or missing AP cost block (e.g., $C5, $Free, $F).`);
+  
+  let [, apType, apCostStr] = apMatch;
+  apType = apType.toUpperCase(); // Normalize to uppercase
+
+  // Check if the type is 'F' (for Free)
+  if (apType === 'F' || apType === 'FREE') {  // Previously Normalize to uppercase
+    cardObj.apType = 'F'; // Standardize the output type to 'F'
+    cardObj.apCost = 0;
+  } else { // Must be 'C' or 'B'
+    cardObj.apType = apType;
+    cardObj.apCost = parseInt(apCostStr, 10);
+    if (isNaN(cardObj.apCost) || cardObj.apCost < 1 || cardObj.apCost > 100) {
+      throw new Error(`In fGetKLCardObj, the cost/tier line from sheet "${tabName}" at cell ${r},${c} ("${costTierLine}") has an apCost that is not an integer between 1 and 100.`);
+    }
+  }
+
+  // Parse Tier (from the second line)
+  const tierMatch = costTierLine.match(/T(\d+)/);
+  if (!tierMatch) throw new Error(`In fGetKLCardObj, the cost/tier line from sheet "${tabName}" at cell ${r},${c} ("${costTierLine}") is missing the Tier indicator (e.g., T2).`);
+  cardObj.tier = parseInt(tierMatch[1], 10);
+
+  // Parse ID (from the third line)
+  const idMatch = idVerLine.match(/🔑(.{6})/);
+  if (!idMatch) throw new Error(`In fGetKLCardObj, the ID/version line from sheet "${tabName}" at cell ${r},${c} ("${idVerLine}") is missing the '🔑' ID indicator.`);
+  cardObj.id = idMatch[1];
+
+  // Parse Buff/Version Type and Number (from the third line)
+  const buffVerMatch = idVerLine.match(/\.([bv])([1-9])$/);
+  if (!buffVerMatch) throw new Error(`In fGetKLCardObj, the ID/version line from sheet "${tabName}" at cell ${r},${c} ("${idVerLine}") has an invalid or missing buff/version suffix (e.g., .b1, .v9).`);
+  
+  [, cardObj.buffVerType, cardObj.buffVerNum] = buffVerMatch;
+  cardObj.buffVerNum = parseInt(cardObj.buffVerNum, 10);
+
+  return cardObj;
+} // End fGetKLCardObj
+
+
+
+/**
+ * Purpose: Updates the name of a KL Card object and rebuilds the source string in the provided array.
+ * Input:
+ *   currentTab - The cached sheet object containing the .arr to be modified.
+ *   klCard - The parsed card object to be updated.
+ *   elementName - The new name for the card.
+ *   r - The 0-indexed row in the array to update.
+ *   c - The 0-indexed column in the array to update.
+ * Output: Void (modifies the currentTab.arr by reference).
+ */
+function fNewKLName(currentTab, klCard, elementName, r, c) {
+  
+  // Check if the new name is different and a non-empty string
+  if (klCard.name !== elementName && typeof elementName === 'string' && elementName) {
+    klCard.name = elementName;
+    currentTab.arr[r][c] = fKLCardObjToStr(klCard);
+  }
+} // End fNewKLName
+
+
+
+
+/**
+ * Purpose: Converts a KL Card object back into its three-line formatted string representation.
+ * Assumptions: The klCard object has all the necessary properties (name, apType, apCost, etc.).
+ * Input: klCard - The object representing the card's data.
+ * Output: A formatted, three-line string representing the card.
+ */
+function fKLCardObjToStr(klCard) {
+  
+  // Conditionally format the AP cost string
+  const apCostString = klCard.apType === 'F' ? 'Free' : klCard.apType + klCard.apCost;
+
+  return `${klCard.name}\n$${apCostString} T${klCard.tier}\n🔑${klCard.id}.${klCard.buffVerType}${klCard.buffVerNum}`;
+} // End fKLCardObjToStr
 
 
 
