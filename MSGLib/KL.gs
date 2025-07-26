@@ -42,6 +42,7 @@ function fKLCreateMenu() {
           .addItem('Un-check All CheckBoxes', 'fKLMenuClearAllCheckBoxes')
           .addItem('Update Element Names', 'fKLMenuUpdateKLElementNames')
           .addItem('Set AP Costs', 'fKLMenuSetKLAPCosts')
+          .addItem('Set Notes', 'fKLMenuSetKLNotes')
         )
       .addToUi();
   } 
@@ -66,6 +67,7 @@ function fKLMenuUn_HideAll() {fKLRunMenuOrButton('Un_HideAll');}
 function fKLMenuUpdateKLElementNames() {fKLRunMenuOrButton('UpdateKLElementNames');}
 function fKLMenuClearAllCheckBoxes() {fKLRunMenuOrButton('ClearAllCheckBoxes');}
 function fKLMenuSetKLAPCosts() {fKLRunMenuOrButton('SetKLAPCosts');}
+function fKLMenuSetKLNotes() {fKLRunMenuOrButton('SetKLNotes');}
 // End Menu Functions
 
 
@@ -102,6 +104,7 @@ function fKLRunMenuOrButton(menuChoice) {
       case 'UpdateKLElementNames': fKLUpdateKLElementNames(); break;
       case 'ClearAllCheckBoxes': fKLClearAllCheckBoxes(); break;
       case 'SetKLAPCosts': fKLSetKLAPCosts(); break;
+      case 'SetKLNotes': fKLSetKLNotes(); break;
     }
   } catch (error) {
       SpreadsheetApp.getUi().alert(error); // NOTE: an error of End or end will simply end the program.
@@ -373,7 +376,60 @@ function fKLSetKLAPCosts() {
 } // End fKLSetKLAPCosts
 
 
+/**
+ * Purpose: Populates the notes for the first instance of each unique ability card in the KL RC-style sheets, preserving any existing notes in the header rows.
+ * Notes: This function now treats the first 'buff' ('b') and the first 'version' ('v') of an ability as separate instances for the purpose of adding notes.
+ * Input:
+ * none
+ * Output: Void (modifies the notes of the KL sheets directly).
+ */
+function fKLSetKLNotes() {
 
+    const firstInstanceMap = {};
+
+    g.klRCSheetNames.forEach(tabName => {
+        const currentTab = getObjKL_KLTab(tabName, true);
+        const numRows = currentTab.arr.length;
+        const numCols = currentTab.arr[0].length;
+
+        //
+        // Read all existing notes from the sheet to preserve the header notes.
+        const noteArr = currentTab.ref.getRange(1, 1, numRows, numCols).getNotes();
+
+        const lastCol = numCols - 2; // Loop until the second to last column to safely access c+1
+
+        for (let r = currentTab.dataFirst_R; r <= currentTab.dataLast_R; r++) {
+            for (let c = 1; c <= lastCol; c++) {
+
+                // Erase any old note in the non-header row to ensure a clean slate for this run.
+                noteArr[r][c + 1] = null;
+                
+                // Check if the cell contains a boolean value to process.
+                if (currentTab.arr[r][c] === true || currentTab.arr[r][c] === false) {
+
+                    const cardText = currentTab.arr[r][c + 1];
+                    if (!cardText) continue;
+
+                    const klCard = fGetKLCardObj(cardText, tabName, r, c + 1);
+
+                    // Create a unique key by combining the ID and the buff/version type ('b' or 'v').
+                    const uniqueKey = klCard.id + klCard.buffVerType;
+
+                    // If this is the first time seeing this specific ID + type combination, get the note.
+                    if (!firstInstanceMap.hasOwnProperty(uniqueKey)) {
+                        firstInstanceMap[uniqueKey] = true; // Mark this combo as seen
+                        noteArr[r][c + 1] = gGetVal('db', 'Elements', klCard.id, 'Notes');
+                    }
+                }
+            }
+        }
+
+        //
+        // Save the entire notes array, now containing both old header notes and new ability notes, in a single operation.
+        currentTab.ref.getRange(1, 1, numRows, numCols).setNotes(noteArr);
+    });
+
+} // End fKLSetKLNotes
 
 
 
