@@ -13,6 +13,7 @@ function fKLCreateMenu() {
   SpreadsheetApp.getUi()
   .createMenu('*** MyKLs')
     .addItem('Refresh My KLs', 'fKLMenuRefreshMyKLs')
+    .addItem('Calc KLs & AP', 'fKLMenuCalcKLAndAP')
   .addToUi();
   SpreadsheetApp.getUi()
   .createMenu('MyAbilities')
@@ -55,6 +56,7 @@ function fKLCreateMenu() {
 // Menu Functions //////////////////////////////////////////////////////////////////////////////////////////////////
 // Kit Menu
 function fKLMenuRefreshMyKLs() {fKLRunMenuOrButton('RefreshMyKLs');}
+function fKLMenuCalcKLAndAP() {fKLRunMenuOrButton('CalcKLAndAP');}
 // Abilies Menu
 function fKLMenuLoadAbilitiesFromDB() {fKLRunMenuOrButton('LoadAbilitiesFromDB');}
 // Rogue Menu
@@ -80,6 +82,7 @@ function fKLButtonRefreshKits() {fKLRunMenuOrButton('RefreshMyKLs');}
 function fKLButtonBuildMyAbilities() {fKLRunMenuOrButton('BuildMyAbilities');}
 function fKLButtonRefreshRogue() {fKLRunMenuOrButton('RefreshRogueAbil');}
 function fKLButtonLoadAllAbilities() {fKLRunMenuOrButton('LoadAbilitiesFromDB');}
+function fKLButtonCalcKLAndAP() {fKLRunMenuOrButton('CalcKLAndAP');}
 // End Button Functions
 
 
@@ -94,6 +97,7 @@ function fKLRunMenuOrButton(menuChoice) {
     switch (menuChoice) {
       // Kits Menu
       case 'RefreshMyKLs': fKLRefreshMyKLs(); break;
+      case 'CalcKLAndAP': fKLCalcKLAndAP(); break;
       // Abilities Menu
       case 'LoadAbilitiesFromDB': fKLLoadAbilitiesFromDB(); break;
       // Rogue Menu
@@ -109,7 +113,7 @@ function fKLRunMenuOrButton(menuChoice) {
       case 'ClearAllCheckBoxes': fKLClearAllCheckBoxes(); break;
       case 'SetKLAPCosts': fKLSetKLAPCosts(); break;
       case 'SetKLNotes': fKLSetKLNotes(); break;
-      case 'HideOtherRCTabs': fKLHideOtherRCTabs(); break;
+      case 'HideOtherRCTabs': fKLGetRCAndHideOtherRCTabs(); break;
       case 'Un_HideOtherRCTabs': fKLUn_HideOtherRCTabs(); break;
     }
   } catch (error) {
@@ -122,6 +126,170 @@ function fKLRunMenuOrButton(menuChoice) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////                                  KLs  (end Menu)
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+/**
+ * Purpose: A master function to perform a full calculation of all KL sheet AP values and update the header information.
+ * Input:
+ * -- none
+ * Output: Void (modifies the KL sheets directly).
+ */
+function fKLCalcKLAndAP() {
+
+    // Get the character's active RC tab name, hiding other RC tabs in the process.
+    const myRCTabName = fKLGetRCAndHideOtherRCTabs();
+    const myUsedRCTabs = ['All', myRCTabName];
+
+    // Initialize an object and pass it to the quick calculator to get currently spent AP.
+    const apSpent = {
+        combat: 0,
+        base: 0,
+    };
+    fKLQuickAPCalc(myUsedRCTabs, apSpent);
+
+    // Build the full header object using the spent AP, then save it back to the sheets.
+    const headerInfo = fKLBuildHeaderObject(apSpent);
+    fKLSaveRCHeaderInfo(myUsedRCTabs, headerInfo);
+
+} // End fKLCalcKLAndAP
+
+
+
+
+/**
+ * Purpose: Calculates the total spent combat and base AP from a given list of KL sheets by summing costs from checked abilities.
+ * Notes: This function modifies the apSpent object directly (pass by reference).
+ * Input:
+ * -- myRCTabName - {string[]} An array of KL sheet names to process.
+ * -- apSpent - {object} An object with 'combat' and 'base' properties to accumulate the costs into.
+ * Output: Void (modifies the input apSpent object).
+ */
+function fKLQuickAPCalc(myRCTabName, apSpent) {
+
+    // Reset the AP counters to zero before calculation.
+    apSpent.combat = 0;
+    apSpent.base = 0;
+
+    // Iterate through each provided sheet name.
+    myRCTabName.forEach(tabName => {
+        const currentTab = getObjKL_KLTab(tabName, true);
+
+        const dataFirstTF_C = 1;
+        const dataLastTF_C = currentTab.arr[0].length - 1;
+
+        for (let r = currentTab.dataFirst_R; r <= currentTab.dataLast_R; r++) {
+            for (let c = dataFirstTF_C; c < dataLastTF_C; c++) {
+
+                // If a checkbox in the current cell is checked, process the adjacent card.
+                if (currentTab.arr[r][c] === true) {
+
+                    const cardText = currentTab.arr[r][c + 1];
+                    if (!cardText) continue;
+
+                    const klCard = fGetKLCardObj(cardText, tabName, r, c + 1);
+
+                    // Add the card's AP cost to the appropriate counter based on its type.
+                    switch (klCard.apType) {
+                        case 'C': apSpent.combat += klCard.apCost; break;
+                        case 'B': apSpent.base += klCard.apCost; break;
+                        case 'F': break;
+                        default: throw new Error(`In sheet "${tabName}" the KL card "${cardText}" has an illegal AP Type of "${klCard.apType}"`);
+                    }
+                }
+            }
+        }
+    });
+
+} // End fKLQuickAPCalc
+
+
+
+
+
+/**
+ * Purpose: Calculates all header AP, Level, and Tier values and assembles them into a single object using pre-calculated spent AP.
+ * Assumptions: The apSpent object is provided and contains valid 'combat' and 'base' number properties.
+ * Notes: This refactor makes the function dependent on an input object for spent AP values rather than reading them from the sheet directly.
+ * Input:
+ * -- apSpent - {object} An object containing the spent AP values, e.g., { combat: 10, base: 5 }.
+ * Output: An object containing all calculated header values.
+ */
+function fKLBuildHeaderObject(apSpent) {
+
+    //
+    // First, calculate all the necessary values in sequence.
+    const myLevel = gCharLvl();
+    const levelAP = 10 * myLevel;
+    const tierString = gGetVal('mykl', 'All', 'Tier', 'Tier');
+    const tierMatch = String(tierString).match(/\d+/);
+    const tierNum = tierMatch ? parseInt(tierMatch[0], 10) : 0;
+    const bnsAP = gGetVal('mykl', 'All', 'BnsAP', 'APCount');
+    const totalAP = levelAP + bnsAP;
+    const apCombat = totalAP;
+    const apBase = Math.round(0.2 * totalAP);
+    const apCombatSpent = apSpent.combat;
+    const apBaseSpent = apSpent.base;
+    const apCombatRemaining = apCombat - apCombatSpent;
+    const apBaseRemaining = apBase - apBaseSpent;
+
+    //
+    // Then, assemble the final object using the calculated constants.
+    const header = {
+        myLevel,
+        tierString,
+        tierNum,
+        levelAP,
+        bnsAP,
+        totalAP,
+        apCombat,
+        apBase,
+        apCombatSpent,
+        apBaseSpent,
+        apCombatRemaining,
+        apBaseRemaining,
+    };
+
+    return header;
+
+} // End fKLBuildHeaderObject
+
+
+
+
+
+
+/**
+ * Purpose: Saves the calculated header AP, Level, and Tier info to a given list of RC sheets.
+ * Assumptions: The header object 'h' has been pre-calculated by fKLBuildHeaderObject().
+ * Input:
+ * -- myUsedRCTabs - {string[]} An array of KL sheet names to update.
+ * -- h - {object} The header object containing the values to be saved.
+ * Output: Void (modifies the specified KL sheets directly).
+ */
+function fKLSaveRCHeaderInfo(myUsedRCTabs, h) {
+
+    // For each provided sheet name, set all header values from the header object, then save the sheet.
+    myUsedRCTabs.forEach(tabName => {
+
+        gSetVal('mykl', tabName, 'MyLvl', 'MyLvl', h.myLevel);
+        gSetVal('mykl', tabName, 'Tier', 'Tier', h.tierString);
+        gSetVal('mykl', tabName, 'LevelAP', 'APCount', h.levelAP);
+        gSetVal('mykl', tabName, 'BnsAP', 'APCount', h.bnsAP);
+        gSetVal('mykl', tabName, 'TotalAP', 'APCount', h.totalAP);
+        gSetVal('mykl', tabName, 'APCombat', 'APTotal', h.apCombat);
+        gSetVal('mykl', tabName, 'APBase', 'APTotal', h.apBase);
+        gSetVal('mykl', tabName, 'APCombat', 'APSpent', h.apCombatSpent);
+        gSetVal('mykl', tabName, 'APBase', 'APSpent', h.apBaseSpent);
+        gSetVal('mykl', tabName, 'APCombat', 'APRemaining', h.apCombatRemaining);
+        gSetVal('mykl', tabName, 'APBase', 'APRemaining', h.apBaseRemaining);
+
+        gSaveSheet('mykl', tabName);
+    });
+
+} // End fKLSaveRCHeaderInfo
+
+
+
 
 
 
@@ -290,13 +458,31 @@ function fKLCardObjToStr(klCard) {
 
 
 /**
- * Purpose: Iterates through all specified KL sheets and unchecks any cell containing a boolean 'true' value.
- * Output: Void (modifies the sheets directly by saving the updated in-memory arrays).
+ * Purpose: A wrapper function that unchecks all 'true' checkboxes across all standard KL RC sheets.
+ * @returns {void}
  */
 function fKLClearAllCheckBoxes() {
 
+    // Call the core function with the global list of all RC sheet names.
+    fKLClearAllCheckBoxesFrom(g.klRCSheetNames);
+
+} // End fKLClearAllCheckBoxes
+
+
+
+/**
+ * Purpose: Iterates through a provided list of KL RC sheets and unchecks any cell containing a boolean 'true' value.
+ * Notes: This is the core logic function; it is called by other checkbox-clearing functions.
+ * @param {(string|string[])} sheetNameList - A single sheet name or an array of sheet names to process.
+ * @returns {void}
+ */
+function fKLClearAllCheckBoxesFrom(sheetNameList) {
+
+    // Ensure the input is an array so .forEach can be used reliably.
+    const sheetNames = Array.isArray(sheetNameList) ? sheetNameList : [sheetNameList];
+
     // For each specified sheet, load it, change all 'true' values to 'false', and save it.
-    g.klRCSheetNames.forEach(tabName => {
+    sheetNames.forEach(tabName => {
         const currentTab = getObjKL_KLTab(tabName, true);
         const lastCol = currentTab.arr[0].length - 1;
 
@@ -310,7 +496,8 @@ function fKLClearAllCheckBoxes() {
         gSaveSheet('mykl', tabName);
     });
 
-} // End fKLMenuClearAllCheckBoxes
+} // End fKLClearAllCheckBoxesFrom
+
 
 
 
@@ -442,15 +629,16 @@ function fKLSetKLNotes() {
 /**
  * Purpose: Hides all RC-related sheets in the KeyLine except for the <All> sheet and the one currently selected on the Character Sheet.
  * Assumptions: The g.klRCSheetNames and g.matchingKLRCIDs global arrays are parallel and correctly populated.
+ * Notes: This function will now skip clearing and hiding sheets that are already hidden.
  * Input:
  * -- none
- * Output: Void (modifies the visibility of sheets).
+ * Output: myRCTabName
  */
-function fKLHideOtherRCTabs() {
+function fKLGetRCAndHideOtherRCTabs() {
 
     const ssRef = gSSRef('mykl');
     const rcName_ID = gGetVal('mycs', 'RaceClass', 'RC', 'Val');
-    gSaveVal('mykl','All', 'RC', 'RC', rcName_ID);
+    gSaveVal('mykl', 'All', 'RC', 'RC', rcName_ID);
 
     // Validate that a RaceClass has been selected on the Character Sheet.
     if (!rcName_ID || typeof rcName_ID !== 'string') {
@@ -463,22 +651,27 @@ function fKLHideOtherRCTabs() {
 
     // If the ID isn't found in our list, throw an error.
     if (i === -1) {
-        throw new Error(`In fKLHideOtherRCTabs the ID "${rcID}" from your selected RaceClass was not found in the g.matchingKLRCIDs list.`);
+        throw new Error(`In fKLGetRCAndHideOtherRCTabs the ID "${rcID}" from your selected RaceClass was not found in the g.matchingKLRCIDs list.`);
     }
 
     // Use the found index to get the corresponding tab name from the parallel array.
-    const rcTabName = g.klRCSheetNames[i];
+    const myRCTabName = g.klRCSheetNames[i];
 
-    // Iterate through all sheets and hide the ones that are in the RC list but are not 'All' or the selected RC.
+    // Iterate through all sheets and hide the ones that are in the RC list but are not already hidden or 'All' or the selected RC.
     const sheets = ssRef.getSheets();
     sheets.forEach(sheet => {
         const tabName = sheet.getName();
-        if (g.klRCSheetNames.includes(tabName) && tabName !== 'All' && tabName !== rcTabName) {
+        if (g.klRCSheetNames.includes(tabName) && tabName !== 'All' && tabName !== myRCTabName && !sheet.isSheetHidden()) {
+            fKLClearAllCheckBoxesFrom(tabName);
             sheet.hideSheet();
-        } else if (tabName === rcTabName) sheet.showSheet();
+        } else if (tabName === myRCTabName) {
+            sheet.showSheet();
+        }
     });
 
-} // End fKLHideOtherRCTabs
+    return myRCTabName;
+
+} // End fKLGetRCAndHideOtherRCTabs
 
 
 
