@@ -33,6 +33,7 @@ const g = {
   treS: '<span style="background-color: yellow; color: green; font-weight: bold;">',
   endS: '</span>',
   klRCSheetNames: ['All', 'CIV', 'EVS', 'GG', 'HBE', 'HSR', 'NA', 'SV', 'VL', 'WBB'],
+  matchingKLRCIDs: ['','rk5bou','p9x8pw','x4u89v','n1qg4u','8dcscb','rh95jy','1c4zc5','xdp3m1','zns53t']
 };
 
 
@@ -190,18 +191,6 @@ function gSetVal(ss,sheetName, keyOrR, headerOrC, value) {
 
 
 
-// gSaveValIndirect //////////////////////////////////////////////////////////////////////////////////////////////////
-// Purpose -> Finds the listed sheetname, Row,  and Col in <Data> and saves val to that sheet and location
-function gSaveValIndirect(ss,dataKey,val) {
-  const sheetName = gGetVal(ss, 'data', dataKey, 'SheetName');
-  const r = gGetVal(ss, 'data', dataKey, 'Row');
-  const c = gGetVal(ss, 'data', dataKey, 'Col');
-  gSaveVal(ss,sheetName,r,c,val);
-} // End gSaveValIndirect
-
-
-
-
 // gSaveVal //////////////////////////////////////////////////////////////////////////////////////////////////
 // Purpose: if Table not already loaded, then LoadTable then...
 // Purpose: Save a value to both the in-memory array and the actual Google Sheet
@@ -238,6 +227,17 @@ function gSaveVal(ss,sheetName, keyOrR, headerOrC, value) {
   sheet.getRange(r + 1, c + 1).setValue(value);
 } // End gSaveVal
 
+
+
+
+// gSaveValIndirect //////////////////////////////////////////////////////////////////////////////////////////////////
+// Purpose -> Finds the listed sheetname, Row,  and Col in <Data> and saves val to that sheet and location
+function gSaveValIndirect(ss,dataKey,val) {
+  const sheetName = gGetVal(ss, 'data', dataKey, 'SheetName');
+  const r = gGetVal(ss, 'data', dataKey, 'Row');
+  const c = gGetVal(ss, 'data', dataKey, 'Col');
+  gSaveVal(ss,sheetName,r,c,val);
+} // End gSaveValIndirect
 
 
 

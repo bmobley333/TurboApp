@@ -43,6 +43,8 @@ function fKLCreateMenu() {
           .addItem('Update Element Names', 'fKLMenuUpdateKLElementNames')
           .addItem('Set AP Costs', 'fKLMenuSetKLAPCosts')
           .addItem('Set Notes', 'fKLMenuSetKLNotes')
+          .addItem('Hide Other RC Tabs', 'fKLMenuHideOtherRCTabs')
+          .addItem('Un-Hide All RC Tabs', 'fKLMenuUn_HideAllRCTabs')
         )
       .addToUi();
   } 
@@ -68,6 +70,8 @@ function fKLMenuUpdateKLElementNames() {fKLRunMenuOrButton('UpdateKLElementNames
 function fKLMenuClearAllCheckBoxes() {fKLRunMenuOrButton('ClearAllCheckBoxes');}
 function fKLMenuSetKLAPCosts() {fKLRunMenuOrButton('SetKLAPCosts');}
 function fKLMenuSetKLNotes() {fKLRunMenuOrButton('SetKLNotes');}
+function fKLMenuHideOtherRCTabs() {fKLRunMenuOrButton('HideOtherRCTabs');}
+function fKLMenuUn_HideAllRCTabs() {fKLRunMenuOrButton('Un_HideOtherRCTabs');}
 // End Menu Functions
 
 
@@ -105,6 +109,8 @@ function fKLRunMenuOrButton(menuChoice) {
       case 'ClearAllCheckBoxes': fKLClearAllCheckBoxes(); break;
       case 'SetKLAPCosts': fKLSetKLAPCosts(); break;
       case 'SetKLNotes': fKLSetKLNotes(); break;
+      case 'HideOtherRCTabs': fKLHideOtherRCTabs(); break;
+      case 'Un_HideOtherRCTabs': fKLUn_HideOtherRCTabs(); break;
     }
   } catch (error) {
       SpreadsheetApp.getUi().alert(error); // NOTE: an error of End or end will simply end the program.
@@ -431,6 +437,71 @@ function fKLSetKLNotes() {
 
 } // End fKLSetKLNotes
 
+
+
+/**
+ * Purpose: Hides all RC-related sheets in the KeyLine except for the <All> sheet and the one currently selected on the Character Sheet.
+ * Assumptions: The g.klRCSheetNames and g.matchingKLRCIDs global arrays are parallel and correctly populated.
+ * Input:
+ * -- none
+ * Output: Void (modifies the visibility of sheets).
+ */
+function fKLHideOtherRCTabs() {
+
+    const ssRef = gSSRef('mykl');
+    const rcName_ID = gGetVal('mycs', 'RaceClass', 'RC', 'Val');
+    gSaveVal('mykl','All', 'RC', 'RC', rcName_ID);
+
+    // Validate that a RaceClass has been selected on the Character Sheet.
+    if (!rcName_ID || typeof rcName_ID !== 'string') {
+        throw new Error(`You need to select a RaceClass on the <RaceClass> tab of your Character Sheet.`);
+    }
+
+    // Parse the ID from the RaceClass string and find its index in the global ID list.
+    const rcID = gGetIDFromString(rcName_ID);
+    const i = g.matchingKLRCIDs.indexOf(rcID);
+
+    // If the ID isn't found in our list, throw an error.
+    if (i === -1) {
+        throw new Error(`In fKLHideOtherRCTabs the ID "${rcID}" from your selected RaceClass was not found in the g.matchingKLRCIDs list.`);
+    }
+
+    // Use the found index to get the corresponding tab name from the parallel array.
+    const rcTabName = g.klRCSheetNames[i];
+
+    // Iterate through all sheets and hide the ones that are in the RC list but are not 'All' or the selected RC.
+    const sheets = ssRef.getSheets();
+    sheets.forEach(sheet => {
+        const tabName = sheet.getName();
+        if (g.klRCSheetNames.includes(tabName) && tabName !== 'All' && tabName !== rcTabName) {
+            sheet.hideSheet();
+        } else if (tabName === rcTabName) sheet.showSheet();
+    });
+
+} // End fKLHideOtherRCTabs
+
+
+
+
+/**
+ * Purpose: Un-hides all sheets listed in the g.klRCSheetNames global array.
+ * Input:
+ * -- none
+ * Output: Void (modifies the visibility of sheets).
+ */
+function fKLUn_HideOtherRCTabs() {
+
+    const ssRef = gSSRef('mykl');
+
+    // Iterate through the global list of RC sheet names and unhide each one.
+    g.klRCSheetNames.forEach(tabName => {
+        const sheet = ssRef.getSheetByName(tabName);
+        if (sheet && sheet.isSheetHidden()) {
+            sheet.showSheet();
+        }
+    });
+
+} // End fKLUn_HideOtherRCTabs
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
