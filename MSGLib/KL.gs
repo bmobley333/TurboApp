@@ -39,7 +39,9 @@ function fKLCreateMenu() {
         .addItem('Hide All', 'fKLMenuHideAll')
         .addItem('Un-Hide All', 'fKLMenuUn_HideAll')
         .addSubMenu(SpreadsheetApp.getUi().createMenu('KLs')
+          .addItem('Un-check All CheckBoxes', 'fKLMenuClearAllCheckBoxes')
           .addItem('Update Element Names', 'fKLMenuUpdateKLElementNames')
+          .addItem('Set AP Costs', 'fKLMenuSetKLAPCosts')
         )
       .addToUi();
   } 
@@ -62,6 +64,8 @@ function fKLMenuRefreshAll() {fKLRunMenuOrButton('RefreshMenu');}
 function fKLMenuHideAll() {fKLRunMenuOrButton('HideAll');}
 function fKLMenuUn_HideAll() {fKLRunMenuOrButton('Un_HideAll');}
 function fKLMenuUpdateKLElementNames() {fKLRunMenuOrButton('UpdateKLElementNames');}
+function fKLMenuClearAllCheckBoxes() {fKLRunMenuOrButton('ClearAllCheckBoxes');}
+function fKLMenuSetKLAPCosts() {fKLRunMenuOrButton('SetKLAPCosts');}
 // End Menu Functions
 
 
@@ -95,7 +99,9 @@ function fKLRunMenuOrButton(menuChoice) {
       // Designer Menu
       case 'HideAll': gHideAll('mykl'); break;
       case 'Un_HideAll': gUn_HideAll('mykl'); break;
-      case 'UpdateKLElementNames': fUpdateKLElementNames(); break;
+      case 'UpdateKLElementNames': fKLUpdateKLElementNames(); break;
+      case 'ClearAllCheckBoxes': fKLClearAllCheckBoxes(); break;
+      case 'SetKLAPCosts': fKLSetKLAPCosts(); break;
     }
   } catch (error) {
       SpreadsheetApp.getUi().alert(error); // NOTE: an error of End or end will simply end the program.
@@ -116,10 +122,9 @@ function fKLRunMenuOrButton(menuChoice) {
  * looks up the element ID from the second column in a central database,
  * and writes the corresponding element name back into that cell.
  */
-function fUpdateKLElementNames() {
-  const klRCSheetNames = ['All', 'CIV', 'EVS', 'GG', 'HBE', 'HSR', 'NA', 'SV', 'VL', 'WBB'];
+function fKLUpdateKLElementNames() {
 
-  klRCSheetNames.forEach(tabName => {
+  g.klRCSheetNames.forEach(tabName => {
     // Get the object for the current tab, forcing a reload to ensure data is current.
     const currentTab = getObjKL_KLTab(tabName, true);
 
@@ -143,7 +148,7 @@ function fUpdateKLElementNames() {
             const newName = gGetVal('db', 'Elements', klCard.id, 'Name');
             
             // Write the new name back to the sheet.
-            fNewKLName(currentTab, klCard, newName, r, c+1);
+            fKLNewKLName(currentTab, klCard, newName, r, c+1);
           } else {
             // If the ID is not found, throw a detailed error.
             throw new Error(`ID lookup failed for sheet "${tabName}". The ID "${klCard.id}" (derived from cell ${r+1},${c+2} with value "${cardText}") was not found in the 'Elements' database.`);
@@ -154,7 +159,7 @@ function fUpdateKLElementNames() {
     gSaveSheet('mykl', tabName);
   });
 
-} // End fUpdateKLElementNames
+} // End fKLUpdateKLElementNames
 
 
 
@@ -246,14 +251,14 @@ function fGetKLCardObj(cardText, tabName, r, c) {
  *   c - The 0-indexed column in the array to update.
  * Output: Void (modifies the currentTab.arr by reference).
  */
-function fNewKLName(currentTab, klCard, elementName, r, c) {
+function fKLNewKLName(currentTab, klCard, elementName, r, c) {
   
   // Check if the new name is different and a non-empty string
   if (klCard.name !== elementName && typeof elementName === 'string' && elementName) {
     klCard.name = elementName;
     currentTab.arr[r][c] = fKLCardObjToStr(klCard);
   }
-} // End fNewKLName
+} // End fKLNewKLName
 
 
 
@@ -271,6 +276,104 @@ function fKLCardObjToStr(klCard) {
 
   return `${klCard.name}\n$${apCostString} T${klCard.tier}\n🔑${klCard.id}.${klCard.buffVerType}${klCard.buffVerNum}`;
 } // End fKLCardObjToStr
+
+
+
+
+/**
+ * Purpose: Iterates through all specified KL sheets and unchecks any cell containing a boolean 'true' value.
+ * Output: Void (modifies the sheets directly by saving the updated in-memory arrays).
+ */
+function fKLClearAllCheckBoxes() {
+
+    // For each specified sheet, load it, change all 'true' values to 'false', and save it.
+    g.klRCSheetNames.forEach(tabName => {
+        const currentTab = getObjKL_KLTab(tabName, true);
+        const lastCol = currentTab.arr[0].length - 1;
+
+        for (let r = currentTab.dataFirst_R; r <= currentTab.dataLast_R; r++) {
+            for (let c = 1; c <= lastCol; c++) {
+                if (currentTab.arr[r][c] === true) {
+                    currentTab.arr[r][c] = false;
+                }
+            }
+        }
+        gSaveSheet('mykl', tabName);
+    });
+
+} // End fKLMenuClearAllCheckBoxes
+
+
+
+/**
+ * Purpose: Recalculates the AP Cost for all abilities in the KL RC-style sheets based on their tier progression.
+ * Assumptions: The klRCSheetNames array is globally available at g.klRCSheetNames.
+ * Input:
+ * none
+ * Output: Void (modifies the KL sheets directly).
+ */
+function fKLSetKLAPCosts() {
+
+    const firstTierMap = {};
+    const buffAPCost = [2, 4, 8, 16, 32];
+    const verAPCost = [5, 5, 9, 16, 25];
+
+    // Alert the user that the <All> sheet has a special condition.
+    SpreadsheetApp.getUi().alert('Notice', 'Abilities on the KL <All> sheet will only be updated from row 18 onwards (Skipping Attributes). All other RC sheets will be fully processed.', SpreadsheetApp.getUi().ButtonSet.OK);
+
+    // For each specified sheet, load it, recalculate AP costs, and save it.
+    g.klRCSheetNames.forEach(tabName => {
+        const currentTab = getObjKL_KLTab(tabName, true);
+        const lastCol = currentTab.arr[0].length - 2; // Loop until the second to last column to safely access c+1
+
+        for (let r = currentTab.dataFirst_R; r <= currentTab.dataLast_R; r++) {
+
+            // If on the 'All' sheet, skip the protected Attributes rows.
+            if (tabName.toLowerCase() === 'all' && r < 17) {
+                continue;
+            }
+
+            for (let c = 1; c <= lastCol; c++) {
+                
+                // Check if the cell contains a boolean value to process.
+                if (currentTab.arr[r][c] === true || currentTab.arr[r][c] === false) {
+
+                    const cardText = currentTab.arr[r][c + 1];
+                    if (!cardText) throw new Error(`In fKLSetKLAPCosts sheet "${tabName}" at cell ${r},${c + 1} there is no KL Card after this check box.`);
+
+                    const klCard = fGetKLCardObj(cardText, tabName, r, c + 1);
+
+                    // If this is the first time seeing this ability ID, store its tier as the base tier.
+                    if (!firstTierMap.hasOwnProperty(klCard.id)) {
+                        firstTierMap[klCard.id] = klCard.tier;
+                    }
+
+                    // Skip cost calculation for 'Free' abilities.
+                    if (klCard.apType === 'F') {
+                        continue;
+                    }
+
+                    // Calculate and validate the cost tier.
+                    const baseTier = firstTierMap[klCard.id];
+                    const apCostTier = klCard.tier - baseTier;
+
+                    if (!Number.isInteger(apCostTier) || apCostTier < 0 || apCostTier > 4) {
+                        throw new Error(`In fKLSetKLAPCosts sheet "${tabName}" at cell ${r + 1},${c + 2} with value "${cardText}" has an improper Tier progression. The calculated cost tier was ${apCostTier}, but it must be an integer between 0 and 4.`);
+                    }
+
+                    // Assign the new AP cost based on the tier and buff/version type.
+                    klCard.apCost = (klCard.buffVerType === 'v') ? verAPCost[apCostTier] : buffAPCost[apCostTier];
+                    currentTab.arr[r][c + 1] = fKLCardObjToStr(klCard);
+                }
+            }
+        }
+        gSaveSheet('mykl', tabName);
+    });
+
+} // End fKLSetKLAPCosts
+
+
+
 
 
 

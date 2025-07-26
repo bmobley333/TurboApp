@@ -31,7 +31,8 @@ const g = {
   redBS: '<span style="color: red; font-weight: bold;">',
   bluBS: '<span style="color: blue; font-weight: bold;">',
   treS: '<span style="background-color: yellow; color: green; font-weight: bold;">',
-  endS: '</span>'
+  endS: '</span>',
+  klRCSheetNames: ['All', 'CIV', 'EVS', 'GG', 'HBE', 'HSR', 'NA', 'SV', 'VL', 'WBB'],
 };
 
 
