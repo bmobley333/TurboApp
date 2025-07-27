@@ -140,7 +140,7 @@ function fKLCalcKLAndAP() {
     const myRCTabName = fKLGetRCAndHideOtherRCTabs();
     const myUsedRCTabs = ['All', myRCTabName];
 
-    // Verify RC Checkboxes and set KL Card Colors (green = know, yellow = can learn, red = can't learn)
+    // Verify RC Checkboxes and set KL Card Colors (green = know, yellow = can learn now, lighter yellow = can learn if preceeding learned first, red = can't learn)
     const tierString = gGetVal('mykl', 'All', 'Tier', 'Tier');
     const tierMatch = String(tierString).match(/\d+/);
     const tierNum = tierMatch ? parseInt(tierMatch[0], 10) : 0;
@@ -156,6 +156,7 @@ function fKLCalcKLAndAP() {
     // Build and save final header info
     const headerInfo = fKLBuildHeaderObject(apSpent);
     fKLSaveRCHeaderInfo(myUsedRCTabs, headerInfo);
+    fKLAlertIfOverspentAP(headerInfo);
 
 
 } // End fKLCalcKLAndAP
@@ -319,6 +320,7 @@ function fKLVerifyRCCheckedBoxesSetColors(myUsedRCTabs, myTierNum) {
     const lightRed = '#fc8279';
     const lightGreen = '#a6f04d';
     const lightYellow = '#fce803';
+    const lighterYellow = '#ede477';
 
     //
     // Iterate through each provided sheet name.
@@ -336,7 +338,6 @@ function fKLVerifyRCCheckedBoxesSetColors(myUsedRCTabs, myTierNum) {
         for (let r = currentTab.dataFirst_R; r <= currentTab.dataLast_R; r++) {
             for (let c = 1; c <= lastCol; c++) {
 
-                //
                 // If there is a checkbox in the current cell, verify it and set colors.
                 if (currentTab.arr[r][c] === true || currentTab.arr[r][c] === false) {
 
@@ -345,12 +346,9 @@ function fKLVerifyRCCheckedBoxesSetColors(myUsedRCTabs, myTierNum) {
 
                     const klCard = fGetKLCardObj(cardText, tabName, r, c + 1);
 
-                    //
                     // Perform boundary-safe dependency checks.
                     const isDependentAboveUn_Checked = (r > currentTab.dataFirst_R) && (currentTab.arr[r - 1][c] === false);
-                    // const isDependentTwoAboveUn_Checked = (r > currentTab.dataFirst_R + 1) && (currentTab.arr[r - 2][c] === false);
 
-                    //
                     // Verify and set the checkbox state based on tier and dependency rules.
                     if (klCard.tier > myTierNum || isDependentAboveUn_Checked) {
                         currentTab.arr[r][c] = false;
@@ -358,14 +356,13 @@ function fKLVerifyRCCheckedBoxesSetColors(myUsedRCTabs, myTierNum) {
                         currentTab.arr[r][c] = true;
                     }
 
-                    //
                     // Determine and set the background color based on the ability's final state.
-                    if (klCard.tier > myTierNum || isDependentAboveUn_Checked) {
+                    if (klCard.tier > myTierNum) {
                         colorArr[r][c + 1] = lightRed; // Illegal ability (too high tier or broken dependency chain)
                     } else if (currentTab.arr[r][c] === true) {
                         colorArr[r][c + 1] = lightGreen; // Legal and selected ability
                     } else {
-                        colorArr[r][c + 1] = lightYellow; // Legal but not selected ability
+                        colorArr[r][c + 1] = (isDependentAboveUn_Checked) ? lighterYellow : lightYellow; // Legal but not selected ability
                     }
                 }
             }
@@ -378,6 +375,36 @@ function fKLVerifyRCCheckedBoxesSetColors(myUsedRCTabs, myTierNum) {
     });
 
 } // End fKLVerifyRCCheckedBoxesSetColors
+
+
+
+/**
+ * Purpose: Alerts the user if they have overspent their Combat or Base AP totals.
+ * Assumptions: The input object 'h' contains apCombatRemaining and apBaseRemaining as number properties.
+ * Notes: This provides a non-interrupting warning to the user, as opposed to throwing an error.
+ * @param {object} h - A pre-calculated header object containing all AP, Level, and Tier values.
+ * @returns {void}
+ */
+function fKLAlertIfOverspentAP(h) {
+    let errorString = '';
+
+    // Check for overspent Combat AP and construct the warning message.
+    if (h.apCombatRemaining < 0) {
+        errorString += `You have overspent your Combat AP by ${-h.apCombatRemaining}.\n`;
+    }
+
+    // Check for overspent Base AP and construct the warning message.
+    if (h.apBaseRemaining < 0) {
+        errorString += `You have overspent your Base AP by ${-h.apBaseRemaining}.`;
+    }
+
+    // If any error messages were generated, display them in an alert box.
+    if (errorString) {
+        const ui = SpreadsheetApp.getUi();
+        ui.alert('AP Warning', errorString.trim(), ui.ButtonSet.OK);
+    }
+} // End fKLAlertIfOverspentAP
+
 
 
 
