@@ -5,8 +5,8 @@ echo ===================================
 echo  Google Apps Script Project Manager
 echo ===================================
 echo.
-echo  1. PULL from MSGLib
-echo  2. PUSH to MSGLib
+echo  1. PUSH to MSGLib
+echo  2. PULL from MSGLib
 echo.
 echo  3. PULL from Turbo
 echo  4. PUSH to Turbo
@@ -21,8 +21,8 @@ CHOICE /C 12345 /M "Enter your choice: "
 if errorlevel 5 goto :Exit
 if errorlevel 4 goto :PushTurbo
 if errorlevel 3 goto :PullTurbo
-if errorlevel 2 goto :PushMSGLib
-if errorlevel 1 goto :PullMSGLib
+if errorlevel 2 goto :PullMSGLib
+if errorlevel 1 goto :PushMSGLib
 
 REM --- MSGLib PULL Section ---
 :PullMSGLib

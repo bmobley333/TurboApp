@@ -244,6 +244,60 @@ function getObjKLMyKLs(forceLoad = false) {
 } // End getObjKLMyKL
 
 
+
+// getObjKnownAbilities //////////////////////////////////////////////////////////////////////////////////////////////////
+// Purpose -> performs a gLoadTable if necessary (or forceLoad), then if necessary (or forceLoad) reloads the g.obj[ss][sheetname]
+function getObjKnownAbilities(forceLoad = false) {
+  const ss = 'mykl';
+  const sheetName = 'KnownAbilities';
+
+  // Load Table (note: if g.[ss][sheetName] already exists it will not be reloaded unless forceLoad = true, to save run time)
+  gLoadTable(ss, sheetName, forceLoad);
+
+  // Don't reload g.obj[ss][sheetName] unless forceLoad is true or g.obj[ss][sheetName] doesn't exist.
+  if (!forceLoad && g?.obj?.[ss]?.[sheetName]) return g.obj[ss][sheetName];
+
+  // Create or update the sheet object - specifically use the existing g.obj[ss][sheetName] if it exists, else g.obj[ss][sheetName] doesn't yet exist and will be cretaed below
+  // IMPORTANT - this guarantees that g.obj[ss][sheetName] will always be the same object and that calling this Factory Function will never create more than one object, (if new -> obj is made, if exists -> obj is updated)
+  const newObj = g?.obj?.[ss]?.[sheetName] || {};
+
+  // Assign new values to the object properties
+  Object.assign(newObj, {
+
+    ref: gSheetRef(ss, sheetName),
+    arr: gArr(ss, sheetName),
+    dataFirst_R: gDataFirst_R(ss, sheetName),  
+    dataLast_R: gDataLast_R(ss, sheetName),   
+
+    id_C: gHeaderC(ss, sheetName, 'ID'), 
+    nameID_C: gHeaderC(ss, sheetName, 'Name_ID'), 
+    ver_C: gHeaderC(ss, sheetName, 'Ver'),
+    buff_C: gHeaderC(ss, sheetName, 'Buff'),  
+    base1_C: gHeaderC(ss, sheetName, 'Base1'),  
+    base2_C: gHeaderC(ss, sheetName, 'Base2'),
+    sk1PLAGHE_C: gHeaderC(ss, sheetName, 'sk1PLAGHE'),  
+    sk2PLAGHE_C: gHeaderC(ss, sheetName, 'sk2PLAGHE'),  
+    finalSk1_C: gHeaderC(ss, sheetName, 'FinalSk1'),
+    finalSk2_C: gHeaderC(ss, sheetName, 'FinalSk2'),  
+  });
+
+  // Build any necessary child keys of g
+  g.obj = g.obj || {};
+  g.obj[ss] = g.obj[ss] || {};
+
+  g.obj[ss][sheetName] = newObj;
+
+  return newObj;
+} // End getObjKnownAbilities
+
+
+
+
+
+
+
+
+
 // getObjKLRogueAbilities //////////////////////////////////////////////////////////////////////////////////////////////////
 // Purpose -> performs a gLoadTable if necessary (or forceLoad), then if necessary (or forceLoad) reloads the g.obj[ss][sheetname]
 function getObjKLRogueAbilities(forceLoad = false) {
