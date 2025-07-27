@@ -160,10 +160,12 @@ function fKLCalcKLAndAP() {
 
     // Build array of known KLs and their best buff/version numbers.
     const knownKLs = fKLBuildKnownKLs(myUsedRCTabs);
+    const extractedKLs = fKLExtractKLsFromKLGroups(knownKLs);
 
-    // Display the knownKLs to the user via a prompt
-    const knownKLsString = knownKLs.map(kl => `${kl.id} (Buff: ${kl.bestBuff}, Ver: ${kl.bestVer})`).join('\n');
-    SpreadsheetApp.getUi().alert(`Known KLs:\n${knownKLsString}`);
+
+    // Display the extractedKLs to the user via a prompt
+    const extractedKLsString = extractedKLs.map(kl => `${kl.id} (Buff: ${kl.bestBuff}, Ver: ${kl.bestVer})`).join('\n');
+    SpreadsheetApp.getUi().alert(`Extracted KLs:\n${extractedKLsString}`);
 
 } // End fKLCalcKLAndAP
 
@@ -465,6 +467,61 @@ function fKLBuildKnownKLs(myUsedRCTabs) {
 
     return knownKLs;
 } // End fKLBuildKnownKLs
+
+
+
+
+/**
+ * Purpose: Expands any KeyLine Groups from a list of known KLs and consolidates the result with the original individual KLs, ensuring each unique KL ID is represented once with its highest found buff and version.
+ * Assumptions: The input array 'knownKLs' contains objects with id, bestBuff, and bestVer properties.
+ * Notes: This function flattens a list that may contain high-level groups, producing a final, definitive list of all individual abilities and their most powerful discovered stats.
+ * @param {object[]} knownKLs - An array of simplified, known KL objects.
+ * @returns {object[]} A new, consolidated array of unique KL objects.
+ */
+function fKLExtractKLsFromKLGroups(knownKLs) {
+    const consolidatedKLs = new Map(); // Example: ['rk5bou', { id: 'rk5bou', bestBuff: 3, bestVer: 1 }]
+    const allIndividualKLs = [];
+    const parentIDsToRemove = []; // This will hold IDs of parent groups that should be excluded.
+
+    // First, create a single "flat" list of all individual KLs, expanding any groups.
+    for (const kl of knownKLs) {
+        if (gTestID('db', 'KeyLines', kl.id)) {
+            const klListString = gGetVal('db', 'KeyLines', kl.id, 'KLList');
+
+            if (klListString) {
+                parentIDsToRemove.push(kl.id); // Log the parent group ID for later removal.
+                const klIdArray = klListString.split(',');
+                for (const klId of klIdArray) {
+                    allIndividualKLs.push({
+                        id: klId.trim(),
+                        bestBuff: kl.bestBuff,
+                        bestVer: kl.bestVer,
+                    });
+                }
+            }
+        } else {
+            // It's not a group, so add the individual KL directly to the list.
+            allIndividualKLs.push(kl);
+        }
+    }
+
+    // Next, consolidate the flat list to find the max buff/ver for each unique ID.
+    for (const kl of allIndividualKLs) {
+        const existingKL = consolidatedKLs.get(kl.id);
+        if (existingKL) {
+            existingKL.bestBuff = Math.max(existingKL.bestBuff, kl.bestBuff);
+            existingKL.bestVer = Math.max(existingKL.bestVer, kl.bestVer);
+        } else {
+            consolidatedKLs.set(kl.id, { ...kl });
+        }
+    }
+
+    // Convert the map's values back to an array and filter out the parent group IDs.
+    const finalKLs = Array.from(consolidatedKLs.values()).filter(kl => !parentIDsToRemove.includes(kl.id));
+
+    return finalKLs;
+} // End fKLExtractKLsFromKLGroups
+
 
 
 
