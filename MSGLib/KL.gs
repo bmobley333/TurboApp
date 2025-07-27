@@ -479,33 +479,94 @@ function fKLBuildKnownKLs(myUsedRCTabs) {
  * @returns {object[]} A new, consolidated array of unique KL objects.
  */
 function fKLExtractKLsFromKLGroups(knownKLs) {
-    const consolidatedKLs = new Map(); // Example: ['rk5bou', { id: 'rk5bou', bestBuff: 3, bestVer: 1 }]
-    const allIndividualKLs = [];
-    const parentIDsToRemove = []; // This will hold IDs of parent groups that should be excluded.
+    const { flatList, parentIDs } = fKLExpandKLGroups(knownKLs);
+    const consolidatedList = fKLFlattenDuplicates(flatList);
 
-    // First, create a single "flat" list of all individual KLs, expanding any groups.
+    // Filter out the parent group IDs to create the final list.
+    const finalList = consolidatedList.filter(kl => !parentIDs.includes(kl.id));
+
+    return finalList;
+} // End fKLExtractKLsFromKLGroups
+
+
+
+
+/**
+ * Purpose: Recursively expands any KeyLine Groups to create a "flat" list of all individual KLs.
+ * Assumptions: A KL Group's KLList can contain IDs of other groups.
+ * Notes: Uses an iterative approach with a stack to prevent deep recursion errors and a Set to avoid infinite loops from circular dependencies.
+ * @param {object[]} knownKLs - An array of simplified, known KL objects.
+ * @returns {object} An object containing the `flatList` of all individual KLs and the `parentIDs` of all groups that were expanded.
+ */
+function fKLExpandKLGroups(knownKLs) {
+    const finalList = [];
+    const groupsToProcess = [];
+
+    // 1. Separate initial KLs into individuals and top-level groups.
     for (const kl of knownKLs) {
         if (gTestID('db', 'KeyLines', kl.id)) {
-            const klListString = gGetVal('db', 'KeyLines', kl.id, 'KLList');
-
-            if (klListString) {
-                parentIDsToRemove.push(kl.id); // Log the parent group ID for later removal.
-                const klIdArray = klListString.split(',');
-                for (const klId of klIdArray) {
-                    allIndividualKLs.push({
-                        id: klId.trim(),
-                        bestBuff: kl.bestBuff,
-                        bestVer: kl.bestVer,
-                    });
-                }
-            }
+            groupsToProcess.push(kl); // It's a group, add to the processing stack.
         } else {
-            // It's not a group, so add the individual KL directly to the list.
-            allIndividualKLs.push(kl);
+            finalList.push(kl); // It's an individual, add directly to the final list.
         }
     }
 
-    // Next, consolidate the flat list to find the max buff/ver for each unique ID.
+    const processedGroupIDs = new Set(); // Tracks all groups that have been expanded.
+
+    // 2. Iteratively process the stack of groups until it's empty.
+    while (groupsToProcess.length > 0) {
+        const currentGroup = groupsToProcess.pop();
+
+        // Avoid infinite loops from circular dependencies (e.g., Group A contains B, B contains A).
+        if (processedGroupIDs.has(currentGroup.id)) {
+            continue;
+        }
+        processedGroupIDs.add(currentGroup.id);
+
+        const childIdListString = gGetVal('db', 'KeyLines', currentGroup.id, 'KLList');
+        if (!childIdListString) continue;
+
+        const childIdArray = childIdListString.split(',');
+
+        // 3. Process each child ID from the current group.
+        for (const childId of childIdArray) {
+            const trimmedId = childId.trim();
+            if (gTestID('db', 'KeyLines', trimmedId)) {
+                // The child is another group, add it to the stack to be processed.
+                // It inherits the buff/ver from its immediate parent.
+                groupsToProcess.push({
+                    id: trimmedId,
+                    bestBuff: currentGroup.bestBuff,
+                    bestVer: currentGroup.bestVer,
+                });
+            } else {
+                // The child is an individual KL, add it to our final flat list.
+                finalList.push({
+                    id: trimmedId,
+                    bestBuff: currentGroup.bestBuff,
+                    bestVer: currentGroup.bestVer,
+                });
+            }
+        }
+    }
+
+    return { flatList: finalList, parentIDs: Array.from(processedGroupIDs) };
+} // End fKLExpandKLGroups
+
+
+
+
+/**
+ * Purpose: Consolidates a list of KLs to ensure each unique ID is represented only once, with the highest buff and version numbers - no duplicates of any kind!
+ * Assumptions: The input array may contain KL objects with duplicate IDs.
+ * Notes: Uses a Map to efficiently handle the consolidation. This single step resolves all potential duplicates, regardless of whether they were in the original list, created by expanding multiple KL Groups, or came from duplicate KL Groups themselves.
+ * @param {object[]} allIndividualKLs - A "flat" list of KL objects, possibly with duplicates.
+ * @returns {object[]} A new array of unique, consolidated KL objects.
+ */
+function fKLFlattenDuplicates(allIndividualKLs) {
+    const consolidatedKLs = new Map();
+
+    // Consolidate the flat list to find the max buff/ver for each unique ID.
     for (const kl of allIndividualKLs) {
         const existingKL = consolidatedKLs.get(kl.id);
         if (existingKL) {
@@ -516,11 +577,11 @@ function fKLExtractKLsFromKLGroups(knownKLs) {
         }
     }
 
-    // Convert the map's values back to an array and filter out the parent group IDs.
-    const finalKLs = Array.from(consolidatedKLs.values()).filter(kl => !parentIDsToRemove.includes(kl.id));
+    return Array.from(consolidatedKLs.values());
+} // End fKLFlattenDuplicates
 
-    return finalKLs;
-} // End fKLExtractKLsFromKLGroups
+
+
 
 
 
