@@ -140,18 +140,29 @@ function fKLCalcKLAndAP() {
     const myRCTabName = fKLGetRCAndHideOtherRCTabs();
     const myUsedRCTabs = ['All', myRCTabName];
 
-    // Initialize an object and pass it to the quick calculator to get currently spent AP.
+    // Verify RC Checkboxes
+    const tierString = gGetVal('mykl', 'All', 'Tier', 'Tier');
+    const tierMatch = String(tierString).match(/\d+/);
+    const tierNum = tierMatch ? parseInt(tierMatch[0], 10) : 0;
+    fKLVerifyRCCheckedBoxes(myUsedRCTabs,tierNum);
+
+    // Calculate AP Spent
     const apSpent = {
         combat: 0,
         base: 0,
     };
-    fKLQuickAPCalc(myUsedRCTabs, apSpent);
+    fKLAPSpentCalc(myUsedRCTabs, apSpent);
 
-    // Build the full header object using the spent AP, then save it back to the sheets.
+    // Build and save final header info
     const headerInfo = fKLBuildHeaderObject(apSpent);
     fKLSaveRCHeaderInfo(myUsedRCTabs, headerInfo);
 
+
 } // End fKLCalcKLAndAP
+
+
+
+
 
 
 
@@ -164,7 +175,7 @@ function fKLCalcKLAndAP() {
  * -- apSpent - {object} An object with 'combat' and 'base' properties to accumulate the costs into.
  * Output: Void (modifies the input apSpent object).
  */
-function fKLQuickAPCalc(myRCTabName, apSpent) {
+function fKLAPSpentCalc(myRCTabName, apSpent) {
 
     // Reset the AP counters to zero before calculation.
     apSpent.combat = 0;
@@ -200,7 +211,7 @@ function fKLQuickAPCalc(myRCTabName, apSpent) {
         }
     });
 
-} // End fKLQuickAPCalc
+} // End fKLAPSpentCalc
 
 
 
@@ -223,10 +234,11 @@ function fKLBuildHeaderObject(apSpent) {
     const tierString = gGetVal('mykl', 'All', 'Tier', 'Tier');
     const tierMatch = String(tierString).match(/\d+/);
     const tierNum = tierMatch ? parseInt(tierMatch[0], 10) : 0;
+    const rcName_ID = gGetVal('mykl', 'All', 'RC', 'RC');
     const bnsAP = gGetVal('mykl', 'All', 'BnsAP', 'APCount');
     const totalAP = levelAP + bnsAP;
     const apCombat = totalAP;
-    const apBase = Math.round(0.2 * totalAP);
+    const apBase = Math.round(0.3 * totalAP);
     const apCombatSpent = apSpent.combat;
     const apBaseSpent = apSpent.base;
     const apCombatRemaining = apCombat - apCombatSpent;
@@ -238,6 +250,7 @@ function fKLBuildHeaderObject(apSpent) {
         myLevel,
         tierString,
         tierNum,
+        rcName_ID,
         levelAP,
         bnsAP,
         totalAP,
@@ -273,6 +286,7 @@ function fKLSaveRCHeaderInfo(myUsedRCTabs, h) {
 
         gSetVal('mykl', tabName, 'MyLvl', 'MyLvl', h.myLevel);
         gSetVal('mykl', tabName, 'Tier', 'Tier', h.tierString);
+        gSetVal('mykl', tabName, 'RC', 'RC', h.rcName_ID);
         gSetVal('mykl', tabName, 'LevelAP', 'APCount', h.levelAP);
         gSetVal('mykl', tabName, 'BnsAP', 'APCount', h.bnsAP);
         gSetVal('mykl', tabName, 'TotalAP', 'APCount', h.totalAP);
@@ -289,6 +303,55 @@ function fKLSaveRCHeaderInfo(myUsedRCTabs, h) {
 } // End fKLSaveRCHeaderInfo
 
 
+
+
+/**
+ * Purpose: Verifies all checkboxes in the data rows of specified KL sheets, unchecking any that are invalid and checking any that are 'Free' and valid.
+ * Assumptions: The header object 'h' contains the character's current tier number (h.tierNum).
+ * Notes: This function enforces the rule that a higher-tier ability cannot be selected if the tier directly above it is not selected.
+ * Input:
+ * -- myUsedRCTabs - {string[]} An array of KL sheet names to process.
+ * -- tierNum - containing the character's tier.
+ * Output: Void (modifies the specified KL sheets directly).
+ */
+function fKLVerifyRCCheckedBoxes(myUsedRCTabs, tierNum) {
+
+    // Iterate through each provided sheet name.
+    myUsedRCTabs.forEach(tabName => {
+        const currentTab = getObjKL_KLTab(tabName, true);
+
+        const lastCol = currentTab.arr[0].length - 2; // Loop until the second to last column to safely access c+1
+
+        for (let r = currentTab.dataFirst_R; r <= currentTab.dataLast_R; r++) {
+            for (let c = 1; c <= lastCol; c++) {
+
+                // If there is a checkbox (true or false) in the current cell, verify it.
+                if (currentTab.arr[r][c] === true || currentTab.arr[r][c] === false) {
+
+                    const cardText = currentTab.arr[r][c + 1];
+                    if (!cardText) continue;
+
+                    const klCard = fGetKLCardObj(cardText, tabName, r, c + 1);
+
+                    // Check if the ability directly above this one in the same column is checked.
+                    const isDependentAboveUn_Checked = (currentTab.arr[r - 1][c] === false);
+
+                    // Verify checkbox is allowed based on character tier and dependency on the ability above it.
+                    if (klCard.tier > tierNum || isDependentAboveUn_Checked) {
+                        currentTab.arr[r][c] = false;
+                    } else if (klCard.apType === 'F') {
+                      
+                        // Automatically check 'Free' abilities (already know they are at or below PC's tier)
+                        currentTab.arr[r][c] = true;
+                    }
+                }
+            }
+        }
+
+        gSaveSheet('mykl', tabName);
+    });
+
+} // End fKLVerifyRCCheckedBoxes
 
 
 
