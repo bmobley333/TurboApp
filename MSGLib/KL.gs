@@ -158,6 +158,12 @@ function fKLCalcKLAndAP() {
     fKLSaveRCHeaderInfo(myUsedRCTabs, headerInfo);
     fKLAlertIfOverspentAP(headerInfo);
 
+    // Build array of known KLs and their best buff/version numbers.
+    const knownKLs = fKLBuildKnownKLs(myUsedRCTabs);
+
+    // Display the knownKLs to the user via a prompt
+    const knownKLsString = knownKLs.map(kl => `${kl.id} (Buff: ${kl.bestBuff}, Ver: ${kl.bestVer})`).join('\n');
+    SpreadsheetApp.getUi().alert(`Known KLs:\n${knownKLsString}`);
 
 } // End fKLCalcKLAndAP
 
@@ -406,6 +412,59 @@ function fKLAlertIfOverspentAP(h) {
 } // End fKLAlertIfOverspentAP
 
 
+
+
+/**
+ * Purpose: Builds a master array of unique, known KeyLine abilities from specified RC tabs, consolidating to the highest version and buff number for each.
+ * Assumptions: Assumes fGetKLCardObj and getObjKL_KLTab functions exist and work as expected.
+ * Notes: A KeyLine card represents a specific ability or trait.
+ * @param {string[]} myUsedRCTabs - An array of KeyLine RC sheet names (e.g., 'CIV', 'HBE') to process.
+ * @returns {object[]} An array of simplified objects, each containing an `id`, the maximum `buffNum`, and the maximum `verNum`.
+ */
+function fKLBuildKnownKLs(myUsedRCTabs) {
+    const knownKLs = [];
+
+    // Loop through each used RC tab.
+    myUsedRCTabs.forEach(tabName => {
+        const currentTab = getObjKL_KLTab(tabName, true);
+        const lastCol = currentTab.arr[0].length - 2; // Loop until the second to last column to safely access c+1
+
+        // Iterate through the data rows and columns to find checked boxes.
+        for (let r = currentTab.dataFirst_R; r <= currentTab.dataLast_R; r++) {
+            for (let c = 1; c <= lastCol; c++) {
+
+                // If a checkbox in the current cell is checked (TRUE).
+                if (currentTab.arr[r][c] === true) {
+                    const cardText = currentTab.arr[r][c + 1];
+                    if (!cardText) continue;
+
+                    // Create a card object from the cell text.
+                    const klCard = fGetKLCardObj(cardText, tabName, r, c + 1);
+                    const existingKL = knownKLs.find(kl => kl.id === klCard.id);
+
+                    if (existingKL) {
+                        // If it exists, update the appropriate buff or version number to the highest value found.
+                        if (klCard.buffVerType === 'b') {
+                            existingKL.bestBuff = Math.max(existingKL.bestBuff, klCard.buffVerNum);
+                        } else if (klCard.buffVerType === 'v') {
+                            existingKL.bestVer = Math.max(existingKL.bestVer, klCard.buffVerNum);
+                        }
+                    } else {
+                        // If it's a new ability, create the simplified object using ternary operators and add it.
+                        const newKL = {
+                            id: klCard.id,
+                            bestBuff: (klCard.buffVerType === 'b') ? klCard.buffVerNum : 0,
+                            bestVer: (klCard.buffVerType === 'v') ? klCard.buffVerNum : 0,
+                        };
+                        knownKLs.push(newKL);
+                    }
+                }
+            }
+        }
+    });
+
+    return knownKLs;
+} // End fKLBuildKnownKLs
 
 
 
