@@ -140,11 +140,11 @@ function fKLCalcKLAndAP() {
     const myRCTabName = fKLGetRCAndHideOtherRCTabs();
     const myUsedRCTabs = ['All', myRCTabName];
 
-    // Verify RC Checkboxes
+    // Verify RC Checkboxes and set KL Card Colors (green = know, yellow = can learn, red = can't learn)
     const tierString = gGetVal('mykl', 'All', 'Tier', 'Tier');
     const tierMatch = String(tierString).match(/\d+/);
     const tierNum = tierMatch ? parseInt(tierMatch[0], 10) : 0;
-    fKLVerifyRCCheckedBoxes(myUsedRCTabs,tierNum);
+    fKLVerifyRCCheckedBoxesSetColors(myUsedRCTabs,tierNum);
 
     // Calculate AP Spent
     const apSpent = {
@@ -305,27 +305,39 @@ function fKLSaveRCHeaderInfo(myUsedRCTabs, h) {
 
 
 
+
 /**
- * Purpose: Verifies all checkboxes in the data rows of specified KL sheets, unchecking any that are invalid and checking any that are 'Free' and valid.
- * Assumptions: The header object 'h' contains the character's current tier number (h.tierNum).
- * Notes: This function enforces the rule that a higher-tier ability cannot be selected if the tier directly above it is not selected.
+ * Purpose: Verifies all checkboxes in the data rows of specified KL sheets, unchecking any that are invalid, checking any that are 'Free' and valid, and setting cell colors to indicate ability status.
+ * Notes: Enforces the rule that a higher-tier ability cannot be selected if the tier directly below it is not selected.
  * Input:
  * -- myUsedRCTabs - {string[]} An array of KL sheet names to process.
- * -- tierNum - containing the character's tier.
+ * -- myTierNum - {number} The character's current tier number.
  * Output: Void (modifies the specified KL sheets directly).
  */
-function fKLVerifyRCCheckedBoxes(myUsedRCTabs, tierNum) {
+function fKLVerifyRCCheckedBoxesSetColors(myUsedRCTabs, myTierNum) {
 
+    const lightRed = '#fc8279';
+    const lightGreen = '#a6f04d';
+    const lightYellow = '#fce803';
+
+    //
     // Iterate through each provided sheet name.
     myUsedRCTabs.forEach(tabName => {
         const currentTab = getObjKL_KLTab(tabName, true);
+        const numRows = currentTab.arr.length;
+        const numCols = currentTab.arr[0].length;
 
-        const lastCol = currentTab.arr[0].length - 2; // Loop until the second to last column to safely access c+1
+        //
+        // Read all existing colors from the sheet first to preserve all original formatting.
+        const colorArr = currentTab.ref.getRange(1, 1, numRows, numCols).getBackgrounds();
+
+        const lastCol = numCols - 2; // Loop until the second to last column to safely access c+1
 
         for (let r = currentTab.dataFirst_R; r <= currentTab.dataLast_R; r++) {
             for (let c = 1; c <= lastCol; c++) {
 
-                // If there is a checkbox (true or false) in the current cell, verify it.
+                //
+                // If there is a checkbox in the current cell, verify it and set colors.
                 if (currentTab.arr[r][c] === true || currentTab.arr[r][c] === false) {
 
                     const cardText = currentTab.arr[r][c + 1];
@@ -333,25 +345,39 @@ function fKLVerifyRCCheckedBoxes(myUsedRCTabs, tierNum) {
 
                     const klCard = fGetKLCardObj(cardText, tabName, r, c + 1);
 
-                    // Check if the ability directly above this one in the same column is checked.
-                    const isDependentAboveUn_Checked = (currentTab.arr[r - 1][c] === false);
+                    //
+                    // Perform boundary-safe dependency checks.
+                    const isDependentAboveUn_Checked = (r > currentTab.dataFirst_R) && (currentTab.arr[r - 1][c] === false);
+                    // const isDependentTwoAboveUn_Checked = (r > currentTab.dataFirst_R + 1) && (currentTab.arr[r - 2][c] === false);
 
-                    // Verify checkbox is allowed based on character tier and dependency on the ability above it.
-                    if (klCard.tier > tierNum || isDependentAboveUn_Checked) {
+                    //
+                    // Verify and set the checkbox state based on tier and dependency rules.
+                    if (klCard.tier > myTierNum || isDependentAboveUn_Checked) {
                         currentTab.arr[r][c] = false;
                     } else if (klCard.apType === 'F') {
-                      
-                        // Automatically check 'Free' abilities (already know they are at or below PC's tier)
                         currentTab.arr[r][c] = true;
+                    }
+
+                    //
+                    // Determine and set the background color based on the ability's final state.
+                    if (klCard.tier > myTierNum || isDependentAboveUn_Checked) {
+                        colorArr[r][c + 1] = lightRed; // Illegal ability (too high tier or broken dependency chain)
+                    } else if (currentTab.arr[r][c] === true) {
+                        colorArr[r][c + 1] = lightGreen; // Legal and selected ability
+                    } else {
+                        colorArr[r][c + 1] = lightYellow; // Legal but not selected ability
                     }
                 }
             }
         }
 
+        //
+        // Save the updated values and the new colors in two separate, fast operations.
         gSaveSheet('mykl', tabName);
+        currentTab.ref.getRange(1, 1, numRows, numCols).setBackgrounds(colorArr);
     });
 
-} // End fKLVerifyRCCheckedBoxes
+} // End fKLVerifyRCCheckedBoxesSetColors
 
 
 
