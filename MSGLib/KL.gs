@@ -736,7 +736,7 @@ function fKLFillInDBVersionsStats(abil, r) {
             tryVerID = `${abilID}.v${tryVerNum}`;
         }
     }
-    
+
     // If a valid version was found (tryVerNum > 0), populate the stats
     if (tryVerNum > 0) {
         const db_R = gKeyR('db', 'Versions', tryVerID);
@@ -754,40 +754,47 @@ function fKLFillInDBVersionsStats(abil, r) {
 
 
 /**
- * Purpose: Copies all ability Name_IDs from the KL 'KnownAbilities' sheet to the CS 'List' sheet, resizing the destination sheet if necessary.
- * Assumptions: The 'KnownAbilities' sheet on 'mykl' and the 'List' sheet on 'mycs' exist and are properly formatted.
+ * Purpose: Copies all ability and gear Name_IDs from the KL 'KnownAbilities' and DB 'Gear' sheets to the CS 'List' sheet, resizing the destination sheet if necessary.
+ * Assumptions: The 'KnownAbilities' sheet on 'mykl', 'Gear' on 'db', and 'List' sheet on 'mycs' exist and are properly formatted.
  * Notes: This function will overwrite the existing ability list on the Character Sheet.
  * @returns {void}
  */
 function fKLCopyKnownAbilitiesToCS() {
     const kl = getObjKnownAbilities(true);
     let cs = getObjCSList(true);
+    const gear = getObjDBGear(true);
+
+    // Extract the list of gear Name_IDs from the DB 'Gear' sheet, filtering out all armor and weapons (as these will be in listOfAbilName_ID).
+    const listOfGearName_ID = gear.arr
+        .slice(gear.dataFirst_R, gear.dataLast_R + 1)
+        .map(row => row[gear.nameID_C])
+        .filter(nameID => nameID && !nameID.startsWith('Armor:') && !nameID.startsWith('Wpn:'));
+
+    // Extract the list of ability Name_IDs from the KL 'KnownAbilities' sheet.
+    const listOfAbilName_ID = kl.arr.slice(kl.dataFirst_R, kl.dataLast_R + 1).map(row => row[kl.nameID_C]);
+
+    // Combine gear and abilities, remove duplicates and blanks, then sort alphabetically.
+    const combinedList = [...listOfGearName_ID, ...listOfAbilName_ID];
+    const listOfAllName_ID = [...new Set(combinedList)].filter(Boolean).sort();
+
+    // Determine if the CS List sheet needs more rows to accommodate all items.
+    const numTotalItems = listOfAllName_ID.length;
+    const numCSAbils = (cs.dataLast_R - cs.dataFirst_R + 1);
 
     // Clear the existing ability list on the CS List sheet.
     gFillArraySection(cs.arr, cs.dataFirst_R, cs.dataLast_R, cs.abilityNameID_C, cs.abilityNameID_C, '');
 
-    // Determine if the CS List sheet needs more rows to accommodate all known abilities.
-    const numKLAbils = (kl.dataLast_R - kl.dataFirst_R + 1);
-    const numCSAbils = (cs.dataLast_R - cs.dataFirst_R + 1);
-
-    if (numKLAbils > numCSAbils) {
-        const rowsToAdd = numKLAbils - numCSAbils;
+    if (numTotalItems > numCSAbils) {
+        const rowsToAdd = numTotalItems - numCSAbils;
         cs.ref.insertRowsAfter(cs.ref.getMaxRows(), rowsToAdd);
         cs = getObjCSList(true); // Recache the sheet object after resizing.
     }
 
-    // Extract, sort, and filter the list of ability Name_IDs from the KnownAbilities sheet.
-    const listOfAbilName_ID = kl.arr
-        .slice(kl.dataFirst_R, kl.dataLast_R + 1)
-        .map(row => row[kl.nameID_C])
-        .filter(nameID => nameID) // Remove any blank or null entries before sorting.
-        .sort();
-
-    // Populate the CS List array with the sorted list of abilities.
-    for (let i = 0; i < listOfAbilName_ID.length; i++) {
+    // Populate the CS List array with the sorted list of all items.
+    for (let i = 0; i < listOfAllName_ID.length; i++) {
         const targetRow = cs.dataFirst_R + i;
         if (targetRow <= cs.dataLast_R) {
-            cs.arr[targetRow][cs.abilityNameID_C] = listOfAbilName_ID[i];
+            cs.arr[targetRow][cs.abilityNameID_C] = listOfAllName_ID[i];
         }
     }
 
