@@ -280,6 +280,12 @@ function getObjKnownAbilities(forceLoad = false) {
     sk2PLAGHE_C: gHeaderC(ss, sheetName, 'sk2PLAGHE'),  
     finalSk1_C: gHeaderC(ss, sheetName, 'FinalSk1'),
     finalSk2_C: gHeaderC(ss, sheetName, 'FinalSk2'),  
+    act_C: gHeaderC(ss, sheetName,'Act'),
+    dur_C: gHeaderC(ss, sheetName,'Dur'),
+    rng_C: gHeaderC(ss, sheetName,'Rng'),
+    meta_C: gHeaderC(ss, sheetName,'Meta'),
+    uses_C: gHeaderC(ss, sheetName,'Uses'),
+    regain_C: gHeaderC(ss, sheetName,'Regain'),
   });
 
   // Build any necessary child keys of g

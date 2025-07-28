@@ -169,6 +169,8 @@ function fKLCalcKLAndAP() {
     // Copy Known Aility list to CS <List>
     fKLCopyKnownAbilitiesToCS();
 
+    SpreadsheetApp.getUi().alert('Character Sheet Reminder', 'Reminder: To see these changes, you will need to refresh the <Game> table on your Character Sheet.', SpreadsheetApp.getUi().ButtonSet.OK);
+
 
 } // End fKLCalcKLAndAP
 
@@ -632,8 +634,11 @@ function fKLBuildKnownAbilitiesSheet(extractedKLs) {
             abil.arr[r][abil.sk2PLAGHE_C] = gGetVal('db', 'Abilities', kl.id, rcID_C + 1) || '~';
 
             fKLCalcFinalSkills(abil, r);
+            // Fills in Act, Dur, Rng, Meta, Uses, Regain to KL 'KnownAbilities' from DB 'Versions'
+            fKLFillInDBVersionsStats(abil,r);
         }
     }
+
 
     // Save the newly populated array back to the sheet.
     gSaveSheet('mykl', 'knownabilities');
@@ -706,6 +711,44 @@ function fKLCalcFinalSkills(abil, r) {
 } // End fKLCalcFinalSkills
 
 
+
+
+/**
+ * Purpose: Fills in the Act, Dur, Rng, Meta, Uses, and Regain stats for an ability based on its version number.
+ * Assumptions: The ability's version is available. It will find the highest valid version stats from the DB that is less than or equal to the ability's current version.
+ * Notes: If no valid version is found in the database, the stats fields will not be populated.
+ * @param {object} abil - The entire MyAbilities sheet object from getObjKLMyAbilities.
+ * @param {number} r - The 0-indexed row of the ability to update in the abil.arr.
+ * @returns {void}
+ */
+function fKLFillInDBVersionsStats(abil, r) {
+    const dbVer = getObjDBVersions();
+    const abilRow = abil.arr[r];
+
+    const abilID = abilRow[abil.id_C];
+    let tryVerNum = abilRow[abil.ver_C] || 1; // Default to 1 if no version is set
+    let tryVerID = `${abilID}.v${tryVerNum}`;
+
+    // Decrement the version number until a valid entry is found in DB 'Versions'
+    while (tryVerNum > 0 && !gKeyR('db', 'Versions', tryVerID)) { // Note can't use gTestID as this is a verID not an ID
+        tryVerNum--;
+        if (tryVerNum > 0) {
+            tryVerID = `${abilID}.v${tryVerNum}`;
+        }
+    }
+    
+    // If a valid version was found (tryVerNum > 0), populate the stats
+    if (tryVerNum > 0) {
+        const db_R = gKeyR('db', 'Versions', tryVerID);
+        abilRow[abil.act_C] = dbVer.arr[db_R][dbVer.act_C];
+        abilRow[abil.dur_C] = dbVer.arr[db_R][dbVer.dur_C];
+        abilRow[abil.rng_C] = dbVer.arr[db_R][dbVer.rng_C];
+        abilRow[abil.meta_C] = dbVer.arr[db_R][dbVer.meta_C];
+        abilRow[abil.uses_C] = dbVer.arr[db_R][dbVer.uses_C];
+        abilRow[abil.regain_C] = dbVer.arr[db_R][dbVer.regain_C];
+    }
+
+} // End fKLFillInDBVersionsStats
 
 
 

@@ -387,141 +387,201 @@ function fCSResetAbilOn() {
 
 
 
-// fCSRefreshAbilities //////////////////////////////////////////////////////////////////////////////////////////////////
-// Purpose: Refreshes <Game> abilities and gear tables
+/**
+ * Purpose: Refreshes the <Game> sheet's abilities and gear tables using the KL <KnownAbilities> sheet as the source for owned abilities.
+ * Assumptions: The user's KL <KnownAbilities> sheet is up-to-date. Dependent calculator functions (fCSCalcVitMax, etc.) exist.
+ * Notes: This is a full refresh that recalculates totals and applies permanent morphs.
+ * @returns {void}
+ */
 function fCSRefreshAbilities() {
+    let objGame = getObjCSGame(true);
+    let klKnownAbilities = getObjKnownAbilities(true);
+    let dbAbil = getObjDBAbilities(true);
+    let dbGear = getObjDBGear(true);
 
-  let objGame = getObjCSGame();
-  let klMyAbil = getObjKLMyAbilities();
-  let dbAbil = getObjDBAbilities();
-  let dbGear = getObjDBGear();
-
-  const total = {
-    sumAP: 0,
-    sumEnc: 0
-  }
-
-  // Search every Ability on <Game> within in the specified range
-  for (let r = objGame.dataFirst_R; r <= objGame.gearTblEnd_R; r++) {
-
-    // Skip rows between abil and gear tables
-    if (r > objGame.abilTblEnd_R && r < objGame.gearTblStart_R) {
-      r = objGame.gearTblStart_R - 1;
-      continue;
-    }
-
-    const abil = {
-      row: objGame.arr[r],
-      isElem: false,
-      isMyAbil: false,
-      isGear: false,
-      klMyAbil_R: -1,
-      dbAbil_R: -1,
-      dbGear_R: -1
+    const total = {
+        sumAP: 0,
+        sumEnc: 0
     };
 
-    // set elemID to false if not in KL's <MyAbilities> or DB's <Gear> otherwise store the element's ID - note can be in both such as a known artifact
-    let elemID = abil.row[objGame.abilNameID_C];
-    abil.isElem = gTestID('db', 'Elements', elemID);
-    let testMyID = gTestID('mykl', 'MyAbilities', elemID);
-    if (testMyID) {
-      abil.klMyAbil_R = gKeyR('mykl', 'MyAbilities', testMyID);
-      const learned = klMyAbil.arr[abil.klMyAbil_R][klMyAbil.learn_C];
-      if (learned) {
-        abil.isMyAbil = true;
-        abil.dbAbil_R = gKeyR('db', 'Abilities', testMyID);
-      }
+    // Search every Ability row on <Game> within the specified range.
+    for (let r = objGame.dataFirst_R; r <= objGame.gearTblEnd_R; r++) {
+
+        // Skip the empty rows between the ability and gear tables.
+        if (r > objGame.abilTblEnd_R && r < objGame.gearTblStart_R) {
+            r = objGame.gearTblStart_R - 1;
+            continue;
+        }
+
+        const abil = {
+            row: objGame.arr[r],
+            isElem: false,
+            isMyAbil: false,
+            isGear: false,
+            klKnownAbilR: -1,
+            dbAbil_R: -1,
+            dbGear_R: -1
+        };
+
+        // Determine if the item is a known ability, gear, or both.
+        let elemID = abil.row[objGame.abilNameID_C];
+        abil.isElem = gTestID('db', 'Elements', elemID);
+
+        let testMyID = gTestID('mykl', 'KnownAbilities', elemID);
+        if (testMyID) {
+            abil.klKnownAbilR = gKeyR('mykl', 'KnownAbilities', testMyID);
+            abil.isMyAbil = true;
+            abil.dbAbil_R = gKeyR('db', 'Abilities', testMyID);
+        }
+
+        testMyID = gTestID('db', 'Gear', elemID);
+        if (testMyID) {
+            abil.isGear = true;
+            abil.dbGear_R = gKeyR('db', 'Gear', testMyID);
+        }
+
+        // Fill or clear the row based on whether it's a known item.
+        if (abil.isMyAbil || abil.isGear) {
+            fFillGameAbilAndGearRow(r, objGame, klKnownAbilities, dbAbil, dbGear, total, abil);
+        } else {
+            fClearGameAbilAndGearRow(objGame, r, abil.isElem);
+        }
     }
 
-    testMyID = gTestID('db', 'Gear', elemID);
-    if (testMyID) {
-      abil.isGear = true;
-      abil.dbGear_R = gKeyR('db', 'Gear', testMyID);
-    }
+    // Save Gear Totals (Enc, AP).
+    objGame.arr[objGame.possEncTot_R][objGame.possEncTot_C] = total.sumEnc;
+    objGame.arr[objGame.possAPTot_R][objGame.possGrandAPTot_C] = total.sumAP;
 
-    if (abil.isMyAbil || abil.isGear) {
-      fFillGameAbilAndGearRow(r, objGame, klMyAbil, dbAbil, dbGear, total, abil);
-    } else {
-      fClearGameAbilAndGearRow(objGame, r,abil.isElem);
-    }
-  }
+    // Recalculate character stats based on the new gear and ability configuration.
+    fCSCalcVitMax();
+    fCSCalcMR(objGame, total.sumEnc);
+    fCSCalcMaxSocketedItems(objGame);
 
-  // Save Gear Totals (Enc, AP)
-  objGame.arr[objGame.possEncTot_R][objGame.possEncTot_C] = total.sumEnc;
-  objGame.arr[objGame.possAPTot_R][objGame.possGrandAPTot_C] = total.sumAP;
+    // Save the updated ability and gear sections back to the <Game> sheet.
+    gSaveArraySectionToSheet(objGame.ref, objGame.arr, objGame.dataFirst_R, objGame.dataLast_R, objGame.abilTableFirst_C, objGame.last_C);
 
-  // Calculates Max Vit (self saves to <Game>), MR, MaxSockets
-  fCSCalcVitMax();
-  fCSCalcMR(objGame, total.sumEnc); // This uses total.sumEnc, assuming this is the correct argument.
-  fCSCalcMaxSocketedItems(objGame);
+    // Apply any permanent morph conditions.
+    fCSRefreshPermMorph();
 
-  // Save the updated Abilities back to <Game>
-  gSaveArraySectionToSheet(objGame.ref, objGame.arr, objGame.dataFirst_R, objGame.dataLast_R, objGame.abilTableFirst_C, objGame.last_C);
-
-  // Apply Conditions
-  fCSRefreshPermMorph();
-
-} // end fCSRefreshAbilities
+} // End fCSRefreshAbilities
 
 
 
 
+/**
+ * Purpose: Fills a row in the <Game> sheet's ability and gear tables with data from source sheets.
+ * Assumptions: The 'abil' object has been pre-validated to be either a known ability, gear, or both.
+ * Notes: This version sources ability data from the <KnownAbilities> sheet.
+ * @param {number} r - The current row index in the objGame.arr.
+ * @param {object} objGame - The game sheet object from getObjCSGame.
+ * @param {object} klKnownAbilities - The known abilities object from getObjKnownAbilities.
+ * @param {object} dbAbil - The abilities database object from getObjDBAbilities.
+ * @param {object} dbGear - The gear database object from getObjDBGear.
+ * @param {object} total - An object tracking the sum of AP and Encumbrance.
+ * @param {object} abil - An object containing details about the current ability/gear item.
+ * @returns {void}
+ */
+function fFillGameAbilAndGearRow(r, objGame, klKnownAbilities, dbAbil, dbGear, total, abil) {
+    const gameRow = abil.row;
+
+    // Populate Ability-specific columns
+    gameRow[objGame.sk1Typ_C] = (abil.isMyAbil) ? dbAbil.arr[abil.dbAbil_R][dbAbil.sk1Typ_C] : '';
+    gameRow[objGame.sk1_C] = (abil.isMyAbil) ? klKnownAbilities.arr[abil.klKnownAbilR][klKnownAbilities.finalSk1_C] : '';
+    gameRow[objGame.abilNameID_C] = (r === objGame.nishAtr_R) ?
+        'Nish                                                                                  _k97cmz' :
+        (abil.isMyAbil) ? klKnownAbilities.arr[abil.klKnownAbilR][klKnownAbilities.nameID_C] : dbGear.arr[abil.dbGear_R][dbGear.nameID_C];
+    gameRow[objGame.sk2_C] = (abil.isMyAbil) ? klKnownAbilities.arr[abil.klKnownAbilR][klKnownAbilities.finalSk2_C] : '';
+    gameRow[objGame.sk2Typ_C] = (abil.isMyAbil) ? dbAbil.arr[abil.dbAbil_R][dbAbil.sk2Typ_C] : '';
+    gameRow[objGame.ver_C] = (abil.isMyAbil) ? `v${klKnownAbilities.arr[abil.klKnownAbilR][klKnownAbilities.ver_C]}` : '';
+    gameRow[objGame.notes_C] = (abil.isMyAbil) ? dbAbil.arr[abil.dbAbil_R][dbAbil.notes_C] : dbGear.arr[abil.dbGear_R][dbGear.notes_C];
+    gameRow[objGame.pic_C] = (abil.isMyAbil) ? dbAbil.arr[abil.dbAbil_R][dbAbil.pic_C] : dbGear.arr[abil.dbGear_R][dbGear.pic_C];
+
+    gameRow[objGame.act_C] = (abil.isMyAbil) ? klKnownAbilities.arr[abil.klKnownAbilR][klKnownAbilities.act_C] : '';
+    gameRow[objGame.dur_C] = (abil.isMyAbil) ? klKnownAbilities.arr[abil.klKnownAbilR][klKnownAbilities.dur_C] : '';
+    gameRow[objGame.rng_C] = (abil.isMyAbil) ? klKnownAbilities.arr[abil.klKnownAbilR][klKnownAbilities.rng_C] : '';
+    gameRow[objGame.meta_C] = (abil.isMyAbil) ? klKnownAbilities.arr[abil.klKnownAbilR][klKnownAbilities.meta_C] : '';
+    gameRow[objGame.uses_C] = (abil.isMyAbil) ? klKnownAbilities.arr[abil.klKnownAbilR][klKnownAbilities.uses_C] : '';
+    gameRow[objGame.regain_C] = (abil.isMyAbil) ? klKnownAbilities.arr[abil.klKnownAbilR][klKnownAbilities.regain_C] : '';
+
+    // Populate Gear-specific columns
+    const numOfGear = (!abil.isGear) ? '' : (gameRow[objGame.possNum_C] === '') ? 1 : gameRow[objGame.possNum_C];
+    gameRow[objGame.possNum_C] = numOfGear;
+    gameRow[objGame.possName_C] = (abil.isGear) ? gSimpleName(gameRow[objGame.abilNameID_C]) : '';
+    if (!abil.isGear) gameRow[objGame.possWorn_C] = false;
+
+    gameRow[objGame.possEnc_C] = (!abil.isGear) ?
+        '' :
+        (gameRow[objGame.possWorn_C]) ?
+        dbGear.arr[abil.dbGear_R][dbGear.wornEnc_C] * numOfGear :
+        dbGear.arr[abil.dbGear_R][dbGear.itemEnc_C] * numOfGear;
+
+    total.sumEnc += +gameRow[objGame.possEnc_C];
+
+    const percOffMult = (!abil.isGear) ? 1 : (gameRow[objGame.possPerOff_C] === '') ? 1 : (100 - gameRow[objGame.possPerOff_C]) / 100;
+    const dbGearCrEa = (!abil.isGear) ? '' : dbGear.arr[abil.dbGear_R][dbGear.itemCR_C];
+    gameRow[objGame.possCrEa_C] = (!abil.isGear) ? '' : dbGearCrEa;
+    gameRow[objGame.possCrTot_C] = (!abil.isGear) ? '' : (isNaN(Number(dbGearCrEa))) ? dbGearCrEa : dbGearCrEa * percOffMult;
+    gameRow[objGame.possIsArtifact_C] = (!abil.isGear) ? false : dbGear.arr[abil.dbGear_R][dbGear.isArtifact_C];
+    gameRow[objGame.possAPEa_C] = (!abil.isGear) ? '' : dbGear.arr[abil.dbGear_R][dbGear.apCost_C];
+    gameRow[objGame.possAPTot_C] = (!abil.isGear) ? '' : numOfGear * dbGear.arr[abil.dbGear_R][dbGear.apCost_C];
+
+    total.sumAP += +gameRow[objGame.possAPTot_C];
+
+} // End fFillGameAbilAndGearRow
 
 
-// fFillGameAbilAndGearRow //////////////////////////////////////////////////////////////////////////////////////////////////
-// Purpose -> Fills the <Game> ability and gear tables appropriately
-// Purpose -> Assumes abil is either isMyAbil or isGear (or both) BUT not neither
-function fFillGameAbilAndGearRow(r, objGame, klMyAbil, dbAbil, dbGear, total, abil) {
 
-  if (!abil.isMyAbil) abil.row[objGame.morph1_C] = ',';
-  abil.row[objGame.sk1Typ_C] = (abil.isMyAbil) ? dbAbil.arr[abil.dbAbil_R][dbAbil.sk1Typ_C] : '';
-  abil.row[objGame.sk1_C] = (abil.isMyAbil) ? klMyAbil.arr[abil.klMyAbil_R][klMyAbil.trainedSk1_C] : '';
-  abil.row[objGame.abilNameID_C] = (r === objGame.nishAtr_R) 
-    ? 'Nish                                                                                  _k97cmz' 
-    : (abil.isMyAbil) ? dbAbil.arr[abil.dbAbil_R][dbAbil.nameID_C] : dbGear.arr[abil.dbGear_R][dbGear.nameID_C];
-  if (!abil.isMyAbil) abil.row[objGame.condition_C] = '';
-  abil.row[objGame.sk2_C] = (abil.isMyAbil) ? klMyAbil.arr[abil.klMyAbil_R][klMyAbil.trainedSk2_C] : '';
-  abil.row[objGame.sk2Typ_C] = (abil.isMyAbil) ? dbAbil.arr[abil.dbAbil_R][dbAbil.sk2Typ_C] : '';
-  if (!abil.isMyAbil) abil.row[objGame.morph2_C] = ',';
-  abil.row[objGame.ver_C] = (abil.isMyAbil) ? `v${klMyAbil.arr[abil.klMyAbil_R][klMyAbil.ver_C]}` : '';
-  abil.row[objGame.notes_C] = (abil.isMyAbil) ? dbAbil.arr[abil.dbAbil_R][dbAbil.notes_C] : dbGear.arr[abil.dbGear_R][dbGear.notes_C];
-  abil.row[objGame.pic_C] = (abil.isMyAbil) ? dbAbil.arr[abil.dbAbil_R][dbAbil.pic_C] : dbGear.arr[abil.dbGear_R][dbGear.pic_C];
-  abil.row[objGame.act_C] = (abil.isMyAbil) ? klMyAbil.arr[abil.klMyAbil_R][klMyAbil.act_C] : '';
-  abil.row[objGame.dur_C] = (abil.isMyAbil) ? klMyAbil.arr[abil.klMyAbil_R][klMyAbil.dur_C] : '';
-  abil.row[objGame.rng_C] = (abil.isMyAbil) ? klMyAbil.arr[abil.klMyAbil_R][klMyAbil.rng_C] : '';
-  abil.row[objGame.meta_C] = (abil.isMyAbil) ? klMyAbil.arr[abil.klMyAbil_R][klMyAbil.meta_C] : '';
 
-  // Ensure existingUses and maxUses are numbers
-  const existingUses = abil.row[objGame.uses_C];
-  const maxUses = (abil.isMyAbil) ? klMyAbil.arr[abil.klMyAbil_R][klMyAbil.uses_C] : '';
-  abil.row[objGame.uses_C] = (existingUses === '') ? maxUses : existingUses;
-  abil.row[objGame.regain_C] = (abil.isMyAbil) ? klMyAbil.arr[abil.klMyAbil_R][klMyAbil.regain_C] : '';
+/**
+ * Purpose: Clears all ability and gear columns for a given row on the <Game> sheet.
+ * Assumptions: This function is called when a row does not correspond to a known ability or gear item.
+ * Notes: Differentiates between clearing an invalid 'Element' row completely versus a custom user-entered ability.
+ * @param {object} objGame - The game sheet object from getObjCSGame.
+ * @param {number} r - The row index to clear.
+ * @param {boolean} isElem - A boolean indicating if the row corresponds to a (non-owned) item from the Elements database.
+ * @returns {void}
+ */
+function fClearGameAbilAndGearRow(objGame, r, isElem) {
+    const abilRow = objGame.arr[r];
+    const clearAll = isElem || abilRow[objGame.abilNameID_C] === '';
 
-  // Fill Gear Enc Table
-  let numOfGear = (!abil.isGear) ? '' : (abil.row[objGame.possNum_C] === '') ? 1 : abil.row[objGame.possNum_C];
-  abil.row[objGame.possNum_C] = numOfGear;
-  abil.row[objGame.possName_C] = (abil.isGear) ? gSimpleName(abil.row[objGame.abilNameID_C]) : '';
-  if (!abil.isGear) abil.row[objGame.possWorn_C] = false;
+    // Clear Ability Table section
+    abilRow[objGame.permMorph1_C] = '';
+    if (clearAll) abilRow[objGame.morph1_C] = ',';
+    if (clearAll) abilRow[objGame.sk1Typ_C] = '';
+    if (clearAll) abilRow[objGame.sk1_C] = '';
+    if (clearAll) abilRow[objGame.on_C] = '.';
+    abilRow[objGame.sk1ChkBox_C] = false;
+    if (clearAll) abilRow[objGame.abilNameID_C] = '';
+    abilRow[objGame.condition_C] = '';
+    abilRow[objGame.sk2ChkBox_C] = false;
+    if (clearAll) abilRow[objGame.sk2_C] = '';
+    if (clearAll) abilRow[objGame.sk2Typ_C] = '';
+    if (clearAll) abilRow[objGame.morph2_C] = ',';
+    abilRow[objGame.permMorph2_C] = '';
+    abilRow[objGame.ver_C] = '';
+    abilRow[objGame.notes_C] = '';
+    abilRow[objGame.pic_C] = '';
+    if (clearAll) abilRow[objGame.act_C] = '';
+    if (clearAll) abilRow[objGame.dur_C] = '';
+    if (clearAll) abilRow[objGame.rng_C] = '';
+    if (clearAll) abilRow[objGame.meta_C] = '';
+    if (clearAll) abilRow[objGame.uses_C] = '';
+    if (clearAll) abilRow[objGame.regain_C] = '';
 
-  abil.row[objGame.possEnc_C] = (!abil.isGear) 
-    ? '' 
-    : (abil.row[objGame.possWorn_C]) 
-      ? dbGear.arr[abil.dbGear_R][dbGear.wornEnc_C] * numOfGear 
-      : dbGear.arr[abil.dbGear_R][dbGear.itemEnc_C] * numOfGear;
+    // Clear Gear Table section
+    abilRow[objGame.possNum_C] = '';
+    abilRow[objGame.possName_C] = '';
+    abilRow[objGame.possWorn_C] = false;
+    abilRow[objGame.possEnc_C] = '';
+    abilRow[objGame.possCrEa_C] = '';
+    abilRow[objGame.possPerOff_C] = '';
+    abilRow[objGame.possCrTot_C] = '';
+    abilRow[objGame.possIsArtifact_C] = false;
+    abilRow[objGame.possAPEa_C] = '';
+    abilRow[objGame.possAPTot_C] = '';
 
-  total.sumEnc += +abil.row[objGame.possEnc_C];
-
-  const percOffMult = (!abil.isGear) ? 1 : (abil.row[objGame.possPerOff_C] === '') ? 1 : (100 - abil.row[objGame.possPerOff_C]) / 100;
-  const dbGearCrEa = (!abil.isGear) ? '' : dbGear.arr[abil.dbGear_R][dbGear.itemCR_C];
-  abil.row[objGame.possCrEa_C] = (!abil.isGear) ? '' : dbGearCrEa;
-  abil.row[objGame.possCrTot_C] = (!abil.isGear) ? '' : (isNaN(Number(dbGearCrEa))) ? dbGearCrEa : dbGearCrEa * percOffMult;
-  abil.row[objGame.possIsArtifact_C] = (!abil.isGear) ? false : dbGear.arr[abil.dbGear_R][dbGear.isArtifact_C];
-  abil.row[objGame.possAPEa_C] = (!abil.isGear) ? '' : dbGear.arr[abil.dbGear_R][dbGear.apCost_C];
-  abil.row[objGame.possAPTot_C] = (!abil.isGear) ? '' : numOfGear * dbGear.arr[abil.dbGear_R][dbGear.apCost_C];
-
-  total.sumAP += +abil.row[objGame.possAPTot_C];
-
-} // end fFillGameAbilAndGearRow
+} // end fClearGameAbilAndGearRow
 
 
 
