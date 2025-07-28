@@ -273,6 +273,7 @@ function getObjKnownAbilities(forceLoad = false) {
     nameID_C: gHeaderC(ss, sheetName, 'Name_ID'), 
     ver_C: gHeaderC(ss, sheetName, 'Ver'),
     buff_C: gHeaderC(ss, sheetName, 'Buff'),  
+    notes_C: gHeaderC(ss, sheetName, 'Notes'),  
     base1_C: gHeaderC(ss, sheetName, 'Base1'),  
     base2_C: gHeaderC(ss, sheetName, 'Base2'),
     sk1PLAGHE_C: gHeaderC(ss, sheetName, 'sk1PLAGHE'),  

@@ -166,6 +166,10 @@ function fKLCalcKLAndAP() {
     // Build the KnownAbilities sheet from the extracted KLs.
     fKLBuildKnownAbilitiesSheet(extractedKLs);
 
+    // Copy Known Aility list to CS <List>
+    fKLCopyKnownAbilitiesToCS();
+
+
 } // End fKLCalcKLAndAP
 
 
@@ -238,7 +242,7 @@ function fKLBuildHeaderObject(apSpent) {
     //
     // First, calculate all the necessary values in sequence.
     const myLevel = gCharLvl();
-    const levelAP = 10 * myLevel;
+    const levelAP = 10 * myLevel + 10;
     const tierString = gGetVal('mykl', 'All', 'Tier', 'Tier');
     const tierMatch = String(tierString).match(/\d+/);
     const tierNum = tierMatch ? parseInt(tierMatch[0], 10) : 0;
@@ -582,80 +586,6 @@ function fKLFlattenDuplicates(allIndividualKLs) {
 
 
 /**
- * Purpose: Resizes and populates the 'KnownAbilities' sheet, then filters out and deletes any abilities that have no applicable PLG skills.
- * Assumptions: The input array has already been fully expanded and consolidated.
- * Notes: This function overwrites existing data. The final step removes abilities where both skill slots are marked as non-applicable ('~') for the current RaceClass.
- * @param {object[]} extractedKLs - The final array of unique, individual KL objects.
- * @returns {void}
- */
-function fKLBuildKnownAbilitiesSheet(extractedKLs) {
-    let abil = getObjKnownAbilities(true);
-    const numAbilities = extractedKLs.length;
-
-    // Adjust the number of rows on the sheet to exactly fit the new data.
-    const newRowCount = abil.dataFirst_R + numAbilities;
-    const currentRowCount = abil.ref.getMaxRows();
-
-    if (newRowCount > currentRowCount) {
-        abil.ref.insertRowsAfter(currentRowCount, newRowCount - currentRowCount);
-    } else if (newRowCount < currentRowCount) {
-        abil.ref.deleteRows(newRowCount + 1, currentRowCount - newRowCount);
-    }
-
-    // Reload the sheet object to get a correctly sized array, then clear the data portion.
-    abil = getObjKnownAbilities(true);
-    if (abil.dataLast_R >= abil.dataFirst_R) {
-        gFillArraySection(abil.arr, abil.dataFirst_R, abil.dataLast_R, 0, abil.arr[0].length - 1, '');
-    }
-
-    // Populate the KnownAbilities array with the extracted KLs.
-    const rcID = gGetIDFromString(gGetVal('mykl', 'All', 'RC', 'RC'));
-    const rcID_C = gHeaderC('db', 'Abilities', rcID);
-
-    for (let i = 0; i < numAbilities; i++) {
-        const r = abil.dataFirst_R + i;
-        const kl = extractedKLs[i];
-        abil.arr[r][abil.id_C] = kl.id;
-        abil.arr[r][abil.nameID_C] = gGetVal('db', 'Elements', kl.id, 'Name_ID');
-        abil.arr[r][abil.ver_C] = kl.bestVer;
-        abil.arr[r][abil.buff_C] = kl.bestBuff;
-
-        if (gTestID('db', 'Abilities', kl.id)) {
-            abil.arr[r][abil.base1_C] = gGetVal('db', 'Abilities', kl.id, 'Base1');
-            abil.arr[r][abil.base2_C] = gGetVal('db', 'Abilities', kl.id, 'Base2');
-            abil.arr[r][abil.sk1PLAGHE_C] = gGetVal('db', 'Abilities', kl.id, rcID_C) || '~';
-            abil.arr[r][abil.sk2PLAGHE_C] = gGetVal('db', 'Abilities', kl.id, rcID_C + 1) || '~';
-
-            fKLCalcFinalSkills(abil.arr,r);
-        }
-    }
-
-    // Save the newly populated array back to the sheet.
-    gSaveSheet('mykl', 'knownabilities');
-
-    // Get a fresh reference to the data just saved to the sheet.
-    const finalAbil = getObjKnownAbilities(true);
-    const sheetValues = finalAbil.arr;
-
-    // Loop backwards from the last data row to the first.
-    for (let i = finalAbil.dataLast_R; i >= finalAbil.dataFirst_R; i--) {
-        const row = sheetValues[i];
-        if (row[finalAbil.sk1PLAGHE_C] === '~' && row[finalAbil.sk2PLAGHE_C] === '~') {
-            // Delete the corresponding row from the sheet (i + 1 converts 0-based index to 1-based row number).
-            finalAbil.ref.deleteRow(i + 1);
-        }
-    }
-
-    // Final load to capture the final KnownAbilities structure and data after the deletions
-    getObjKnownAbilities(true);
-
-} // End fKLBuildKnownAbilitiesSheet
-
-
-
-
-
-/**
  * Purpose: Resizes and populates the 'KnownAbilities' sheet, then filters out and deletes any abilities that have no applicable RC skills.
  * Assumptions: The input array has already been fully expanded and consolidated.
  * Notes: This function overwrites existing data. The final step removes abilities where both skill slots are marked as non-applicable ('~') for the current RaceClass.
@@ -693,6 +623,7 @@ function fKLBuildKnownAbilitiesSheet(extractedKLs) {
         abil.arr[r][abil.nameID_C] = gGetVal('db', 'Elements', kl.id, 'Name_ID');
         abil.arr[r][abil.ver_C] = kl.bestVer;
         abil.arr[r][abil.buff_C] = kl.bestBuff;
+        abil.arr[r][abil.notes_C] = gGetVal('db', 'Elements', kl.id, 'Notes');
 
         if (gTestID('db', 'Abilities', kl.id)) {
             abil.arr[r][abil.base1_C] = gGetVal('db', 'Abilities', kl.id, 'Base1');
@@ -773,6 +704,56 @@ function fKLCalcFinalSkills(abil, r) {
         row[abil.finalSk2_C] = Math.round(combine2[0] + combine2[1] / 2 + combine2[2] / 4);
     }
 } // End fKLCalcFinalSkills
+
+
+
+
+
+
+/**
+ * Purpose: Copies all ability Name_IDs from the KL 'KnownAbilities' sheet to the CS 'List' sheet, resizing the destination sheet if necessary.
+ * Assumptions: The 'KnownAbilities' sheet on 'mykl' and the 'List' sheet on 'mycs' exist and are properly formatted.
+ * Notes: This function will overwrite the existing ability list on the Character Sheet.
+ * @returns {void}
+ */
+function fKLCopyKnownAbilitiesToCS() {
+    const kl = getObjKnownAbilities(true);
+    let cs = getObjCSList(true);
+
+    // Clear the existing ability list on the CS List sheet.
+    gFillArraySection(cs.arr, cs.dataFirst_R, cs.dataLast_R, cs.abilityNameID_C, cs.abilityNameID_C, '');
+
+    // Determine if the CS List sheet needs more rows to accommodate all known abilities.
+    const numKLAbils = (kl.dataLast_R - kl.dataFirst_R + 1);
+    const numCSAbils = (cs.dataLast_R - cs.dataFirst_R + 1);
+
+    if (numKLAbils > numCSAbils) {
+        const rowsToAdd = numKLAbils - numCSAbils;
+        cs.ref.insertRowsAfter(cs.ref.getMaxRows(), rowsToAdd);
+        cs = getObjCSList(true); // Recache the sheet object after resizing.
+    }
+
+    // Extract, sort, and filter the list of ability Name_IDs from the KnownAbilities sheet.
+    const listOfAbilName_ID = kl.arr
+        .slice(kl.dataFirst_R, kl.dataLast_R + 1)
+        .map(row => row[kl.nameID_C])
+        .filter(nameID => nameID) // Remove any blank or null entries before sorting.
+        .sort();
+
+    // Populate the CS List array with the sorted list of abilities.
+    for (let i = 0; i < listOfAbilName_ID.length; i++) {
+        const targetRow = cs.dataFirst_R + i;
+        if (targetRow <= cs.dataLast_R) {
+            cs.arr[targetRow][cs.abilityNameID_C] = listOfAbilName_ID[i];
+        }
+    }
+
+    // Save the entire updated array back to the CS 'List' sheet.
+    gSaveSheet('mycs', 'list');
+
+} // End fKLCopyKnownAbilitiesToCS
+
+
 
 
 

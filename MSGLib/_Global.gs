@@ -328,7 +328,6 @@ function gSaveSheet(ss, sheetName) {
   // Update the actual Google Sheet
   const ssRange = sheetRef.getRange(1, 1, sheetArr.length, sheetArr[0].length);
   ssRange.setValues(sheetArr);
-  console.log(`Save to ${sheetName} successful.`);
 
 } // End gSaveSheet
 
