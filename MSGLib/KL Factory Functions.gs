@@ -65,7 +65,7 @@ function getObjKLAllAbilities(forceLoad = false) {
  * @param {boolean} [forceLoad=false] If true, forces a reload of the data table and the object.
  * @returns {object} The object containing references for the specified sheet.
  */
-function getObjKL_KLTab(tabName, forceLoad = false) {
+function getObjKL_RCTab(tabName, forceLoad = false) {
   const ss = 'mykl';
 
   // Validate that tabName is a non-empty string.
@@ -96,18 +96,14 @@ function getObjKL_KLTab(tabName, forceLoad = false) {
 
     myLvl_C: gHeaderC(ss, sheetName, 'MyLvl'),
     tier_C: gHeaderC(ss, sheetName, 'Tier'),
-    apCount_C: gHeaderC(ss, sheetName, 'APCount'),
-    apTotal_C: gHeaderC(ss, sheetName, 'APTotal'),
-    apSpent_C: gHeaderC(ss, sheetName, 'APSpent'),
-    apRemaining_C: gHeaderC(ss, sheetName, 'APRemaining'),
+    apVal_C: gHeaderC(ss, sheetName, 'APVal'),
 
     myLvl_R: gKeyR(ss, sheetName, 'MyLvl'),
     tier_R: gKeyR(ss, sheetName, 'Tier'),
-    levelAP_R: gKeyR(ss, sheetName, 'LevelAP'),
     bnsAP_R: gKeyR(ss, sheetName, 'BnsAP'),
     totalAP_R: gKeyR(ss, sheetName, 'TotalAP'),
-    apCombat_R: gKeyR(ss, sheetName, 'APCombat'),
-    apBase_R: gKeyR(ss, sheetName, 'APBase'),
+    spentAP_R: gKeyR(ss, sheetName, 'SpentAP'),
+    remainingAP_R: gKeyR(ss, sheetName, 'RemainingAP'),
   });
 
   // Conditionally add properties only if the sheetName is 'All'.

@@ -1,4 +1,3 @@
-
 // KL
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -42,7 +41,7 @@ function fKLCreateMenu() {
         .addSubMenu(SpreadsheetApp.getUi().createMenu('KLs')
           .addItem('Un-check All CheckBoxes', 'fKLMenuClearAllCheckBoxes')
           .addItem('Update Element Names', 'fKLMenuUpdateKLElementNames')
-          .addItem('Set AP Costs', 'fKLMenuSetKLAPCosts')
+          .addItem('Validate AP Costs', 'fKLMenuSetKLAPCosts')
           .addItem('Set Notes', 'fKLMenuSetKLNotes')
           .addItem('Hide Other RC Tabs', 'fKLMenuHideOtherRCTabs')
           .addItem('Un-Hide All RC Tabs', 'fKLMenuUn_HideAllRCTabs')
@@ -130,9 +129,9 @@ function fKLRunMenuOrButton(menuChoice) {
 
 /**
  * Purpose: A master function to perform a full calculation of all KL sheet AP values and update the header information.
- * Input:
- * -- none
- * Output: Void (modifies the KL sheets directly).
+ * Assumptions: The KL sheets are correctly formatted.
+ * Notes: This function orchestrates the entire AP calculation and sheet update process.
+ * @returns {void}
  */
 function fKLCalcKLAndAP() {
 
@@ -140,20 +139,16 @@ function fKLCalcKLAndAP() {
     const myRCTabName = fKLGetRCAndHideOtherRCTabs();
     const myUsedRCTabs = ['All', myRCTabName];
 
-    // Verify RC Checkboxes and set KL Card Colors (green = know, yellow = can learn now, lighter yellow = can learn if preceeding learned first, red = can't learn)
+    // Verify RC Checkboxes and set KL Card Colors.
     const tierString = gGetVal('mykl', 'All', 'Tier', 'Tier');
     const tierMatch = String(tierString).match(/\d+/);
     const tierNum = tierMatch ? parseInt(tierMatch[0], 10) : 0;
     fKLVerifyRCCheckedBoxesSetColors(myUsedRCTabs,tierNum);
 
-    // Calculate AP Spent
-    const apSpent = {
-        combat: 0,
-        base: 0,
-    };
-    fKLAPSpentCalc(myUsedRCTabs, apSpent);
+    // Calculate AP Spent from all checked abilities.
+    const apSpent = fKLAPSpentCalc(myUsedRCTabs);
 
-    // Build and save final header info
+    // Build and save final header info based on the calculated spent AP.
     const headerInfo = fKLBuildHeaderObject(apSpent);
     fKLSaveRCHeaderInfo(myUsedRCTabs, headerInfo);
     fKLAlertIfOverspentAP(headerInfo);
@@ -162,86 +157,67 @@ function fKLCalcKLAndAP() {
     const knownKLs = fKLBuildKnownKLs(myUsedRCTabs);
     const extractedKLs = fKLExtractKLsFromKLGroups(knownKLs);
 
-
     // Build the KnownAbilities sheet from the extracted KLs.
     fKLBuildKnownAbilitiesSheet(extractedKLs);
 
-    // Copy Known Aility list to CS <List>
+    // Copy Known Ability list to CS <List>
     fKLCopyKnownAbilitiesToCS();
 
     SpreadsheetApp.getUi().alert('Character Sheet Reminder', 'Reminder: To see these changes, you will need to refresh the <Game> table on your Character Sheet.', SpreadsheetApp.getUi().ButtonSet.OK);
-
 
 } // End fKLCalcKLAndAP
 
 
 
 
-
-
-
-
 /**
- * Purpose: Calculates the total spent combat and base AP from a given list of KL sheets by summing costs from checked abilities.
- * Notes: This function modifies the apSpent object directly (pass by reference).
- * Input:
- * -- myRCTabName - {string[]} An array of KL sheet names to process.
- * -- apSpent - {object} An object with 'combat' and 'base' properties to accumulate the costs into.
- * Output: Void (modifies the input apSpent object).
+ * Purpose: Calculates the total spent AP from a given list of KL sheets by summing costs from checked abilities.
+ * Assumptions: The KL sheets are correctly formatted.
+ * Notes: This function iterates through the specified sheets to calculate a single AP total.
+ * @param {string[]} myRCTabName - An array of KL sheet names to process.
+ * @returns {number} The total AP spent across all specified sheets.
  */
-function fKLAPSpentCalc(myRCTabName, apSpent) {
-
-    // Reset the AP counters to zero before calculation.
-    apSpent.combat = 0;
-    apSpent.base = 0;
+function fKLAPSpentCalc(myRCTabName) {
+    let totalAPSpent = 0;
 
     // Iterate through each provided sheet name.
     myRCTabName.forEach(tabName => {
-        const currentTab = getObjKL_KLTab(tabName, true);
-
+        const currentTab = getObjKL_RCTab(tabName, true);
         const dataFirstTF_C = 1;
         const dataLastTF_C = currentTab.arr[0].length - 1;
 
         for (let r = currentTab.dataFirst_R; r <= currentTab.dataLast_R; r++) {
             for (let c = dataFirstTF_C; c < dataLastTF_C; c++) {
-
                 // If a checkbox in the current cell is checked, process the adjacent card.
                 if (currentTab.arr[r][c] === true) {
-
                     const cardText = currentTab.arr[r][c + 1];
                     if (!cardText) continue;
 
                     const klCard = fGetKLCardObj(cardText, tabName, r, c + 1);
 
-                    // Add the card's AP cost to the appropriate counter based on its type.
-                    switch (klCard.apType) {
-                        case 'C': apSpent.combat += klCard.apCost; break;
-                        case 'B': apSpent.base += klCard.apCost; break;
-                        case 'F': break;
-                        default: throw new Error(`In sheet "${tabName}" the KL card "${cardText}" has an illegal AP Type of "${klCard.apType}"`);
+                    // Add the card's AP cost to the total unless it's free.
+                    if (!klCard.isFree) {
+                        totalAPSpent += klCard.apCost;
                     }
                 }
             }
         }
     });
 
+    return totalAPSpent;
 } // End fKLAPSpentCalc
 
 
 
 
-
 /**
- * Purpose: Calculates all header AP, Level, and Tier values and assembles them into a single object using pre-calculated spent AP.
- * Assumptions: The apSpent object is provided and contains valid 'combat' and 'base' number properties.
- * Notes: This refactor makes the function dependent on an input object for spent AP values rather than reading them from the sheet directly.
- * Input:
- * -- apSpent - {object} An object containing the spent AP values, e.g., { combat: 10, base: 5 }.
- * Output: An object containing all calculated header values.
+ * Purpose: Calculates all header AP, Level, and Tier values and assembles them into a single object.
+ * Assumptions: The `apSpent` value is a valid number.
+ * Notes: This function centralizes all header calculations.
+ * @param {number} apSpent - The total calculated AP spent.
+ * @returns {object} An object containing all calculated header values.
  */
 function fKLBuildHeaderObject(apSpent) {
-
-    //
     // First, calculate all the necessary values in sequence.
     const myLevel = gCharLvl();
     const levelAP = 10 * myLevel + 10;
@@ -249,38 +225,24 @@ function fKLBuildHeaderObject(apSpent) {
     const tierMatch = String(tierString).match(/\d+/);
     const tierNum = tierMatch ? parseInt(tierMatch[0], 10) : 0;
     const rcName_ID = gGetVal('mykl', 'All', 'RC', 'RC');
-    const bnsAP = gGetVal('mykl', 'All', 'BnsAP', 'APCount');
+    const bnsAP = gGetVal('mykl', 'All', 'BnsAP', 'APVal');
     const totalAP = levelAP + bnsAP;
-    const apCombat = totalAP;
-    const apBase = Math.round(0.3 * totalAP);
-    const apCombatSpent = apSpent.combat;
-    const apBaseSpent = apSpent.base;
-    const apCombatRemaining = apCombat - apCombatSpent;
-    const apBaseRemaining = apBase - apBaseSpent;
+    const apRemaining = totalAP - apSpent;
 
-    //
     // Then, assemble the final object using the calculated constants.
     const header = {
         myLevel,
         tierString,
         tierNum,
         rcName_ID,
-        levelAP,
         bnsAP,
         totalAP,
-        apCombat,
-        apBase,
-        apCombatSpent,
-        apBaseSpent,
-        apCombatRemaining,
-        apBaseRemaining,
+        apSpent,
+        apRemaining,
     };
 
     return header;
-
 } // End fKLBuildHeaderObject
-
-
 
 
 
@@ -288,72 +250,57 @@ function fKLBuildHeaderObject(apSpent) {
 /**
  * Purpose: Saves the calculated header AP, Level, and Tier info to a given list of RC sheets.
  * Assumptions: The header object 'h' has been pre-calculated by fKLBuildHeaderObject().
- * Input:
- * -- myUsedRCTabs - {string[]} An array of KL sheet names to update.
- * -- h - {object} The header object containing the values to be saved.
- * Output: Void (modifies the specified KL sheets directly).
+ * Notes: This function updates the header section of multiple sheets with consistent data.
+ * @param {string[]} myUsedRCTabs - An array of KL sheet names to update.
+ * @param {object} h - The header object containing the values to be saved.
+ * @returns {void}
  */
 function fKLSaveRCHeaderInfo(myUsedRCTabs, h) {
-
     // For each provided sheet name, set all header values from the header object, then save the sheet.
     myUsedRCTabs.forEach(tabName => {
-
         gSetVal('mykl', tabName, 'MyLvl', 'MyLvl', h.myLevel);
         gSetVal('mykl', tabName, 'Tier', 'Tier', h.tierString);
         gSetVal('mykl', tabName, 'RC', 'RC', h.rcName_ID);
-        gSetVal('mykl', tabName, 'LevelAP', 'APCount', h.levelAP);
-        gSetVal('mykl', tabName, 'BnsAP', 'APCount', h.bnsAP);
-        gSetVal('mykl', tabName, 'TotalAP', 'APCount', h.totalAP);
-        gSetVal('mykl', tabName, 'APCombat', 'APTotal', h.apCombat);
-        gSetVal('mykl', tabName, 'APBase', 'APTotal', h.apBase);
-        gSetVal('mykl', tabName, 'APCombat', 'APSpent', h.apCombatSpent);
-        gSetVal('mykl', tabName, 'APBase', 'APSpent', h.apBaseSpent);
-        gSetVal('mykl', tabName, 'APCombat', 'APRemaining', h.apCombatRemaining);
-        gSetVal('mykl', tabName, 'APBase', 'APRemaining', h.apBaseRemaining);
+        gSetVal('mykl', tabName, 'BnsAP', 'APVal', h.bnsAP);
+        gSetVal('mykl', tabName, 'TotalAP', 'APVal', h.totalAP);
+        gSetVal('mykl', tabName, 'SpentAP', 'APVal', h.apSpent);
+        gSetVal('mykl', tabName, 'RemainingAP', 'APVal', h.apRemaining);
 
         gSaveSheet('mykl', tabName);
     });
-
 } // End fKLSaveRCHeaderInfo
-
 
 
 
 
 /**
  * Purpose: Verifies all checkboxes in the data rows of specified KL sheets, unchecking any that are invalid, checking any that are 'Free' and valid, and setting cell colors to indicate ability status.
+ * Assumptions: The KL sheets are correctly formatted.
  * Notes: Enforces the rule that a higher-tier ability cannot be selected if the tier directly below it is not selected.
- * Input:
- * -- myUsedRCTabs - {string[]} An array of KL sheet names to process.
- * -- myTierNum - {number} The character's current tier number.
- * Output: Void (modifies the specified KL sheets directly).
+ * @param {string[]} myUsedRCTabs - An array of KL sheet names to process.
+ * @param {number} myTierNum - The character's current tier number.
+ * @returns {void}
  */
 function fKLVerifyRCCheckedBoxesSetColors(myUsedRCTabs, myTierNum) {
-
     const lightRed = '#fc8279';
     const lightGreen = '#a6f04d';
     const lightYellow = '#fce803';
     const lighterYellow = '#ede477';
 
-    //
     // Iterate through each provided sheet name.
     myUsedRCTabs.forEach(tabName => {
-        const currentTab = getObjKL_KLTab(tabName, true);
+        const currentTab = getObjKL_RCTab(tabName, true);
         const numRows = currentTab.arr.length;
         const numCols = currentTab.arr[0].length;
 
-        //
         // Read all existing colors from the sheet first to preserve all original formatting.
         const colorArr = currentTab.ref.getRange(1, 1, numRows, numCols).getBackgrounds();
-
         const lastCol = numCols - 2; // Loop until the second to last column to safely access c+1
 
         for (let r = currentTab.dataFirst_R; r <= currentTab.dataLast_R; r++) {
             for (let c = 1; c <= lastCol; c++) {
-
                 // If there is a checkbox in the current cell, verify it and set colors.
                 if (currentTab.arr[r][c] === true || currentTab.arr[r][c] === false) {
-
                     const cardText = currentTab.arr[r][c + 1];
                     if (!cardText) continue;
 
@@ -365,13 +312,13 @@ function fKLVerifyRCCheckedBoxesSetColors(myUsedRCTabs, myTierNum) {
                     // Verify and set the checkbox state based on tier and dependency rules.
                     if (klCard.tier > myTierNum || isDependentAboveUn_Checked) {
                         currentTab.arr[r][c] = false;
-                    } else if (klCard.apType === 'F') {
+                    } else if (klCard.isFree) {
                         currentTab.arr[r][c] = true;
                     }
 
                     // Determine and set the background color based on the ability's final state.
                     if (klCard.tier > myTierNum) {
-                        colorArr[r][c + 1] = lightRed; // Illegal ability (too high tier or broken dependency chain)
+                        colorArr[r][c + 1] = lightRed; // Illegal ability (too high tier)
                     } else if (currentTab.arr[r][c] === true) {
                         colorArr[r][c + 1] = lightGreen; // Legal and selected ability
                     } else {
@@ -381,40 +328,26 @@ function fKLVerifyRCCheckedBoxesSetColors(myUsedRCTabs, myTierNum) {
             }
         }
 
-        //
         // Save the updated values and the new colors in two separate, fast operations.
         gSaveSheet('mykl', tabName);
         currentTab.ref.getRange(1, 1, numRows, numCols).setBackgrounds(colorArr);
     });
-
 } // End fKLVerifyRCCheckedBoxesSetColors
 
 
 
+
 /**
- * Purpose: Alerts the user if they have overspent their Combat or Base AP totals.
- * Assumptions: The input object 'h' contains apCombatRemaining and apBaseRemaining as number properties.
- * Notes: This provides a non-interrupting warning to the user, as opposed to throwing an error.
- * @param {object} h - A pre-calculated header object containing all AP, Level, and Tier values.
+ * Purpose: Alerts the user if they have overspent their AP total.
+ * Assumptions: The input object 'h' contains an `apRemaining` number property.
+ * Notes: This provides a non-interrupting warning to the user.
+ * @param {object} h - A pre-calculated header object containing all AP values.
  * @returns {void}
  */
 function fKLAlertIfOverspentAP(h) {
-    let errorString = '';
-
-    // Check for overspent Combat AP and construct the warning message.
-    if (h.apCombatRemaining < 0) {
-        errorString += `You have overspent your Combat AP by ${-h.apCombatRemaining}.\n`;
-    }
-
-    // Check for overspent Base AP and construct the warning message.
-    if (h.apBaseRemaining < 0) {
-        errorString += `You have overspent your Base AP by ${-h.apBaseRemaining}.`;
-    }
-
-    // If any error messages were generated, display them in an alert box.
-    if (errorString) {
-        const ui = SpreadsheetApp.getUi();
-        ui.alert('AP Warning', errorString.trim(), ui.ButtonSet.OK);
+    if (h.apRemaining < 0) {
+        const errorString = `You have overspent your AP by ${-h.apRemaining}.`;
+        SpreadsheetApp.getUi().alert('AP Warning', errorString, SpreadsheetApp.getUi().ButtonSet.OK);
     }
 } // End fKLAlertIfOverspentAP
 
@@ -433,7 +366,7 @@ function fKLBuildKnownKLs(myUsedRCTabs) {
 
     // Loop through each used RC tab.
     myUsedRCTabs.forEach(tabName => {
-        const currentTab = getObjKL_KLTab(tabName, true);
+        const currentTab = getObjKL_RCTab(tabName, true);
         const lastCol = currentTab.arr[0].length - 2; // Loop until the second to last column to safely access c+1
 
         // Iterate through the data rows and columns to find checked boxes.
@@ -819,7 +752,7 @@ function fKLUpdateKLElementNames() {
 
   g.klRCSheetNames.forEach(tabName => {
     // Get the object for the current tab, forcing a reload to ensure data is current.
-    const currentTab = getObjKL_KLTab(tabName, true);
+    const currentTab = getObjKL_RCTab(tabName, true);
 
     // Loop through each data row of the current tab's array.
     // Note: Array row 'r' is 0-indexed, while Sheet rows are 1-indexed.
@@ -859,90 +792,87 @@ function fKLUpdateKLElementNames() {
 
 /**
  * Purpose: Parses a formatted 3-line string from a "KL Card" into a structured object.
- * Assumptions: cardText must be a string with exactly two newline characters, creating three lines of text.
- * Input: 
- *   cardText - A formatted string containing the card's name, cost, tier, ID, and buff info.
- *   tabName - The name of the sheet where the cardText is located.
- *   r - The 0-indexed row of the cell.
- *   c - The 0-indexed column of the cell.
- * Output: A structured object (cardObj) with properties for name, apType, apCost, tier, id, buffVerType, and buffVerNum.
+ * Assumptions: cardText must be a string with exactly two newline characters. The AP cost is either '$Free' or '$' followed by a number.
+ * Notes: This function is the central parser for KL card data.
+ * @param {string} cardText - A formatted string containing the card's name, cost, tier, ID, and buff info.
+ * @param {string} tabName - The name of the sheet where the cardText is located.
+ * @param {number} r - The 0-indexed row of the cell.
+ * @param {number} c - The 0-indexed column of the cell.
+ * @returns {object} A structured object with properties for name, isFree, apCost, tier, id, buffVerType, and buffVerNum.
  */
 function fGetKLCardObj(cardText, tabName, r, c) {
-
-  // Input Validation
-  if (typeof cardText !== 'string' || !cardText.trim()) {
-    throw new Error(`In fGetKLCardObj, the cardText from sheet "${tabName}" at cell ${r},${c} was empty or not a string.`);
-  }
-
-  // Test for exactly two newline characters, which creates an array of three lines.
-  const lines = cardText.split('\n');
-  if (lines.length !== 3) {
-    throw new Error(`In fGetKLCardObj, KLCard from sheet "${tabName}" at cell ${r},${c} does not contain exactly two newline characters. It must be three separate lines.`);
-  }
-
-  // Store each line in its own variable for simpler parsing.
-  const nameLine = lines[0];
-  const costTierLine = lines[1];
-  const idVerLine = lines[2];
-
-  const cardObj = {};
-  
-  // --- Parse each line individually ---
-
-  // Parse Name (from the first line)
-  cardObj.name = nameLine.trim();
-
-  // Parse AP Type and Cost (from the second line)
-  // Updated regex to handle 'Free' as well as 'F', 'C', and 'B' (case-insensitive)
-  const apMatch = costTierLine.match(/\$(Free|[CBF])(\d{1,3})?/i);
-  if (!apMatch) throw new Error(`In fGetKLCardObj, the cost/tier line from sheet "${tabName}" at cell ${r},${c} ("${costTierLine}") has an invalid or missing AP cost block (e.g., $C5, $Free, $F).`);
-  
-  let [, apType, apCostStr] = apMatch;
-  apType = apType.toUpperCase(); // Normalize to uppercase
-
-  // Check if the type is 'F' (for Free)
-  if (apType === 'F' || apType === 'FREE') {  // Previously Normalize to uppercase
-    cardObj.apType = 'F'; // Standardize the output type to 'F'
-    cardObj.apCost = 0;
-  } else { // Must be 'C' or 'B'
-    cardObj.apType = apType;
-    cardObj.apCost = parseInt(apCostStr, 10);
-    if (isNaN(cardObj.apCost) || cardObj.apCost < 0 || cardObj.apCost > 100) {
-      throw new Error(`In fGetKLCardObj, the cost/tier line from sheet "${tabName}" at cell ${r},${c} ("${costTierLine}") has an apCost that is not an integer between 1 and 100.`);
+    // Input Validation
+    if (typeof cardText !== 'string' || !cardText.trim()) {
+        throw new Error(`In fGetKLCardObj, the cardText from sheet "${tabName}" at cell ${r},${c} was empty or not a string.`);
     }
-  }
 
-  // Parse Tier (from the second line)
-  const tierMatch = costTierLine.match(/T(\d+)/);
-  if (!tierMatch) throw new Error(`In fGetKLCardObj, the cost/tier line from sheet "${tabName}" at cell ${r},${c} ("${costTierLine}") is missing the Tier indicator (e.g., T2).`);
-  cardObj.tier = parseInt(tierMatch[1], 10);
+    // Test for exactly two newline characters, which creates an array of three lines.
+    const lines = cardText.split('\n');
+    if (lines.length !== 3) {
+        throw new Error(`In fGetKLCardObj, KLCard from sheet "${tabName}" at cell ${r},${c} does not contain exactly two newline characters. It must be three separate lines.`);
+    }
 
-  // Parse ID (from the third line)
-  const idMatch = idVerLine.match(/🔑(.{6})/);
-  if (!idMatch) throw new Error(`In fGetKLCardObj, the ID/version line from sheet "${tabName}" at cell ${r},${c} ("${idVerLine}") is missing the '🔑' ID indicator.`);
-  cardObj.id = idMatch[1];
+    // Store each line in its own variable for simpler parsing.
+    const nameLine = lines[0];
+    const costTierLine = lines[1];
+    const idVerLine = lines[2];
 
-  // Parse Buff/Version Type and Number (from the third line)
-  const buffVerMatch = idVerLine.match(/\.([bv])([0-9])$/);
-  if (!buffVerMatch) throw new Error(`In fGetKLCardObj, the ID/version line from sheet "${tabName}" at cell ${r},${c} ("${idVerLine}") has an invalid or missing buff/version suffix (e.g., .b1, .v9).`);
-  
-  [, cardObj.buffVerType, cardObj.buffVerNum] = buffVerMatch;
-  cardObj.buffVerNum = parseInt(cardObj.buffVerNum, 10);
+    const cardObj = {};
 
-  return cardObj;
+    // --- Parse each line individually ---
+
+    // Parse Name (from the first line)
+    cardObj.name = nameLine.trim();
+
+    // Parse AP Cost and isFree status (from the second line)
+    const apMatch = costTierLine.match(/\$(Free|\d+)/i);
+    if (!apMatch) throw new Error(`In fGetKLCardObj, the cost/tier line from sheet "${tabName}" at cell ${r},${c} ("${costTierLine}") has an invalid or missing AP cost block (e.g., $5, $Free).`);
+
+    const apValue = apMatch[1];
+    if (apValue.toUpperCase() === 'FREE') {
+        cardObj.isFree = true;
+        cardObj.apCost = 0;
+    } else {
+        cardObj.isFree = false;
+        cardObj.apCost = parseInt(apValue, 10);
+        if (isNaN(cardObj.apCost) || cardObj.apCost < 0) {
+            throw new Error(`In fGetKLCardObj, the cost/tier line from sheet "${tabName}" at cell ${r},${c} ("${costTierLine}") has an apCost that is not a positive integer.`);
+        }
+    }
+
+    // Parse Tier (from the second line)
+    const tierMatch = costTierLine.match(/T(\d+)/);
+    if (!tierMatch) throw new Error(`In fGetKLCardObj, the cost/tier line from sheet "${tabName}" at cell ${r},${c} ("${costTierLine}") is missing the Tier indicator (e.g., T2).`);
+    cardObj.tier = parseInt(tierMatch[1], 10);
+
+    // Parse ID (from the third line)
+    const idMatch = idVerLine.match(/🔑(.{6})/);
+    if (!idMatch) throw new Error(`In fGetKLCardObj, the ID/version line from sheet "${tabName}" at cell ${r},${c} ("${idVerLine}") is missing the '🔑' ID indicator.`);
+    cardObj.id = idMatch[1];
+
+    // Parse Buff/Version Type and Number (from the third line)
+    const buffVerMatch = idVerLine.match(/\.([bv])([0-9])$/);
+    if (!buffVerMatch) throw new Error(`In fGetKLCardObj, the ID/version line from sheet "${tabName}" at cell ${r},${c} ("${idVerLine}") has an invalid or missing buff/version suffix (e.g., .b1, .v9).`);
+
+    [, cardObj.buffVerType, cardObj.buffVerNum] = buffVerMatch;
+    cardObj.buffVerNum = parseInt(cardObj.buffVerNum, 10);
+
+    return cardObj;
 } // End fGetKLCardObj
+
 
 
 
 /**
  * Purpose: Updates the name of a KL Card object and rebuilds the source string in the provided array.
- * Input:
- *   currentTab - The cached sheet object containing the .arr to be modified.
- *   klCard - The parsed card object to be updated.
- *   elementName - The new name for the card.
- *   r - The 0-indexed row in the array to update.
- *   c - The 0-indexed column in the array to update.
- * Output: Void (modifies the currentTab.arr by reference).
+ * Assumptions: The input objects are valid.
+ * Notes: This function modifies the `currentTab.arr` directly.
+ * @param {object} currentTab - The cached sheet object containing the .arr to be modified.
+ * @param {object} klCard - The parsed card object to be updated.
+ * @param {string} elementName - The new name for the card.
+ * @param {number} r - The 0-indexed row in the array to update.
+ * @param {number} c - The 0-indexed column in the array to update.
+ * @returns {void}
  */
 function fKLNewKLName(currentTab, klCard, elementName, r, c) {
   
@@ -958,16 +888,16 @@ function fKLNewKLName(currentTab, klCard, elementName, r, c) {
 
 /**
  * Purpose: Converts a KL Card object back into its three-line formatted string representation.
- * Assumptions: The klCard object has all the necessary properties (name, apType, apCost, etc.).
- * Input: klCard - The object representing the card's data.
- * Output: A formatted, three-line string representing the card.
+ * Assumptions: The klCard object has all the necessary properties (name, isFree, apCost, etc.).
+ * Notes: This is the reverse of `fGetKLCardObj`.
+ * @param {object} klCard - The object representing the card's data.
+ * @returns {string} A formatted, three-line string representing the card.
  */
 function fKLCardObjToStr(klCard) {
-  
-  // Conditionally format the AP cost string
-  const apCostString = klCard.apType === 'F' ? 'Free' : klCard.apType + klCard.apCost;
+    // Conditionally format the AP cost string based on the isFree property.
+    const apCostString = klCard.isFree ? 'Free' : klCard.apCost;
 
-  return `${klCard.name}\n$${apCostString} T${klCard.tier}\n🔑${klCard.id}.${klCard.buffVerType}${klCard.buffVerNum}`;
+    return `${klCard.name}\n$${apCostString} T${klCard.tier}\n🔑${klCard.id}.${klCard.buffVerType}${klCard.buffVerNum}`;
 } // End fKLCardObjToStr
 
 
@@ -975,6 +905,8 @@ function fKLCardObjToStr(klCard) {
 
 /**
  * Purpose: A wrapper function that unchecks all 'true' checkboxes across all standard KL RC sheets.
+ * Assumptions: The global `g.klRCSheetNames` is populated.
+ * Notes: This is a convenience function for a common operation.
  * @returns {void}
  */
 function fKLClearAllCheckBoxes() {
@@ -988,6 +920,7 @@ function fKLClearAllCheckBoxes() {
 
 /**
  * Purpose: Iterates through a provided list of KL RC sheets and unchecks any cell containing a boolean 'true' value.
+ * Assumptions: The sheet names provided are valid.
  * Notes: This is the core logic function; it is called by other checkbox-clearing functions.
  * @param {(string|string[])} sheetNameList - A single sheet name or an array of sheet names to process.
  * @returns {void}
@@ -999,7 +932,7 @@ function fKLClearAllCheckBoxesFrom(sheetNameList) {
 
     // For each specified sheet, load it, change all 'true' values to 'false', and save it.
     sheetNames.forEach(tabName => {
-        const currentTab = getObjKL_KLTab(tabName, true);
+        const currentTab = getObjKL_RCTab(tabName, true);
         const lastCol = currentTab.arr[0].length - 1;
 
         for (let r = currentTab.dataFirst_R; r <= currentTab.dataLast_R; r++) {
@@ -1018,11 +951,10 @@ function fKLClearAllCheckBoxesFrom(sheetNameList) {
 
 
 /**
- * Purpose: Recalculates the AP Cost for all abilities in the KL RC-style sheets based on their tier progression.
- * Assumptions: The klRCSheetNames array is globally available at g.klRCSheetNames.
- * Input:
- * none
- * Output: Void (modifies the KL sheets directly).
+ * Purpose: Recalculates and sets the AP Cost for all abilities in the KL RC-style sheets based on their tier progression.
+ * Assumptions: The klRCSheetNames array is globally available at g.klRCSheetNames. The fGetKLCardObj and fKLCardObjToStr functions have been updated for the new AP cost system.
+ * Notes: This function overwrites the apCost in the card text with a dynamically calculated value.
+ * @returns {void}
  */
 function fKLSetKLAPCosts() {
 
@@ -1035,7 +967,7 @@ function fKLSetKLAPCosts() {
 
     // For each specified sheet, load it, recalculate AP costs, and save it.
     g.klRCSheetNames.forEach(tabName => {
-        const currentTab = getObjKL_KLTab(tabName, true);
+        const currentTab = getObjKL_RCTab(tabName, true);
         const lastCol = currentTab.arr[0].length - 2; // Loop until the second to last column to safely access c+1
 
         for (let r = currentTab.dataFirst_R; r <= currentTab.dataLast_R; r++) {
@@ -1060,8 +992,8 @@ function fKLSetKLAPCosts() {
                         firstTierMap[klCard.id] = klCard.tier;
                     }
 
-                    // Skip cost calculation for 'Free' abilities.
-                    if (klCard.apType === 'F') {
+                    // Skip cost calculation for 'Free' or $0 abilities.
+                    if (klCard.isFree || klCard.apCost === 0) {
                         continue;
                     }
 
@@ -1074,8 +1006,9 @@ function fKLSetKLAPCosts() {
                     }
 
                     // Assign the new AP cost based on the tier and buff/version type.
-                    if (klCard.apCost === 0) continue;
                     klCard.apCost = (klCard.buffVerType === 'v') ? verAPCost[apCostTier] : buffAPCost[apCostTier];
+                    
+                    // Rebuild the card string with the new cost and save it to the array.
                     currentTab.arr[r][c + 1] = fKLCardObjToStr(klCard);
                 }
             }
@@ -1089,34 +1022,28 @@ function fKLSetKLAPCosts() {
 /**
  * Purpose: Populates the notes for the first instance of each unique ability card in the KL RC-style sheets, preserving any existing notes in the header rows.
  * Notes: This function now treats the first 'buff' ('b') and the first 'version' ('v') of an ability as separate instances for the purpose of adding notes.
- * Input:
- * none
- * Output: Void (modifies the notes of the KL sheets directly).
+ * @returns {void}
  */
 function fKLSetKLNotes() {
 
     const firstInstanceMap = {};
 
     g.klRCSheetNames.forEach(tabName => {
-        const currentTab = getObjKL_KLTab(tabName, true);
+        const currentTab = getObjKL_RCTab(tabName, true);
         const numRows = currentTab.arr.length;
         const numCols = currentTab.arr[0].length;
 
-        //
         // Read all existing notes from the sheet to preserve the header notes.
         const noteArr = currentTab.ref.getRange(1, 1, numRows, numCols).getNotes();
-
         const lastCol = numCols - 2; // Loop until the second to last column to safely access c+1
 
         for (let r = currentTab.dataFirst_R; r <= currentTab.dataLast_R; r++) {
             for (let c = 1; c <= lastCol; c++) {
-
                 // Erase any old note in the non-header row to ensure a clean slate for this run.
                 noteArr[r][c + 1] = null;
                 
                 // Check if the cell contains a boolean value to process.
                 if (currentTab.arr[r][c] === true || currentTab.arr[r][c] === false) {
-
                     const cardText = currentTab.arr[r][c + 1];
                     if (!cardText) continue;
 
@@ -1134,7 +1061,6 @@ function fKLSetKLNotes() {
             }
         }
 
-        //
         // Save the entire notes array, now containing both old header notes and new ability notes, in a single operation.
         currentTab.ref.getRange(1, 1, numRows, numCols).setNotes(noteArr);
     });
@@ -1147,9 +1073,7 @@ function fKLSetKLNotes() {
  * Purpose: Hides all RC-related sheets in the KeyLine except for the <All> sheet and the one currently selected on the Character Sheet.
  * Assumptions: The g.klRCSheetNames and g.matchingKLRCIDs global arrays are parallel and correctly populated.
  * Notes: This function will now skip clearing and hiding sheets that are already hidden.
- * Input:
- * -- none
- * Output: myRCTabName
+ * @returns {string} The name of the character's active RC tab.
  */
 function fKLGetRCAndHideOtherRCTabs() {
 
@@ -1195,9 +1119,9 @@ function fKLGetRCAndHideOtherRCTabs() {
 
 /**
  * Purpose: Un-hides all sheets listed in the g.klRCSheetNames global array.
- * Input:
- * -- none
- * Output: Void (modifies the visibility of sheets).
+ * Assumptions: The `g.klRCSheetNames` global array is populated.
+ * Notes: This is a utility function for showing all possible RC sheets.
+ * @returns {void}
  */
 function fKLUn_HideOtherRCTabs() {
 
@@ -1212,6 +1136,9 @@ function fKLUn_HideOtherRCTabs() {
     });
 
 } // End fKLUn_HideOtherRCTabs
+
+
+
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1498,8 +1425,7 @@ function fKLBuildMyAbilities() {
   // Force Load KL <MyAbilities> Info
   let klMyAbilities = getObjKLMyAbilities(true); 
   
-  // *** Reminder to -> Update cs <Game> Abilities names to match cs <List> *** 
-  const reminderCB = klMyAbilities.arr[klMyAbilities.reminderCB_R][klMyAbilities.reminderCB_C];
+  // *** Reminder to -> Update cs <Game> Abilities names to match cs <List> *** const reminderCB = klMyAbilities.arr[klMyAbilities.reminderCB_R][klMyAbilities.reminderCB_C];
   if (reminderCB) SpreadsheetApp.getUi().alert(`Character Sheet Reminder\n\nReminder: To see these changes, you will need to refresh the <Game> table on your Character Sheet.`);
 
   // ****** Update <AllAbilities> with CS <Game> possessions ******
