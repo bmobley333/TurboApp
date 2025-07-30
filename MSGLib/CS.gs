@@ -185,7 +185,7 @@ function fCSRunMenuOrButton(menuChoice) {
       case 'Roll': fCSMasterRoller(); break;
       case 'RollLucked': fCSMasterRoller('Lucked'); break;
       case 'RollFree': fCSMasterRoller('Free'); break;
-      case 'ShowSidebar': break; // Note done here, done on CS local code
+      case 'ShowSidebar': break; // Not done here, done on CS local code
       case 'ScrollToNish': fCSScrollToNish(); break;
       case 'ScrollToGear': fCSScrollToGear(); break;
       case 'NishStartOrEnd': fCSNishStartOrEnd(); break;
