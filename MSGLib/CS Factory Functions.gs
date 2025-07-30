@@ -67,7 +67,6 @@ function getObjCSGame(forceLoad = false) {
     sk1_C: gHeaderC(ss, sheetName, 'Sk1'),
     sk1ChkBox_C: gHeaderC(ss, sheetName, 'Sk1ChkBox'),
     abilNameID_C: gHeaderC(ss, sheetName, 'Ability'),
-    condition_C: gHeaderC(ss, sheetName, 'Condition'),
     sk2ChkBox_C: gHeaderC(ss, sheetName, 'Sk2ChkBox'),
     sk2_C: gHeaderC(ss, sheetName, 'Sk2'),
     sk2Typ_C: gHeaderC(ss, sheetName, 'Sk2Typ'),
@@ -250,57 +249,6 @@ function getObjCSList(forceLoad = false) {
 } // End getObjCSList
 
 
-
-
-
-
-// getObjCSPermMorph //////////////////////////////////////////////////////////////////////////////////////////////////
-// Purpose -> performs a gLoadTable if necessary (or forceLoad), then if necessary (or forceLoad) reloads the g.obj[ss][sheetname]
-function getObjCSPermMorph(forceLoad = false) {
-  const ss = 'mycs';
-  const sheetName = 'permmorph';
-
-  // Load Table (note: if g.[ss][sheetName] already exists it will not be reloaded unless forceLoad = true, to save run time)
-  gLoadTable(ss, sheetName, forceLoad);
-
-  // Don't reload g.obj[ss][sheetName] unless forceLoad is true or g.obj[ss][sheetName] doesn't exist.
-  if (!forceLoad && g?.obj?.[ss]?.[sheetName]) return g.obj[ss][sheetName];
-
-  // Create or update the sheet object - specifically use the existing g.obj[ss][sheetName] if it exists, else g.obj[ss][sheetName] doesn't yet exist and will be cretaed below
-  // IMPORTANT - this guarantees that g.obj[ss][sheetName] will always be the same object and that calling this Factory Function will never create more than one object, (if new -> obj is made, if exists -> obj is updated)
-  const newObj = g?.obj?.[ss]?.[sheetName] || {};
-
-  // Assign new values to the object properties
-  Object.assign(newObj, {
-
-    ref: gSheetRef(ss, sheetName),
-    arr: gArr(ss, sheetName),
-    dataFirst_R: gDataFirst_R(ss, sheetName),
-    dataLast_R: gDataLast_R(ss, sheetName),
-    id_C: gHeaderC(ss, sheetName,'ID'),
-    abilNameID_C: gHeaderC(ss, sheetName,'AbilNameID'),
-    condition_C: gHeaderC(ss, sheetName,'Condition'),
-    morph1_C: gHeaderC(ss, sheetName,'Morph1'),
-    oldSk1_C: gHeaderC(ss, sheetName,'OldSk1'),
-    newSk1_C: gHeaderC(ss, sheetName,'PermSk1'),
-    morphRoll1_C: gHeaderC(ss, sheetName,'PermMorphfRoll1'),
-    morph2_C: gHeaderC(ss, sheetName,'Morph2'),
-    oldSk2_C: gHeaderC(ss, sheetName,'OldSk2'),
-    newSk2_C: gHeaderC(ss, sheetName,'PermSk2'),
-    morphRoll2_C: gHeaderC(ss, sheetName,'PermMorphfRoll2'),
-    why_C: gHeaderC(ss, sheetName,'Why'),
-    first_C: gHeaderC(ss, sheetName,'ID'),
-    last_C: gHeaderC(ss, sheetName,'Why'),
-  });
-
-  // Build any necessary child keys of g
-  g.obj = g.obj || {};
-  g.obj[ss] = g.obj[ss] || {};
-
-  g.obj[ss][sheetName] = newObj;
-
-  return newObj;
-} // End getObjCSPermMorph
 
 
 

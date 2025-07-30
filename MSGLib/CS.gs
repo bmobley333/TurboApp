@@ -75,10 +75,6 @@ function fCSCreateMenu() {
     )
   .addToUi(); 
   SpreadsheetApp.getUi()
-  .createMenu('PermMorph')
-    .addItem('Refresh PermMorph Table', 'fCSMenuRefreshAbilities')
-  .addToUi(); 
-  SpreadsheetApp.getUi()
   .createMenu('RaceClass')
     .addItem('Refresh All - Saves Data', 'fCSMenuRefreshRaceClass')
     .addSeparator()
@@ -155,8 +151,6 @@ function fCSMenuBuildRaceDropDown() {fCSRunMenuOrButton('BuildRaceDropDown');}
 function fCSMenuUpdateRaceNotesPic() {fCSRunMenuOrButton('UpdateRaceNotesPic');}
 function fCSMenuGenerateRaceGenderToVision() {fCSRunMenuOrButton('GenerateRaceGenderToVision');}
 function fCSMenuRefreshRuleBookURLs() {fCSRunMenuOrButton('RefreshRuleBookURLs');}
-// PermMorph Menu
-  // None as it is simply fMenuRefreshAbilities from the // <Game> Menu
 // System Menu
 function fCSMenuAuthorize() {fCSRunMenuOrButton('Authorize');}
 function fCSMenuSaveCSIDURL() {fCSRunMenuOrButton('SaveCSIDURL');}
@@ -175,7 +169,6 @@ function fCSButtonScrollToNish() {fCSRunMenuOrButton('ScrollToNish');}
 function fCSButtonScrollToGear() {fCSRunMenuOrButton('ScrollToGear');}
 function fCSButtonMonsters() {fCSRunMenuOrButton('LoadMonsters');}
 function fCSButtonRefreshRaceClass() {fCSRunMenuOrButton('RefreshRaceClass');}
-// RefreshPermMorph is the is the same as and uses fCSButtonRefreshAbilities
 // End Button Functions
 
 
@@ -231,8 +224,6 @@ function fCSRunMenuOrButton(menuChoice) {
       case 'UpdateRaceNotesPic': fCSUpdateRaceNotesPic(); break;
       case 'GenerateRaceGenderToVision': fCSGenerateRaceGenderToVision(); break;
       case 'RefreshRuleBookURLs': fCSRefreshRuleBookURLs(); break;
-      // PermMorph menu
-        // None as it is simply RefreshAbilities from <Game> Menu
       // System Menu
       case 'Authorize': SpreadsheetApp.getUi().alert(`AUTHORIZED`, `Script Authorized!`, SpreadsheetApp.getUi().ButtonSet.OK); fCSSaveCSID(); break;
       case 'SaveCSIDURL': fCSSaveCSID(); break;
@@ -460,9 +451,6 @@ function fCSRefreshAbilities() {
     // Save the updated ability and gear sections back to the <Game> sheet.
     gSaveArraySectionToSheet(objGame.ref, objGame.arr, objGame.dataFirst_R, objGame.dataLast_R, objGame.abilTableFirst_C, objGame.last_C);
 
-    // Apply any permanent morph conditions.
-    fCSRefreshPermMorph();
-
 } // End fCSRefreshAbilities
 
 
@@ -532,6 +520,7 @@ function fFillGameAbilAndGearRow(r, objGame, klKnownAbilities, dbAbil, dbGear, t
 
 
 
+
 /**
  * Purpose: Clears all ability and gear columns for a given row on the <Game> sheet.
  * Assumptions: This function is called when a row does not correspond to a known ability or gear item.
@@ -553,7 +542,6 @@ function fClearGameAbilAndGearRow(objGame, r, isElem) {
     if (clearAll) abilRow[objGame.on_C] = '.';
     abilRow[objGame.sk1ChkBox_C] = false;
     if (clearAll) abilRow[objGame.abilNameID_C] = '';
-    abilRow[objGame.condition_C] = '';
     abilRow[objGame.sk2ChkBox_C] = false;
     if (clearAll) abilRow[objGame.sk2_C] = '';
     if (clearAll) abilRow[objGame.sk2Typ_C] = '';
@@ -604,7 +592,6 @@ function fClearGameAbilAndGearRow(objGame,r,isElem) {
   if (clearAll) abilRow[objGame.on_C] = '.';
   abilRow[objGame.sk1ChkBox_C] = false;
   if (clearAll) abilRow[objGame.abilNameID_C] = '';
-  abilRow[objGame.condition_C] = '';
   abilRow[objGame.sk2ChkBox_C] = false;
   if (clearAll) abilRow[objGame.sk2_C] = '';
   if (clearAll) abilRow[objGame.sk2Typ_C] = '';
@@ -1779,434 +1766,6 @@ function fCSRefreshRuleBookURLs() {
   raceClassRef.getRange(raceClassPS_R + 1, raceClassPS_C + 1).setFormula('=HYPERLINK("' + urlPL + '", "Player Screen")');
 } // End fCSRefreshRuleBookURLs
 
-
-
-
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////                                  PermMorph (end g. Gear)
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-
-
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// NOTE: this section is ONLY called as a helper to <Game> menu's function fRefreshAbilities()
-
-
-
-
-
-
-
-
-// fCSRefreshPermMorph //////////////////////////////////////////////////////////////////////////////////////////////////
-// Purpose: Refreshes the <PermMorph> table
-function fCSRefreshPermMorph() {
-  // Load perm, game, myAbil objects
-  let perm = getObjCSPermMorph();
-
-  // Blank any empty Ability rows or rows without both a Sk1 Morph and Sk2 Morph
-  fCSBlankInvalidPermRows(perm);
-
-  // Blank any duplicate ID + Condition rows, then sort perm.arr on abilities then condition
-  fCSRemoveDuplicatesAndSort(perm);
-
-  // Calculate ID, OldSk1, NewSk1, Roll1Morph, then same for Sk2
-  fCSCalcNewPermData(perm);
-  fCSBlankInvalidPermRows(perm);
-  fCSSortPermRows(perm);
-
-  // Save perm.arr changes to <PermMorph>
-  gSaveArraySectionToSheet(perm.ref, perm.arr, perm.dataFirst_R, perm.dataLast_R, perm.first_C, perm.last_C);
-  perm = getObjCSPermMorph(true);
-
-  // *** Apply to current <Game> sheet
-  let game = getObjCSGame();
-  fCSBuildconditionDropDown(perm,game);
-  fCSApplyPermToGame(perm, game);
-
-  
-} // End fCSRefreshPermMorph
-
-
-
-
-// fCSBlankInvalidPermRows //////////////////////////////////////////////////////////////////////////////////////////////////
-// Purpose: Blank any empty Perm Morph Ability rows or rows without both a Sk1 Morph and Sk2 Morph
-function fCSBlankInvalidPermRows(perm) {
-
-  // Blank any empty Ability rows or rows without both a Sk1 Morph and Sk2 Morph
-  for (let r = perm.dataFirst_R; r <= perm.dataLast_R; r++) {
-    if (!perm.arr[r][perm.abilNameID_C] || (!perm.arr[r][perm.morph1_C] && !perm.arr[r][perm.morph2_C])) {
-      gFillArraySection(perm.arr, r, r, perm.first_C, perm.last_C, '');
-    }
-  }
-} // End fCSBlankInvalidPermRows
-
-
-
-// fCSSortPermRows //////////////////////////////////////////////////////////////////////////////////////////////////
-// Purpose: Sort perm.arr
-function fCSSortPermRows(perm) {
-
-  gSortArraySection(perm.arr, perm.dataFirst_R, perm.dataLast_R, perm.first_C, perm.last_C, perm.condition_C);
-  gSortArraySection(perm.arr, perm.dataFirst_R, perm.dataLast_R, perm.first_C, perm.last_C, perm.abilNameID_C);
-
-} // End fCSSortPermRows
-
-
-
-
-
-// fCSRemoveDuplicatesAndSort //////////////////////////////////////////////////////////////////////////////////////////////////
-// Purpose -> Sort perm.arr, then Blank any duplicate ID + Condition rows
-function fCSRemoveDuplicatesAndSort(perm) {
-
-  // Sort perm.arr so abilities are contiguous with conditions in sorted order next to them
-  fCSSortPermRows(perm);
-
-  for (let r = perm.dataLast_R; r >= perm.dataFirst_R - 1; r--) {
-    if (perm.arr[r][perm.abilNameID_C] === perm.arr[r-1][perm.abilNameID_C] && perm.arr[r][perm.condition_C] === perm.arr[r-1][perm.condition_C]) {
-      gFillArraySection(perm.arr, r, r, perm.first_C, perm.last_C, '');
-    }
-  }
-
-  // Re-sort after deletions to maintain order and contiguous data
-  fCSSortPermRows(perm);
-} // End fCSRemoveDuplicatesAndSort
-
-
-
-
-
-
-
-
-// fCSCalcNewPermData //////////////////////////////////////////////////////////////////////////////////////////////////
-// Purpose -> Calculate ID, OldSk1, NewSk1, Roll1Morph, then same for Sk2
-function fCSCalcNewPermData(perm) {
-
-  let myAbil = getObjKLMyAbilities();
-
-  // Calculate ID, OldSk1, NewSk1, Roll1Morph, then same for Sk2
-  for (let r = perm.dataFirst_R; r <= perm.dataLast_R && perm.arr[r][perm.abilNameID_C]; r++) {
-    const abilID = perm.arr[r][perm.abilNameID_C].slice(-6); // Assume last 6 characters are the abilID
-    perm.arr[r][perm.id_C] = abilID;
-    const myAbil_R = gKeyR('mykl', 'MyAbilities', abilID); // returns false if not found
-    
-    if (myAbil_R) {
-      perm.arr[r][perm.oldSk1_C] = myAbil.arr[myAbil_R][myAbil.trainedSk1_C];
-      perm.arr[r][perm.oldSk2_C] = myAbil.arr[myAbil_R][myAbil.trainedSk2_C];
-
-      const [newSk1Morph, newSk1, newMorphRoll1] = fCSCalcNewSkAndRollMorph(perm, r, 'Sk1');
-      perm.arr[r][perm.morph1_C] = newSk1Morph;
-      perm.arr[r][perm.newSk1_C] = newSk1;
-      perm.arr[r][perm.morphRoll1_C] = newMorphRoll1;
-
-      const [newSk2Morph, newSk2, newMorphRoll2] = fCSCalcNewSkAndRollMorph(perm, r, 'Sk2');
-      perm.arr[r][perm.morph2_C] = newSk2Morph;
-      perm.arr[r][perm.newSk2_C] = newSk2;
-      perm.arr[r][perm.morphRoll2_C] = newMorphRoll2;
-    }
-  }
-} // End fCSCalcNewPermData
-
-
-
-
-// fCSCalcNewSkAndRollMorph //////////////////////////////////////////////////////////////////////////////////////////////////
-// Purpose -> Calculates newMorphStr, newSk and newRollMorph
-function fCSCalcNewSkAndRollMorph(perm, r, sk1or2) {
-
-  const isSk1 = sk1or2 === 'Sk1';
-
-  perm._morphCol = (isSk1) ? perm.morph1_C : perm.morph2_C;
-  perm._oldSkCol = (isSk1) ? perm.oldSk1_C : perm.oldSk2_C;
-  perm._newSkCol = (isSk1) ? perm.newSk1_C : perm.newSk2_C;
-  perm._morphRollCol = (isSk1) ? perm.morphRoll1_C : perm.morphRoll2_C;
-
-  // If there is no oldSk (which is MyAbil.trained)
-  if (!perm.arr[r][perm._oldSkCol]) return ['','',''];
-
-  const oldMorphStr = perm.arr[r][perm._morphCol];
-  const heading = (isSk1) ? 'Sk1 Morph' : 'Sk2 Morph';
-
-  let newMorphStr = (perm.arr[r][perm._morphCol]) ? fCSCleanPermMorph(oldMorphStr,heading) : '';
-  let newSk = perm.arr[r][perm._oldSkCol];
-  let newRollMorph = '';
-
-  if (newMorphStr) [newSk,newRollMorph] = fCSCalcNewSkNewMorphRoll(perm, r, newMorphStr);
-
-  return [newMorphStr,newSk,newRollMorph];
-
-} // End fCSCalcNewSkAndRollMorph
-
-
-
-
-
-// fCSCleanPermMorph //////////////////////////////////////////////////////////////////////////////////////////////////
-// Purpose -> throws errors if morphStr contains bad elements
-function fCSCleanPermMorph(morphStr, heading) {
-  if (!morphStr) return '';
-
-  // Remove spaces, tabs, returns, reduce multiple commas to one, and remove leading/trailing commas
-  let newMorphStr = morphStr.replace(/\s+/g, '')  // Remove all whitespace characters
-                            .replace(/,+/g, ',')  // Reduce multiple commas to a single comma
-                            .replace(/^,|,$/g, '');  // Remove leading and trailing commas                        
-
-  const morphArr = newMorphStr.toUpperCase().split(',');
-
-  let num; // Declare num here
-
-  // For each element of morphArr verify that it matches one of the cases else throw an error
-  for (const element of morphArr) {
-    switch (true) {
-
-      // Test just a Combine # (If there is just X where X is a positive number (e.g. 5, 8, 12.34))
-      case /^\d+(\.\d+)?$/.test(element.toString()): break;
-
-      // Test two letter + Integer Morphs
-      case element.startsWith('=='):
-      case element.startsWith('++'):
-      case element.startsWith('--'):
-        num = Number(element.substring(2));
-        if (!Number.isInteger(num) || num < 1) 
-          throw new Error(`(1) ${heading} has an invalid argument: "${element}"`);
-        break;
-
-      // Test two letter + Positive Number Morphs
-      case element.startsWith('**'):
-      case element.startsWith('//'):
-        num = Number(element.substring(2));
-        if (isNaN(num) || num <= 0) 
-          throw new Error(`(2) ${heading} has an invalid argument: "${element}"`);
-        break;
-
-      // Test +1d, -1d, +1c, -1c, +1t, -1t (where 1 could be any integer including two or more digits)
-      case /^[\+\-][1-9]\d*[DCT]$/.test(element):
-        num = Number(element.substring(1, element.length - 1));
-        if (!Number.isInteger(num) || num < 1) 
-          throw new Error(`(3) ${heading} has an invalid argument: "${element}"`);
-        break;
-
-      // Test one letter + Integer Morphs
-      case element.startsWith('='):
-      case element.startsWith('+'):
-      case element.startsWith('-'):
-        num = Number(element.substring(1));
-        if (!Number.isInteger(num) || num < 1) 
-          throw new Error(`(4) ${heading} has an invalid argument: "${element}"`);
-        break;
-
-      // Test one letter + Positive Number Morphs
-      case element.startsWith('*'):
-      case element.startsWith('/'):
-        num = Number(element.substring(1));
-        if (isNaN(num) || num <= 0) 
-          throw new Error(`(5) ${heading} has an invalid argument: "${element}"`);
-        break;
-
-      default: 
-        throw new Error(`(6) ${heading} has an invalid argument: "${element}"`);
-    }
-  }
-
-  return `,${newMorphStr}`; 
-
-} // End fCSCleanPermMorph
-
-
-
-
-// fCSCalcNewSkNewMorphRoll //////////////////////////////////////////////////////////////////////////////////////////////////
-// Purpose: Returns [newSk,newRollMorph]
-// Purpose: Calculates NewSk from oldSk and MorphStr
-// Purpose: Calculates newRollMorph based on "est Two letter + Interger Morphs"
-function fCSCalcNewSkNewMorphRoll(perm, r, morphStr) {
-
-  const oldsk = perm.arr[r][perm._oldSkCol]
-
-  if (!morphStr) return [oldsk,''];
-
-  const morph = {
-    base: oldsk,
-    combineArr: [],
-    plusMinus: 0,
-    multDiv: 1,
-    dctTotal: 0,
-
-    // The keyname+2 format below is for ==, ++, --, //, ** 
-    equals2: 0,
-    plusMinus2: 0,
-    multDiv2: 1,
-  };
-
-  const capMorphStr = morphStr.toUpperCase().replace(/^,/, ''); // All CAPS and remove leading ',' if it exists
-  const morphArr = capMorphStr.split(','); 
-
-    morphArr.forEach(element => {
-      switch (true) {
-
-        // Combine: If there is just X where X is a positive number (e.g. 5, 8, 12.34) then truncated to an integer and added to morph.combineArr
-        case /^\d+(\.\d+)?$/.test(element.toString()): {
-          morph.combineArr.push(Math.trunc(Number(element)));
-          break;
-        }
-
-        // Test two letter + Integer Morphs
-        case element.startsWith('=='): morph.equals2 = Math.max(morph.equals2, Number(element.substring(2))); break;
-        case element.startsWith('++'): morph.plusMinus2 += Number(element.substring(2)); break;
-        case element.startsWith('--'): morph.plusMinus2 -= Number(element.substring(2)); break;
-
-        // Calc two letter + Positive Number Morphs
-        case element.startsWith('**'): morph.multDiv2 *= Number(element.substring(2)); break;
-        case element.startsWith('//'): morph.multDiv2 /= Number(element.substring(2)); break;
-        
-        // Calc +1d, -1d, +1c, -1c, +1t, -1t (where 1 could be any integer including two or more digits)
-        case /^[\+\-][1-9]\d*[DCT]$/.test(element): {
-            const isPositive = element.startsWith('+');
-            let num = parseInt(element.substring(1));
-
-            if (element.endsWith('T')) {
-                num *= 10;
-                morph.multDiv *= isPositive ? num : 1/num;
-            } else { // Else endsWith D or C
-                num = element.endsWith('D') ? num : 3 * num;
-                morph.dctTotal += isPositive ? num : -num;
-            }
-            break;
-        }
-
-        // Calc one letter + Integer Morphs
-        case element.startsWith('='): morph.base = Number(element.substring(1)); break;
-        case element.startsWith('+'): morph.plusMinus += Number(element.substring(1)); break;
-        case element.startsWith('-'): morph.plusMinus -= Number(element.substring(1)); break;
-        case element.startsWith('*'): morph.multDiv *= Number(element.substring(1)); break;
-        case element.startsWith('/'): morph.multDiv /= Number(element.substring(1)); break;
-
-        default: throw new Error(`In fCSCalcNewSkNewMorphRoll, Morph not found: "${element}"`);
-      }
-    });
-
-    // Calculate newSk
-    let newSk = fCSCombineBaseAndArr(morph.base,morph.combineArr);
-    newSk = Math.max(1,Math.round(fCSCalcdTiers(newSk, morph.dctTotal) * morph.multDiv + morph.plusMinus));
-
-    // Calculate newMorphRoll
-    let newMorphRoll = '';
-    newMorphRoll += (morph.equals2 !== 0) ?  `,==${morph.equals2}` : '';
-    newMorphRoll += (morph.plusMinus2 > 0) ?  `,++${morph.plusMinus2}` : ''; 
-    newMorphRoll += (morph.plusMinus2 < 0) ?  `,--${morph.plusMinus2}` : '';
-    if (morph.multDiv2 !== 1) {
-      const multiplier = parseFloat(morph.multDiv2.toFixed(3));
-      newMorphRoll += `,**${multiplier}`;
-    }
-
-  return [newSk,newMorphRoll];
-
-} // End fCSCalcNewSkNewMorphRoll
-
-
-
-
-// fCSBuildconditionDropDown //////////////////////////////////////////////////////////////////////////////////////////////////
-// Purpose -> Builds Condition Drop Downs for <Game> and removes unused Conditions
-function fCSBuildconditionDropDown(perm, game) {
-
-  for (let r = game.nishStart_R; r <= game.gearTblEnd_R; r++) {
-
-    // Skip rows between abil and gear tables
-    if (r> game.abilTblEnd_R && r < game.gearTblStart_R) {
-      r = game.gearTblStart_R - 1;
-      continue;
-    }
-
-    const abilNameID = game.arr[r][game.abilNameID_C];
-    const abilID = gTestID('mycs', 'PermMorph', abilNameID);
-    const gameCond = game.arr[r][game.condition_C];
-    let gameCondFound = false;
-    let dropDownList = [];
-
-    // If abilID exists in <PermMorph>
-    if (abilID) {
-      let perm_R = gKeyR('mycs', 'PermMorph', abilID);
-      do {
-        const permCond = perm.arr[perm_R][perm.condition_C];
-        gameCondFound = (gameCondFound || gameCond === permCond);
-        dropDownList.push(permCond);
-        perm_R--;
-      } while (perm_R >= perm.dataFirst_R && perm.arr[perm_R][perm.id_C] === abilID);
-    }
-
-    // Set the DropDown for <Game> "Condition" at the specified range
-    const dropDownRange = game.ref.getRange(r + 1, game.condition_C + 1);
-    if (dropDownList.length > 0) {
-
-    // Create a data validation rule
-    const rule = SpreadsheetApp.newDataValidation()
-                              .requireValueInList(dropDownList, true) // Only allow values from dropDownList
-                              .setAllowInvalid(false) // Prevent invalid data
-                              .build();
-    dropDownRange.setDataValidation(rule);
-    } else {
-      // Clear any existing data validation from the cell.
-      dropDownRange.clearDataValidations();
-    }
-
-    if (!gameCondFound) game.arr[r][game.condition_C] = '';
-
-  }
-
-  gSaveArraySectionToSheet(game.ref,game.arr,game.nishStart_R,game.gearTblEnd_R,game.condition_C,game.condition_C);
-
-} // End fCSBuildconditionDropDown
-
-
-
-
-
-
-// fCSApplyPermToGame //////////////////////////////////////////////////////////////////////////////////////////////////
-// Purpose -> Applies <PermMorph> to <Game>
-function fCSApplyPermToGame(perm, game) {
-
-  for (let r = game.nishStart_R; r <= game.gearTblEnd_R; r++) {
-
-    // Skip rows between abil and gear tables
-    if (r> game.abilTblEnd_R && r < game.gearTblStart_R) {
-      r = game.gearTblStart_R - 1;
-      continue;
-    }
-
-    const abilNameID = game.arr[r][game.abilNameID_C];
-    const abilID = gTestID('mycs', 'PermMorph', abilNameID);
-
-    if (abilID) {
-      let perm_R = gKeyR('mycs', 'PermMorph', abilID); // Finds the LAST match
-      let foundMatch = false;
-      const gameCond = game.arr[r][game.condition_C];
-      do {
-        if (perm.arr[perm_R][perm.condition_C] === gameCond) {
-          foundMatch = true;
-          break;
-        }
-        perm_R--;
-      } while (!foundMatch && perm_R >= perm.dataFirst_R && perm.arr[perm_R][perm.id_C] === abilID);
-      
-      if (foundMatch) {
-        game.arr[r][game.permMorph1_C] = perm.arr[perm_R][perm.morphRoll1_C];
-        game.arr[r][game.sk1_C] = perm.arr[perm_R][perm.newSk1_C];
-        game.arr[r][game.permMorph2_C] = perm.arr[perm_R][perm.morphRoll2_C];
-        game.arr[r][game.sk2_C] = perm.arr[perm_R][perm.newSk2_C];
-      }
-    }
-  }
-
-  gSaveArraySectionToSheet(game.ref,game.arr,game.nishStart_R,game.gearTblEnd_R,game.abilTableFirst_C,game.abilTableLast_C);
-
-} // End fCSApplyPermToGame
 
 
 

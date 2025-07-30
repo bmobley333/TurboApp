@@ -674,6 +674,7 @@ function fKLBuildKnownAbilitiesSheet(extractedKLs) {
  */
 function fKLCalcFinalSkills(abil, r) {
     const row = abil.arr[r];
+    const level = gCharLvl();
 
     const initVer = row[abil.ver_C] || 0;
     const ver = (initVer >= 1) ? initVer - 1 : initVer; // Version 1 provides a 0 bonus.
@@ -697,9 +698,9 @@ function fKLCalcFinalSkills(abil, r) {
     // Calculate Ver and Buff effects for FinalSks.
     row[abil.finalSk1_C] = '~';
     if (plgBase1 !== '~') {
-        const combine1 = [plgBase1, ver * 3, buff * 5];
+        const combine1 = [plgBase1, ver * 3, level/3, buff * 5];
         combine1.sort((a, b) => b - a);
-        row[abil.finalSk1_C] = Math.round(combine1[0] + combine1[1] / 2 + combine1[2] / 4);
+        row[abil.finalSk1_C] = Math.round(combine1[0] + combine1[1] / 2 + combine1[2] / 4 + combine1[3]/8);
     }
 
     row[abil.finalSk2_C] = '~';
