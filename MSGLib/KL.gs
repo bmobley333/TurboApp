@@ -558,6 +558,7 @@ function fKLBuildKnownAbilitiesSheet(extractedKLs) {
         abil.arr[r][abil.nameID_C] = gGetVal('db', 'Elements', kl.id, 'Name_ID');
         abil.arr[r][abil.ver_C] = kl.bestVer;
         abil.arr[r][abil.buff_C] = kl.bestBuff;
+        abil.arr[r][abil.kitID_C] = fKLGetParentKitID(kl.id);
         abil.arr[r][abil.notes_C] = gGetVal('db', 'Elements', kl.id, 'Notes');
 
         if (gTestID('db', 'Abilities', kl.id)) {
@@ -567,16 +568,17 @@ function fKLBuildKnownAbilitiesSheet(extractedKLs) {
             abil.arr[r][abil.sk1PLAGHE_C] = gGetVal('db', 'Abilities', kl.id, rcID_C) ||gGetVal('db', 'Abilities', kl.id, 'DefaultPLAGHESk1') || '~';
             abil.arr[r][abil.sk2PLAGHE_C] = gGetVal('db', 'Abilities', kl.id, rcID_C + 1) || gGetVal('db', 'Abilities', kl.id, 'DefaultPLAGHESk2') || '~';
 
-            fKLCalcFinalSkills(abil, r);
             // Fills in Act, Dur, Rng, Meta, Uses, Regain to KL 'KnownAbilities' from DB 'Versions'
-            fKLFillInDBVersionsStats(abil,r);
+            fKLFillInDBVersionsStats(abil, r);
         }
     }
-
-
-    // Save the newly populated array back to the sheet.
+        
+    // Save and refresh sheet then calculate KitBuffs for kit feats and then final skills  
     gSaveSheet('mykl', 'knownabilities');
-
+    abil = getObjKnownAbilities(true);
+    fKLCalcKitBuffsAndFinalSkills(abil);
+    gSaveSheet('mykl', 'knownabilities');
+    
     // Get a fresh reference to the data just saved to the sheet.
     const finalAbil = getObjKnownAbilities(true);
     const sheetValues = finalAbil.arr;
@@ -598,6 +600,58 @@ function fKLBuildKnownAbilitiesSheet(extractedKLs) {
 
 
 
+
+/**
+ * Purpose: Retrieves the valid 6-character ID of an ability's parent kit.
+ * Assumptions: The 'Abilities' sheet in the 'db' spreadsheet is correctly formatted with a 'ParentKit' column.
+ * Notes: This function performs multiple validations to ensure a valid ID is returned.
+ * @param {string} abilID - The 6-character ID of the child ability to check.
+ * @returns {string} The 6-character ID of the parent kit if found and valid, otherwise an empty string.
+ */
+function fKLGetParentKitID(abilID) {
+    if (gTestID('db', 'Abilities', abilID)) {
+        const parentKitName_ID = gGetVal('db', 'Abilities', abilID, 'ParentKit');
+        const kitID = gGetIDFromString(parentKitName_ID);
+        if (gTestID('db', 'Abilities', kitID)) {
+            return kitID;
+        }
+    }
+    return '';
+} // End fKLGetParentKitID
+
+
+
+
+
+/**
+ * Purpose: First populates the 'KitBuff' column for all abilities, then calculates the 'FinalSk1' and 'FinalSk2' values for every ability.
+ * Assumptions: This function is called after the 'KnownAbilities' sheet has been populated and all 'Buff' values for parent kits are present.
+ * Notes: This function uses a two-pass approach. The first pass gathers all kit buff dependencies. The second pass calculates the final skills, ensuring all prerequisite data is available. It modifies the 'KnownAbilities' array in memory and does not save the changes to the sheet.
+ * @param {object} abil - The sheet object for 'KnownAbilities', typically from getObjKnownAbilities().
+ * @returns {void}
+ */
+function fKLCalcKitBuffsAndFinalSkills(abil) {
+    // First Pass: Populate all KitBuff values. This ensures that when the second pass runs,
+    // the buff value for any parent kit is already available in the array, regardless of row order.
+    for (let r = abil.dataFirst_R; r <= abil.dataLast_R; r++) {
+        const abilRow = abil.arr[r];
+        const parentKitID = abilRow[abil.kitID_C];
+
+        if (parentKitID) {
+            // If a parent kit exists, look up its 'Buff' value from within the same sheet and assign it.
+            abilRow[abil.kitBuff_C] = gGetVal('mykl', 'KnownAbilities', parentKitID, 'Buff');
+        }
+    }
+
+    // Second Pass: Calculate the Final Skills for every ability.
+    // Now that all KitBuffs are populated, this calculation will be correct.
+    for (let r = abil.dataFirst_R; r <= abil.dataLast_R; r++) {
+        fKLCalcFinalSkills(abil, r);
+    }
+
+} // End fKLCalcKitBuffsAndFinalSkills
+
+
 /**
  * Purpose: Calculates the final skill values for a known ability based on its bases, PLG rating, version, and buff numbers.
  * Assumptions: This function modifies the provided ability object's array directly by reference.
@@ -612,7 +666,7 @@ function fKLCalcFinalSkills(abil, r) {
 
     const initVer = row[abil.ver_C] || 0;
     const ver = (initVer >= 1) ? initVer - 1 : initVer; // Version 1 provides a 0 bonus.
-    const buff = row[abil.buff_C] || 0;
+    const buff = Math.max(row[abil.buff_C],row[abil.kitBuff_C]) || 0;
     const base1 = row[abil.base1_C];
     const base2 = row[abil.base2_C];
     const sk1PLG = row[abil.sk1PLAGHE_C];
