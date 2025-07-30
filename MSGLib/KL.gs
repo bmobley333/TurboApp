@@ -630,8 +630,9 @@ function fKLBuildKnownAbilitiesSheet(extractedKLs) {
         if (gTestID('db', 'Abilities', kl.id)) {
             abil.arr[r][abil.base1_C] = gGetVal('db', 'Abilities', kl.id, 'Base1');
             abil.arr[r][abil.base2_C] = gGetVal('db', 'Abilities', kl.id, 'Base2');
-            abil.arr[r][abil.sk1PLAGHE_C] = gGetVal('db', 'Abilities', kl.id, rcID_C) || '~';
-            abil.arr[r][abil.sk2PLAGHE_C] = gGetVal('db', 'Abilities', kl.id, rcID_C + 1) || '~';
+            // Assign the RC specific PlAGHE if it exists, else the default PlAGHE if it exists, else '~'
+            abil.arr[r][abil.sk1PLAGHE_C] = gGetVal('db', 'Abilities', kl.id, rcID_C) ||gGetVal('db', 'Abilities', kl.id, 'DefaultPLAGHESk1') || '~';
+            abil.arr[r][abil.sk2PLAGHE_C] = gGetVal('db', 'Abilities', kl.id, rcID_C + 1) || gGetVal('db', 'Abilities', kl.id, 'DefaultPLAGHESk2') || '~';
 
             fKLCalcFinalSkills(abil, r);
             // Fills in Act, Dur, Rng, Meta, Uses, Regain to KL 'KnownAbilities' from DB 'Versions'
@@ -906,7 +907,7 @@ function fGetKLCardObj(cardText, tabName, r, c) {
   } else { // Must be 'C' or 'B'
     cardObj.apType = apType;
     cardObj.apCost = parseInt(apCostStr, 10);
-    if (isNaN(cardObj.apCost) || cardObj.apCost < 1 || cardObj.apCost > 100) {
+    if (isNaN(cardObj.apCost) || cardObj.apCost < 0 || cardObj.apCost > 100) {
       throw new Error(`In fGetKLCardObj, the cost/tier line from sheet "${tabName}" at cell ${r},${c} ("${costTierLine}") has an apCost that is not an integer between 1 and 100.`);
     }
   }
@@ -922,7 +923,7 @@ function fGetKLCardObj(cardText, tabName, r, c) {
   cardObj.id = idMatch[1];
 
   // Parse Buff/Version Type and Number (from the third line)
-  const buffVerMatch = idVerLine.match(/\.([bv])([1-9])$/);
+  const buffVerMatch = idVerLine.match(/\.([bv])([0-9])$/);
   if (!buffVerMatch) throw new Error(`In fGetKLCardObj, the ID/version line from sheet "${tabName}" at cell ${r},${c} ("${idVerLine}") has an invalid or missing buff/version suffix (e.g., .b1, .v9).`);
   
   [, cardObj.buffVerType, cardObj.buffVerNum] = buffVerMatch;
@@ -1073,6 +1074,7 @@ function fKLSetKLAPCosts() {
                     }
 
                     // Assign the new AP cost based on the tier and buff/version type.
+                    if (klCard.apCost === 0) continue;
                     klCard.apCost = (klCard.buffVerType === 'v') ? verAPCost[apCostTier] : buffAPCost[apCostTier];
                     currentTab.arr[r][c + 1] = fKLCardObjToStr(klCard);
                 }
