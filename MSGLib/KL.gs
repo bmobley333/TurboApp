@@ -495,9 +495,9 @@ function fKLFlattenDuplicates(allIndividualKLs) {
 
 
 /**
- * Purpose: Resizes and populates the 'KnownAbilities' sheet, then filters out and deletes any abilities that have no applicable RC skills.
- * Assumptions: The input array has already been fully expanded and consolidated.
- * Notes: This function overwrites existing data. The final step removes abilities where both skill slots are marked as non-applicable ('~') for the current RaceClass.
+ * Purpose: Resizes and populates the 'KnownAbilities' sheet with data, including parent kit info, then removes abilities irrelevant to the current RaceClass.
+ * Assumptions: The input array has already been fully expanded and consolidated. The 'Abilities' and 'Elements' sheets in the 'db' are correctly formatted.
+ * Notes: This function overwrites existing data on the 'KnownAbilities' sheet. The final step removes abilities where both skill slots are non-applicable ('~') for the current RaceClass.
  * @param {object[]} extractedKLs - The final array of unique, individual KL objects.
  * @returns {void}
  */
@@ -532,10 +532,14 @@ function fKLBuildKnownAbilitiesSheet(extractedKLs) {
         abil.arr[r][abil.nameID_C] = gGetVal('db', 'Elements', kl.id, 'Name_ID');
         abil.arr[r][abil.ver_C] = kl.bestVer;
         abil.arr[r][abil.buff_C] = kl.bestBuff;
-        abil.arr[r][abil.kitID_C] = fKLGetParentKitID(kl.id);
+        const [parentKitName,parentKitID] = fKLGetParentKitNameAndID(kl.id);
+        abil.arr[r][abil.kitID_C] = parentKitID;
+        abil.arr[r][abil.parentKit_C] = parentKitName;
         abil.arr[r][abil.notes_C] = gGetVal('db', 'Elements', kl.id, 'Notes');
 
         if (gTestID('db', 'Abilities', kl.id)) {
+            abil.arr[r][abil.sk1Typ_C] = gGetVal('db', 'Abilities', kl.id, 'SkTyp1');
+            abil.arr[r][abil.sk2Typ_C] = gGetVal('db', 'Abilities', kl.id, 'SkTyp2');
             abil.arr[r][abil.base1_C] = gGetVal('db', 'Abilities', kl.id, 'Base1');
             abil.arr[r][abil.base2_C] = gGetVal('db', 'Abilities', kl.id, 'Base2');
             // Assign the RC specific PlAGHE if it exists, else the default PlAGHE if it exists, else '~'
@@ -576,22 +580,22 @@ function fKLBuildKnownAbilitiesSheet(extractedKLs) {
 
 
 /**
- * Purpose: Retrieves the valid 6-character ID of an ability's parent kit.
+ * Purpose: Retrieves the full Name_ID and the 6-character ID of an ability's parent kit.
  * Assumptions: The 'Abilities' sheet in the 'db' spreadsheet is correctly formatted with a 'ParentKit' column.
- * Notes: This function performs multiple validations to ensure a valid ID is returned.
+ * Notes: Performs multiple validations to ensure valid data is returned.
  * @param {string} abilID - The 6-character ID of the child ability to check.
- * @returns {string} The 6-character ID of the parent kit if found and valid, otherwise an empty string.
+ * @returns {string[]} An array containing two strings: [parentKitName_ID, parentKitID]. Returns ['', ''] if no valid parent is found.
  */
-function fKLGetParentKitID(abilID) {
+function fKLGetParentKitNameAndID(abilID) {
     if (gTestID('db', 'Abilities', abilID)) {
         const parentKitName_ID = gGetVal('db', 'Abilities', abilID, 'ParentKit');
         const kitID = gGetIDFromString(parentKitName_ID);
         if (gTestID('db', 'Abilities', kitID)) {
-            return kitID;
+            return [parentKitName_ID,kitID];
         }
     }
-    return '';
-} // End fKLGetParentKitID
+    return ['',''];
+} // End fKLGetParentKitNameAndID
 
 
 
@@ -990,20 +994,12 @@ function fKLSetKLAPCosts() {
     const buffAPCost = [2, 4, 8, 16, 32];
     const verAPCost = [5, 5, 9, 16, 25];
 
-    // Alert the user that the <All> sheet has a special condition.
-    SpreadsheetApp.getUi().alert('Notice', 'Abilities on the KL <All> sheet will only be updated from row 18 onwards (Skipping Attributes). All other RC sheets will be fully processed.', SpreadsheetApp.getUi().ButtonSet.OK);
-
     // For each specified sheet, load it, recalculate AP costs, and save it.
     g.klRCSheetNames.forEach(tabName => {
         const currentTab = getObjKL_RCTab(tabName, true);
         const lastCol = currentTab.arr[0].length - 2; // Loop until the second to last column to safely access c+1
 
         for (let r = currentTab.dataFirst_R; r <= currentTab.dataLast_R; r++) {
-
-            // If on the 'All' sheet, skip the protected Attributes rows.
-            if (tabName.toLowerCase() === 'all' && r < 17) {
-                continue;
-            }
 
             for (let c = 1; c <= lastCol; c++) {
                 

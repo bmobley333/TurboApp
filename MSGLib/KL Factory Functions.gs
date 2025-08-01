@@ -96,9 +96,11 @@ function getObjKnownAbilities(forceLoad = false) {
     arr: gArr(ss, sheetName),
     dataFirst_R: gDataFirst_R(ss, sheetName),  
     dataLast_R: gDataLast_R(ss, sheetName),   
-
+    
     id_C: gHeaderC(ss, sheetName, 'ID'), 
     nameID_C: gHeaderC(ss, sheetName, 'Name_ID'), 
+    sk1Typ_C: gHeaderC(ss, sheetName,'SkTyp1'),
+    sk2Typ_C: gHeaderC(ss, sheetName,'SkTyp2'),
     finalSk1_C: gHeaderC(ss, sheetName, 'FinalSk1'),
     finalSk2_C: gHeaderC(ss, sheetName, 'FinalSk2'),  
     ver_C: gHeaderC(ss, sheetName, 'Ver'),
@@ -111,6 +113,7 @@ function getObjKnownAbilities(forceLoad = false) {
     regain_C: gHeaderC(ss, sheetName,'Regain'),
     buff_C: gHeaderC(ss, sheetName, 'Buff'),  
     kitID_C: gHeaderC(ss, sheetName, 'KitID'),  
+    parentKit_C: gHeaderC(ss, sheetName, 'ParentKit'), 
     kitBuff_C: gHeaderC(ss, sheetName, 'KitBuff'),  
     base1_C: gHeaderC(ss, sheetName, 'Base1'),  
     base2_C: gHeaderC(ss, sheetName, 'Base2'),

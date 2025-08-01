@@ -53,7 +53,6 @@ const g = {
 // onOpen //////////////////////////////////////////////////////////////////////////////////////////////////
 // onOpen trigger to determine the active sheet and create the corresponding menu
 function onOpen() {
-
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const spreadsheetId = ss.getId();
 

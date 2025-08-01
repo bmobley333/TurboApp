@@ -84,11 +84,15 @@ function getObjDBAbilities(forceLoad = false) {
 
     ref: gSheetRef(ss, sheetName),
     arr: gArr(ss, sheetName),
+    dataFirst_R: gDataFirst_R(ss, sheetName),
+    dataLast_R: gDataLast_R(ss, sheetName),
 
     id_C: gHeaderC(ss, sheetName,'ID'),
     nameID_C: gHeaderC(ss, sheetName,'Name_ID'),
     base1_C: gHeaderC(ss, sheetName,'Base1'),
     base2_C: gHeaderC(ss, sheetName,'Base2'),
+    sk1Typ_C: gHeaderC(ss, sheetName,'SkTyp1'),
+    sk2Typ_C: gHeaderC(ss, sheetName,'SkTyp2'),
     defaultPLAGHESk1_C: gHeaderC(ss, sheetName,'DefaultPLAGHESk1'),
     defaultPLAGHESk2_C: gHeaderC(ss, sheetName,'DefaultPLAGHESk2'),
     parentKit_C: gHeaderC(ss, sheetName,'ParentKit'),
@@ -96,11 +100,7 @@ function getObjDBAbilities(forceLoad = false) {
     kitFirstSk1_C: gHeaderC(ss, sheetName,'KitFirstSk2') - 1,
     kitLastSk1_C: gHeaderC(ss, sheetName,'KitLastSk2') - 1,
 
-    dataFirst_R: gDataFirst_R(ss, sheetName),
-    dataLast_R: gDataLast_R(ss, sheetName),
 
-    sk1Typ_C: gHeaderC(ss, sheetName,'SkTyp1'),
-    sk2Typ_C: gHeaderC(ss, sheetName,'SkTyp2'),
     isItem_C: gHeaderC(ss, sheetName,'IsItem'),
     isNonRCPossession_C: gHeaderC(ss, sheetName,'isNonRCPossession'),
     notes_C: gHeaderC(ss, sheetName,'Notes'),

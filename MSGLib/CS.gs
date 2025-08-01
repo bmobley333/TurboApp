@@ -15,7 +15,7 @@ function fCSCreateMenu() {
 
   SpreadsheetApp.getUi()
   .createMenu('*** Game')
-    .addItem('Turbo', 'fCSMenuTurboUI') // Note this is ONLY to create the "Turbo" menu choice. All turbo code including the rest of the normal menu functions are ran natively from the Character Sheet and the Turbo Web App
+    // .addItem('Turbo', 'fCSMenuTurboUI') // Note this is ONLY to create the "Turbo" menu choice. All turbo code including the rest of the normal menu functions are ran natively from the Character Sheet and the Turbo Web App
     .addItem('Roll', 'fCSMenuRoll')
     .addItem('Roll - Lucked', 'fCSMenuRollLucked')
     .addItem('Roll - Free', 'fCSMenuRollFree')
@@ -536,6 +536,7 @@ function fClearGameAbilAndGearRow(objGame, r, isElem) {
 
     // Clear Ability Table section
     abilRow[objGame.permMorph1_C] = '';
+    if (clearAll) abilRow[objGame.permMorph1_C] = '';
     if (clearAll) abilRow[objGame.morph1_C] = ',';
     if (clearAll) abilRow[objGame.sk1Typ_C] = '';
     if (clearAll) abilRow[objGame.sk1_C] = '';
@@ -546,6 +547,7 @@ function fClearGameAbilAndGearRow(objGame, r, isElem) {
     if (clearAll) abilRow[objGame.sk2_C] = '';
     if (clearAll) abilRow[objGame.sk2Typ_C] = '';
     if (clearAll) abilRow[objGame.morph2_C] = ',';
+    if (clearAll) abilRow[objGame.permMorph2_C] = '';
     abilRow[objGame.permMorph2_C] = '';
     abilRow[objGame.ver_C] = '';
     abilRow[objGame.notes_C] = '';
