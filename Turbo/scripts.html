@@ -568,70 +568,96 @@
   // === Grid Formatting & Visibility  (End of Core Rendering & Grid Tag Setup) ===
   // ==========================================================================
 
-  // fSetTurbosGridHeaderRows ////////////////////////////////////////////////////////////////////
-  // Purpose -> Hides the top utility rows (0, 1) and applies sticky positioning
-  //            and styling to the header rows (2, 3, 4). Also adds a visual
-  //            indicator style to the row immediately below the sticky header (row 5).
-  // Inputs  -> None (Uses gUI.grid2D, gUI.ROW_HEIGHT_PX, gUI.format.bg).
-  // Outputs -> None (Modifies DOM cell styles and classes).
-  function fSetTurbosGridHeaderRows() {
-    fMyConsoleLog("🔒 Applying Sticky Header...");
-    const numRows = gUI.grid2D.length;
+  /**
+   * Purpose: Make header rows (2–4) sticky and hide rows 0–1; ensure #grid is the scroll container so sticky works reliably.
+   * Assumptions: gUI.grid2D is a 2D array of cell HTMLElements; gUI.rowHeights[r] or gUI.ROW_HEIGHT_PX reflects row height in px.
+   * Notes: Applies inline `position: sticky`, `top`, and `zIndex` to avoid stylesheet order issues; safe to call multiple times.
+   * @param {string} parameter1 - Unused placeholder for signature stability.
+   * @param {object} parameter2 - Unused options placeholder.
+   * @returns {boolean} True when sticky header was applied; false if grid/cells missing.
+   */
+  function fSetTurbosGridHeaderRows(parameter1 = "", parameter2 = {}) {
+    try {
+      const gridEl = document.getElementById("grid");
+      const grid = gUI?.grid2D;
+      const numRows = Array.isArray(grid) ? grid.length : 0;
+      const numCols = numRows
+        ? Array.isArray(grid[0])
+          ? grid[0].length
+          : 0
+        : 0;
+      if (!gridEl || !numRows || !numCols) return false;
 
-    // === Validation ===
-    if (numRows < 5) {
-      // Need rows 0, 1, 2, 3, 4 for this to work
-      fMyConsoleLog("⚠️ Not enough rows for sticky header.");
-      return;
-    }
-    const numCols = gUI.grid2D[0]?.length || 0;
-    if (numCols === 0) {
-      fMyConsoleLog("⚠️ No columns found for sticky header.");
-      return;
-    }
+      // Ensure #grid is the sticky anchor/scroll container
+      if (!gridEl.style.position) gridEl.style.position = "relative";
+      if (!gridEl.style.overflowY) gridEl.style.overflowY = "auto";
 
-    // === Hide Top Rows (0 and 1) ===
-    for (let r = 0; r <= 1; r++) {
-      for (let c = 0; c < numCols; c++) {
-        const cell = gUI.grid2D?.[r]?.[c];
-        if (cell) cell.style.display = "none";
+      const stickyRows = [2, 3, 4];
+      const belowRow = 5;
+
+      // Clear previous sticky styles on rows 2..5
+      for (let r = 2; r <= Math.min(5, numRows - 1); r++) {
+        for (let c = 0; c < numCols; c++) {
+          const cell = grid[r]?.[c];
+          if (!cell) continue;
+          cell.classList?.remove("sticky-header", "below-sticky");
+          cell.style.position = "";
+          cell.style.top = "";
+          cell.style.zIndex = "";
+        }
       }
-    }
 
-    // === Apply Sticky Styling to Header Rows (2, 3, 4) ===
-    for (let r = 2; r <= 4; r++) {
-      const offset = (r - 2) * gUI.ROW_HEIGHT_PX; // Calculate offset based on row index (0px for row 2)
-
-      for (let c = 0; c < numCols; c++) {
-        const cell = gUI.grid2D?.[r]?.[c];
-        if (!cell || cell.style.display === "none") continue; // Skip non-existent or hidden cells
-
-        // Add class for base sticky styles
-        cell.classList.add("sticky-header");
-        // Apply dynamic top offset based on row index
-        cell.style.top = `${offset}px`;
-
-        // Re-apply original background color to prevent override by sticky-header class
-        const bgColor = gUI.format?.bg?.[r]?.[c];
-        cell.style.backgroundColor = bgColor || "#ffffff"; // Fallback to white
+      // Hide utility rows 0 and 1
+      for (let r = 0; r <= 1 && r < numRows; r++) {
+        for (let c = 0; c < numCols; c++) {
+          const cell = grid[r]?.[c];
+          if (cell) cell.style.display = "none";
+        }
       }
-    }
 
-    // === Apply Styling to Row Below Sticky Section (Row 5) ===
-    if (numRows > 5) {
-      // Check if row 5 exists
-      const belowRowIndex = 5;
-      for (let c = 0; c < numCols; c++) {
-        const cell = gUI.grid2D?.[belowRowIndex]?.[c];
-        // Apply class only to visible cells in this row
-        if (cell && cell.style.display !== "none") {
+      // Helper: row height
+      const getRowHeight = (rowIndex) => {
+        const h = gUI?.rowHeights?.[rowIndex];
+        return Number.isFinite(h) && h > 0 ? h : gUI.ROW_HEIGHT_PX || 20;
+      };
+
+      // Apply inline sticky with stacked offsets
+      let cumulativeTop = 0;
+      for (let i = 0; i < stickyRows.length; i++) {
+        const r = stickyRows[i];
+        const topPx = cumulativeTop;
+        cumulativeTop += getRowHeight(r);
+
+        for (let c = 0; c < numCols; c++) {
+          const cell = grid[r]?.[c];
+          if (!cell || cell.style.display === "none") continue;
+          cell.classList.add("sticky-header"); // keeps any visual CSS (shadows) if present
+          cell.style.position = "sticky";
+          cell.style.top = `${topPx}px`;
+          cell.style.zIndex = "50";
+
+          // Preserve original header background if known
+          const bg = gUI?.format?.bg?.[r]?.[c];
+          if (bg) cell.style.backgroundColor = bg;
+        }
+      }
+
+      // Mark the row immediately below the sticky band
+      if (belowRow < numRows) {
+        for (let c = 0; c < numCols; c++) {
+          const cell = grid[belowRow]?.[c];
+          if (!cell || cell.style.display === "none") continue;
           cell.classList.add("below-sticky");
         }
       }
-    }
 
-    fMyConsoleLog("✅ Sticky Header Applied");
-  } // END fSetTurbosGridHeaderRows
+      fMyConsoleLog?.("✅ Sticky Header Applied");
+      return true;
+    } catch (err) {
+      console.error("fSetTurbosGridHeaderRows error:", err);
+      return false;
+    }
+  } // End fSetTurbosGridHeaderRows
 
   // fAppliesGridColumnOnOff ///////////////////////////////////////////////////////
   // Purpose -> Recalculates and applies the 'grid-template-columns' CSS style to the
