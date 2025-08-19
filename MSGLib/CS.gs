@@ -15,7 +15,7 @@ function fCSCreateMenu() {
 
   SpreadsheetApp.getUi()
   .createMenu('*** Game')
-    // .addItem('Turbo', 'fCSMenuTurboUI') // Note this is ONLY to create the "Turbo" menu choice. All turbo code including the rest of the normal menu functions are ran natively from the Character Sheet and the Turbo Web App
+    .addItem('Turbo', 'fCSMenuTurboUI') // Note this is ONLY to create the "Turbo" menu choice. All turbo code including the rest of the normal menu functions are ran natively from the Character Sheet and the Turbo Web App
     .addItem('Roll', 'fCSMenuRoll')
     .addItem('Roll - Lucked', 'fCSMenuRollLucked')
     .addItem('Roll - Free', 'fCSMenuRollFree')
