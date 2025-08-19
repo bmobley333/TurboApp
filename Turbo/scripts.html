@@ -8390,11 +8390,14 @@
     fMyConsoleLog("✅ Grid Click & Change Listeners Attached.");
   } // END fSetupGridClickListeners
 
-  // fSetupGridHoverListeners ////////////////////////////////////////////////////////
-  // Purpose -> Attaches delegated 'mouseover' and 'mouseout' event listeners to the
-  //            grid container (#grid) to handle showing and hiding cell tooltips.
-  // Inputs  -> gridElement (HTMLElement): The grid container element.
-  // Outputs -> None (Attaches event listeners).
+  /**
+   * Purpose: Attaches delegated 'mouseover' and 'mouseout' event listeners to the
+   * grid container (#grid) to handle showing and hiding cell tooltips.
+   * Assumptions: The gridElement exists and the global gUI.tooltipElement has been cached.
+   * Notes: This is called post-render to ensure the grid is fully available.
+   * @param {HTMLElement} gridElement - The grid container element.
+   * @returns {void}
+   */
   function fSetupGridHoverListeners(gridElement) {
     // Validate input
     if (!gridElement) {
@@ -8407,8 +8410,13 @@
     fMyConsoleLog("🖱️ Setting up Grid Hover Listeners for Tooltips...");
 
     // Use mouseover/mouseout for better event delegation with cell children
-    gridElement.addEventListener("mouseover", fHandleCellHover); // Handle entering a cell area
-    gridElement.addEventListener("mouseout", fHandleCellMouseOut); // Handle leaving a cell area
+    // These listeners handle the logic for when to show and hide the tooltip.
+    gridElement.addEventListener("mouseover", fHandleCellHover, {
+      passive: true,
+    }); // Handle entering a cell area
+    gridElement.addEventListener("mouseout", fHandleCellMouseOut, {
+      passive: true,
+    }); // Handle leaving a cell area
 
     fMyConsoleLog("✅ Grid Hover Listeners Attached.");
   } // END fSetupGridHoverListeners
@@ -9447,9 +9455,13 @@
     fSetupSidebarActionListeners(); // Buttons within the Roll Log sidebar
   });
 
-  // ======================================================================
-  // === Lightweight App Bootstrap (safe, no side-effects)              ===
-  // ======================================================================
+  /**
+   * Purpose: Performs lightweight, non-blocking, safe client-side setup on script load.
+   * Assumptions: The basic DOM structure (#grid, #cell-tooltip) exists.
+   * Notes: Caches the tooltip element and initializes performance timers. Event listeners are attached later in the lifecycle after the grid is rendered.
+   * @param {} - This is an IIFE and takes no parameters.
+   * @returns {void}
+   */
   (function fBootstrapClientRuntime() {
     try {
       // Ensure perf timers exist for logging
@@ -9457,20 +9469,13 @@
         typeof performance !== "undefined" ? performance.now() : Date.now();
       gUI.lastLogTime = gUI.startTime;
 
-      // Cache tooltip element & wire hover handlers once
+      // Cache the tooltip element. Hover handlers are wired up in fSetupGridHoverListeners
+      // after the grid content is rendered to ensure proper context.
       gUI.tooltipElement = document.getElementById("cell-tooltip") || null;
-      const grid = document.getElementById("grid");
-      if (grid) {
-        // Use mouseover/mousemove for snappy position updates and mouseout to hide
-        grid.addEventListener("mouseover", fHandleCellHover, { passive: true });
-        grid.addEventListener("mousemove", fHandleCellHover, { passive: true });
-        grid.addEventListener("mouseout", fHandleCellMouseOut, {
-          passive: true,
-        });
-      }
+
       fMyConsoleLog("✅ Client bootstrap complete.");
     } catch (e) {
       console.error("Bootstrap error:", e);
     }
-  })();
+  })(); // End fBootstrapClientRuntime
 </script>

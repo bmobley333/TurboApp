@@ -84,7 +84,7 @@ body {
   background: white;
   color: #000;
   border: 1px solid transparent;
-  white-space: pre-wrap;
+  white-space: nowrap; /* Changed from pre-wrap to prevent wrapping */
   text-overflow: ellipsis;
 }
 
@@ -365,6 +365,25 @@ body {
   font-weight: bold;
 }
 
+/* From: style.html */
+
 /* ========================================================================== */
-/* === (Rest of file truncated here for brevity in example) === */
+/* === Tooltip === */
 /* ========================================================================== */
+
+#cell-tooltip {
+  display: none; /* Initially hidden */
+  position: absolute; /* Position relative to the document */
+  background-color: #ffffe0; /* Light yellow background */
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 8px 12px;
+  font-size: 0.85em;
+  line-height: 1.4;
+  max-width: 600px;
+  z-index: 9999; /* Ensure it's on top of everything */
+  pointer-events: none; /* Prevent tooltip from capturing mouse events */
+  box-shadow: 2px 2px 8px rgba(0, 0, 0, 0.15);
+  white-space: pre-wrap; /* Allow newlines from notes to work */
+  word-wrap: break-word; /* Wrap long words */
+}
