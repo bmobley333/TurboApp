@@ -162,6 +162,36 @@ body {
   border-color: transparent #000000 transparent transparent;
 }
 
+
+.cell select.grid-dropdown {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background-color: transparent;
+  
+  /* Add a custom arrow using an SVG background image */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23000000'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 1px center; /* Position arrow near the far right */
+  background-size: 1.6em; /* Keep the large arrow size */
+
+  /* Remove default browser appearance */
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+
+  /* Inherit text styles and add cursor */
+  font-family: inherit;
+  font-size: inherit;
+  text-align: left; /* Align text left to prevent clipping */
+  cursor: pointer;
+
+  /* Adjust padding to prevent text from overlapping the new arrow */
+  padding-left: 0.5em;
+  padding-right: 1.8em; /* Reduce right padding to just cover the arrow */
+}
+
+
 /* ========================================================================== */
 /* === Menu Bar === */
 /* ========================================================================== */

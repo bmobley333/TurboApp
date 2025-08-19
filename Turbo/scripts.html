@@ -113,14 +113,15 @@
   // === Core Rendering & Grid Tag Setup  (End of Core Cell Creation Helpers) ===
   // ==========================================================================
 
-  // fCreateAndFormatCell //////////////////////////////////////////////////////////////
-  // Purpose -> Creates and formats a single grid cell div element. Handles content
-  //            (text, checkbox, dropdown), URL/image/note tags, editability, and styling.
-  // Inputs  -> r (Number): 0-based row index.
-  //         -> c (Number): 0-based column index.
-  //         -> value (Any): The raw value for the cell from gUI.arr.
-  //         -> rowFormat (Object): Formatting object for this specific row.
-  // Outputs -> (HTMLElement): The configured cell div element.
+  /**
+   * Purpose -> Creates and formats a single grid cell div element. Handles content
+   * (text, checkbox, dropdown), URL/image/note tags, editability, and styling.
+   * Inputs  -> r (Number): 0-based row index.
+   * -> c (Number): 0-based column index.
+   * -> value (Any): The raw value for the cell from gUI.arr.
+   * -> rowFormat (Object): Formatting object for this specific row.
+   * Outputs -> (HTMLElement): The configured cell div element.
+   */
   function fCreateAndFormatCell(r, c, value, rowFormat) {
     // === Initialization ===
     const cell = document.createElement("div");
@@ -146,6 +147,9 @@
       // Create and append dropdown
       const select = fMakeDropdown(r, c, dropConfig, value);
       cell.appendChild(select);
+      // Adjust cell style for dropdown to match post-render logic
+      cell.style.padding = "0";
+      cell.style.overflow = "visible";
     } else {
       // Handle standard content (URL/Image/Checkbox/Text)
       const { displayValue, isUrl } = fCheckAndTagUrl(cell, originalValue);
@@ -194,13 +198,14 @@
     return null;
   } // END fFindDropdownMatch
 
-  // fMakeDropdown ///////////////////////////////////////////////////////////////////
-  // Purpose -> Builds a <select> element populated with choices for a grid dropdown.
-  // Inputs  -> r (Number): 0-based row index for data attributes.
-  //         -> c (Number): 0-based column index for data attributes.
-  //         -> config (Object): Dropdown configuration object from gUI.dropDownBox.
-  //         -> currentVal (Any): The current value in gUI.arr[r][c] to pre-select.
-  // Outputs -> (HTMLSelectElement): The configured <select> element.
+  /**
+   * Purpose -> Builds a <select> element populated with choices for a grid dropdown.
+   * Inputs  -> r (Number): 0-based row index for data attributes.
+   * -> c (Number): 0-based column index for data attributes.
+   * -> config (Object): Dropdown configuration object from gUI.dropDownBox.
+   * -> currentVal (Any): The current value in gUI.arr[r][c] to pre-select.
+   * Outputs -> (HTMLSelectElement): The configured <select> element.
+   */
   function fMakeDropdown(r, c, config, currentVal) {
     const select = document.createElement("select");
     select.dataset.r = r;
@@ -219,7 +224,7 @@
     }
 
     // Add styling class
-    select.classList.add("dropdown-cell");
+    select.classList.add("grid-dropdown");
 
     return select;
   } // END fMakeDropdown
