@@ -11,6 +11,23 @@
   // gIndex.GameVer  --> Game version from CS 'Game' such as 28.3
 
   const gUI = {
+    // === Runtime Defaults / Constants (safe fallbacks) ===
+    isDebugMode: false, // flip to true to see status logs
+    ROW_HEIGHT_PX: 20, // must match CSS #grid grid-auto-rows
+    HOVER_DELAY_MS: 400, // tooltip delay
+    TOOLTIP_OFFSET_X: 12,
+    TOOLTIP_OFFSET_Y: 14,
+
+    // === Logging / Perf timers ===
+    startTime:
+      typeof performance !== "undefined" ? performance.now() : Date.now(),
+    lastLogTime:
+      typeof performance !== "undefined" ? performance.now() : Date.now(),
+
+    // === Tooltip runtime cache ===
+    tooltipElement: null,
+    tooltipTimeoutId: null,
+
     // === Core Data Arrays ===
     arr: [], // 2D array of data from the sheet
     rowTag: {}, // Map of row tags to 0-based row indices

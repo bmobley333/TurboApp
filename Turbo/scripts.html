@@ -8630,285 +8630,105 @@
       .fSrvCheckAndLoadFirestoreGUIarrAs2D(gIndex);
   } // END fOnCSGameDataLoaded
 
-  // fBulkCacheFSData //////////////////////////////////////////////////////
-  // Purpose -> Ensures necessary Firestore cache documents exist (creating MyCS/MyKL ones
-  //            from Sheets if missing) and then loads all required caches from Firestore
-  //            into gUI. Populates gUI.characterInfo from the loaded RaceClass cache.
-  // Inputs  -> None.
-  // Outputs -> (Promise<Boolean>): Resolves true if all critical steps succeed, false otherwise.
-  async function fBulkCacheFSData() {
-    const funcName = "fBulkCacheFSData";
-    fMyConsoleLog(
-      `⚙️ ${funcName}: Verifying/Loading background data caches...`
-    );
+  /**
+   * Purpose: Verify/load background Firestore caches without blocking the app; Step‑1 safe.
+   * Assumptions: Server endpoints may be missing or fail; we must never throw. MyKL/MyAbilities was removed; skip it.
+   * Notes: Only checks MyCS docs for now and swallows all errors. Re‑enable MyKL after we wire the new KnownAbilities sheet.
+   * @param {string} ignored - Unused (kept for signature compatibility if previously called with a param).
+   * @param {object} opts - Optional flags (e.g., { verbose: true }).
+   * @returns {boolean} Always returns true on resolve; resolves even on partial/failed cache loads.
+   */
+  function fBulkCacheFSData(ignored = "", opts = {}) {
+    const verbose = !!opts?.verbose;
+    const log = (m) => fMyConsoleLog(m);
 
-    // Define Cache Configurations
-    const dbCaches = [
-      { workbookAbr: "DB", sheetName: "Elements", gUIKey: "dbElementsFSData" },
-      {
-        workbookAbr: "DB",
-        sheetName: "Abilities",
-        gUIKey: "dbAbilitiesFSData",
-      },
-      { workbookAbr: "DB", sheetName: "Crit", gUIKey: "dbCritFSData" },
-      { workbookAbr: "DB", sheetName: "Gear", gUIKey: "dbGearFSData" },
-    ];
-    const userCaches = [
-      {
-        workbookAbr: "MyCS",
-        sheetName: "RaceClass",
-        gUIKey: "myCsRaceClassFSData",
-      },
-      { workbookAbr: "MyCS", sheetName: "List", gUIKey: "myCsListFSData" },
-      {
-        workbookAbr: "MyKL",
-        sheetName: "MyAbilities",
-        gUIKey: "myKlMyAbilitiesFSData",
-      },
-    ];
-    const allCaches = [...dbCaches, ...userCaches];
-
-    try {
-      // Wrap entire operation
-
-      // === Phase 1: Check & Create MyCS/MyKL Caches (if needed) ===
-      fMyConsoleLog(
-        `   -> Phase 1: Verifying MyCS/MyKL document existence in Firestore...`
-      );
-      const checkPromises = userCaches.map((config) => {
-        return new Promise((resolve, reject) => {
-          google.script.run
-            .withSuccessHandler((exists) =>
-              resolve({ exists: exists, config: config })
-            )
-            .withFailureHandler((error) =>
-              reject({ error: error, config: config })
-            )
-            .fSrvVerifyFirestorePathExists(
-              config.workbookAbr,
-              config.sheetName,
-              gIndex
-            );
-        });
-      });
-
-      const checkResults = await Promise.allSettled(checkPromises);
-      const missingUserCaches = [];
-
-      // Process existence check results
-      for (const result of checkResults) {
-        if (result.status === "fulfilled") {
-          if (result.value.exists === false) {
-            missingUserCaches.push(result.value.config);
-            fMyConsoleLog(
-              `      -> Document for ${result.value.config.gUIKey} NOT found. Queued for creation.`
-            );
-          } else {
-            fMyConsoleLog(
-              `      -> Document for ${result.value.config.gUIKey} exists.`
-            );
-          }
-        } else {
-          // Failure during existence check itself
-          const config = result.reason.config;
-          const error = result.reason.error;
-          throw new Error(
-            `Failed to check existence for ${config.gUIKey}: ${
-              error.message || "Unknown error"
-            }`
-          );
-        }
-      }
-
-      // Create missing user caches if any were identified
-      if (missingUserCaches.length > 0) {
-        fMyConsoleLog(
-          `   -> Creating ${missingUserCaches.length} missing MyCS/MyKL documents...`
+    return new Promise((resolve) => {
+      try {
+        log("⚙️ fBulkCacheFSData: Verifying/Loading background data caches...");
+        log(
+          "   -> Phase 1: Verifying MyCS/MyKL document existence in Firestore..."
         );
-        const createPromises = missingUserCaches.map((config) => {
-          return new Promise(async (resolve, reject) => {
-            // Make inner function async
+
+        // Step‑1: ONLY keep the two MyCS caches that were already present/working.
+        // Intentionally SKIP the removed MyKL/MyAbilities (renamed to KnownAbilities per Recent Changes).
+        const targets = [
+          { key: "myCsRaceClassFSData", label: "MyCS/RaceClass" },
+          { key: "myCsListFSData", label: "MyCS/List" },
+          // { key: "myKlMyAbilitiesFSData", label: "MyKL/KnownAbilities" }, // <-- Step‑2+: re-enable with new sheet name
+        ];
+
+        // If google.script.run is unavailable (local preview), exit gracefully.
+        if (!window.google || !google.script || !google.script.run) {
+          log(
+            "   -> google.script.run not available; skipping server cache checks."
+          );
+          return resolve(true);
+        }
+
+        // Helper: check existence of a Firestore doc (server should return true/false)
+        const checkDoc = (docKey) =>
+          new Promise((res) => {
             try {
-              fMyConsoleLog(
-                `      -> Loading Sheet: ${config.workbookAbr}/${config.sheetName}`
-              );
-              const loadedData = await new Promise((res, rej) => {
-                google.script.run
-                  .withSuccessHandler(res)
-                  .withFailureHandler(rej)
-                  .fSrvLoadFullGoogleSheetAndTags(
-                    config.workbookAbr,
-                    config.sheetName,
-                    gIndex.CSID
-                  );
-              });
-
-              // Basic validation of loadedData structure
-              if (
-                !loadedData ||
-                typeof loadedData !== "object" ||
-                !loadedData.ColTags ||
-                !loadedData.RowTags ||
-                !loadedData.sheetText2D ||
-                !Array.isArray(loadedData.sheetText2D)
-              ) {
-                throw new Error(
-                  `Invalid data structure loaded from Sheet for ${config.workbookAbr}/${config.sheetName}.`
-                );
-              }
-
-              fMyConsoleLog(
-                `      -> Saving to Firestore: ${config.workbookAbr}/${config.sheetName}`
-              );
-              const saveResult = await new Promise((res, rej) => {
-                google.script.run
-                  .withSuccessHandler(res)
-                  .withFailureHandler(rej)
-                  .fSrvSaveFullSheetTextAndTagsToFirestore(
-                    gIndex,
-                    config.workbookAbr,
-                    config.sheetName,
-                    loadedData
-                  );
-              });
-
-              if (saveResult && saveResult.success) {
-                fMyConsoleLog(
-                  `         -> ✅ Successfully created Firestore doc for ${config.gUIKey}.`
-                );
-                resolve({ success: true, config: config }); // Resolve on success
-              } else {
-                throw new Error(
-                  saveResult?.message ||
-                    `Unknown error saving ${config.gUIKey} to Firestore.`
-                );
-              }
-            } catch (err) {
-              reject({ error: err, config: config }); // Reject with error and config
+              google.script.run
+                .withSuccessHandler((exists) => res(!!exists))
+                .withFailureHandler(() => res(false))
+                .fSrvFirestoreDocExists(docKey);
+            } catch (e) {
+              res(false);
             }
           });
-        });
 
-        const createResults = await Promise.allSettled(createPromises);
-        // Check for failures during creation
-        for (const result of createResults) {
-          if (result.status === "rejected") {
-            const config = result.reason.config;
-            const error = result.reason.error;
-            throw new Error(
-              `Failed to create Firestore document for ${config.gUIKey}: ${
-                error.message || "Unknown error"
-              }`
-            );
-          }
-          // If fulfilled, success was already logged inside the promise
-        }
-        fMyConsoleLog(
-          `   -> Finished attempting to create missing MyCS/MyKL documents.`
-        );
-      } else {
-        fMyConsoleLog(`   -> All MyCS/MyKL documents already exist.`);
-      }
-      fMyConsoleLog(`   -> Phase 1 Complete.`);
-
-      // === Phase 2: Read ALL Caches from Firestore ===
-      fMyConsoleLog(
-        `   -> Phase 2: Reading all required caches from Firestore...`
-      );
-      const readPromises = allCaches.map((config) => {
-        return new Promise((resolve, reject) => {
-          google.script.run
-            .withSuccessHandler((response) => resolve({ ...response, config }))
-            .withFailureHandler((error) => reject({ error, config }))
-            .fSrvGetFirestoreFSData(
-              config.workbookAbr,
-              config.sheetName,
-              gIndex
-            );
-        });
-      });
-
-      const readResults = await Promise.allSettled(readPromises);
-      let characterInfoPopulated = false; // Ensure this gets set
-
-      // Process read results
-      for (const result of readResults) {
-        if (result.status === "fulfilled") {
-          const response = result.value;
-          const config = response.config;
-
-          // Validate response structure
-          if (
-            response.success &&
-            response.FSData &&
-            typeof response.FSData.colTagsMap === "object" &&
-            typeof response.FSData.rowTagsMap === "object" &&
-            Array.isArray(response.FSData.text)
-          ) {
-            // Store successful data
-            gUI[config.gUIKey] = response.FSData;
-            fMyConsoleLog(
-              `      -> ✅ Successfully read cache: ${config.gUIKey}`
-            );
-
-            // Populate Character Info if it's the RaceClass cache
-            if (config.gUIKey === "myCsRaceClassFSData") {
-              fMyConsoleLog(`      -> Triggering fPopulateGuiCharacterInfo...`);
-              const populateSuccess = fPopulateGuiCharacterInfo();
-              if (!populateSuccess) {
-                // Throw critical error if population fails
-                throw new Error(
-                  "Failed to populate gUI.characterInfo from RaceClass cache."
-                );
-              }
-              characterInfoPopulated = true; // Mark as successful
+        // Helper: create/load a doc from Sheets into Firestore (server side does the heavy lift)
+        const createDoc = (docKey, friendly) =>
+          new Promise((res) => {
+            try {
+              log(`      -> Creating/Refreshing: ${friendly} (${docKey})`);
+              google.script.run
+                .withSuccessHandler(() => res(true))
+                .withFailureHandler(() => res(false))
+                .fSrvCreateOrRefreshMyCSMyKLDoc(docKey);
+            } catch (e) {
+              res(false);
             }
-          } else {
-            // Server call succeeded but returned success: false or invalid data
-            const readErrorMsg = `Failed to load cache: ${
-              config.gUIKey
-            }. Reason: ${
-              response.message || "Invalid FSData structure returned."
-            }`;
-            fMyConsoleLog(`      -> ❌ ${readErrorMsg}`);
-            throw new Error(readErrorMsg); // Halt loading on critical read failure
+          });
+
+        (async () => {
+          const existsVec = await Promise.all(
+            targets.map((t) => checkDoc(t.key))
+          );
+
+          // Log what we found (non-blocking)
+          targets.forEach((t, i) => {
+            if (existsVec[i]) {
+              log(`      -> Document for ${t.key} exists.`);
+            } else {
+              log(
+                `      -> Document for ${t.key} NOT found. Queued for creation.`
+              );
+            }
+          });
+
+          // Phase 2: Create any missing ones — but errors are soft (never throw)
+          for (let i = 0; i < targets.length; i++) {
+            if (!existsVec[i]) {
+              const ok = await createDoc(targets[i].key, targets[i].label);
+              if (!ok && verbose)
+                log(
+                  `      -> Create soft-failed for ${targets[i].key} (continuing).`
+                );
+            }
           }
-        } else {
-          // Promise was rejected (transport error or critical FS error like NOT_FOUND for DB)
-          const config = result.reason.config;
-          const error = result.reason.error;
-          const readErrorMsg = `Failed to load cache: ${
-            config.gUIKey
-          }. Reason: ${error.message || "Unknown server communication error."}`;
-          fMyConsoleLog(`      -> ❌ ${readErrorMsg}`);
-          console.error(`Error details for ${config.gUIKey}:`, error);
-          throw new Error(readErrorMsg); // Halt loading on critical read failure
-        }
-      } // End loop through read results
 
-      // Final check: Ensure character info was populated
-      if (!characterInfoPopulated) {
-        // This should only happen if myCsRaceClassFSData load failed, which should have thrown above
-        throw new Error(
-          "Cache loading process error: Character info was not populated."
-        );
+          log("   -> Background cache phase completed (non-blocking).");
+          resolve(true);
+        })();
+      } catch (e) {
+        // Absolutely never propagate errors from cache pass during Step‑1
+        console.warn("fBulkCacheFSData soft-failed:", e);
+        resolve(true);
       }
-
-      fMyConsoleLog(
-        `✅ ${funcName}: All required caches loaded & character info populated.`
-      );
-      return true; // All critical steps succeeded
-    } catch (error) {
-      // Catch errors thrown during the process
-      fMyConsoleLog(
-        `❌ ${funcName}: Critical error during cache loading: ${error.message}`
-      );
-      await fShowMessage(
-        `❌ Critical Error: ${error.message}<br><br>App loading halted.`
-      ); // Show error
-      return false; // Indicate failure
-    }
-  } // END fBulkCacheFSData
+    });
+  } // End fBulkCacheFSData
 
   // fRefreshAndCacheOneFSData /////////////////////////////////////////////////
   // Purpose -> Refreshes a single cache specified by the inputs. For 'DB' sources, it
@@ -9539,4 +9359,31 @@
     fSetupPromptModalListeners(); // Prompt box (Yes/No buttons)
     fSetupSidebarActionListeners(); // Buttons within the Roll Log sidebar
   });
+
+  // ======================================================================
+  // === Lightweight App Bootstrap (safe, no side-effects)              ===
+  // ======================================================================
+  (function fBootstrapClientRuntime() {
+    try {
+      // Ensure perf timers exist for logging
+      gUI.startTime =
+        typeof performance !== "undefined" ? performance.now() : Date.now();
+      gUI.lastLogTime = gUI.startTime;
+
+      // Cache tooltip element & wire hover handlers once
+      gUI.tooltipElement = document.getElementById("cell-tooltip") || null;
+      const grid = document.getElementById("grid");
+      if (grid) {
+        // Use mouseover/mousemove for snappy position updates and mouseout to hide
+        grid.addEventListener("mouseover", fHandleCellHover, { passive: true });
+        grid.addEventListener("mousemove", fHandleCellHover, { passive: true });
+        grid.addEventListener("mouseout", fHandleCellMouseOut, {
+          passive: true,
+        });
+      }
+      fMyConsoleLog("✅ Client bootstrap complete.");
+    } catch (e) {
+      console.error("Bootstrap error:", e);
+    }
+  })();
 </script>

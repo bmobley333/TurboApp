@@ -10,16 +10,24 @@
   // Inputs  -> msg (String): The message to log.
   // Outputs -> None (Logs to console).
   function fMyConsoleLog(msg) {
-    if (!gUI.isDebugMode) return; // Exit early if debug mode is off
+    if (!gUI.isDebugMode) return;
 
-    // Calculate timestamps
-    const now = performance.now();
-    const delta = ((now - gUI.lastLogTime) / 1000).toFixed(2);
-    const total = ((now - gUI.startTime) / 1000).toFixed(2);
-    gUI.lastLogTime = now;
+    try {
+      const now =
+        typeof performance !== "undefined" ? performance.now() : Date.now();
+      // Initialize timers defensively if missing
+      if (typeof gUI.startTime !== "number") gUI.startTime = now;
+      if (typeof gUI.lastLogTime !== "number") gUI.lastLogTime = gUI.startTime;
 
-    // Log the formatted message
-    console.log(`Status Log: [${total}s] ${msg} (+${delta}s)`);
+      const delta = ((now - gUI.lastLogTime) / 1000).toFixed(2);
+      const total = ((now - gUI.startTime) / 1000).toFixed(2);
+      gUI.lastLogTime = now;
+
+      console.log(`Status Log: [${total}s] ${msg} (+${delta}s)`);
+    } catch (e) {
+      // Never throw from logging
+      console.log(`Status Log: ${msg}`);
+    }
   } // END fMyConsoleLog
 
   // fResolveRow ////////////////////////////////////////////////////////////////////
