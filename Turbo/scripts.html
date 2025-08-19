@@ -574,6 +574,66 @@
   // ==========================================================================
 
   /**
+   * Purpose: Applies specific text alignment classes to predefined cell ranges.
+   * Assumptions: gUI.grid2D is populated, and the ranges are defined in gUI.range.
+   * Notes: This is a targeted utility function called during post-render formatting.
+   * @param {} - No parameters.
+   * @returns {void}
+   */
+  function fApplySpecialAlignments() {
+    fMyConsoleLog("✨ Applying Special Alignments...");
+    const alignmentConfigs = [
+      {
+        className: "left-align-text",
+        ranges: gUI.range?.abilityNameCells || [],
+      },
+      // Future alignment configs can be added here
+    ];
+
+    let cellsStyled = 0;
+
+    alignmentConfigs.forEach((config) => {
+      if (!config.className || !Array.isArray(config.ranges)) return;
+
+      config.ranges.forEach((range) => {
+        if (!fDoesObjectHaveR1C1R2C2Properties(range)) {
+          console.warn(
+            "fApplySpecialAlignments: Skipping invalid range object:",
+            range
+          );
+          return;
+        }
+
+        const resolved = fConvertsR1C1R2C2TagOrNumToIndices(range);
+        if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
+          console.warn(
+            "fApplySpecialAlignments: Skipping range due to unresolved indices:",
+            range
+          );
+          return;
+        }
+
+        const rMin = Math.min(resolved.r1, resolved.r2);
+        const rMax = Math.max(resolved.r1, resolved.r2);
+        const cMin = Math.min(resolved.c1, resolved.c2);
+        const cMax = Math.max(resolved.c1, resolved.c2);
+
+        for (let r = rMin; r <= rMax; r++) {
+          for (let c = cMin; c <= cMax; c++) {
+            const cell = gUI.grid2D?.[r]?.[c];
+            if (cell) {
+              cell.classList.add(config.className);
+              cellsStyled++;
+            }
+          }
+        }
+      });
+    });
+
+    fMyConsoleLog(`✅ Special Alignments Applied to ${cellsStyled} cells.`);
+  } // End fApplySpecialAlignments
+
+  /**
    * Purpose: Make header rows (2–4) sticky and hide rows 0–1; ensure #grid is the scroll container so sticky works reliably.
    * Assumptions: gUI.grid2D is a 2D array of cell HTMLElements; gUI.rowHeights[r] or gUI.ROW_HEIGHT_PX reflects row height in px.
    * Notes: Applies inline `position: sticky`, `top`, and `zIndex` to avoid stylesheet order issues; safe to call multiple times.
@@ -9364,6 +9424,7 @@
     fApplyGridManualBorders(); // 4) outline borders only (as per your config)
     fApplyGridColAndRowInitialVisibility(); // 5) hide initial ranges
     fApplyGridManualColoring(); // 6) font colors, etc.
+    fApplySpecialAlignments();
     fSetTurbosGridHeaderRows(); // 7) sticky header
 
     // Static interactive elements
