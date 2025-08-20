@@ -1894,15 +1894,18 @@
     }
   } // END fHandleDropdownChange
 
-  // fProcessAbilityChange ///////////////////////////////////////////////////////
-  // Purpose -> Handles the logic when an Ability dropdown value changes. Dispatches
-  //            to helper functions for clearing or processing the new selection,
-  //            using synchronous calls to fHandleNewAbilitySelection which reads from caches.
-  // Inputs  -> r (Number): Row index of the changed ability cell.
-  //         -> c (Number): Column index of the changed ability cell (likely 'Ability' col).
-  //         -> newValue (Any): The new value selected in the dropdown (expected format 'Name_id').
-  //         -> oldValue (Any): The previous value in the cell.
-  // Outputs -> None (Calls helper functions which modify grid).
+  /**
+   * Purpose: Handles the logic when an Ability dropdown value changes. Dispatches
+   * to helper functions for clearing or processing the new selection,
+   * using synchronous calls to fHandleNewAbilitySelection which reads from caches.
+   * Assumptions: Helper functions (fHandleClearAbilityRow, fHandleNewAbilitySelection,
+   * fCalculatesEnc_MR_AP, fSaveNewAbilityToAbilTbl) exist and are correct.
+   * @param {number} r - Row index of the changed ability cell.
+   * @param {number} c - Column index of the changed ability cell (likely 'Ability' col).
+   * @param {any} newValue - The new value selected in the dropdown (expected format 'Name_id').
+   * @param {any} oldValue - The previous value in the cell.
+   * @returns {void}
+   */
   function fProcessAbilityChange(r, c, newValue, oldValue) {
     const funcName = "fProcessAbilityChange";
     fMyConsoleLog(
@@ -1942,9 +1945,9 @@
         r,
         newValueStr
       );
-      const klMyAbilitiesResult = fHandleNewAbilitySelection(
+      const klKnownAbilitiesResult = fHandleNewAbilitySelection(
         "MyKL",
-        "MyAbilities",
+        "KnownAbilities",
         r,
         newValueStr
       );
@@ -1957,7 +1960,7 @@
       // Check for critical errors during cache access/processing within handlers
       if (
         dbAbilityResult === null ||
-        klMyAbilitiesResult === null ||
+        klKnownAbilitiesResult === null ||
         dbGearResult === null
       ) {
         fMyConsoleLog(
@@ -1971,10 +1974,11 @@
 
       // Log individual outcomes based on the 'found' flag
       fMyConsoleLog(
-        `   -> ${funcName}: Cache Processing Results - DB Ability Found: ${dbAbilityResult.found}, KL MyAbil Found: ${klMyAbilitiesResult.found}, DB Gear Found: ${dbGearResult.found}`
+        `   -> ${funcName}: Cache Processing Results - DB Ability Found: ${dbAbilityResult.found}, KL KnownAbil Found: ${klKnownAbilitiesResult.found}, DB Gear Found: ${dbGearResult.found}`
       );
       // Check if we have *at least* Ability OR Gear dataRow to proceed
-      const hasAbilityData = dbAbilityResult.found || klMyAbilitiesResult.found;
+      const hasAbilityData =
+        dbAbilityResult.found || klKnownAbilitiesResult.found;
       const hasGearData = dbGearResult.found;
 
       if (!hasAbilityData && !hasGearData) {
@@ -1996,14 +2000,14 @@
       fSaveNewAbilityToAbilTbl(
         r,
         dbAbilityResult,
-        klMyAbilitiesResult,
+        klKnownAbilitiesResult,
         dbGearResult
       );
 
       // Recalculate Enc/MR AFTER saving the new data
       fCalculatesEnc_MR_AP();
     } // End else (newValueStr !== '')
-  } // END fProcessAbilityChange
+  } // End fProcessAbilityChange
 
   // fHandleClearAbilityRow //////////////////////////////////////////////////////
   // Purpose -> Helper function to clear relevant cells in a grid row when an
@@ -2069,17 +2073,20 @@
     fHandleAutoSaveTextToFirestore(); // Save changes after clearing attempt
   } // END fHandleClearAbilityRow
 
-  // fHandleNewAbilitySelection //////////////////////////////////////////////////
-  // Purpose -> Handles selection of a new ability/gear item synchronously using cached data.
-  //            Finds the data row for the selected item ID within the appropriate cached
-  //            FSData object (DB Abilities, MyKL Abilities, or DB Gear).
-  // Inputs  -> workbookAbr (String): The workbook abbreviation ('DB' or 'MyKL').
-  //         -> sheetName (String): The sheet name ('Abilities', 'MyAbilities', or 'Gear').
-  //         -> r (Number): Row index in the grid where the ability was selected (for logging).
-  //         -> newValueStr (String): The new ability value selected (e.g., 'Name_id').
-  // Outputs -> (Object | null): Returns { dataRow, headerRow, colTagsMap, found: boolean } on success,
-  //                              or null if critical errors occur (like cache not loaded).
-  //                              'found' is true if RowBeforeFirstDataRow was located in the respective cache.
+  /**
+   * Purpose: Handles selection of a new ability/gear item synchronously using cached data.
+   * Finds the data row for the selected item ID within the appropriate cached
+   * FSData object (DB Abilities, MyKL KnownAbilities, or DB Gear).
+   * Assumptions: The relevant cache objects (gUI.dbAbilitiesFSData, gUI.myKlKnownAbilitiesFSData, etc.)
+   * have been pre-loaded. Helper function fGetIDFromNameID is available.
+   * @param {string} workbookAbr - The workbook abbreviation ('DB' or 'MyKL').
+   * @param {string} sheetName - The sheet name ('Abilities', 'KnownAbilities', or 'Gear').
+   * @param {number} r - Row index in the grid where the ability was selected (for logging).
+   * @param {string} newValueStr - The new ability value selected (e.g., 'Name_id').
+   * @returns {object | null} Returns { dataRow, headerRow, colTagsMap, found: boolean } on success,
+   * or null if critical errors occur (like cache not loaded).
+   * 'found' is true if the item's ID was located in the respective cache.
+   */
   function fHandleNewAbilitySelection(workbookAbr, sheetName, r, newValueStr) {
     const funcName = "fHandleNewAbilitySelection";
     fMyConsoleLog(
@@ -2097,10 +2104,10 @@
       cacheKey = "gUI.dbAbilitiesFSData";
     } else if (
       lowerWorkbookAbr === "mykl" &&
-      lowerSheetName === "myabilities"
+      lowerSheetName === "knownabilities"
     ) {
-      targetCache = gUI.myKlMyAbilitiesFSData;
-      cacheKey = "gUI.myKlMyAbilitiesFSData";
+      targetCache = gUI.myKlKnownAbilitiesFSData;
+      cacheKey = "gUI.myKlKnownAbilitiesFSData";
     } else if (lowerWorkbookAbr === "db" && lowerSheetName === "gear") {
       targetCache = gUI.dbGearFSData;
       cacheKey = "gUI.dbGearFSData";
@@ -2152,7 +2159,7 @@
     if (isNaN(rowIndex)) {
       // ID not found or index out of bounds (fResolveFSDataRow handles this)
       const isOptionalNotFound =
-        (lowerWorkbookAbr === "mykl" && lowerSheetName === "myabilities") ||
+        (lowerWorkbookAbr === "mykl" && lowerSheetName === "knownabilities") ||
         (lowerWorkbookAbr === "db" && lowerSheetName === "gear");
       if (isOptionalNotFound) {
         // Log INFO for optional sources
@@ -2161,7 +2168,7 @@
             `       -> INFO: ID "${abilID}" not found in ${cacheKey}. Expected for non-gear.`
           );
         } else {
-          // MyKL/MyAbilities case
+          // MyKL/KnownAbilities case
           fMyConsoleLog(
             `       -> ID "${abilID}" not found in ${cacheKey}. Expected/handled.`
           );
@@ -2202,21 +2209,22 @@
       colTagsMap: colTagsMap,
       found: found,
     };
-  } // END fHandleNewAbilitySelection
+  } // End fHandleNewAbilitySelection
 
-  // fSaveNewAbilityToAbilTbl ////////////////////////////////////////////////////
-  // Purpose -> Saves data fetched from DB Abilities, DB Gear, and KL MyAbilities sources
-  //            to the appropriate columns in a specific grid row using fSetGridValue.
-  //            Also sets default values and calculates derived gear properties.
-  // Inputs  -> r (Number): The target row index in the grid.
-  //         -> dbAbilityResult (Object | null): Result from DB Abilities fetch { dataRow, headerRow, colTagsMap } or null.
-  //         -> klMyAbilitiesResult (Object | null): Result from KL MyAbilities fetch { dataRow, headerRow, colTagsMap } or null.
-  //         -> dbGearResult (Object | null): Result from DB Gear fetch { dataRow, headerRow, colTagsMap } or null (or might lack dataRow if not found).
-  // Outputs -> None (Modifies grid via fSetGridValue, calls auto-save).
+  /**
+   * Purpose: Saves data fetched from DB Abilities, DB Gear, and KL KnownAbilities sources
+   * to the appropriate columns in a specific grid row using fSetGridValue.
+   * Also sets default values and calculates derived gear properties.
+   * @param {number} r - The target row index in the grid.
+   * @param {object | null} dbAbilityResult - Result from DB Abilities fetch { dataRow, headerRow, colTagsMap } or null.
+   * @param {object | null} klKnownAbilitiesResult - Result from KL KnownAbilities fetch { dataRow, headerRow, colTagsMap } or null.
+   * @param {object | null} dbGearResult - Result from DB Gear fetch { dataRow, headerRow, colTagsMap } or null (or might lack dataRow if not found).
+   * @returns {void}
+   */
   function fSaveNewAbilityToAbilTbl(
     r,
     dbAbilityResult,
-    klMyAbilitiesResult,
+    klKnownAbilitiesResult,
     dbGearResult
   ) {
     const funcName = "fSaveNewAbilityToAbilTbl";
@@ -2227,8 +2235,8 @@
     // --- Extract data and maps safely ---
     const dbAbilityRow = dbAbilityResult?.dataRow;
     const dbAbilityColTags = dbAbilityResult?.colTagsMap;
-    const klMyAbilitiesRow = klMyAbilitiesResult?.dataRow;
-    const klMyAbilitiesColTags = klMyAbilitiesResult?.colTagsMap;
+    const klKnownAbilitiesRow = klKnownAbilitiesResult?.dataRow;
+    const klKnownAbilitiesColTags = klKnownAbilitiesResult?.colTagsMap;
     const dbGearRow = dbGearResult?.dataRow; // This might be undefined/null if not found or fetch failed
     const dbGearColTags = dbGearResult?.colTagsMap;
 
@@ -2247,61 +2255,61 @@
       return undefined; // Tag not found or index invalid
     };
 
-    // --- Define the base mappings (Abilities & MyAbilities) ---
+    // --- Define the base mappings (Abilities & KnownAbilities) ---
     const dataMappings = [
-      // klMyAbilitiesRow source Data
+      // klKnownAbilitiesRow source Data
       {
         gridTag: "Sk1",
-        sourceRow: klMyAbilitiesRow,
-        sourceColTags: klMyAbilitiesColTags,
-        sourceTag: "TrainedSk1",
+        sourceRow: klKnownAbilitiesRow,
+        sourceColTags: klKnownAbilitiesColTags,
+        sourceTag: "FinalSk1",
       },
       {
         gridTag: "Sk2",
-        sourceRow: klMyAbilitiesRow,
-        sourceColTags: klMyAbilitiesColTags,
-        sourceTag: "TrainedSk2",
+        sourceRow: klKnownAbilitiesRow,
+        sourceColTags: klKnownAbilitiesColTags,
+        sourceTag: "FinalSk2",
       },
       {
         gridTag: "Ver",
-        sourceRow: klMyAbilitiesRow,
-        sourceColTags: klMyAbilitiesColTags,
+        sourceRow: klKnownAbilitiesRow,
+        sourceColTags: klKnownAbilitiesColTags,
         sourceTag: "Ver",
       },
       {
         gridTag: "Act",
-        sourceRow: klMyAbilitiesRow,
-        sourceColTags: klMyAbilitiesColTags,
+        sourceRow: klKnownAbilitiesRow,
+        sourceColTags: klKnownAbilitiesColTags,
         sourceTag: "Act",
       },
       {
         gridTag: "Dur",
-        sourceRow: klMyAbilitiesRow,
-        sourceColTags: klMyAbilitiesColTags,
+        sourceRow: klKnownAbilitiesRow,
+        sourceColTags: klKnownAbilitiesColTags,
         sourceTag: "Dur",
       },
       {
         gridTag: "Rng",
-        sourceRow: klMyAbilitiesRow,
-        sourceColTags: klMyAbilitiesColTags,
+        sourceRow: klKnownAbilitiesRow,
+        sourceColTags: klKnownAbilitiesColTags,
         sourceTag: "Rng",
       },
       {
         gridTag: "MetaCost",
-        sourceRow: klMyAbilitiesRow,
-        sourceColTags: klMyAbilitiesColTags,
+        sourceRow: klKnownAbilitiesRow,
+        sourceColTags: klKnownAbilitiesColTags,
         sourceTag: "Meta",
       }, // Note gridTag vs sourceTag
       {
         gridTag: "Uses",
-        sourceRow: klMyAbilitiesRow,
-        sourceColTags: klMyAbilitiesColTags,
+        sourceRow: klKnownAbilitiesRow,
+        sourceColTags: klKnownAbilitiesColTags,
         sourceTag: "Uses",
       },
       {
         gridTag: "Regain",
-        sourceRow: klMyAbilitiesRow,
-        sourceColTags: klMyAbilitiesColTags,
+        sourceRow: klKnownAbilitiesRow,
+        sourceColTags: klKnownAbilitiesColTags,
         sourceTag: "Regain",
       },
 
@@ -2332,8 +2340,8 @@
       },
     ];
 
-    // --- Apply mapped data (Abilities & MyAbilities) ---
-    fMyConsoleLog(`     -> Applying Ability/MyAbilities mappings...`);
+    // --- Apply mapped data (Abilities & KnownAbilities) ---
+    fMyConsoleLog(`     -> Applying Ability/KnownAbilities mappings...`);
     dataMappings.forEach((map) => {
       const value = getValueFromSource(
         map.sourceRow,
@@ -2459,7 +2467,7 @@
     );
     // --- Save changes ---
     fHandleAutoSaveTextToFirestore();
-  } // END fSaveNewAbilityToAbilTbl
+  } // End fSaveNewAbilityToAbilTbl
 
   // fApplyDropdownsToGrid ///////////////////////////////////////////////////////////
   // Purpose -> Iterates through gUI.dropDownBox configurations and replaces the
@@ -4428,13 +4436,15 @@
     }
   } // END fToggleSidebar
 
-  // fHandleNewLevelSlotName ///////////////////////////////////////////////////////
-  // Purpose -> Handles the "Update (Level, Slot, Names)" menu action. Force-refreshes
-  //            user-specific caches (RaceClass, List, MyAbilities) from Sheets to
-  //            Firestore to gUI, validates the resulting slot number, sends an update
-  //            log, UPDATES ABILITY DROPDOWNS, and triggers a full grid refresh.
-  // Inputs  -> None.
-  // Outputs -> (Promise<void>): Resolves after completing actions or handling errors.
+  /**
+   * Purpose: Handles the "Update (Level, Slot, Names)" menu action. Force-refreshes
+   * user-specific caches (RaceClass, List, KnownAbilities) from Sheets to
+   * Firestore to gUI, validates the resulting slot number, sends an update
+   * log, UPDATES ABILITY DROPDOWNS, and triggers a full grid refresh.
+   * Assumptions: The cache refresh functions handle their own error messaging.
+   * @param {} - No parameters.
+   * @returns {Promise<void>} Resolves after completing actions or handling errors.
+   */
   async function fHandleNewLevelSlotName() {
     const funcName = "fHandleNewLevelSlotName";
     fMyConsoleLog(`⚙️ Menu Action: ${funcName} Triggered...`);
@@ -4457,8 +4467,8 @@
         { workbookAbr: "MyCS", sheetName: "List", gUIKey: "myCsListFSData" },
         {
           workbookAbr: "MyKL",
-          sheetName: "MyAbilities",
-          gUIKey: "myKlMyAbilitiesFSData",
+          sheetName: "KnownAbilities",
+          gUIKey: "myKlKnownAbilitiesFSData",
         },
       ];
       const refreshPromises = userCachesToRefresh.map((config) =>
@@ -4569,7 +4579,7 @@
       await fShowMessage(`❌ ${errorMsg}`); // Show the final error to the user
       // Implicitly returns undefined on error
     }
-  } // END fHandleNewLevelSlotName
+  } // End fHandleNewLevelSlotName
 
   // fHandleGMAward //////////////////////////////////////////////////////////////
   // Purpose -> Handles the <Game><GM Award> menu action. Gets a random award from
@@ -8809,11 +8819,11 @@
         const targets = [
           { key: "myCsRaceClassFSData", label: "MyCS/RaceClass" },
           { key: "myCsListFSData", label: "MyCS/List" },
+          { key: "myKlKnownAbilitiesFSData", label: "MyKL/KnownAbilities" },
           { key: "dbAbilitiesFSData", label: "DB/Abilities" },
           { key: "dbCritFSData", label: "DB/Crit" },
           { key: "dbElementsFSData", label: "DB/Elements" },
           { key: "dbGearFSData", label: "DB/Gear" },
-          // NOTE: MyKL/MyAbilities is intentionally omitted per project step.
         ];
 
         if (!window.google || !google.script || !google.script.run) {
