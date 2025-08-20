@@ -1307,16 +1307,20 @@
     return img;
   } // END fCreateGridHeaderRowButtonImage
 
-  // fApplyGridButtonToCell //////////////////////////////////////////////////////
-  // Purpose -> Clears the target cell's content, inserts the provided image element,
-  //            and applies centering styles suitable for image buttons.
-  // Inputs  -> cell (HTMLElement): The target cell div element.
-  //         -> img (HTMLImageElement): The configured <img> element to insert.
-  // Outputs -> None (Modifies the input cell element's content and style).
+  /**
+   * Purpose -> Clears the target cell's content, inserts the provided image element,
+   * and applies centering styles suitable for image buttons.
+   * Inputs  -> cell (HTMLElement): The target cell div element.
+   * -> img (HTMLImageElement): The configured <img> element to insert.
+   * Outputs -> None (Modifies the input cell element's content and style).
+   */
   function fApplyGridButtonToCell(cell, img) {
     // Clear existing content and append the image
     cell.innerHTML = "";
     cell.appendChild(img);
+
+    // Add a specific class for targeting styles
+    cell.classList.add("header-button-cell");
 
     // Apply centering styles to the cell
     cell.style.justifyContent = "center";
