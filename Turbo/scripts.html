@@ -3535,13 +3535,14 @@
     // else: Sidebar exists and is already hidden, or doesn't exist, do nothing.
   } // END fHideSidebar
 
-  // fHandleApplyWoundsClick ///////////////////////////////////////////////////////
-  // Purpose -> Handles clicks on the dynamically added "Apply" wounds button in the
-  //            sidebar. Reads the wound amount from the button's data attribute,
-  //            adds it to the current 1st Degree Wounds cell ('VitTbl', 'vit1st'),
-  //            updates the grid, recalculates Vit Now/Percent, and disables the button.
-  // Inputs  -> event (MouseEvent): The click event object.
-  // Outputs -> None (Modifies grid data/DOM via helpers, updates button state).
+  /**
+   * Purpose -> Handles clicks on the dynamically added "Apply" wounds button in the
+   * sidebar. Reads the wound amount from the button's data attribute,
+   * adds it to the current 1st Degree Wounds cell ('VitTbl', 'vit1st'),
+   * updates the grid, recalculates Vit Now/Percent, and disables the button.
+   * Inputs  -> event (MouseEvent): The click event object.
+   * Outputs -> None (Modifies grid data/DOM via helpers, updates button state).
+   */
   async function fHandleApplyWoundsClick(event) {
     const button = event.target; // The element that was actually clicked
 
@@ -3609,6 +3610,7 @@
     fHandleAutoSaveTextToFirestore();
 
     fMyConsoleLog("✅ Wounds Applied Successfully.");
+    await fShowMessage("✅ Wounds Applied Successfully.");
   } // END fHandleApplyWoundsClick
 
   // fSetupSidebarActionListeners //////////////////////////////////////////////////

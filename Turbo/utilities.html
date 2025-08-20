@@ -1139,70 +1139,14 @@
     fMyConsoleLog("Message modal hidden and state reset.");
   } // END fHideMessage
 
-  // fSetupMessageModalListeners /////////////////////////////////////////////////////
-  // Purpose -> Sets up event listeners for closing the message modal:
-  //            - Click on the 'Close' button.
-  //            - Click on the background overlay.
-  //            - Pressing the 'Escape' key.
-  //            All actions trigger fHideMessage, which resolves the promise.
-  // Inputs  -> None.
-  // Outputs -> None (Attaches event listeners).
-  function fSetupMessageModalListeners() {
-    fMyConsoleLog("🖱️ Setting up Message Modal Listeners...");
-
-    // === Get Required Elements ===
-    // Fetch elements directly during setup for reliability
-    const overlayElement = document.getElementById("messageModal");
-    const closeButtonElement = document.getElementById("closeMessageModal");
-
-    // === Validate Elements ===
-    if (!overlayElement) {
-      console.error(
-        "Setup failed: Message modal overlay element (#messageModal) not found *during listener setup*."
-      );
-      fMyConsoleLog(
-        "⚠️ Message Modal Listeners NOT Attached (overlay missing)."
-      );
-      return;
-    }
-    if (!closeButtonElement) {
-      console.error(
-        "Setup failed: Message modal close button (#closeMessageModal) not found *during listener setup*."
-      );
-      fMyConsoleLog(
-        "⚠️ Message Modal Listeners NOT Attached (button missing)."
-      );
-      return;
-    }
-
-    // === Attach Listeners ===
-    // Listener for the close button click
-    closeButtonElement.addEventListener("click", fHideMessage);
-
-    // Listener for clicking the background overlay
-    overlayElement.addEventListener("click", (event) => {
-      // Only hide if the click target is the overlay itself, not its content
-      if (event.target === overlayElement) {
-        fHideMessage();
-      }
-    });
-
-    // Listener for the Escape key
-    document.addEventListener("keydown", (event) => {
-      // Only hide if the modal is visible and Escape key is pressed
-      if (overlayElement.style.display !== "none" && event.key === "Escape") {
-        fHideMessage();
-      }
-    });
-
-    fMyConsoleLog("✅ Message Modal Listeners Attached.");
-  } // END fSetupMessageModalListeners// fSetupMessageModalListeners /////////////////////////////////////////////////////
-  // Purpose -> Sets up event listeners for closing the message modal:
-  //            - Click on the 'Close' button.
-  //            - Click on the background overlay (if closeable).
-  //            - Pressing the 'Escape' key (if closeable).
-  // Inputs  -> None.
-  // Outputs -> None (Attaches event listeners).
+  /**
+   * Purpose -> Sets up event listeners for closing the message modal:
+   * - Click on the 'Close' button.
+   * - Click on the background overlay (if closeable).
+   * - Pressing the 'Escape' key (if closeable).
+   * Inputs  -> None.
+   * Outputs -> None (Attaches event listeners).
+   */
   function fSetupMessageModalListeners() {
     fMyConsoleLog("🖱️ Setting up Message Modal Listeners...");
 
