@@ -2604,12 +2604,16 @@
     fProcessCachedAbilityList();
   } // END fFetchAndApplyAbilityDropdowns
 
-  // fProcessCachedAbilityList ///////////////////////////////////////////////
-  // Purpose -> Processes the cached MyCS/List data, extracting only rows from
-  //            'TableFirstRow' down, sorts the relevant column ('AbilitiesNameID'),
-  //            adds an empty option, and applies it to the grid dropdowns.
-  // Inputs  -> None (Uses gUI.myCsListFSData).
-  // Outputs -> None (Modifies gUI.dropDownBox, calls fApplyDropdownsToGrid).
+  /**
+   * Purpose: Processes the cached MyCS/List data, extracting only rows from
+   * 'TableFirstRow' down, sorts the relevant column ('AbilitiesNameID'),
+   * adds an empty option, and applies it to the grid dropdowns.
+   * Assumptions: The cache gUI.myCsListFSData has been loaded and is valid.
+   * Notes: This function finds or creates the specific dropdown configuration object
+   * within gUI.dropDownBox and then triggers a global re-application of all dropdowns.
+   * @param {} - No parameters.
+   * @returns {void}
+   */
   function fProcessCachedAbilityList() {
     const funcName = "fProcessCachedAbilityList";
     fMyConsoleLog(`   -> ${funcName}: Processing cached MyCS/List data...`);
@@ -2719,7 +2723,7 @@
 
     // --- 5. Apply Dropdowns to Grid ---
     fApplyDropdownsToGrid();
-  } // END fProcessCachedAbilityList
+  } // End fProcessCachedAbilityList
 
   // ==========================================================================
   // === Grid Interaction Logic          (End of Dropdown Boxes ) ===
@@ -8786,12 +8790,13 @@
   } // END fOnCSGameDataLoaded
 
   /**
-   * Purpose: Verify/load background Firestore caches without blocking the app; Step‑1 safe.
-   * Assumptions: Server endpoints may be missing or fail; we must never throw. MyKL/MyAbilities was removed; skip it.
-   * Notes: Only checks MyCS docs for now and swallows all errors. Re‑enable MyKL after we wire the new KnownAbilities sheet.
+   * Purpose: Verify, create if missing, and load required background Firestore caches into the gUI object.
+   * Assumptions: Server endpoints exist to handle these operations. This function must resolve
+   * successfully even if some non-critical caches fail, but it will attempt to load all defined targets.
+   * Notes: The logic is now sequential: Verify all -> Create all missing -> Load all.
    * @param {string} ignored - Unused (kept for signature compatibility if previously called with a param).
    * @param {object} opts - Optional flags (e.g., { verbose: true }).
-   * @returns {boolean} Always returns true on resolve; resolves even on partial/failed cache loads.
+   * @returns {Promise<boolean>} Resolves true on completion.
    */
   function fBulkCacheFSData(ignored = "", opts = {}) {
     const verbose = !!opts?.verbose;
@@ -8800,19 +8805,17 @@
     return new Promise((resolve) => {
       try {
         log("⚙️ fBulkCacheFSData: Verifying/Loading background data caches...");
-        log(
-          "   -> Phase 1: Verifying MyCS/MyKL document existence in Firestore..."
-        );
 
-        // Step‑1: ONLY keep the two MyCS caches that were already present/working.
-        // Intentionally SKIP the removed MyKL/MyAbilities (renamed to KnownAbilities per Recent Changes).
         const targets = [
           { key: "myCsRaceClassFSData", label: "MyCS/RaceClass" },
           { key: "myCsListFSData", label: "MyCS/List" },
-          // { key: "myKlMyAbilitiesFSData", label: "MyKL/KnownAbilities" }, // <-- Step‑2+: re-enable with new sheet name
+          { key: "dbAbilitiesFSData", label: "DB/Abilities" },
+          { key: "dbCritFSData", label: "DB/Crit" },
+          { key: "dbElementsFSData", label: "DB/Elements" },
+          { key: "dbGearFSData", label: "DB/Gear" },
+          // NOTE: MyKL/MyAbilities is intentionally omitted per project step.
         ];
 
-        // If google.script.run is unavailable (local preview), exit gracefully.
         if (!window.google || !google.script || !google.script.run) {
           log(
             "   -> google.script.run not available; skipping server cache checks."
@@ -8820,7 +8823,6 @@
           return resolve(true);
         }
 
-        // Helper: check existence of a Firestore doc (server should return true/false)
         const checkDoc = (docKey) =>
           new Promise((res) => {
             try {
@@ -8833,7 +8835,6 @@
             }
           });
 
-        // Helper: create/load a doc from Sheets into Firestore (server side does the heavy lift)
         const createDoc = (docKey, friendly) =>
           new Promise((res) => {
             try {
@@ -8848,39 +8849,45 @@
           });
 
         (async () => {
+          // Phase 1: Verify existence
+          log("   -> Phase 1: Verifying document existence in Firestore...");
           const existsVec = await Promise.all(
             targets.map((t) => checkDoc(t.key))
           );
 
-          // Log what we found (non-blocking)
           targets.forEach((t, i) => {
-            if (existsVec[i]) {
-              log(`      -> Document for ${t.key} exists.`);
-            } else {
+            if (!existsVec[i]) {
               log(
                 `      -> Document for ${t.key} NOT found. Queued for creation.`
               );
             }
           });
 
-          // Phase 2: Create any missing ones — but errors are soft (never throw)
+          // Phase 2: Create any missing ones
+          log("   -> Phase 2: Creating any missing documents...");
           for (let i = 0; i < targets.length; i++) {
             if (!existsVec[i]) {
-              const ok = await createDoc(targets[i].key, targets[i].label);
-              if (!ok && verbose)
-                log(
-                  `      -> Create soft-failed for ${targets[i].key} (continuing).`
-                );
+              await createDoc(targets[i].key, targets[i].label);
             }
           }
 
-          log("   -> Background cache phase completed (non-blocking).");
+          // Phase 3: Load all caches into gUI object
+          log("   -> Phase 3: Loading all caches into client gUI object...");
+          const loadPromises = targets.map((t) =>
+            fRefreshAndCacheOneFSData(
+              t.label.split("/")[0], // e.g., "MyCS" or "DB"
+              t.label.split("/")[1], // e.g., "RaceClass" or "Abilities"
+              t.key
+            )
+          );
+          await Promise.all(loadPromises);
+
+          log("   -> Background cache phases completed.");
           resolve(true);
         })();
       } catch (e) {
-        // Absolutely never propagate errors from cache pass during Step‑1
         console.warn("fBulkCacheFSData soft-failed:", e);
-        resolve(true);
+        resolve(true); // Always resolve true to not block app load
       }
     });
   } // End fBulkCacheFSData
