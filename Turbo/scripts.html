@@ -7703,15 +7703,16 @@
       .fSrvGetSheetRangeDataNTags("db", "GMScreen", gmMonsterRangeDef);
   } // END fRefreshMonsterData
 
-  // fTotalRereshOfAllAbilitiesAndAllGear ////////////////////////////////////////
-  // Purpose -> (Stage 1) Iterates through Ability/Gear table rows, validating the 'Ability'
-  //            cell content against the myCsListFSData cache. Clears rows with empty
-  //            'Ability' cells, invalid extracted IDs, or IDs not found in the list cache.
-  //            (Stage 2) For rows that passed Stage 1, fetches static definition data
-  //            from various caches, updates the grid, and triggers recalculations.
-  // Inputs  -> None (Relies on gUI state).
-  // Outputs -> (Promise<void>): Implicitly returns promise due to async calls like fShowMessage.
-  // Note    -> Stage 1 handles validation/clearing. Stage 2 populates valid rows.
+  /**
+   * Purpose -> (Stage 1) Iterates through Ability/Gear table rows, validating the 'Ability'
+   * cell content against the myCsListFSData cache. Clears rows with empty
+   * 'Ability' cells, invalid extracted IDs, or IDs not found in the list cache.
+   * (Stage 2) For rows that passed Stage 1, fetches static definition data
+   * from various caches, updates the grid, and triggers recalculations.
+   * @param {} - No parameters.
+   * @returns {Promise<void>} Implicitly returns promise due to async calls like fShowMessage.
+   * Note    -> Stage 1 handles validation/clearing. Stage 2 populates valid rows.
+   */
   async function fTotalRereshOfAllAbilitiesAndAllGear() {
     const funcName = "fTotalRereshOfAllAbilitiesAndAllGear";
     fMyConsoleLog(`🔄 ${funcName}: Starting Full Ability/Gear Refresh...`);
@@ -7757,12 +7758,12 @@
     // Validate other necessary caches exist before starting the loop
     if (
       !gUI.dbAbilitiesFSData ||
-      !gUI.myKlMyAbilitiesFSData ||
+      !gUI.myKlKnownAbilitiesFSData ||
       !gUI.dbElementsFSData ||
       !gUI.dbGearFSData
     ) {
       fMyConsoleLog(
-        `   -> ❌ Error: One or more required data caches (dbAbilities, myKlMyAbilities, dbElements, dbGear) are not loaded.`
+        `   -> ❌ Error: One or more required data caches (dbAbilities, myKlKnownAbilities, dbElements, dbGear) are not loaded.`
       );
       requiredCacheMissing = true;
     }
@@ -7870,31 +7871,39 @@
           const newSk1Typ =
             fGetVal_GUICache(abilID, "SkTyp1", gUI.dbAbilitiesFSData) ?? "";
           const newSk1 =
-            fGetVal_GUICache(abilID, "TrainedSk1", gUI.myKlMyAbilitiesFSData) ??
-            "";
+            fGetVal_GUICache(
+              abilID,
+              "FinalSk1",
+              gUI.myKlKnownAbilitiesFSData
+            ) ?? "";
           const newAbilNameID =
             fGetVal_GUICache(abilID, "Name_ID", gUI.dbElementsFSData) ?? "";
           const newSk2 =
-            fGetVal_GUICache(abilID, "TrainedSk2", gUI.myKlMyAbilitiesFSData) ??
-            "";
+            fGetVal_GUICache(
+              abilID,
+              "FinalSk2",
+              gUI.myKlKnownAbilitiesFSData
+            ) ?? "";
           const newSk2Typ =
             fGetVal_GUICache(abilID, "SkTyp2", gUI.dbAbilitiesFSData) ?? "";
           const newVer =
-            fGetVal_GUICache(abilID, "Ver", gUI.myKlMyAbilitiesFSData) ?? "";
+            fGetVal_GUICache(abilID, "Ver", gUI.myKlKnownAbilitiesFSData) ?? "";
           const newNotes =
             fGetVal_GUICache(abilID, "Notes", gUI.dbElementsFSData) ?? "";
           const newPic =
             fGetVal_GUICache(abilID, "Pic", gUI.dbElementsFSData) ?? "";
           const newAct =
-            fGetVal_GUICache(abilID, "Act", gUI.myKlMyAbilitiesFSData) ?? "";
+            fGetVal_GUICache(abilID, "Act", gUI.myKlKnownAbilitiesFSData) ?? "";
           const newDur =
-            fGetVal_GUICache(abilID, "Dur", gUI.myKlMyAbilitiesFSData) ?? "";
+            fGetVal_GUICache(abilID, "Dur", gUI.myKlKnownAbilitiesFSData) ?? "";
           const newRng =
-            fGetVal_GUICache(abilID, "Rng", gUI.myKlMyAbilitiesFSData) ?? "";
+            fGetVal_GUICache(abilID, "Rng", gUI.myKlKnownAbilitiesFSData) ?? "";
           const newMeta =
-            fGetVal_GUICache(abilID, "Meta", gUI.myKlMyAbilitiesFSData) ?? "";
+            fGetVal_GUICache(abilID, "Meta", gUI.myKlKnownAbilitiesFSData) ??
+            "";
           const newRgn =
-            fGetVal_GUICache(abilID, "Regain", gUI.myKlMyAbilitiesFSData) ?? "";
+            fGetVal_GUICache(abilID, "Regain", gUI.myKlKnownAbilitiesFSData) ??
+            "";
           const newGearName =
             fGetVal_GUICache(abilID, "Name", gUI.dbGearFSData) ?? "";
           const newCrEach =
@@ -7999,7 +8008,7 @@
         refreshErrors > 0 ? ` (${refreshErrors} errors)` : ""
       }.`
     );
-  } // END fTotalRereshOfAllAbilitiesAndAllGear
+  } // End fTotalRereshOfAllAbilitiesAndAllGear
 
   // ==========================================================================
   // === Firestore Text Read/Write     (End of Header Button Click) ===
