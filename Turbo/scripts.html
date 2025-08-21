@@ -2081,7 +2081,7 @@
    * Purpose: Handles selection of a new ability/gear item synchronously using cached data.
    * Finds the data row for the selected item ID within the appropriate cached
    * FSData object (DB Abilities, MyKL KnownAbilities, or DB Gear).
-   * Assumptions: The relevant cache objects (gUI.dbAbilitiesFSData, gUI.myKlKnownAbilitiesFSData, etc.)
+   * Assumptions: The relevant cache objects (gUI.dbAbilitiesFSData, gUI.myKLKnownAbilitiesFSData, etc.)
    * have been pre-loaded. Helper function fGetIDFromNameID is available.
    * @param {string} workbookAbr - The workbook abbreviation ('DB' or 'MyKL').
    * @param {string} sheetName - The sheet name ('Abilities', 'KnownAbilities', or 'Gear').
@@ -2110,8 +2110,8 @@
       lowerWorkbookAbr === "mykl" &&
       lowerSheetName === "knownabilities"
     ) {
-      targetCache = gUI.myKlKnownAbilitiesFSData;
-      cacheKey = "gUI.myKlKnownAbilitiesFSData";
+      targetCache = gUI.myKLKnownAbilitiesFSData;
+      cacheKey = "gUI.myKLKnownAbilitiesFSData";
     } else if (lowerWorkbookAbr === "db" && lowerSheetName === "gear") {
       targetCache = gUI.dbGearFSData;
       cacheKey = "gUI.dbGearFSData";
@@ -2482,7 +2482,7 @@
   function fApplyDropdownsToGrid() {
     fMyConsoleLog("🧬 Applying Dropdowns to Grid...");
     let dropdownsApplied = 0;
-    const abilityListKey = "myCsListFSData"; // Key identifying the ability dropdown config
+    const abilityListKey = "myCSListFSData"; // Key identifying the ability dropdown config
 
     // === Validate Configuration ===
     if (!gUI.dropDownBox || !Array.isArray(gUI.dropDownBox)) {
@@ -2601,8 +2601,8 @@
 
     // --- Validate Prerequisite Cache ---
     // Check if the cache load mechanism should have already run and populated the cache
-    if (!gUI.myCsListFSData) {
-      const errorMsg = `Cannot process ability list: Required cache (gUI.myCsListFSData) was not loaded during initial setup.`;
+    if (!gUI.myCSListFSData) {
+      const errorMsg = `Cannot process ability list: Required cache (gUI.myCSListFSData) was not loaded during initial setup.`;
       console.error(`${funcName}: ${errorMsg}`);
       fMyConsoleLog(`   -> ❌ ${funcName} Error: ${errorMsg}`);
       fShowMessage(`Error: ${errorMsg}`).catch((e) =>
@@ -2620,7 +2620,7 @@
    * Purpose: Processes the cached MyCS/List data, extracting only rows from
    * 'TableFirstRow' down, sorts the relevant column ('AbilitiesNameID'),
    * adds an empty option, and applies it to the grid dropdowns.
-   * Assumptions: The cache gUI.myCsListFSData has been loaded and is valid.
+   * Assumptions: The cache gUI.myCSListFSData has been loaded and is valid.
    * Notes: This function finds or creates the specific dropdown configuration object
    * within gUI.dropDownBox and then triggers a global re-application of all dropdowns.
    * @param {} - No parameters.
@@ -2631,8 +2631,8 @@
     fMyConsoleLog(`   -> ${funcName}: Processing cached MyCS/List data...`);
 
     // --- 1. Access and Validate Cache & Required Tags ---
-    const listCache = gUI.myCsListFSData;
-    const cacheKey = "myCsListFSData"; // Key for resolver functions
+    const listCache = gUI.myCSListFSData;
+    const cacheKey = "myCSListFSData"; // Key for resolver functions
     const colTagForAbilities = "AbilitiesNameID";
     const startRowTag = "TableFirstRow";
 
@@ -4468,13 +4468,13 @@
         {
           workbookAbr: "MyCS",
           sheetName: "RaceClass",
-          gUIKey: "myCsRaceClassFSData",
+          gUIKey: "myCSRaceClassFSData",
         },
-        { workbookAbr: "MyCS", sheetName: "List", gUIKey: "myCsListFSData" },
+        { workbookAbr: "MyCS", sheetName: "List", gUIKey: "myCSListFSData" },
         {
           workbookAbr: "MyKL",
           sheetName: "KnownAbilities",
-          gUIKey: "myKlKnownAbilitiesFSData",
+          gUIKey: "myKLKnownAbilitiesFSData",
         },
       ];
       const refreshPromises = userCachesToRefresh.map((config) =>
@@ -7711,7 +7711,7 @@
 
   /**
    * Purpose -> (Stage 1) Iterates through Ability/Gear table rows, validating the 'Ability'
-   * cell content against the myCsListFSData cache. Clears rows with empty
+   * cell content against the myCSListFSData cache. Clears rows with empty
    * 'Ability' cells, invalid extracted IDs, or IDs not found in the list cache.
    * (Stage 2) For rows that passed Stage 1, fetches static definition data
    * from various caches, updates the grid, and triggers recalculations.
@@ -7725,8 +7725,8 @@
 
     // --- 1. Get Target Ranges & Validate Caches ---
     const abilityGearRanges = gUI.range?.entireAbiliyNGearTables;
-    const listCache = gUI.myCsListFSData;
-    const listCacheKey = "gUI.myCsListFSData";
+    const listCache = gUI.myCSListFSData;
+    const listCacheKey = "gUI.myCSListFSData";
     const listColTag = "AbilitiesNameID";
     let abilitiesNameIdColIndex = -1;
     let requiredCacheMissing = false;
@@ -7764,7 +7764,7 @@
     // Validate other necessary caches exist before starting the loop
     if (
       !gUI.dbAbilitiesFSData ||
-      !gUI.myKlKnownAbilitiesFSData ||
+      !gUI.myKLKnownAbilitiesFSData ||
       !gUI.dbElementsFSData ||
       !gUI.dbGearFSData
     ) {
@@ -7880,7 +7880,7 @@
             fGetVal_GUICache(
               abilID,
               "FinalSk1",
-              gUI.myKlKnownAbilitiesFSData
+              gUI.myKLKnownAbilitiesFSData
             ) ?? "";
           const newAbilNameID =
             fGetVal_GUICache(abilID, "Name_ID", gUI.dbElementsFSData) ?? "";
@@ -7888,27 +7888,27 @@
             fGetVal_GUICache(
               abilID,
               "FinalSk2",
-              gUI.myKlKnownAbilitiesFSData
+              gUI.myKLKnownAbilitiesFSData
             ) ?? "";
           const newSk2Typ =
             fGetVal_GUICache(abilID, "SkTyp2", gUI.dbAbilitiesFSData) ?? "";
           const newVer =
-            fGetVal_GUICache(abilID, "Ver", gUI.myKlKnownAbilitiesFSData) ?? "";
+            fGetVal_GUICache(abilID, "Ver", gUI.myKLKnownAbilitiesFSData) ?? "";
           const newNotes =
             fGetVal_GUICache(abilID, "Notes", gUI.dbElementsFSData) ?? "";
           const newPic =
             fGetVal_GUICache(abilID, "Pic", gUI.dbElementsFSData) ?? "";
           const newAct =
-            fGetVal_GUICache(abilID, "Act", gUI.myKlKnownAbilitiesFSData) ?? "";
+            fGetVal_GUICache(abilID, "Act", gUI.myKLKnownAbilitiesFSData) ?? "";
           const newDur =
-            fGetVal_GUICache(abilID, "Dur", gUI.myKlKnownAbilitiesFSData) ?? "";
+            fGetVal_GUICache(abilID, "Dur", gUI.myKLKnownAbilitiesFSData) ?? "";
           const newRng =
-            fGetVal_GUICache(abilID, "Rng", gUI.myKlKnownAbilitiesFSData) ?? "";
+            fGetVal_GUICache(abilID, "Rng", gUI.myKLKnownAbilitiesFSData) ?? "";
           const newMeta =
-            fGetVal_GUICache(abilID, "Meta", gUI.myKlKnownAbilitiesFSData) ??
+            fGetVal_GUICache(abilID, "Meta", gUI.myKLKnownAbilitiesFSData) ??
             "";
           const newRgn =
-            fGetVal_GUICache(abilID, "Regain", gUI.myKlKnownAbilitiesFSData) ??
+            fGetVal_GUICache(abilID, "Regain", gUI.myKLKnownAbilitiesFSData) ??
             "";
           const newGearName =
             fGetVal_GUICache(abilID, "Name", gUI.dbGearFSData) ?? "";
@@ -8815,26 +8815,27 @@
   } // END fOnCSGameDataLoaded
 
   /**
-   * Purpose: Verify, create if missing, and load required background Firestore caches into the gUI object.
-   * Assumptions: Server endpoints exist to handle these operations. This function must resolve
-   * successfully even if some non-critical caches fail, but it will attempt to load all defined targets.
-   * Notes: The logic is now sequential: Verify all -> Create all missing -> Load all.
+   * Purpose: Loads all required background data caches into the gUI object sequentially. It relies on
+   * function fRefreshAndCacheOneFSData to intelligently handle whether to read from Firestore directly
+   * (for DB and existing user caches) or to create a user cache for the first time.
+   * Assumptions: function fRefreshAndCacheOneFSData correctly implements the caching logic.
+   * Notes: The complex verification and creation phases have been removed, as the logic is now
+   * correctly consolidated within function fRefreshAndCacheOneFSData.
    * @param {string} ignored - Unused (kept for signature compatibility if previously called with a param).
    * @param {object} opts - Optional flags (e.g., { verbose: true }).
-   * @returns {Promise<boolean>} Resolves true on completion.
+   * @returns {Promise<boolean>} Resolves true on completion, false if a critical cache fails to load.
    */
   function fBulkCacheFSData(ignored = "", opts = {}) {
-    const verbose = !!opts?.verbose;
     const log = (m) => fMyConsoleLog(m);
 
     return new Promise((resolve) => {
       try {
-        log("⚙️ fBulkCacheFSData: Verifying/Loading background data caches...");
+        log("⚙️ fBulkCacheFSData: Loading background data caches...");
 
         const targets = [
-          { key: "myCsRaceClassFSData", label: "MyCS/RaceClass" },
-          { key: "myCsListFSData", label: "MyCS/List" },
-          { key: "myKlKnownAbilitiesFSData", label: "MyKL/KnownAbilities" },
+          { key: "myCSRaceClassFSData", label: "MyCS/RaceClass" },
+          { key: "myCSListFSData", label: "MyCS/List" },
+          { key: "myKLKnownAbilitiesFSData", label: "MyKL/KnownAbilities" },
           { key: "dbAbilitiesFSData", label: "DB/Abilities" },
           { key: "dbCritFSData", label: "DB/Crit" },
           { key: "dbElementsFSData", label: "DB/Elements" },
@@ -8848,66 +8849,34 @@
           return resolve(true);
         }
 
-        const checkDoc = (docKey) =>
-          new Promise((res) => {
-            try {
-              google.script.run
-                .withSuccessHandler((exists) => res(!!exists))
-                .withFailureHandler(() => res(false))
-                .fSrvFirestoreDocExists(docKey);
-            } catch (e) {
-              res(false);
-            }
-          });
-
-        const createDoc = (docKey, friendly) =>
-          new Promise((res) => {
-            try {
-              log(`      -> Creating/Refreshing: ${friendly} (${docKey})`);
-              google.script.run
-                .withSuccessHandler(() => res(true))
-                .withFailureHandler(() => res(false))
-                .fSrvCreateOrRefreshMyCSMyKLDoc(docKey);
-            } catch (e) {
-              res(false);
-            }
-          });
-
         (async () => {
-          // Phase 1: Verify existence
-          log("   -> Phase 1: Verifying document existence in Firestore...");
-          const existsVec = await Promise.all(
-            targets.map((t) => checkDoc(t.key))
+          // The old Phase 1 (verify) and Phase 2 (create) were removed because they were
+          // redundant and based on old, non-existent server functions. All intelligent
+          // loading logic is now correctly handled by fRefreshAndCacheOneFSData.
+
+          log(
+            "   -> Loading all caches into client gUI object (sequentially)..."
           );
-
-          targets.forEach((t, i) => {
-            if (!existsVec[i]) {
+          for (const target of targets) {
+            const success = await fRefreshAndCacheOneFSData(
+              target.label.split("/")[0], // e.g., "MyCS" or "DB"
+              target.label.split("/")[1], // e.g., "RaceClass" or "Abilities"
+              target.key
+            );
+            // If a critical user-specific cache fails, stop the entire loading process.
+            if (
+              !success &&
+              (target.key.startsWith("myCS") || target.key.startsWith("myKL"))
+            ) {
               log(
-                `      -> Document for ${t.key} NOT found. Queued for creation.`
+                `   -> ❌ Critical user cache '${target.key}' failed to load. Halting cache sequence.`
               );
-            }
-          });
-
-          // Phase 2: Create any missing ones
-          log("   -> Phase 2: Creating any missing documents...");
-          for (let i = 0; i < targets.length; i++) {
-            if (!existsVec[i]) {
-              await createDoc(targets[i].key, targets[i].label);
+              resolve(false); // Resolve false to stop fOnCSGameDataLoaded from rendering.
+              return; // Exit the async IIFE.
             }
           }
 
-          // Phase 3: Load all caches into gUI object
-          log("   -> Phase 3: Loading all caches into client gUI object...");
-          const loadPromises = targets.map((t) =>
-            fRefreshAndCacheOneFSData(
-              t.label.split("/")[0], // e.g., "MyCS" or "DB"
-              t.label.split("/")[1], // e.g., "RaceClass" or "Abilities"
-              t.key
-            )
-          );
-          await Promise.all(loadPromises);
-
-          log("   -> Background cache phases completed.");
+          log("   -> Background cache loading completed.");
           resolve(true);
         })();
       } catch (e) {
@@ -8915,24 +8884,24 @@
         resolve(true); // Always resolve true to not block app load
       }
     });
-  } // End fBulkCacheFSData
+  } // End function fBulkCacheFSData
 
-  // fRefreshAndCacheOneFSData /////////////////////////////////////////////////
-  // Purpose -> Refreshes a single cache specified by the inputs. For 'DB' sources, it
-  //            reads directly from Firestore. For 'MyCS'/'MyKL' sources, it forces
-  //            an update by reading the Google Sheet, saving to Firestore, and then
-  //            reading back from Firestore. Updates gUI.characterInfo if the
-  //            RaceClass cache is refreshed.
-  // Inputs  -> workbookAbr (String): The workbook abbreviation ('DB', 'MyCS', 'MyKL').
-  //         -> sheetName (String): The specific sheet name.
-  //         -> gUIKey (String): The key in the gUI object where the cache data is
-  //                             stored (e.g., 'dbElementsFSData', 'myCsRaceClassFSData').
-  // Outputs -> (Promise<Boolean>): Resolves true if the refresh and cache update succeeded, false otherwise.
+  /**
+   * Purpose -> Refreshes a single cache specified by the inputs. For 'DB' sources, it
+   * reads directly from Firestore. For 'MyCS'/'MyKL' sources, it first checks
+   * if the cache exists in Firestore. If it does, it reads it directly (fast path).
+   * If not, it forces an update (slow path: Sheet -> FS -> FS Read).
+   * Updates gUI.characterInfo if the RaceClass cache is refreshed.
+   * @param {string} workbookAbr - The workbook abbreviation ('DB', 'MyCS', 'MyKL').
+   * @param {string} sheetName - The specific sheet name.
+   * @param {string} gUIKey - The key in the gUI object where the cache data is
+   * stored (e.g., 'dbElementsFSData', 'myCsRaceClassFSData').
+   * @returns {Promise<Boolean>} Resolves true if the refresh and cache update succeeded, false otherwise.
+   */
   async function fRefreshAndCacheOneFSData(workbookAbr, sheetName, gUIKey) {
     const funcName = "fRefreshAndCacheOneFSData";
-    const cacheDesc = `${gUIKey} (${workbookAbr}/${sheetName})`; // For logging/messages
+    const cacheDesc = `${gUIKey} (${workbookAbr}/${sheetName})`;
 
-    // === 1. Input Validation ===
     if (
       !workbookAbr ||
       typeof workbookAbr !== "string" ||
@@ -8954,16 +8923,36 @@
 
     fMyConsoleLog(`⚙️ ${funcName}: Starting refresh for ${cacheDesc}...`);
 
-    // === 2. Main Operation with Error Handling ===
     try {
-      let fsData = null; // To hold data read from Firestore
+      let fsData = null;
+      const isUserCache = workbookAbr === "MyCS" || workbookAbr === "MyKL";
+      let forceRefresh = false;
 
-      // === 3. Conditional Logic based on Source Type ===
-      if (workbookAbr === "DB") {
-        // --- DB Source: Read directly from Firestore ---
+      if (isUserCache) {
         fMyConsoleLog(
-          `   -> DB Source: Reading ${cacheDesc} from Firestore...`
+          `   -> User Source: Checking if ${cacheDesc} exists in Firestore...`
         );
+        const cacheExists = await new Promise((resolve, reject) => {
+          google.script.run
+            .withSuccessHandler(resolve)
+            .withFailureHandler(reject)
+            .fSrvVerifyFirestorePathExists(workbookAbr, sheetName, gIndex);
+        });
+
+        if (!cacheExists) {
+          forceRefresh = true;
+          fMyConsoleLog(
+            `   -> ℹ️ User cache ${cacheDesc} not found in Firestore. Forcing refresh from Sheet.`
+          );
+        } else {
+          fMyConsoleLog(
+            `   -> ✅ Cache exists. Reading directly from Firestore.`
+          );
+        }
+      }
+
+      if (workbookAbr === "DB" || !forceRefresh) {
+        // FAST PATH: Read directly from Firestore
         try {
           const response = await new Promise((resolve, reject) => {
             google.script.run
@@ -8972,15 +8961,8 @@
               .fSrvGetFirestoreFSData(workbookAbr, sheetName, gIndex);
           });
 
-          // Validate response
-          if (
-            response.success &&
-            response.FSData &&
-            typeof response.FSData.colTagsMap === "object" &&
-            typeof response.FSData.rowTagsMap === "object" &&
-            Array.isArray(response.FSData.text)
-          ) {
-            fsData = response.FSData; // Store data for Step 4
+          if (response.success && response.FSData) {
+            fsData = response.FSData;
             fMyConsoleLog(
               `      -> ✅ Successfully read ${cacheDesc} from Firestore.`
             );
@@ -8991,25 +8973,18 @@
             );
           }
         } catch (error) {
-          // Handle rejected promise or thrown validation error
-          console.error(
-            `Error reading DB cache ${cacheDesc} from Firestore:`,
-            error
-          );
           throw new Error(
-            `Failed to load critical cache ${cacheDesc}: ${
+            `Failed to load cache ${cacheDesc}: ${
               error.message || "Unknown server error."
             }`
           );
         }
-      } else if (workbookAbr === "MyCS" || workbookAbr === "MyKL") {
-        // --- User Source: Force update (Sheet -> FS -> FS Read) ---
+      } else {
+        // SLOW PATH: Force refresh for new user caches (Sheet -> FS -> FS Read)
         fMyConsoleLog(
-          `   -> User Source: Force refreshing ${cacheDesc} (Sheet->FS->FS)...`
+          `   -> New User Cache: Force refreshing ${cacheDesc} (Sheet->FS->FS)...`
         );
         let loadedData = null;
-
-        // --- Step A: Load from Sheet ---
         try {
           fMyConsoleLog(
             `      -> A. Loading Sheet: ${workbookAbr}/${sheetName}`
@@ -9024,14 +8999,11 @@
                 gIndex.CSID
               );
           });
-          // Validate structure
           if (
             !loadedData ||
-            typeof loadedData !== "object" ||
             !loadedData.ColTags ||
             !loadedData.RowTags ||
-            !loadedData.sheetText2D ||
-            !Array.isArray(loadedData.sheetText2D)
+            !loadedData.sheetText2D
           ) {
             throw new Error(
               `Invalid data structure loaded from Sheet for ${workbookAbr}/${sheetName}.`
@@ -9041,7 +9013,6 @@
             `         -> ✅ Successfully loaded ${cacheDesc} from Sheet.`
           );
         } catch (error) {
-          console.error(`Error loading Sheet for ${cacheDesc}:`, error);
           throw new Error(
             `Failed to load data from Sheet for ${cacheDesc}: ${
               error.message || "Unknown server error."
@@ -9049,7 +9020,6 @@
           );
         }
 
-        // --- Step B: Save to Firestore ---
         try {
           fMyConsoleLog(`      -> B. Saving ${cacheDesc} to Firestore...`);
           const saveResult = await new Promise((resolve, reject) => {
@@ -9063,7 +9033,6 @@
                 loadedData
               );
           });
-          // Validate response
           if (!saveResult || !saveResult.success) {
             throw new Error(
               saveResult?.message ||
@@ -9074,7 +9043,6 @@
             `         -> ✅ Successfully saved ${cacheDesc} to Firestore.`
           );
         } catch (error) {
-          console.error(`Error saving ${cacheDesc} to Firestore:`, error);
           throw new Error(
             `Failed to save ${cacheDesc} to Firestore: ${
               error.message || "Unknown server error."
@@ -9082,7 +9050,6 @@
           );
         }
 
-        // --- Step C: Read back from Firestore ---
         try {
           fMyConsoleLog(
             `      -> C. Reading ${cacheDesc} back from Firestore...`
@@ -9093,15 +9060,8 @@
               .withFailureHandler(reject)
               .fSrvGetFirestoreFSData(workbookAbr, sheetName, gIndex);
           });
-          // Validate response
-          if (
-            response.success &&
-            response.FSData &&
-            typeof response.FSData.colTagsMap === "object" &&
-            typeof response.FSData.rowTagsMap === "object" &&
-            Array.isArray(response.FSData.text)
-          ) {
-            fsData = response.FSData; // Store data for Step 4
+          if (response.success && response.FSData) {
+            fsData = response.FSData;
             fMyConsoleLog(
               `         -> ✅ Successfully read ${cacheDesc} back from Firestore.`
             );
@@ -9112,32 +9072,21 @@
             );
           }
         } catch (error) {
-          console.error(
-            `Error reading ${cacheDesc} from Firestore after update:`,
-            error
-          );
           throw new Error(
             `Failed to read ${cacheDesc} from Firestore after update: ${
               error.message || "Unknown server error."
             }`
           );
         }
-      } else {
-        // --- Invalid workbookAbr ---
-        throw new Error(`Invalid workbookAbr provided: "${workbookAbr}"`);
       }
 
-      // === 4. Populate gUI Cache ===
-      // This step is reached only if the appropriate path above succeeded and fsData is populated
       gUI[gUIKey] = fsData;
       fMyConsoleLog(`   -> Updated gUI cache key: ${gUIKey}`);
 
-      // === 5. Character Info Update (Common Logic) ===
-      if (gUIKey === "myCsRaceClassFSData") {
+      if (gUIKey === "myCSRaceClassFSData") {
         fMyConsoleLog("      -> Triggering fPopulateGuiCharacterInfo...");
         const populateSuccess = fPopulateGuiCharacterInfo();
         if (!populateSuccess) {
-          // fPopulateGuiCharacterInfo logs its own errors
           throw new Error(
             "Failed to populate gUI.characterInfo after updating RaceClass cache."
           );
@@ -9145,11 +9094,9 @@
         fMyConsoleLog("         -> ✅ Successfully populated character info.");
       }
 
-      // === 6. Final Success ===
       fMyConsoleLog(`✅ ${funcName}: Successfully refreshed ${cacheDesc}.`);
       return true;
     } catch (error) {
-      // === Catch errors thrown from any step ===
       const errorMsg = `Error during ${funcName} for ${cacheDesc}: ${
         error.message || "Unknown error"
       }`;
@@ -9160,14 +9107,14 @@
           error.message || "Unknown error"
         }`
       );
-      return false; // Indicate failure
+      return false;
     }
-  } // END fRefreshAndCacheOneFSData
+  } // End function fRefreshAndCacheOneFSData
 
   // fPopulateGuiCharacterInfo ///////////////////////////////////////////////////////
-  // Purpose -> Reads data from the gUI.myCsRaceClassFSData cache and populates
+  // Purpose -> Reads data from the gUI.myCSRaceClassFSData cache and populates
   //            the gUI.characterInfo object. Called by fBulkCacheFSData.
-  // Inputs  -> None (Reads gUI.myCsRaceClassFSData).
+  // Inputs  -> None (Reads gUI.myCSRaceClassFSData).
   // Outputs -> (Boolean): True if population is successful, false otherwise.
   function fPopulateGuiCharacterInfo() {
     const funcName = "fPopulateGuiCharacterInfo";
@@ -9176,7 +9123,7 @@
     );
 
     // === 1. Validate Cache ===
-    const cacheKey = "myCsRaceClassFSData";
+    const cacheKey = "myCSRaceClassFSData";
     const cache = gUI[cacheKey];
     if (!cache || !cache.text || !Array.isArray(cache.text)) {
       // Removed map checks as resolvers handle that
