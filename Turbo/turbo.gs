@@ -2269,8 +2269,8 @@ function fSrvSaveFullSheetTextAndTagsToFirestore(
 /**
  * Purpose: Determines the Firestore collection and document ID based on the workbook
  * type and other parameters.
- * Assumptions: This is the central logic for path calculation. User-specific paths
- * ('mycs', 'mykl') are versioned.
+ * Assumptions: This is the central logic for path calculation. DB and user-specific paths
+ * ('mycs', 'mykl') are now versioned.
  * @param {string} workbookAbr - Abbreviation ('db', 'mastercs', 'mycs', etc.).
  * @param {string} sheetName - The name of the sheet.
  * @param {object} gIndex - Object with GameVer, Email, and CSID.
@@ -2309,17 +2309,22 @@ function fSrvCalcFirestorePath(workbookAbr, sheetName, gIndex) {
         gIndex.GameVer.trim() === ""
       ) {
         throw new Error(
-          `${funcName}: Game Version is required for workbook type 
- '${workbookAbr}'.`
+          `${funcName}: Game Version is required for workbook type '${workbookAbr}'.`
         );
       }
-      // Assign collection name based on abbreviation, ensuring proper casing
-      if (lowerWorkbookAbr === "db") collectionName = "DB";
-      else if (lowerWorkbookAbr === "mastercs") collectionName = "MasterCS";
-      else collectionName = "MasterKL";
-      // Must be masterkl
-      documentId = `v${gIndex.GameVer.trim()} ${trimmedSheetName}`;
-      // Format: vVERSION SHEETNAME
+      
+      const gameVerMajorForDB = String(gIndex.GameVer).trim().split('.')[0];
+
+      if (lowerWorkbookAbr === "db") {
+        collectionName = `v${gameVerMajorForDB} DB`;
+        documentId = trimmedSheetName; // Document is now just the sheet name
+      } else if (lowerWorkbookAbr === "mastercs") {
+        collectionName = "MasterCS";
+        documentId = `v${gIndex.GameVer.trim()} ${trimmedSheetName}`;
+      } else { // masterkl
+        collectionName = "MasterKL";
+        documentId = `v${gIndex.GameVer.trim()} ${trimmedSheetName}`;
+      }
       break;
     case "mycs":
     case "mykl":
@@ -2347,7 +2352,7 @@ function fSrvCalcFirestorePath(workbookAbr, sheetName, gIndex) {
         );
       }
       const gameVerMajor = String(gIndex.GameVer).trim().split('.')[0];
-      collectionName = `v${gameVerMajor} ${gIndex.Email}`; // User's gIndex.Email is the collection
+      collectionName = `v${gameVerMajor} ${gIndex.Email}`;
       if (lowerWorkbookAbr === "mycs") {
         documentId = `MyCS_${trimmedSheetName}_${gIndex.CSID}`;
       } else {
@@ -2355,20 +2360,17 @@ function fSrvCalcFirestorePath(workbookAbr, sheetName, gIndex) {
         documentId = `MyKL_${trimmedSheetName}_OfMyCS_${gIndex.CSID}`;
       }
       break;
-    // Default case is handled by the initial validation check for validWorkbooks
   }
 
   // --- 4. Final Validation and Return ---
   if (!collectionName || !documentId) {
-    // This should theoretically not happen if logic above is correct, but as a safeguard:
     throw new Error(
       `${funcName}: Failed to determine collectionName or documentId for workbook '${workbookAbr}'.`
     );
   }
 
-  // Logger.log(`${funcName}: Determined Path - Collection: "${collectionName}", Document: "${documentId}"`); // Optional log
   return { collectionName, documentId };
-} // End fSrvCalcFirestorePath
+} // End function fSrvCalcFirestorePath
 
 // fSrvGetFirestoreFSData ///////////////////////////////////////////////////////////
 // Purpose -> Reads data from a Firestore document (potentially sliced across multiple
