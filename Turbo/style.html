@@ -199,6 +199,12 @@ body {
 
 .header-button-img {
   cursor: pointer;
+  transition: transform 0.5s ease-in-out, filter 0.5s ease-in-out;
+}
+
+.header-button-img:hover {
+  transform: scale(0.95);
+  filter: brightness(0.8);
 }
 
 .cell.header-button-cell:focus,
