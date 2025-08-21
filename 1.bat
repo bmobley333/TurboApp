@@ -29,11 +29,11 @@ REM --- MSGLib PULL Section ---
 echo.
 echo ---------------------------------------------------
 echo Changing directory to MSGLib...
-cd /d "H:\My Drive\_RPG\GitHub\TurboApp\MSGLib"
+cd /d "H:\My Drive\_RPG\Code\VS Code\MSGLib"
 
 if not exist ".clasp.json" (
     echo ERROR: .clasp.json not found in the target directory!
-    echo PATH: H:\My Drive\_RPG\GitHub\TurboApp\MSGLib
+    echo PATH: H:\My Drive\_RPG\Code\VS Code\MSGLib
     pause
     goto :Menu
 )
@@ -50,11 +50,11 @@ REM --- MSGLib PUSH Section ---
 echo.
 echo ---------------------------------------------------
 echo Changing directory to MSGLib...
-cd /d "H:\My Drive\_RPG\GitHub\TurboApp\MSGLib"
+cd /d "H:\My Drive\_RPG\Code\VS Code\MSGLib"
 
 if not exist ".clasp.json" (
     echo ERROR: .clasp.json not found in the target directory!
-    echo PATH: H:\My Drive\_RPG\GitHub\TurboApp\MSGLib
+    echo PATH: H:\My Drive\_RPG\Code\VS Code\MSGLib
     pause
     goto :Menu
 )
@@ -80,11 +80,11 @@ REM --- Turbo PULL Section ---
 echo.
 echo ---------------------------------------------------
 echo Changing directory to Turbo...
-cd /d "H:\My Drive\_RPG\GitHub\TurboApp\Turbo"
+cd /d "H:\My Drive\_RPG\Code\VS Code\Turbo"
 
 if not exist ".clasp.json" (
     echo ERROR: .clasp.json not found in the target directory!
-    echo PATH: H:\My Drive\_RPG\GitHub\TurboApp\Turbo
+    echo PATH: H:\My Drive\_RPG\Code\VS Code\Turbo
     pause
     goto :Menu
 )
@@ -101,11 +101,11 @@ REM --- Turbo PUSH Section ---
 echo.
 echo ---------------------------------------------------
 echo Changing directory to Turbo...
-cd /d "H:\My Drive\_RPG\GitHub\TurboApp\Turbo"
+cd /d "H:\My Drive\_RPG\Code\VS Code\Turbo"
 
 if not exist ".clasp.json" (
     echo ERROR: .clasp.json not found in the target directory!
-    echo PATH: H:\My Drive\_RPG\GitHub\TurboApp\Turbo
+    echo PATH: H:\My Drive\_RPG\Code\VS Code\Turbo
     pause
     goto :Menu
 )
