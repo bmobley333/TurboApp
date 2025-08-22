@@ -301,6 +301,59 @@ function fSrvValidateDesignerPassword(passwordAttempt) {
   return isValid;
 } // END fSrvValidateDesignerPassword
 
+
+/**
+ * Purpose: Reads the 'Game' tab from the Master CS, packages the UI data, and saves it
+ * as a chunked document set to the 'vXX Game UI' Firestore collection.
+ * Assumptions: This is an administrator-only function triggered from the client's Designer menu.
+ * @param {object} gIndex - The client-side gIndex object, containing at least GameVer.
+ * @returns {object} A success/failure object like { success: boolean, message?: string }.
+ */
+function fSrvRefreshUITemplateCache(gIndex) {
+  const funcName = "fSrvRefreshUITemplateCache";
+  Logger.log(`${funcName}: Starting UI Template Cache Refresh for v${gIndex.GameVer}...`);
+
+  if (!gIndex || !gIndex.GameVer) {
+    const msg = "Game Version is required to create a versioned UI template.";
+    Logger.log(`${funcName} Error: ${msg}`);
+    return { success: false, message: msg };
+  }
+
+  try {
+    const firestore = fSrvGetFirestoreInstance();
+    if (!firestore) {
+      throw new Error("Failed to get Firestore instance.");
+    }
+
+    const masterCsId = gSrv.ids.sheets.mastercs;
+    if (!masterCsId) {
+      throw new Error("MasterCS ID is not defined in server configuration.");
+    }
+    Logger.log(`   -> Reading from MasterCS ID: ${masterCsId}`);
+    const uiTemplateData = fSrvReadCSGameSheet({ CSID: masterCsId });
+    if (!uiTemplateData || !uiTemplateData.arr || !uiTemplateData.format) {
+      throw new Error("Failed to read or process data from the Master Character Sheet.");
+    }
+    Logger.log(`   -> Successfully read and packaged MasterCS 'Game' tab data.`);
+
+    const gameVerMajor = String(gIndex.GameVer).trim().split('.')[0];
+    const collectionName = `v${gameVerMajor} Game UI`;
+    const baseDocumentId = `UITemplate`;
+
+    fSrvSaveObjectAsChunkedDocs(firestore, uiTemplateData, collectionName, baseDocumentId);
+
+    Logger.log(`✅ ${funcName}: Successfully triggered refresh and save for UI Template Cache.`);
+    return { success: true, message: `UI Template Cache saved to collection '${collectionName}'.` };
+
+  } catch (e) {
+    const errorMsg = `Error in ${funcName}: ${e.message}`;
+    console.error(errorMsg, e.stack);
+    Logger.log(`❌ ${funcName} Error: ${e.message}`);
+    return { success: false, message: e.message };
+  }
+} // End function fSrvRefreshUITemplateCache
+
+
 // ==========================================================================
 // === Low-Level Tag & Range Helpers ===
 // ==========================================================================
@@ -1601,6 +1654,61 @@ function fSrvSaveURLtoNamesAndLogToDBandPS(dataBundle) {
 // ==========================================================================
 // === Firestore Integration ===
 // ==========================================================================
+
+
+/**
+ * Purpose: Takes a large JavaScript object, converts it to a JSON string, splits it into
+ * manageable chunks, and saves it to Firestore as a metadata document plus multiple data chunk documents.
+ * Assumptions: The Firestore instance is valid.
+ * @param {object} firestore - The authenticated Firestore instance.
+ * @param {object} objectToSave - The large JavaScript object to be saved.
+ * @param {string} collectionName - The name of the Firestore collection.
+ * @param {string} baseDocumentId - The base name for the documents (e.g., 'UITemplate').
+ * @returns {void}
+ * @throws {Error} If saving fails.
+ */
+function fSrvSaveObjectAsChunkedDocs(firestore, objectToSave, collectionName, baseDocumentId) {
+  const funcName = "fSrvSaveObjectAsChunkedDocs";
+  const MAX_CHUNK_SIZE = 800000; // Keep chunks well under the 1 MiB limit
+
+  // 1. Convert the entire object to a single JSON string.
+  const jsonString = JSON.stringify(objectToSave);
+  const totalSize = jsonString.length;
+  Logger.log(`   -> ${funcName}: Serialized object to JSON string of size ${totalSize} chars.`);
+
+  // 2. Split the string into chunks.
+  const chunks = [];
+  for (let i = 0; i < totalSize; i += MAX_CHUNK_SIZE) {
+    chunks.push(jsonString.substring(i, i + MAX_CHUNK_SIZE));
+  }
+  const totalChunks = chunks.length;
+  Logger.log(`   -> ${funcName}: Split JSON string into ${totalChunks} chunk(s).`);
+
+  // 3. Save the metadata document.
+  const metadataDocId = `${baseDocumentId}_metadata`;
+  const metadataPath = `${collectionName}/${metadataDocId}`;
+  const metadataObject = {
+    totalChunks: totalChunks,
+    totalSize: totalSize,
+    _lastUpdated: new Date(),
+  };
+  Logger.log(`   -> ${funcName}: Saving metadata to ${metadataPath}`);
+  firestore.updateDocument(metadataPath, metadataObject, false);
+
+  // 4. Save each chunk document.
+  for (let i = 0; i < totalChunks; i++) {
+    const chunkIndex = i + 1; // 1-based index for naming
+    const chunkDocId = `${baseDocumentId}_chunk_${chunkIndex}of${totalChunks}`;
+    const chunkPath = `${collectionName}/${chunkDocId}`;
+    const chunkData = {
+      chunkData: chunks[i],
+      _chunkIndex: i
+    };
+    Logger.log(`   -> ${funcName}: Saving data chunk ${chunkIndex}/${totalChunks} to ${chunkPath}`);
+    firestore.updateDocument(chunkPath, chunkData, false);
+  }
+  Logger.log(`   -> ${funcName}: All chunks saved successfully.`);
+} // End function fSrvSaveObjectAsChunkedDocs
 
 // fSrvGetFirestoreInstance ///////////////////////////////////////////////////////
 // Purpose -> Initializes and returns an authenticated Firestore instance using

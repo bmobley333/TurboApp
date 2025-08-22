@@ -4185,34 +4185,32 @@
   // === Menu Bar Click     (End of Menu Bar Setup)) ===
   // ==========================================================================
 
-  // fSetupMenuActionClickListener //////////////////////////////////////////////
-  // Purpose -> Sets up a single event listener on the menu bar to handle clicks
-  //            on menu items using event delegation and data attributes.
-  // Inputs  -> menuBar (HTMLElement): The menu bar element (#menu-bar) is expected to exist.
-  // Outputs -> None. Attaches event listener.
+  /**
+   * Purpose -> Sets up a single event listener on the menu bar to handle clicks
+   * on menu items using event delegation and data attributes.
+   * @param {} - No parameters.
+   * @returns {void}
+   */
   function fSetupMenuActionClickListener() {
-    // Removed menuBar parameter, gets element inside
     const menuBar = document.getElementById("menu-bar");
     if (!menuBar) {
       console.error("Setup failed: Menu bar (#menu-bar) not found.");
       fMyConsoleLog(
         "❌ ERROR: Menu bar element not found for action listener setup."
-      ); // Added log
-      return; // Stop if the menu bar isn't there
+      );
+      return;
     }
 
     menuBar.addEventListener("click", (event) => {
-      const target = event.target.closest("a[data-action]"); // Find the clicked link with a data-action
-      if (!target) return; // Exit if the click wasn't on an action link
+      const target = event.target.closest("a[data-action]");
+      if (!target) return;
 
-      event.preventDefault(); // Prevent default link behavior (like navigating)
+      event.preventDefault();
       const action = target.dataset.action;
       fMyConsoleLog(`🎬 Menu Action Clicked: ${action}`);
 
-      // Close any open dropdowns first
-      fCloseAllDropdowns(); // Use the existing helper
+      fCloseAllDropdowns();
 
-      // --- Handle actions based on the data-action attribute ---
       switch (action) {
         // Game Menu Actions
         case "game-nishStartEnd":
@@ -4314,6 +4312,9 @@
         case "designer-saveDbSheetVer":
           fSaveGoogelSheetToFSData();
           break;
+        case "designer-refreshUITemplate":
+          fHandleRefreshUITemplate();
+          break;
 
         // Default case for unhandled actions
         default:
@@ -4325,7 +4326,7 @@
     });
 
     fMyConsoleLog("✅ Delegated Menu Action Click Listener Attached.");
-  } // END fSetupMenuActionClickListener
+  } // End function fSetupMenuActionClickListener
 
   // fHandleNishStartOrEnd ///////////////////////////////////////////////////////////
   // Purpose -> Handles <Game><Nish Start or End> menu action. Runs Meta Flood,
@@ -4586,6 +4587,66 @@
       // Implicitly returns undefined on error
     }
   } // End fHandleNewLevelSlotName
+
+  /**
+   * Purpose: Handles the 'Refresh UI Template Cache' designer menu action. Calls the
+   * server to re-read the MasterCS 'Game' tab and save it to a versioned
+   * collection in Firestore.
+   * @param {} - No parameters.
+   * @returns {Promise<void>} Resolves after the operation is complete.
+   */
+  async function fHandleRefreshUITemplate() {
+    const funcName = "fHandleRefreshUITemplate";
+    fMyConsoleLog(`⚙️ Menu Action: ${funcName} Triggered...`);
+
+    if (!gUI.isDesignerMode) {
+      await fShowMessage(
+        "❌ This action requires Designer Mode to be enabled."
+      );
+      return;
+    }
+
+    const userConfirmed = await fShowPrompt(
+      `<b>Refresh the UI Template Cache for v${gIndex.GameVer}?</b><br><br>
+    This will overwrite the cached UI layout in Firestore with the current version from the Master Character Sheet.<br><br>
+    This action is slow and should only be done after changing the 'Game' tab layout.`
+    );
+
+    if (!userConfirmed) {
+      fMyConsoleLog(`   -> User cancelled UI Template refresh.`);
+      return;
+    }
+
+    fShowMessageNoClose(
+      "⏳ Refreshing and saving UI Template... This may take a minute."
+    );
+    try {
+      const result = await new Promise((resolve, reject) => {
+        google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(reject)
+          .fSrvRefreshUITemplateCache(gIndex);
+      });
+
+      fHideMessage();
+      if (result && result.success) {
+        fMyConsoleLog(`✅ ${funcName}: Server confirmed success.`);
+        await fShowMessage(`✅ ${result.message || "Success!"}`);
+      } else {
+        throw new Error(
+          result.message || "An unknown error occurred on the server."
+        );
+      }
+    } catch (error) {
+      fHideMessage();
+      const errorMsg = `Error refreshing UI Template: ${
+        error.message || error
+      }`;
+      console.error(`${funcName}:`, error);
+      fMyConsoleLog(`❌ ${funcName}: ${errorMsg}`);
+      await fShowMessage(`❌ ${errorMsg}`);
+    }
+  } // End function fHandleRefreshUITemplate
 
   // fHandleGMAward //////////////////////////////////////////////////////////////
   // Purpose -> Handles the <Game><GM Award> menu action. Gets a random award from
@@ -8722,7 +8783,7 @@
   // Inputs  -> data (Object): The structured data object from the server { arr, format, notesArr }.
   // Outputs -> None (Initiates subsequent data loading and UI rendering).
   async function fOnCSGameDataLoaded(data) {
-    fMyConsoleLog("✅ Initial Sheet Data received from server");
+    fMyConsoleLog("✅ Initial Game tab Data loaded from Google Sheets");
 
     // === 1. Validate and Store Initial Sheet Data ===
     const isSheetDataValid = fStoreAndValidateData(data);
