@@ -460,6 +460,29 @@ function fSrvResolveTag(tagOrIndex, tagMap, type = "unknown") {
 // === Core Sheet Loader – “Game” Tab ===
 // ==========================================================================
 
+
+/**
+ * Purpose: Acts as the main data loader. Tries the "fast path" by calling fSrvGetUITemplateFromCache.
+ * If that fails, it falls back to the "slow path" by calling fSrvReadCSGameSheet.
+ * @param {object} gIndex - The client-side gIndex object, containing at least GameVer and CSID.
+ * @returns {object} The structured data object { arr, format, notesArr }.
+ */
+function fSrvGetInitialGridData(gIndex) {
+  try {
+    Logger.log("--> Attempting Fast Path: Load UI from Firestore Cache...");
+    const cachedData = fSrvGetUITemplateFromCache(gIndex);
+    Logger.log("--> ✅ Fast Path SUCCESS: UI loaded from Firestore Cache.");
+    return cachedData;
+  } catch (e) {
+    Logger.log(`--> ℹ️ Fast Path FAILED: ${e.message}. Falling back to Slow Path.`);
+    Logger.log("--> Attempting Slow Path: Load UI from Google Sheet...");
+    const sheetData = fSrvReadCSGameSheet(gIndex);
+    Logger.log("--> ✅ Slow Path SUCCESS: UI loaded from Google Sheet.");
+    return sheetData;
+  }
+} // End function fSrvGetInitialGridData
+
+
 // fSrvReadCSGameSheet /////////////////////////////////////////////////////////////////////////////////
 // Purpose -> Loads full data, format, and notes from the 'Game' sheet of a given spreadsheet ID.
 // Inputs  -> gIndex.CSID (String): The ID of the spreadsheet to read from.
@@ -1654,6 +1677,72 @@ function fSrvSaveURLtoNamesAndLogToDBandPS(dataBundle) {
 // ==========================================================================
 // === Firestore Integration ===
 // ==========================================================================
+
+
+/**
+ * Purpose: Reads and reassembles a chunked UI Template from the 'vXX Game UI' Firestore collection.
+ * This is the "fast path" for loading the initial UI.
+ * @param {object} gIndex - The client-side gIndex object, containing at least GameVer.
+ * @returns {object} The reassembled UI data object parsed from JSON.
+ * @throws {Error} If the cache is not found, is malformed, or cannot be parsed.
+ */
+function fSrvGetUITemplateFromCache(gIndex) {
+  const funcName = "fSrvGetUITemplateFromCache";
+  const firestore = fSrvGetFirestoreInstance();
+  if (!firestore) {
+    throw new Error("Could not get Firestore instance.");
+  }
+
+  const gameVerMajor = String(gIndex.GameVer).trim().split('.')[0];
+  const collectionName = `v${gameVerMajor} Game UI`;
+  const baseDocumentId = `UITemplate`;
+  const metadataPath = `${collectionName}/${baseDocumentId}_metadata`;
+  Logger.log(`   -> ${funcName}: Attempting to load from ${metadataPath}`);
+
+  const metadataDoc = firestore.getDocument(metadataPath);
+  if (metadataDoc && metadataDoc.fields) {
+    // Manually convert the fields object into a clean JS object.
+    const metadataFields = metadataDoc.fields;
+    const metadata = {};
+    for (const key in metadataFields) {
+      metadata[key] = fSrvConvertFirestoreTypesToJS(metadataFields[key]);
+    }
+
+    if (typeof metadata.totalChunks === 'number') {
+      const totalChunks = metadata.totalChunks;
+      Logger.log(`   -> ${funcName}: Metadata found. Total chunks to load: ${totalChunks}.`);
+
+      if (totalChunks === 0) {
+        return { arr: [[]], format: {}, notesArr: [[]] };
+      }
+
+      let jsonStringChunks = new Array(totalChunks);
+      for (let i = 1; i <= totalChunks; i++) {
+        const chunkDocId = `${baseDocumentId}_chunk_${i}of${totalChunks}`;
+        const chunkPath = `${collectionName}/${chunkDocId}`;
+        const chunkDoc = firestore.getDocument(chunkPath);
+
+        // Manually convert the chunk's fields object.
+        const chunkFields = chunkDoc.fields;
+        const chunkData = {};
+        for (const key in chunkFields) {
+          chunkData[key] = fSrvConvertFirestoreTypesToJS(chunkFields[key]);
+        }
+
+        if (typeof chunkData.chunkData !== 'string') {
+          throw new Error(`Data in chunk ${i} is not a string.`);
+        }
+        jsonStringChunks[chunkData._chunkIndex] = chunkData.chunkData;
+      }
+
+      const fullJsonString = jsonStringChunks.join('');
+      Logger.log(`   -> ${funcName}: All ${totalChunks} chunks loaded and reassembled. Parsing...`);
+      return JSON.parse(fullJsonString);
+    }
+    throw new Error("Metadata document is malformed (missing or invalid totalChunks).");
+  }
+  throw new Error("Metadata document not found or is empty.");
+} // End function fSrvGetUITemplateFromCache
 
 
 /**

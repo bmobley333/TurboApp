@@ -9493,49 +9493,46 @@
     return true;
   } // End fRunPostRenderFormatting
 
-  // fLoadGameSheet //////////////////////////////////////////////////////////////////
-  // Purpose -> Initiates the process of loading and displaying the game sheet data.
-  //            Sets up timing, validates gIndex.CSID, and calls the server-side
-  //            function (fSrvReadCSGameSheet) to retrieve data, handling success and failure cases.
-  // Inputs  -> None (Uses global gIndex.CSID).
-  // Outputs -> None (Initiates server call).
+  /**
+   * Purpose -> Initiates the process of loading and displaying the game sheet data.
+   * Sets up timing, validates gIndex.CSID, and calls the server-side
+   * function (fSrvGetInitialGridData) to retrieve data, handling success and failure cases.
+   * Inputs  -> None (Uses global gIndex.CSID).
+   * Outputs -> None (Initiates server call).
+   */
   function fLoadGameSheet() {
     // === Initialize Timers ===
-    gUI.startTime = performance.now(); // Record start time for performance logging
-    gUI.lastLogTime = gUI.startTime; // Initialize last log time
+    gUI.startTime = performance.now();
+    gUI.lastLogTime = gUI.startTime;
     fMyConsoleLog("🚀 Requesting GSheet Data...");
-    console.log("Sheet ID:", gIndex.CSID); // Log the sheet ID being used
+    console.log("Sheet ID:", gIndex.CSID);
 
     // === Validate Sheet ID ===
     if (!gIndex.CSID) {
       const errorMsg = "❌ No Sheet ID found. Cannot load data.";
       console.error(errorMsg);
       fMyConsoleLog(errorMsg);
-      // Display error message in the grid container if ID is missing
       const gridDiv = document.getElementById("grid");
       if (gridDiv)
         gridDiv.innerHTML = `<p style="color:red;">${errorMsg} Check URL parameter.</p>`;
-      fHideMessage(); // ADDED: Hide loading message on critical error
+      fHideMessage();
       return;
     }
 
     // === Call Server Function ===
-    // Use google.script.run to call the Apps Script function
     google.script.run
-      .withSuccessHandler(fOnCSGameDataLoaded) // Callback for successful data retrieval or server-side errors
+      .withSuccessHandler(fOnCSGameDataLoaded)
       .withFailureHandler((error) => {
-        // Callback for transport errors or unhandled exceptions
         const errorMsg = `❌ Failed to call server: ${error.message}`;
         console.error(errorMsg, error);
         fMyConsoleLog(errorMsg);
-        // Display error message in the grid container on failure
         const gridDiv = document.getElementById("grid");
         if (gridDiv)
           gridDiv.innerHTML = `<p style="color:red;">${errorMsg}</p>`;
-        fHideMessage(); // ADDED: Hide loading message on server call failure
+        fHideMessage();
       })
-      .fSrvReadCSGameSheet(gIndex); // The server-side function to call in Turbo.gs
-  } // END fLoadGameSheet
+      .fSrvGetInitialGridData(gIndex);
+  } // End function fLoadGameSheet
 
   // ==========================================================================
   // === Entry Point                 (End of Initial Data Load) ===
