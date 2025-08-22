@@ -466,7 +466,7 @@ function fSrvResolveTag(tagOrIndex, tagMap, type = "unknown") {
  * If that fails, it falls back to the "slow path": reading from the Google Sheet AND automatically
  * creating the Firestore cache for subsequent loads ("self-healing").
  * @param {object} gIndex - The client-side gIndex object, containing at least GameVer and CSID.
- * @returns {object} The structured data object { arr, format, notesArr }.
+ * @returns {object} A wrapper object { data: { arr, format, notesArr }, source: 'Firestore' | 'Google Sheets' }.
  */
 function fSrvGetInitialGridData(gIndex) {
   const funcName = "fSrvGetInitialGridData";
@@ -474,14 +474,13 @@ function fSrvGetInitialGridData(gIndex) {
     Logger.log("--> Attempting Fast Path: Load UI from Firestore Cache...");
     const cachedData = fSrvGetUITemplateFromCache(gIndex);
     Logger.log("--> ✅ Fast Path SUCCESS: UI loaded from Firestore Cache.");
-    return cachedData;
+    return { data: cachedData, source: 'Firestore' };
   } catch (e) {
     Logger.log(`--> ℹ️ Fast Path FAILED: ${e.message}. Falling back to Slow Path.`);
     Logger.log("--> Attempting Slow Path: Load UI from Google Sheet...");
     const sheetData = fSrvReadCSGameSheet(gIndex);
     Logger.log("--> ✅ Slow Path SUCCESS: UI loaded from Google Sheet.");
 
-    // SELF-HEALING: After a successful slow load, try to create the cache for next time.
     try {
       Logger.log("   -> Self-Healing: Attempting to save the loaded Sheet data to create the cache for the next load...");
       const gameVerMajor = String(gIndex.GameVer).trim().split('.')[0];
@@ -491,12 +490,10 @@ function fSrvGetInitialGridData(gIndex) {
       fSrvSaveObjectAsChunkedDocs(firestore, sheetData, collectionName, baseDocumentId);
       Logger.log("   -> ✅ Self-Healing: Cache created successfully.");
     } catch (saveError) {
-      // Log a warning, but don't stop the user from loading the app.
-      // The cache will just try to build again on the next slow load.
       Logger.log(`   -> ⚠️ Self-Healing WARNING: Could not save UI Template to cache after slow load. Error: ${saveError.message}`);
     }
 
-    return sheetData;
+    return { data: sheetData, source: 'Google Sheets' };
   }
 } // End function fSrvGetInitialGridData
 

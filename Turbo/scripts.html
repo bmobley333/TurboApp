@@ -8772,39 +8772,46 @@
   // === Initial Data Load      (End of Initialization & Setup Functions) ===
   // ==========================================================================
 
-  // fOnCSGameDataLoaded ///////////////////////////////////////////////////////////////////
-  // Purpose -> Callback executed after initial Sheet data retrieval (fSrvReadCSGameSheet).
-  //            Validates sheet data, checks Firestore for overriding gUI.arr data,
-  //            then initiates the fetching of background caches (which now includes
-  //            populating character info) and subsequent grid rendering.
-  // Inputs  -> data (Object): The structured data object from the server { arr, format, notesArr }.
-  // Outputs -> None (Initiates subsequent data loading and UI rendering).
-  async function fOnCSGameDataLoaded(data) {
-    fMyConsoleLog("✅ Initial Game tab Data loaded from Google Sheets");
-
-    // === 1. Validate and Store Initial Sheet Data ===
-    const isSheetDataValid = fStoreAndValidateData(data);
-    if (!isSheetDataValid) {
+  /**
+   * Purpose -> Callback executed after initial data retrieval. Logs the data source, validates
+   * the data payload, then initiates the fetching of background caches and subsequent grid rendering.
+   * @param {object} response - The wrapper object from the server { data: { arr, format, notesArr }, source: string }.
+   * @returns {Promise<void>} Resolves after the entire load and render process is kicked off.
+   */
+  async function fOnCSGameDataLoaded(response) {
+    // Determine the source and log the appropriate message
+    const source = response?.source || "Unknown";
+    if (source === "Firestore") {
+      fMyConsoleLog("✅ Initial Game UI Data loaded from Firestore");
+    } else {
+      // Covers 'Google Sheets' and 'Unknown'
+      fMyConsoleLog("✅ Initial Game tab Data loaded from Google Sheets");
+      const gameVerMajor = String(gIndex.GameVer).trim().split(".")[0];
       fMyConsoleLog(
-        "❌ Initial sheet data invalid or empty. Halting load process."
+        `💾 Creating and Saving "v${gameVerMajor} Game UI" to Firestore...`
       );
-      fHideMessage(); // <<< ADDED: Hide loading message
-      // fStoreAndValidateData shows messages/logs errors
+    }
+
+    // Extract the actual data payload for further processing
+    const dataPayload = response?.data;
+
+    // Validate and Store Initial Sheet Data
+    const isSheetDataValid = fStoreAndValidateData(dataPayload);
+    if (!isSheetDataValid) {
+      fMyConsoleLog("❌ Initial data invalid or empty. Halting load process.");
+      fHideMessage();
       return;
     }
-    fMyConsoleLog("   -> Stored initial data from Sheet into gUI.");
+    fMyConsoleLog("   -> Stored initial data into gUI.");
 
-    // === 2. Check Firestore for Overriding gUI.arr Data ===
+    // Check Firestore for Overriding gUI.arr Data
     fMyConsoleLog("⚙️ Checking Firestore for saved Grid (gUI.arr) data...");
     if (!gIndex.Email || !gIndex.CSID) {
       fMyConsoleLog(
         "   -> ⚠️ Skipping Firestore gUI.arr check: Missing Email or CSID."
       );
       fSetupTooltipAndModal();
-
-      fMyConsoleLog(
-        "   -> Proceeding to fetch background caches (skipped Firestore arr check)..."
-      );
+      fMyConsoleLog("   -> Proceeding to fetch background caches...");
       const cachesLoaded = await fBulkCacheFSData();
       if (cachesLoaded) {
         fRenderGridWithFinalData();
@@ -8812,28 +8819,25 @@
         fMyConsoleLog(
           "❌ Background cache loading failed. Halting further rendering."
         );
-        fHideMessage(); // <<< ADDED: Hide loading message if caches fail
+        fHideMessage();
       }
       return;
     }
 
     google.script.run
       .withSuccessHandler(async (firestoreResponse) => {
-        let usingFirestoreArr = false;
         if (
-          firestoreResponse &&
-          firestoreResponse.success === true &&
+          firestoreResponse?.success === true &&
           firestoreResponse.firestoreArr
         ) {
           fMyConsoleLog(
             "   -> ✅ Firestore Grid data found. Overwriting gUI.arr."
           );
           gUI.arr = firestoreResponse.firestoreArr;
-          usingFirestoreArr = true;
         } else {
           const reason = firestoreResponse?.message || "Reason unknown.";
           fMyConsoleLog(
-            `   -> ℹ️ Firestore Grid check returned false (${reason}). Using Sheet data for gUI.arr.`
+            `   -> ℹ️ Firestore Grid check returned false (${reason}). Using template/Sheet data for gUI.arr.`
           );
         }
 
@@ -8844,16 +8848,16 @@
           fRenderGridWithFinalData();
         } else {
           fMyConsoleLog(
-            "❌ Background cache loading failed after Firestore check. Halting further rendering."
+            "❌ Background cache loading failed. Halting further rendering."
           );
-          fHideMessage(); // <<< ADDED: Hide loading message if caches fail
+          fHideMessage();
         }
       })
       .withFailureHandler(async (error) => {
         const errorMsg = `Error checking Firestore for Grid data: ${error.message}`;
         console.error(errorMsg, error);
         fMyConsoleLog(
-          `   -> ❌ ${errorMsg}. Using Sheet data for gUI.arr as fallback.`
+          `   -> ❌ ${errorMsg}. Using template/Sheet data for gUI.arr as fallback.`
         );
         fSetupTooltipAndModal();
         fMyConsoleLog(
@@ -8864,13 +8868,13 @@
           fRenderGridWithFinalData();
         } else {
           fMyConsoleLog(
-            "❌ Background cache loading failed after Firestore check failure. Halting further rendering."
+            "❌ Background cache loading failed. Halting further rendering."
           );
-          fHideMessage(); // <<< ADDED: Hide loading message if caches fail
+          fHideMessage();
         }
       })
       .fSrvCheckAndLoadFirestoreGUIarrAs2D(gIndex);
-  } // END fOnCSGameDataLoaded
+  } // End function fOnCSGameDataLoaded
 
   /**
    * Purpose: Loads all required background data caches into the gUI object sequentially. It relies on
