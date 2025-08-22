@@ -8877,12 +8877,10 @@
   } // End function fOnCSGameDataLoaded
 
   /**
-   * Purpose: Loads all required background data caches into the gUI object sequentially. It relies on
+   * Purpose: Loads all required background data caches defined in gUI.cachesToLoadOnStartup. It relies on
    * function fRefreshAndCacheOneFSData to intelligently handle whether to read from Firestore directly
-   * (for DB and existing user caches) or to create a user cache for the first time.
+   * or to create a cache for the first time.
    * Assumptions: function fRefreshAndCacheOneFSData correctly implements the caching logic.
-   * Notes: The complex verification and creation phases have been removed, as the logic is now
-   * correctly consolidated within function fRefreshAndCacheOneFSData.
    * @param {string} ignored - Unused (kept for signature compatibility if previously called with a param).
    * @param {object} opts - Optional flags (e.g., { verbose: true }).
    * @returns {Promise<boolean>} Resolves true on completion, false if a critical cache fails to load.
@@ -8894,15 +8892,14 @@
       try {
         log("⚙️ fBulkCacheFSData: Loading background data caches...");
 
-        const targets = [
-          { key: "myCSRaceClassFSData", label: "MyCS/RaceClass" },
-          { key: "myCSListFSData", label: "MyCS/List" },
-          { key: "myKLKnownAbilitiesFSData", label: "MyKL/KnownAbilities" },
-          { key: "dbAbilitiesFSData", label: "DB/Abilities" },
-          { key: "dbCritFSData", label: "DB/Crit" },
-          { key: "dbElementsFSData", label: "DB/Elements" },
-          { key: "dbGearFSData", label: "DB/Gear" },
-        ];
+        const targets = gUI.cachesToLoadOnStartup || [];
+
+        if (targets.length === 0) {
+          log(
+            "   -> No caches defined in gUI.cachesToLoadOnStartup. Skipping."
+          );
+          return resolve(true);
+        }
 
         if (!window.google || !google.script || !google.script.run) {
           log(
@@ -8912,20 +8909,15 @@
         }
 
         (async () => {
-          // The old Phase 1 (verify) and Phase 2 (create) were removed because they were
-          // redundant and based on old, non-existent server functions. All intelligent
-          // loading logic is now correctly handled by fRefreshAndCacheOneFSData.
-
           log(
             "   -> Loading all caches into client gUI object (sequentially)..."
           );
           for (const target of targets) {
             const success = await fRefreshAndCacheOneFSData(
-              target.label.split("/")[0], // e.g., "MyCS" or "DB"
-              target.label.split("/")[1], // e.g., "RaceClass" or "Abilities"
+              target.label.split("/")[0],
+              target.label.split("/")[1],
               target.key
             );
-            // If a critical user-specific cache fails, stop the entire loading process.
             if (
               !success &&
               (target.key.startsWith("myCS") || target.key.startsWith("myKL"))
@@ -8933,8 +8925,8 @@
               log(
                 `   -> ❌ Critical user cache '${target.key}' failed to load. Halting cache sequence.`
               );
-              resolve(false); // Resolve false to stop fOnCSGameDataLoaded from rendering.
-              return; // Exit the async IIFE.
+              resolve(false);
+              return;
             }
           }
 
@@ -8943,37 +8935,28 @@
         })();
       } catch (e) {
         console.warn("fBulkCacheFSData soft-failed:", e);
-        resolve(true); // Always resolve true to not block app load
+        resolve(true);
       }
     });
   } // End function fBulkCacheFSData
 
   /**
-   * Purpose -> Refreshes a single cache specified by the inputs. For 'DB' sources, it
-   * reads directly from Firestore. For 'MyCS'/'MyKL' sources, it first checks
-   * if the cache exists in Firestore. If it does, it reads it directly (fast path).
-   * If not, it forces an update (slow path: Sheet -> FS -> FS Read).
+   * Purpose -> Refreshes a single cache. It first checks if the cache exists in Firestore.
+   * If it does, it reads it directly (fast path). If not, it forces an update
+   * (slow path: Sheet -> FS -> FS Read). This logic applies to all cache types.
    * Updates gUI.characterInfo if the RaceClass cache is refreshed.
    * @param {string} workbookAbr - The workbook abbreviation ('DB', 'MyCS', 'MyKL').
    * @param {string} sheetName - The specific sheet name.
-   * @param {string} gUIKey - The key in the gUI object where the cache data is
-   * stored (e.g., 'dbElementsFSData', 'myCsRaceClassFSData').
+   * @param {string} gUIKey - The key in the gUI object where the cache data is stored.
    * @returns {Promise<Boolean>} Resolves true if the refresh and cache update succeeded, false otherwise.
    */
   async function fRefreshAndCacheOneFSData(workbookAbr, sheetName, gUIKey) {
     const funcName = "fRefreshAndCacheOneFSData";
     const cacheDesc = `${gUIKey} (${workbookAbr}/${sheetName})`;
 
-    if (
-      !workbookAbr ||
-      typeof workbookAbr !== "string" ||
-      !sheetName ||
-      typeof sheetName !== "string" ||
-      !gUIKey ||
-      typeof gUIKey !== "string"
-    ) {
+    if (!workbookAbr || !sheetName || !gUIKey) {
       const errorMsg = `Invalid input parameters provided to ${funcName}.`;
-      console.error(`${funcName}: ${errorMsg} Got:`, {
+      console.error(`${funcName}: ${errorMsg}`, {
         workbookAbr,
         sheetName,
         gUIKey,
@@ -8987,34 +8970,20 @@
 
     try {
       let fsData = null;
-      const isUserCache = workbookAbr === "MyCS" || workbookAbr === "MyKL";
-      let forceRefresh = false;
 
-      if (isUserCache) {
-        fMyConsoleLog(
-          `   -> User Source: Checking if ${cacheDesc} exists in Firestore...`
-        );
-        const cacheExists = await new Promise((resolve, reject) => {
-          google.script.run
-            .withSuccessHandler(resolve)
-            .withFailureHandler(reject)
-            .fSrvVerifyFirestorePathExists(workbookAbr, sheetName, gIndex);
-        });
+      fMyConsoleLog(`   -> Checking if ${cacheDesc} exists in Firestore...`);
+      const cacheExists = await new Promise((resolve, reject) => {
+        google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(reject)
+          .fSrvVerifyFirestorePathExists(workbookAbr, sheetName, gIndex);
+      });
 
-        if (!cacheExists) {
-          forceRefresh = true;
-          fMyConsoleLog(
-            `   -> ℹ️ User cache ${cacheDesc} not found in Firestore. Forcing refresh from Sheet.`
-          );
-        } else {
-          fMyConsoleLog(
-            `   -> ✅ Cache exists. Reading directly from Firestore.`
-          );
-        }
-      }
-
-      if (workbookAbr === "DB" || !forceRefresh) {
+      if (cacheExists) {
         // FAST PATH: Read directly from Firestore
+        fMyConsoleLog(
+          `   -> ✅ Cache exists. Reading directly from Firestore.`
+        );
         try {
           const response = await new Promise((resolve, reject) => {
             google.script.run
@@ -9042,12 +9011,13 @@
           );
         }
       } else {
-        // SLOW PATH: Force refresh for new user caches (Sheet -> FS -> FS Read)
+        // SLOW PATH: Force refresh (Sheet -> FS -> FS Read)
         fMyConsoleLog(
-          `   -> New User Cache: Force refreshing ${cacheDesc} (Sheet->FS->FS)...`
+          `   -> ℹ️ Cache not found in Firestore. Forcing refresh from Sheet...`
         );
         let loadedData = null;
         try {
+          // Step A: Load from Sheet
           fMyConsoleLog(
             `      -> A. Loading Sheet: ${workbookAbr}/${sheetName}`
           );
@@ -9083,6 +9053,7 @@
         }
 
         try {
+          // Step B: Save to Firestore
           fMyConsoleLog(`      -> B. Saving ${cacheDesc} to Firestore...`);
           const saveResult = await new Promise((resolve, reject) => {
             google.script.run
@@ -9113,6 +9084,7 @@
         }
 
         try {
+          // Step C: Read back from Firestore
           fMyConsoleLog(
             `      -> C. Reading ${cacheDesc} back from Firestore...`
           );
