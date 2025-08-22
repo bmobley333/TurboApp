@@ -2584,6 +2584,73 @@ function fSrvCalcFirestorePath(workbookAbr, sheetName, gIndex) {
   return { collectionName, documentId };
 } // End function fSrvCalcFirestorePath
 
+
+/**
+ * Purpose: Receives a list of required cache definitions, loads each one from Firestore
+ * (or creates it via self-healing if missing), and returns them all in a single object.
+ * This consolidates multiple client-server round trips into one.
+ * @param {Array<object>} requiredCaches - An array of cache definitions, e.g., [{ key: 'dbAbilitiesFSData', label: 'DB/Abilities' }].
+ * @param {object} gIndex - The standard gIndex object from the client.
+ * @returns {object} A result object like { success: boolean, caches: { dbAbilitiesFSData: {...}, ... }, message?: string }.
+ */
+function fSrvGetRequiredCaches(requiredCaches, gIndex) {
+  const funcName = "fSrvGetRequiredCaches";
+  Logger.log(`${funcName}: Received request to bulk-load ${requiredCaches.length} caches.`);
+
+  if (!Array.isArray(requiredCaches) || requiredCaches.length === 0) {
+    return { success: false, caches: {}, message: "Invalid or empty cache list provided." };
+  }
+
+  const loadedCaches = {};
+  let overallSuccess = true;
+
+  for (const cacheInfo of requiredCaches) {
+    const { key, label } = cacheInfo;
+    const [workbookAbr, sheetName] = label.split('/');
+
+    try {
+      Logger.log(`   -> ${funcName}: Processing cache '${key}' (${label})...`);
+      // Check if the cache exists
+      const cacheExists = fSrvVerifyFirestorePathExists(workbookAbr, sheetName, gIndex);
+
+      if (cacheExists) {
+        // FAST PATH: Load from Firestore
+        Logger.log(`      -> Cache exists. Reading from Firestore.`);
+        const response = fSrvGetFirestoreFSData(workbookAbr, sheetName, gIndex);
+        if (response.success) {
+          loadedCaches[key] = response.FSData;
+        } else {
+          throw new Error(response.message || "Failed to read existing cache.");
+        }
+      } else {
+        // SLOW PATH / SELF-HEAL: Load from Sheet and save to Firestore
+        Logger.log(`      -> Cache NOT found. Self-healing: Reading from Sheet...`);
+        const sheetData = fSrvLoadFullGoogleSheetAndTags(workbookAbr, sheetName, gIndex.CSID);
+
+        Logger.log(`      -> Self-healing: Saving '${key}' to Firestore...`);
+        fSrvSaveFullSheetTextAndTagsToFirestore(gIndex, workbookAbr, sheetName, sheetData);
+
+        // Read it back to ensure consistency (optional but good practice)
+        const response = fSrvGetFirestoreFSData(workbookAbr, sheetName, gIndex);
+        if (response.success) {
+          loadedCaches[key] = response.FSData;
+        } else {
+          throw new Error(response.message || "Failed to read cache after self-healing.");
+        }
+      }
+    } catch (e) {
+      Logger.log(`   -> ❌ ${funcName}: CRITICAL FAILURE processing cache '${key}'. Error: ${e.message}`);
+      console.error(`Error in ${funcName} for ${key}: ${e.stack}`);
+      overallSuccess = false;
+      // We stop processing this specific cache but continue with others.
+      // The client will see this cache as missing from the final returned object.
+    }
+  }
+
+  Logger.log(`${funcName}: Finished bulk load. Returning ${Object.keys(loadedCaches).length} of ${requiredCaches.length} requested caches.`);
+  return { success: overallSuccess, caches: loadedCaches };
+} // End function fSrvGetRequiredCaches
+
 // fSrvGetFirestoreFSData ///////////////////////////////////////////////////////////
 // Purpose -> Reads data from a Firestore document (potentially sliced across multiple
 //            documents) previously saved by fSrvSaveFullSheetTextAndTagsToFirestore.

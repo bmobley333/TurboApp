@@ -8877,65 +8877,105 @@
   } // End function fOnCSGameDataLoaded
 
   /**
-   * Purpose: Loads all required background data caches defined in gUI.cachesToLoadOnStartup. It relies on
-   * function fRefreshAndCacheOneFSData to intelligently handle whether to read from Firestore directly
-   * or to create a cache for the first time.
-   * Assumptions: function fRefreshAndCacheOneFSData correctly implements the caching logic.
-   * @param {string} ignored - Unused (kept for signature compatibility if previously called with a param).
-   * @param {object} opts - Optional flags (e.g., { verbose: true }).
-   * @returns {Promise<boolean>} Resolves true on completion, false if a critical cache fails to load.
+   * Purpose: Loads all required background data caches by making a single, bulk request to the server.
+   * It passes the gUI.cachesToLoadOnStartup list to the server, which handles the intelligent loading.
+   * @param {string} ignored - Unused.
+   * @param {object} opts - Unused.
+   * @returns {Promise<boolean>} Resolves true if all critical caches were loaded, false otherwise.
    */
   function fBulkCacheFSData(ignored = "", opts = {}) {
     const log = (m) => fMyConsoleLog(m);
 
-    return new Promise((resolve) => {
+    return new Promise(async (resolve) => {
       try {
-        log("⚙️ fBulkCacheFSData: Loading background data caches...");
+        log(
+          "⚙️ fBulkCacheFSData: Requesting all background caches in a single call..."
+        );
 
         const targets = gUI.cachesToLoadOnStartup || [];
-
         if (targets.length === 0) {
-          log(
-            "   -> No caches defined in gUI.cachesToLoadOnStartup. Skipping."
-          );
+          log("   -> No caches defined. Skipping.");
           return resolve(true);
         }
-
         if (!window.google || !google.script || !google.script.run) {
           log(
-            "   -> google.script.run not available; skipping server cache checks."
+            "   -> google.script.run not available. Skipping server cache checks."
           );
           return resolve(true);
         }
 
-        (async () => {
-          log(
-            "   -> Loading all caches into client gUI object (sequentially)..."
+        const response = await new Promise((res, rej) => {
+          google.script.run
+            .withSuccessHandler(res)
+            .withFailureHandler(rej)
+            .fSrvGetRequiredCaches(targets, gIndex);
+        });
+
+        if (!response || !response.success || !response.caches) {
+          throw new Error(
+            response.message ||
+              "Invalid or failed response from server bulk cache loader."
           );
-          for (const target of targets) {
-            const success = await fRefreshAndCacheOneFSData(
-              target.label.split("/")[0],
-              target.label.split("/")[1],
-              target.key
+        }
+
+        log(
+          "   -> ✅ Received bulk cache response from server. Populating gUI object..."
+        );
+        let allCriticalCachesLoaded = true;
+
+        // Populate gUI with the loaded caches
+        for (const target of targets) {
+          const cacheData = response.caches[target.key];
+          if (cacheData) {
+            gUI[target.key] = cacheData;
+            log(`      -> Loaded '${target.key}' into gUI.`);
+          } else {
+            log(
+              `      -> ⚠️ WARNING: Cache for '${target.key}' was not returned from server.`
             );
+            // Check if a missing cache is critical
             if (
-              !success &&
-              (target.key.startsWith("myCS") || target.key.startsWith("myKL"))
+              target.key.startsWith("myCS") ||
+              target.key.startsWith("myKL")
             ) {
-              log(
-                `   -> ❌ Critical user cache '${target.key}' failed to load. Halting cache sequence.`
+              allCriticalCachesLoaded = false;
+              await fShowMessage(
+                `❌ CRITICAL ERROR: Failed to load essential user cache: ${target.key}. Please reload.`
               );
-              resolve(false);
-              return;
             }
           }
+        }
 
-          log("   -> Background cache loading completed.");
-          resolve(true);
-        })();
-      } catch (e) {
-        console.warn("fBulkCacheFSData soft-failed:", e);
+        if (!allCriticalCachesLoaded) {
+          log(
+            `   -> ❌ One or more critical user caches failed to load. Halting.`
+          );
+          return resolve(false);
+        }
+
+        // Special handling for character info after myCSRaceClassFSData is loaded
+        if (gUI.myCSRaceClassFSData) {
+          log("      -> Triggering fPopulateGuiCharacterInfo...");
+          if (!fPopulateGuiCharacterInfo()) {
+            log(`   -> ❌ Critical error populating character info. Halting.`);
+            await fShowMessage(
+              "❌ CRITICAL ERROR: Could not populate character info from cache."
+            );
+            return resolve(false);
+          }
+          log("         -> ✅ Successfully populated character info.");
+        }
+
+        log("   -> ✅ Background cache loading completed.");
         resolve(true);
+      } catch (e) {
+        const errorMsg = `Critical error during fBulkCacheFSData: ${
+          e.message || e
+        }`;
+        console.error(errorMsg, e);
+        fMyConsoleLog(`❌ ${errorMsg}`);
+        await fShowMessage(errorMsg);
+        resolve(false);
       }
     });
   } // End function fBulkCacheFSData
