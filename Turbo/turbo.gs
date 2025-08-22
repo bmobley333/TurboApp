@@ -462,12 +462,14 @@ function fSrvResolveTag(tagOrIndex, tagMap, type = "unknown") {
 
 
 /**
- * Purpose: Acts as the main data loader. Tries the "fast path" by calling fSrvGetUITemplateFromCache.
- * If that fails, it falls back to the "slow path" by calling fSrvReadCSGameSheet.
+ * Purpose: Acts as the main data loader. Tries the "fast path" by loading from the Firestore UI cache.
+ * If that fails, it falls back to the "slow path": reading from the Google Sheet AND automatically
+ * creating the Firestore cache for subsequent loads ("self-healing").
  * @param {object} gIndex - The client-side gIndex object, containing at least GameVer and CSID.
  * @returns {object} The structured data object { arr, format, notesArr }.
  */
 function fSrvGetInitialGridData(gIndex) {
+  const funcName = "fSrvGetInitialGridData";
   try {
     Logger.log("--> Attempting Fast Path: Load UI from Firestore Cache...");
     const cachedData = fSrvGetUITemplateFromCache(gIndex);
@@ -478,6 +480,22 @@ function fSrvGetInitialGridData(gIndex) {
     Logger.log("--> Attempting Slow Path: Load UI from Google Sheet...");
     const sheetData = fSrvReadCSGameSheet(gIndex);
     Logger.log("--> ✅ Slow Path SUCCESS: UI loaded from Google Sheet.");
+
+    // SELF-HEALING: After a successful slow load, try to create the cache for next time.
+    try {
+      Logger.log("   -> Self-Healing: Attempting to save the loaded Sheet data to create the cache for the next load...");
+      const gameVerMajor = String(gIndex.GameVer).trim().split('.')[0];
+      const collectionName = `v${gameVerMajor} Game UI`;
+      const baseDocumentId = `UITemplate`;
+      const firestore = fSrvGetFirestoreInstance();
+      fSrvSaveObjectAsChunkedDocs(firestore, sheetData, collectionName, baseDocumentId);
+      Logger.log("   -> ✅ Self-Healing: Cache created successfully.");
+    } catch (saveError) {
+      // Log a warning, but don't stop the user from loading the app.
+      // The cache will just try to build again on the next slow load.
+      Logger.log(`   -> ⚠️ Self-Healing WARNING: Could not save UI Template to cache after slow load. Error: ${saveError.message}`);
+    }
+
     return sheetData;
   }
 } // End function fSrvGetInitialGridData
