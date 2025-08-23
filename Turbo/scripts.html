@@ -2025,14 +2025,35 @@
     } // End else (newValueStr !== '')
   } // End fProcessAbilityChange
 
-  // fHandleClearAbilityRow //////////////////////////////////////////////////////
-  // Purpose -> Helper function to clear relevant cells in a grid row when an
-  //            Ability selection is removed (set to empty) or when preparing for
-  //            a new selection (optionally preserving the Ability name).
-  // Inputs  -> r (Number): Row index to clear.
-  //         -> saveAbilityNameID (Boolean): Optional. If true, preserves the 'Ability'
-  //                                         cell value. Defaults to false (clears 'Ability').
-  // Outputs -> None (Modifies grid via fSetGridValue, calls auto-save).
+  /**
+   * Purpose: Replaces the content of a given cell with a dropdown placeholder.
+   * @param {number} r - The 0-based row index of the cell.
+   * @param {number} c - The 0-based column index of the cell.
+   * @returns {void}
+   */
+  function fRestoreDropdownPlaceholderToCell(r, c) {
+    const cell = gUI.grid2D?.[r]?.[c];
+    if (!cell) return;
+
+    cell.innerHTML = ""; // Clear existing content.
+    const placeholder = document.createElement("div");
+    placeholder.className = "dropdown-placeholder";
+    cell.appendChild(placeholder);
+
+    // Restore styles for a dropdown-type cell.
+    cell.style.padding = "0";
+    cell.style.overflow = "visible";
+    cell.classList.remove("left-align-text"); // Remove edit-mode alignment.
+  } // End function fRestoreDropdownPlaceholderToCell
+
+  /**
+   * Purpose -> Helper function to clear relevant cells in a grid row when an
+   * Ability selection is removed or when preparing for a new selection.
+   * @param {number} r - Row index to clear.
+   * @param {boolean} saveAbilityNameID - Optional. If true, preserves the 'Ability'
+   * cell value. Defaults to false (clears 'Ability').
+   * @returns {void}
+   */
   function fHandleClearAbilityRow(r, saveAbilityNameID = false) {
     const funcName = "fHandleClearAbilityRow";
     fMyConsoleLog(
@@ -2040,54 +2061,36 @@
         saveAbilityNameID ? " (preserving Ability Name)" : ""
       }...`
     );
-    let clearSuccess = true; // Note: check based on fSetGridValue return is likely flawed
 
-    // Clear cells needing empty string
-    // Assumes gUI.list.clearAbilityColTags_EmptyString is defined and populated
-    const colsToClearEmpty = gUI.list?.clearAbilityColTags_EmptyString || [];
-    colsToClearEmpty.forEach((tag) => {
-      let shouldClear = true;
-      // --- MODIFIED LOGIC ---
+    const abilityCol = fResolveCol("Ability");
+
+    gUI.list?.clearAbilityColTags_EmptyString?.forEach((tag) => {
+      const c = fResolveCol(tag);
+      if (isNaN(c)) return;
+
       if (tag === "Ability" && saveAbilityNameID) {
-        shouldClear = false; // Don't clear Ability name if flag is true
         fMyConsoleLog(
           `     -> Skipping clear for column '${tag}' due to saveAbilityNameID=true.`
         );
-      }
-      // --- END MODIFIED LOGIC ---
-
-      if (shouldClear) {
-        // Note: This check assumes fSetGridValue returns boolean, which it might not.
-        if (!fSetGridValue(r, tag, "")) {
-          // Set to empty string
-          fMyConsoleLog(
-            `     -> (Check Warning) Failed check for clearing column '${tag}' for row ${r}.`
-          );
-          // clearSuccess = false; // Commented out: Unreliable check
-        }
+      } else if (tag === "Ability") {
+        // For the main ability cell, update the model and restore the placeholder
+        gUI.arr[r][c] = "";
+        fRestoreDropdownPlaceholderToCell(r, c);
+      } else {
+        // For all other cells, use the standard setter
+        fSetGridValue(r, c, "");
       }
     });
 
-    // Clear cells needing false
-    // Assumes gUI.list.clearAbilityColTags_False is defined and populated
-    const colsToClearFalse = gUI.list?.clearAbilityColTags_False || [];
-    colsToClearFalse.forEach((tag) => {
-      // Note: This check assumes fSetGridValue returns boolean, which it might not.
-      if (!fSetGridValue(r, tag, false)) {
-        // Set to boolean false
-        fMyConsoleLog(
-          `     -> (Check Warning) Failed check for clearing column '${tag}' for row ${r}.`
-        );
-        // clearSuccess = false; // Commented out: Unreliable check
-      }
+    gUI.list?.clearAbilityColTags_False?.forEach((tag) => {
+      fSetGridValue(r, tag, false);
     });
 
-    // Original success check logic might be unreliable
     fMyConsoleLog(
       `   -> ${funcName}: Finished attempting to clear relevant cells for row ${r}.`
     );
-    fHandleAutoSaveTextToFirestore(); // Save changes after clearing attempt
-  } // END fHandleClearAbilityRow
+    fHandleAutoSaveTextToFirestore();
+  } // End function fHandleClearAbilityRow
 
   /**
    * Purpose: Handles selection of a new ability/gear item synchronously using cached data.
@@ -2485,120 +2488,83 @@
     fHandleAutoSaveTextToFirestore();
   } // End fSaveNewAbilityToAbilTbl
 
-  // fApplyDropdownsToGrid ///////////////////////////////////////////////////////////
-  // Purpose -> Iterates through gUI.dropDownBox configurations and replaces the
-  //            content of applicable grid cells with dropdown (<select>) elements.
-  //            Allows replacing existing dropdowns specifically for Ability Name lists.
-  // Inputs  -> None (Uses gUI.dropDownBox, gUI.arr, gUI.grid2D).
-  // Outputs -> None (Modifies DOM by replacing cell content).
+  /**
+   * Purpose -> Iterates through gUI.dropDownBox configurations and replaces the
+   * content of applicable grid cells with dropdown (<select>) elements,
+   * skipping cells that already contain a custom (⚡) item.
+   * @param {} - No parameters.
+   * @returns {void}
+   */
   function fApplyDropdownsToGrid() {
     fMyConsoleLog("🧬 Applying Dropdowns to Grid...");
     let dropdownsApplied = 0;
-    const abilityListKey = "myCSListFSData"; // Key identifying the ability dropdown config
+    const abilityListKey = "myCSListFSData";
 
-    // === Validate Configuration ===
-    if (!gUI.dropDownBox || !Array.isArray(gUI.dropDownBox)) {
-      fMyConsoleLog("ℹ️ No dropdown configurations found in gUI.dropDownBox.");
+    if (!Array.isArray(gUI.dropDownBox)) {
+      fMyConsoleLog("ℹ️ No dropdown configurations found.");
       return;
     }
 
-    // === Iterate Through Each Dropdown Configuration ===
     gUI.dropDownBox.forEach((config) => {
-      // Validate current config structure
-      if (
-        !config.choices ||
-        !config.ranges ||
-        !Array.isArray(config.choices) ||
-        !Array.isArray(config.ranges)
-      ) {
+      if (!config.choices || !Array.isArray(config.ranges)) {
         console.warn(
           "fApplyDropdownsToGrid: Skipping invalid dropdown config:",
           config
         );
-        return; // Skip to next config
+        return;
       }
+      const isAbilityDropdownConfig = config.gUIListKey === abilityListKey;
 
-      const isAbilityDropdownConfig = config.gUIListKey === abilityListKey; // <<< ADDED: Check if this is the ability config
-
-      // === Iterate Through Ranges for This Config ===
       config.ranges.forEach((range) => {
-        // Validate range object structure
-        if (!fDoesObjectHaveR1C1R2C2Properties(range)) {
-          console.warn(
-            "fApplyDropdownsToGrid: Skipping invalid range object within dropdown config:",
-            range
-          );
-          return; // Skip this range
-        }
-
-        // Resolve range tags/indices
         const resolved = fConvertsR1C1R2C2TagOrNumToIndices(range);
-        if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
-          console.warn(
-            "fApplyDropdownsToGrid: Skipping dropdown range due to unresolved indices:",
-            range
-          );
-          return; // Skip range if tags invalid
-        }
+        if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN))
+          return;
 
-        // Determine bounds
         const rMin = Math.min(resolved.r1, resolved.r2);
         const rMax = Math.max(resolved.r1, resolved.r2);
         const cMin = Math.min(resolved.c1, resolved.c2);
         const cMax = Math.max(resolved.c1, resolved.c2);
 
-        // === Apply Dropdown to Cells Within Range ===
         for (let r = rMin; r <= rMax; r++) {
           for (let c = cMin; c <= cMax; c++) {
             const cell = gUI.grid2D?.[r]?.[c];
+            if (!cell || cell.style.display === "none") continue;
 
-            // --- Check if cell is suitable for dropdown update ---
-            const existingDropdown = cell
-              ? cell.querySelector("select.grid-dropdown")
-              : null;
-            const hasCheckbox = cell
-              ? cell.querySelector('input[type="checkbox"]')
-              : true; // Assume true if cell missing
+            // === NEW: Check for custom item before applying dropdown ===
+            const currentValue = gUI.arr?.[r]?.[c];
+            if (
+              typeof currentValue === "string" &&
+              currentValue.startsWith("⚡")
+            ) {
+              continue; // Skip this cell, it's a custom item.
+            }
+            // === END NEW LOGIC ===
 
-            // <<< MODIFIED Check: >>>
-            // Allow update if:
-            // 1. Cell exists and is visible
-            // 2. Cell does NOT contain a checkbox
-            // 3. EITHER the cell does NOT currently have a dropdown OR this IS the ability dropdown config
+            const existingDropdown = cell.querySelector("select.grid-dropdown");
+            const hasCheckbox = cell.querySelector('input[type="checkbox"]');
             const shouldApplyDropdown =
-              cell &&
-              cell.style.display !== "none" &&
-              !hasCheckbox &&
-              (!existingDropdown || isAbilityDropdownConfig);
+              !hasCheckbox && (!existingDropdown || isAbilityDropdownConfig);
 
             if (shouldApplyDropdown) {
-              const currentValue = gUI.arr?.[r]?.[c];
-              // Create the NEW dropdown element with updated choices
               const dropdown = fCreateDropdownElement(
                 r,
                 c,
                 config.choices,
                 currentValue
               );
-
-              // Replace cell content with the dropdown
-              cell.innerHTML = ""; // Clear existing content (including old dropdown if present)
+              cell.innerHTML = "";
               cell.appendChild(dropdown);
-
-              // Adjust cell style for dropdown
-              cell.style.padding = "0"; // Remove padding to allow dropdown full space
-              cell.style.overflow = "visible"; // Allow dropdown arrow to be visible
-
+              cell.style.padding = "0";
+              cell.style.overflow = "visible";
               dropdownsApplied++;
             }
-            // --- End Check ---
-          } // End col loop
-        } // End row loop
-      }); // End ranges.forEach
-    }); // End dropDownBox.forEach
+          }
+        }
+      });
+    });
 
     fMyConsoleLog(`✅ Applied ${dropdownsApplied} Dropdowns.`);
-  } // END fApplyDropdownsToGrid
+  } // End function fApplyDropdownsToGrid
 
   // fFetchAndApplyAbilityDropdowns //////////////////////////////////////////////
   // Purpose -> Ensures the ability list ('MyCS'/'List') is processed from the cache
@@ -2944,79 +2910,48 @@
     }
   } // END fUncheckOldSkGroupBox
 
-  // fHandleGridClick ////////////////////////////////////////////////////////////////
-  // Purpose -> Delegated click handler for the main grid container (#grid). Routes clicks
-  //            based on the target element (header button, checkbox, URL link, editable cell).
-  //            Updates gUI.cellClickInfo with details of the last clicked cell.
-  // Inputs  -> event (MouseEvent): The click event object.
-  // Outputs -> None (Calls specific handlers based on target).
+  /**
+   * Purpose -> Delegated click handler for the main grid container (#grid). Routes clicks
+   * based on the target element (header button, checkbox, URL link).
+   * Updates gUI.cellClickInfo with details of the last clicked cell.
+   * @param {MouseEvent} event - The click event object.
+   * @returns {void}
+   */
   async function fHandleGridClick(event) {
-    // Keep async for potential future needs
     const target = event.target;
 
     // === Handle Header Button Clicks ===
-    // Check if the click was on an image inside a header button cell
     const buttonImg = target.closest(".header-button-img[data-button-action]");
     if (buttonImg) {
       fHandleGridButtonClick(event, buttonImg);
-      // Note: cellClickInfo is NOT updated for header button clicks.
-      return; // Stop further processing
+      return;
     }
 
     // === Get Clicked Cell Element ===
     const cellDiv = target.closest(".cell");
-    if (!cellDiv) return; // Exit if click wasn't inside a grid cell
+    if (!cellDiv) return;
 
     // === Update Last Clicked Cell Info ===
-    try {
-      const r_str = cellDiv.dataset.r;
-      const c_str = cellDiv.dataset.c;
-      const r = parseInt(r_str, 10);
-      const c = parseInt(c_str, 10);
-      const text = cellDiv.textContent?.trim() ?? ""; // Get visible text
-
-      if (!isNaN(r) && !isNaN(c)) {
-        // Store valid coordinates and text
-        gUI.cellClickInfo = { r, c, text, focusText: null }; // Reset focusText
-        fMyConsoleLog(`🖱️ Cell Click: [${r}, ${c}]`);
-      } else {
-        // Log warning and clear info if coordinates are invalid
-        console.warn(
-          `fHandleGridClick: Invalid row/col data attributes found: r='${r_str}', c='${c_str}'`
-        );
-        gUI.cellClickInfo = { r: null, c: null, text: null, focusText: null };
-      }
-    } catch (e) {
-      console.error("Error updating gUI.cellClickInfo:", e);
-      gUI.cellClickInfo = { r: null, c: null, text: null, focusText: null }; // Clear on error
+    const r = parseInt(cellDiv.dataset.r, 10);
+    const c = parseInt(cellDiv.dataset.c, 10);
+    if (!isNaN(r) && !isNaN(c)) {
+      gUI.cellClickInfo = {
+        r,
+        c,
+        text: cellDiv.textContent?.trim() ?? "",
+        focusText: null,
+      };
+      fMyConsoleLog(`🖱️ Cell Click: [${r}, ${c}]`);
     }
 
     // === Route Click Based on Target Type ===
-    // Checkbox Click
     if (fIsCheckboxClick(target)) {
       fHandleGridCheckboxClick(event);
-      return;
-    }
-
-    // Click inside an already focused editable cell (do nothing special)
-    if (fIsEditableCell(cellDiv) && document.activeElement === cellDiv) {
-      return;
-    }
-
-    // Click to focus an editable cell (allow default focus behavior)
-    if (fIsEditableCell(cellDiv)) {
-      return;
-    }
-
-    // URL Link Click
-    if (fIsUrlLinkCell(cellDiv)) {
+    } else if (fIsUrlLinkCell(cellDiv)) {
       fHandleUrlClick(cellDiv);
-      return;
     }
-
-    // Fallback for general clicks on non-interactive cells (optional logging)
-    // fMyConsoleLog(`General click on non-interactive cell [${gUI.cellClickInfo.r}, ${gUI.cellClickInfo.c}]`);
-  } // END fHandleGridClick
+    // Clicks on custom text cells or other non-interactive cells will now correctly do nothing.
+  } // End function fHandleGridClick
 
   // fIsCheckboxClick ////////////////////////////////////////////////////////////////
   // Purpose -> Helper to check if the event target is a checkbox input element.
@@ -3134,76 +3069,99 @@
     }
   } // END fHandleUrlClick
 
-  // fHandleGridCellEdit /////////////////////////////////////////////////////////////
-  // Purpose -> Handles the 'blur' event delegated from the grid for contenteditable cells.
-  //            Updates the underlying data model (gUI.arr) if the cell's text content
-  //            has changed since it gained focus. Calls fCalcGearLine for specific
-  //            gear columns and fCalc_VitMaxNowPerc for specific Vit-related columns.
-  //            Handles special validation (including max values for Meta cells) and
-  //            alerting (including showing sidebar and sending log) for Meta/Channel Meta cells.
-  // Inputs  -> event (FocusEvent): The blur event object.
-  // Outputs -> None (Modifies gUI.arr, potentially triggers calculations and auto-save).
+  /**
+   * Purpose -> Handles the 'blur' event for contenteditable cells. Updates the
+   * data model (gUI.arr), handles custom Ability/Gear name logic (adding ⚡),
+   * and triggers specific calculations or alerts for other edited cells.
+   * @param {FocusEvent} event - The blur event object.
+   * @returns {void}
+   */
   async function fHandleGridCellEdit(event) {
     const cellDiv = event.target;
 
-    // === 1. Validate Target Element ===
     if (
       !cellDiv ||
       !cellDiv.classList.contains("cell") ||
       cellDiv.contentEditable !== "true"
     ) {
-      return; // Exit if not an editable cell div
+      return;
     }
 
-    // === 2. Get Coordinates and Values ===
     const r = parseInt(cellDiv.dataset.r, 10);
     const c = parseInt(cellDiv.dataset.c, 10);
+    if (isNaN(r) || isNaN(c) || !gUI.arr[r]) {
+      return;
+    }
 
-    if (isNaN(r) || isNaN(c) || r < 0 || c < 0 || !gUI.arr[r]) {
-      console.warn(
-        "fHandleGridCellEdit: Invalid row/column index from data attributes.",
-        cellDiv.dataset
+    cellDiv.contentEditable = false;
+
+    const abilityCol = fResolveCol("Ability");
+    if (c === abilityCol) {
+      const newText = cellDiv.textContent.trim();
+      const oldValueInModel = String(gUI.arr[r][c] ?? "");
+
+      // 1. Handle "Clear" actions (cell is empty or contains only the prefix).
+      if (newText === "" || newText === "⚡") {
+        if (oldValueInModel !== "") {
+          fMyConsoleLog(
+            `⚡ Ability cell [${r}, ${c}] cleared. Resetting row...`
+          );
+          fHandleClearAbilityRow(r); // This now correctly restores the placeholder
+          fCalculatesEnc_MR_AP();
+        }
+        return;
+      }
+
+      // 2. Handle "No Change" actions to prevent accidental flagging.
+      const oldTextForCompare = oldValueInModel.replace(/^⚡\s*/, "").trim();
+      if (newText === oldTextForCompare) {
+        fMyConsoleLog(
+          `Ability cell [${r}, ${c}] unchanged. Reverting to original visual state.`
+        );
+        if (!oldValueInModel.startsWith("⚡")) {
+          const abilityConfig = gUI.dropDownBox.find(
+            (config) => config.gUIListKey === "myCSListFSData"
+          );
+          if (abilityConfig) {
+            const dropdown = fCreateDropdownElement(
+              r,
+              c,
+              abilityConfig.choices,
+              oldValueInModel
+            );
+            cellDiv.innerHTML = "";
+            cellDiv.appendChild(dropdown);
+            cellDiv.style.padding = "0";
+            cellDiv.style.overflow = "visible";
+          } else {
+            cellDiv.textContent = oldValueInModel; // Fallback
+          }
+        } else {
+          cellDiv.textContent = oldValueInModel; // Restore custom text
+        }
+        return;
+      }
+
+      // 3. Handle "Save Custom" actions (a real change was made).
+      let finalValueToStore = newText;
+      if (!finalValueToStore.startsWith("⚡")) {
+        finalValueToStore = "⚡" + finalValueToStore;
+      }
+      cellDiv.textContent = finalValueToStore;
+      gUI.arr[r][c] = finalValueToStore;
+      fMyConsoleLog(
+        `⚡ Custom Ability at [${r}, ${c}] updated to: "${finalValueToStore}"`
       );
+      fHandleAutoSaveTextToFirestore();
       return;
     }
 
     const newValue = cellDiv.textContent;
-    const oldValueInModel = gUI.arr[r][c]; // Get value directly from model for comparison
-    const oldValueForDisplay =
-      oldValueInModel === "" || oldValueInModel === 0
-        ? "0"
-        : String(oldValueInModel);
-
-    // === 3. Check if Value Changed (Text Content vs Model) ===
-    let textChanged = true;
-    const isMetaOrChannelCellForChangeCheck =
-      (gUI.range?.meta && fIsCellInRangeArray(r, c, [gUI.range.meta])) ||
-      (gUI.range?.metaChannel &&
-        fIsCellInRangeArray(r, c, [gUI.range.metaChannel]));
-
-    if (isMetaOrChannelCellForChangeCheck) {
-      const normalizedNewValue = newValue === "0" ? "" : newValue; // Treat "0" input as "" for comparison with model
-      if (normalizedNewValue === String(oldValueInModel ?? "")) {
-        // Compare with stringified model value
-        textChanged = false;
-      }
-    } else {
-      if (newValue === String(oldValueInModel ?? "")) {
-        // Standard comparison for non-meta
-        textChanged = false;
-      }
-    }
-
-    if (!textChanged) {
-      // fMyConsoleLog(`Cell [${r}, ${c}] content effectively unchanged from model.`); // Can be noisy
-      if (cellDiv.textContent !== String(oldValueInModel ?? "")) {
-        // Ensure DOM matches model if no change
-        cellDiv.textContent = String(oldValueInModel ?? "");
-      }
+    const oldValueInModel = gUI.arr[r][c];
+    if (String(newValue ?? "") === String(oldValueInModel ?? "")) {
       return;
     }
 
-    // === 4. Identify Edited Column & Handle Specific Calculations ===
     const gearColumnsToCalculate = ["PossNum", "PossWorn", "PossPerOff"];
     const editedColTag = Object.keys(gUI.colTag).find(
       (tag) => gUI.colTag[tag] === c
@@ -3211,9 +3169,8 @@
     let finalValueToStore = newValue;
     let shouldUpdateModelAndSave = true;
     let specificCalcDone = false;
-    let metaOrChannelAlertPosted = false; // Flag to see if a Meta/Channel alert was generated
+    let metaOrChannelAlertPosted = false;
 
-    // --- Meta and Meta Channel Cell Handling ---
     const isMetaCell =
       gUI.range?.meta && fIsCellInRangeArray(r, c, [gUI.range.meta]);
     const isMetaChannelCell =
@@ -3221,25 +3178,18 @@
       fIsCellInRangeArray(r, c, [gUI.range.metaChannel]);
 
     if (isMetaCell || isMetaChannelCell) {
-      fMyConsoleLog(
-        `   -> Edit in Meta/Channel cell: ${editedColTag || `[${r},${c}]`}`
-      );
       const trimmedNewValue = newValue.trim();
       let parsedNum = parseInt(trimmedNewValue, 10);
       let isValidInput = false;
 
       if (trimmedNewValue === "") {
-        finalValueToStore = ""; // Valid: blank represents 0
+        finalValueToStore = "";
         isValidInput = true;
-        fMyConsoleLog(
-          `      -> Valid Meta/Channel input: Blank string, stored as "" (represents 0).`
-        );
       } else if (
         !isNaN(parsedNum) &&
         parsedNum > 0 &&
         String(parsedNum) === trimmedNewValue
       ) {
-        // Positive integer, and no trailing non-numeric chars
         if (isMetaCell) {
           const colorIndex = gUI.list.metaColor.findIndex(
             (tag) => gUI.colTag[tag] === c
@@ -3253,38 +3203,16 @@
             if (parsedNum <= maxAllowed) {
               finalValueToStore = parsedNum;
               isValidInput = true;
-              fMyConsoleLog(
-                `      -> Valid Meta input: Positive integer ${parsedNum} (Max: ${maxAllowed}).`
-              );
-            } else {
-              fMyConsoleLog(
-                `      -> Invalid Meta input: ${parsedNum} exceeds max ${maxAllowed} for ${gUI.list.metaColor[colorIndex]}. Reverting.`
-              );
-              // Invalid: exceeds max for Meta cells
             }
-          } else {
-            fMyConsoleLog(
-              `      -> Could not determine max for Meta cell ${gUI.list.metaColor[colorIndex]}. Treating as invalid.`
-            );
-            // Should not happen if gUI.list.metaColor and gUI.list.metaFull are synced
           }
         } else {
-          // isMetaChannelCell
-          finalValueToStore = parsedNum; // Meta Channel has no upper cap beyond being positive integer
+          finalValueToStore = parsedNum;
           isValidInput = true;
-          fMyConsoleLog(
-            `      -> Valid Meta Channel input: Positive integer ${parsedNum}.`
-          );
         }
-      } else {
-        fMyConsoleLog(
-          `      -> Invalid Meta/Channel input: "${newValue}" (not blank or not positive integer). Reverting.`
-        );
-        // Invalid input (includes "0", negatives, decimals, non-numeric)
       }
 
       if (!isValidInput) {
-        cellDiv.textContent = String(oldValueInModel ?? ""); // Revert DOM
+        cellDiv.textContent = String(oldValueInModel ?? "");
         shouldUpdateModelAndSave = false;
       }
 
@@ -3292,28 +3220,26 @@
         const metaType = isMetaCell ? "Meta Color" : "Meta Channel Color";
         const colorTag =
           gUI.list.metaColor.find((tag) => gUI.colTag[tag] === c) || `Col${c}`;
+        const oldValueForDisplay =
+          oldValueInModel === "" || oldValueInModel === 0
+            ? "0"
+            : String(oldValueInModel);
         const newValueForDisplay =
           finalValueToStore === "" || finalValueToStore === 0
             ? "0"
             : String(finalValueToStore);
-
         const alertPrefixHtml = `⚠️ <span class="red-bold">Alert:</span> `;
         const alertPrefixText = `⚠️ Alert: `;
-
         const alertMsgHtml = `${alertPrefixHtml}${metaType} ${colorTag} was changed from ${oldValueForDisplay} to ${newValueForDisplay}`;
         const alertMsgText = `${alertPrefixText}${metaType} ${colorTag} was changed from ${oldValueForDisplay} to ${newValueForDisplay}`;
-        fPostToSidebar(alertMsgHtml, alertMsgText); // This updates gUI.plainTextLogEntries
-        fShowSidebar(); // Ensure sidebar is visible for these alerts
-        metaOrChannelAlertPosted = true; // Set flag
+        fPostToSidebar(alertMsgHtml, alertMsgText);
+        fShowSidebar();
+        metaOrChannelAlertPosted = true;
       }
       specificCalcDone = true;
     }
 
-    // --- Gear Calculations (if not already handled by meta/channel) ---
     if (!specificCalcDone && gearColumnsToCalculate.includes(editedColTag)) {
-      fMyConsoleLog(
-        `   -> Edit in gear calculation column: ${editedColTag} [${r}, ${c}]`
-      );
       const validatedValue = await fCalcGearLine(
         r,
         c,
@@ -3322,19 +3248,12 @@
       );
       if (validatedValue !== null) {
         finalValueToStore = validatedValue;
-        fMyConsoleLog(
-          `   -> fCalcGearLine successful for [${r}, ${c}]. Value to store: "${finalValueToStore}"`
-        );
       } else {
-        fMyConsoleLog(
-          `   -> fCalcGearLine failed for [${r}, ${c}]. NOT updating data model for this cell.`
-        );
         shouldUpdateModelAndSave = false;
       }
       specificCalcDone = true;
     }
 
-    // --- Vitality Calculations (if not already handled) ---
     if (!specificCalcDone) {
       const isVitMaxPlus =
         gUI.range?.vitMaxPlus &&
@@ -3342,64 +3261,28 @@
       const isVit1stTo3rd =
         gUI.range?.vit1stTo3rd &&
         fIsCellInRangeArray(r, c, [gUI.range.vit1stTo3rd]);
-
       if (isVitMaxPlus || isVit1stTo3rd) {
-        fMyConsoleLog(
-          `   -> Edit in Vit-related column: ${
-            editedColTag || `[${r},${c}]`
-          }. Triggering fCalc_VitMaxNowPerc...`
-        );
         gUI.arr[r][c] = newValue;
-        await fCalc_VitMaxNowPerc(); // This function now calls fSendLogToGMScreenAndPS
+        await fCalc_VitMaxNowPerc();
         finalValueToStore = gUI.arr[r][c];
-        fMyConsoleLog(
-          `   -> fCalc_VitMaxNowPerc completed. Final value for [${r}, ${c}]: "${finalValueToStore}"`
-        );
-        // No need to set metaOrChannelAlertPosted = true here, fCalc_VitMaxNowPerc handles its own logging
-      } else if (!specificCalcDone) {
-        fMyConsoleLog(
-          `   -> Edit in standard column: ${
-            editedColTag || "Unknown"
-          } [${r}, ${c}]`
-        );
       }
     }
 
-    // === 5. Update Data Model & Trigger Save (if appropriate) ===
     if (shouldUpdateModelAndSave) {
-      if (
-        gUI.arr[r][c] !== finalValueToStore ||
-        (String(oldValueInModel ?? "") !== finalValueToStore &&
-          newValue !== String(oldValueInModel ?? ""))
-      ) {
+      if (gUI.arr[r][c] !== finalValueToStore) {
         gUI.arr[r][c] = finalValueToStore;
         fMyConsoleLog(
           `   -> Data model gUI.arr[${r}][${c}] updated to: "${finalValueToStore}"`
         );
-        fHandleAutoSaveTextToFirestore(); // Saves gUI.arr to Firestore
-
-        // If a Meta/Channel alert was just posted, ensure its text also gets sent to Sheets
+        fHandleAutoSaveTextToFirestore();
         if (metaOrChannelAlertPosted) {
-          fMyConsoleLog(
-            "   -> Meta/Channel alert posted. Triggering fSendLogToGMScreenAndPS for sheet update."
-          );
           setTimeout(() => fSendLogToGMScreenAndPS(), 0);
         }
-      } else {
-        fMyConsoleLog(
-          `   -> Data model gUI.arr[${r}][${c}] already matches final value or no net change occurred. Save potentially skipped.`
-        );
-        // Still, if a meta/channel alert was posted due to a "change" that resulted in the same validated value,
-        // we should send the log.
-        if (metaOrChannelAlertPosted) {
-          fMyConsoleLog(
-            "   -> Meta/Channel alert posted (even if model value is same after validation). Triggering fSendLogToGMScreenAndPS."
-          );
-          setTimeout(() => fSendLogToGMScreenAndPS(), 0);
-        }
+      } else if (metaOrChannelAlertPosted) {
+        setTimeout(() => fSendLogToGMScreenAndPS(), 0);
       }
     }
-  } // END fHandleGridCellEdit
+  } // End function fHandleGridCellEdit
 
   // fDoesObjectHaveR1C1R2C2Properties /////////////////////////////////////////////////////////////
   // Purpose -> Checks if a given object has the required properties (r1, c1, r2, c2)
@@ -7780,14 +7663,12 @@
   } // END fRefreshMonsterData
 
   /**
-   * Purpose -> (Stage 1) Iterates through Ability/Gear table rows, validating the 'Ability'
-   * cell content against the myCSListFSData cache. Clears rows with empty
-   * 'Ability' cells, invalid extracted IDs, or IDs not found in the list cache.
-   * (Stage 2) For rows that passed Stage 1, fetches static definition data
-   * from various caches, updates the grid, and triggers recalculations.
+   * Purpose: Performs a full refresh of all Ability and Gear rows. Skips any
+   * custom rows (prefixed with ⚡). For standard rows, it validates the
+   * 'Ability' cell against the myCSListFSData cache, clearing invalid rows.
+   * For valid rows, it re-fetches static data and updates the grid.
    * @param {} - No parameters.
-   * @returns {Promise<void>} Implicitly returns promise due to async calls like fShowMessage.
-   * Note    -> Stage 1 handles validation/clearing. Stage 2 populates valid rows.
+   * @returns {Promise<void>} Resolves after the refresh is complete.
    */
   async function fTotalRereshOfAllAbilitiesAndAllGear() {
     const funcName = "fTotalRereshOfAllAbilitiesAndAllGear";
@@ -7796,295 +7677,120 @@
     // --- 1. Get Target Ranges & Validate Caches ---
     const abilityGearRanges = gUI.range?.entireAbiliyNGearTables;
     const listCache = gUI.myCSListFSData;
-    const listCacheKey = "gUI.myCSListFSData";
-    const listColTag = "AbilitiesNameID";
-    let abilitiesNameIdColIndex = -1;
-    let requiredCacheMissing = false;
-
-    if (!Array.isArray(abilityGearRanges) || abilityGearRanges.length === 0) {
-      fMyConsoleLog(
-        `   -> ❌ Error: Range definition 'gUI.range.entireAbiliyNGearTables' is missing or empty.`
-      );
-      requiredCacheMissing = true;
-    }
     if (
-      !listCache ||
-      !listCache.text ||
-      !Array.isArray(listCache.text) ||
-      !listCache.colTagsMap ||
-      typeof listCache.colTagsMap !== "object"
+      !Array.isArray(abilityGearRanges) ||
+      abilityGearRanges.length === 0 ||
+      !listCache
     ) {
-      fMyConsoleLog(
-        `   -> ❌ Error: Required cache ${listCacheKey} is not loaded or invalid.`
-      );
-      requiredCacheMissing = true;
-    } else {
-      abilitiesNameIdColIndex = listCache.colTagsMap[listColTag];
-      if (
-        abilitiesNameIdColIndex === undefined ||
-        abilitiesNameIdColIndex === null ||
-        isNaN(abilitiesNameIdColIndex)
-      ) {
-        fMyConsoleLog(
-          `   -> ❌ Error: Column tag '${listColTag}' not found in ${listCacheKey}.colTagsMap.`
-        );
-        requiredCacheMissing = true;
-      }
-    }
-    // Validate other necessary caches exist before starting the loop
-    if (
-      !gUI.dbAbilitiesFSData ||
-      !gUI.myKLKnownAbilitiesFSData ||
-      !gUI.dbElementsFSData ||
-      !gUI.dbGearFSData
-    ) {
-      fMyConsoleLog(
-        `   -> ❌ Error: One or more required data caches (dbAbilities, myKlKnownAbilities, dbElements, dbGear) are not loaded.`
-      );
-      requiredCacheMissing = true;
-    }
-
-    if (requiredCacheMissing) {
       await fShowMessage(
-        "Error: Cannot perform refresh due to missing cache or range definitions. Please reload."
+        "Error: Cannot perform refresh due to missing cache or range definitions."
       );
       return;
     }
-    fMyConsoleLog(
-      `   -> Validated ranges and caches. Found '${listColTag}' at index ${abilitiesNameIdColIndex}.`
-    );
+    const listCacheKey = "myCSListFSData";
+    const listColTag = "AbilitiesNameID";
+    const abilitiesNameIdColIndex = listCache.colTagsMap?.[listColTag];
+    if (isNaN(abilitiesNameIdColIndex)) {
+      await fShowMessage(
+        `Error: Column tag '${listColTag}' not found in List cache.`
+      );
+      return;
+    }
 
-    // --- 2. Iterate Through Grid Ranges (Stage 1 & 2) ---
+    // --- 2. Iterate Through Grid Ranges ---
     let rowsProcessed = 0;
     let rowsCleared = 0;
     let rowsRefreshed = 0;
-    let refreshErrors = 0;
-    const nishRowResolved = fResolveRow("NishAtr_R"); // Resolve Nish row once
 
     for (const range of abilityGearRanges) {
-      if (!fDoesObjectHaveR1C1R2C2Properties(range)) {
-        console.warn(
-          `${funcName}: Skipping invalid range object in entireAbiliyNGearTables:`,
-          range
-        );
-        continue;
-      }
       const resolved = fConvertsR1C1R2C2TagOrNumToIndices(range);
-      if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
-        console.warn(
-          `${funcName}: Skipping range due to unresolved indices:`,
-          range
-        );
+      if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN))
         continue;
-      }
+
       const rMin = Math.min(resolved.r1, resolved.r2);
       const rMax = Math.max(resolved.r1, resolved.r2);
 
-      // --- Iterate Through Rows in Range ---
       for (let r = rMin; r <= rMax; r++) {
-        rowsProcessed++;
-        let rowShouldBeCleared = false; // Flag for Stage 1 clearing
-        let abilID = null; // Store valid ID if found
+        // === NEW: Exemption for Custom Items ===
+        const abilityName = fGetGridValue(r, "Ability");
+        if (typeof abilityName === "string" && abilityName.startsWith("⚡")) {
+          fMyConsoleLog(
+            `   -> Row ${r}: Skipping refresh for custom item "${abilityName}".`
+          );
+          continue; // Skip the rest of the logic for this row
+        }
+        // === END NEW LOGIC ===
 
-        // --- Stage 1: Validation & Clearing Logic ---
+        rowsProcessed++;
+        let rowShouldBeCleared = false;
+        let abilID = null;
         const abilityNameId = fGetGridValue(r, "Ability");
 
         if (!abilityNameId) {
           const sk1Val = fGetGridValue(r, "Sk1");
-          if (sk1Val !== "" && sk1Val !== undefined && sk1Val !== false) {
-            fMyConsoleLog(
-              `   -> Row ${r}: Clearing due to empty 'Ability' cell.`
-            );
-            rowShouldBeCleared = true;
-          } else {
-            continue;
-          }
+          if (sk1Val) rowShouldBeCleared = true;
         } else {
           abilID = fGetIDFromNameID(abilityNameId);
           if (!abilID) {
-            fMyConsoleLog(
-              `   -> Row ${r}: Clearing due to invalid ID extracted from "${abilityNameId}".`
-            );
             rowShouldBeCleared = true;
           } else {
-            let foundInList = false;
-            const listCacheText = listCache.text;
-            for (let list_R = 0; list_R < listCacheText.length; list_R++) {
-              const listValue =
-                listCacheText[list_R]?.[abilitiesNameIdColIndex];
-              if (abilID === fGetIDFromNameID(listValue)) {
-                foundInList = true;
-                break;
-              }
-            }
-            if (!foundInList) {
-              fMyConsoleLog(
-                `   -> Row ${r}: Clearing because ID "${abilID}" (from "${abilityNameId}") not found in ${listCacheKey}.`
-              );
-              rowShouldBeCleared = true;
-            }
+            const foundInList = listCache.text.some(
+              (row) => abilID === fGetIDFromNameID(row[abilitiesNameIdColIndex])
+            );
+            if (!foundInList) rowShouldBeCleared = true;
           }
         }
 
         if (rowShouldBeCleared) {
           fHandleClearAbilityRow(r);
           rowsCleared++;
-          continue; // Skip Stage 2 for this row
-        }
-
-        // --- Stage 2: Refresh Valid Row ---
-        if (!abilID) {
-          console.warn(
-            `${funcName}: Row ${r} was not cleared, but abilID is missing. Skipping Stage 2.`
-          );
           continue;
         }
 
-        fMyConsoleLog(`   -> Row ${r}: Refreshing data for ID "${abilID}"...`);
+        if (!abilID) continue;
+
         rowsRefreshed++;
-        try {
-          // Fetch Data
-          const newSk1Typ =
-            fGetVal_GUICache(abilID, "SkTyp1", gUI.dbAbilitiesFSData) ?? "";
-          const newSk1 =
-            fGetVal_GUICache(
-              abilID,
-              "FinalSk1",
-              gUI.myKLKnownAbilitiesFSData
-            ) ?? "";
-          const newAbilNameID =
-            fGetVal_GUICache(abilID, "Name_ID", gUI.dbElementsFSData) ?? "";
-          const newSk2 =
-            fGetVal_GUICache(
-              abilID,
-              "FinalSk2",
-              gUI.myKLKnownAbilitiesFSData
-            ) ?? "";
-          const newSk2Typ =
-            fGetVal_GUICache(abilID, "SkTyp2", gUI.dbAbilitiesFSData) ?? "";
-          const newVer =
-            fGetVal_GUICache(abilID, "Ver", gUI.myKLKnownAbilitiesFSData) ?? "";
-          const newNotes =
-            fGetVal_GUICache(abilID, "Notes", gUI.dbElementsFSData) ?? "";
-          const newPic =
-            fGetVal_GUICache(abilID, "Pic", gUI.dbElementsFSData) ?? "";
-          const newAct =
-            fGetVal_GUICache(abilID, "Act", gUI.myKLKnownAbilitiesFSData) ?? "";
-          const newDur =
-            fGetVal_GUICache(abilID, "Dur", gUI.myKLKnownAbilitiesFSData) ?? "";
-          const newRng =
-            fGetVal_GUICache(abilID, "Rng", gUI.myKLKnownAbilitiesFSData) ?? "";
-          const newMeta =
-            fGetVal_GUICache(abilID, "Meta", gUI.myKLKnownAbilitiesFSData) ??
-            "";
-          const newRgn =
-            fGetVal_GUICache(abilID, "Regain", gUI.myKLKnownAbilitiesFSData) ??
-            "";
-          const newGearName =
-            fGetVal_GUICache(abilID, "Name", gUI.dbGearFSData) ?? "";
-          const newCrEach =
-            fGetVal_GUICache(abilID, "ItemCR", gUI.dbGearFSData) ?? "";
-          const newIsArtifact =
-            fGetVal_GUICache(abilID, "IsArtifact", gUI.dbGearFSData) ?? false;
-          const newAPEach =
-            fGetVal_GUICache(abilID, "AP", gUI.dbGearFSData) ?? "";
+        const dbAbilityResult = fHandleNewAbilitySelection(
+          "DB",
+          "Abilities",
+          r,
+          abilityNameId
+        );
+        const klKnownAbilitiesResult = fHandleNewAbilitySelection(
+          "MyKL",
+          "KnownAbilities",
+          r,
+          abilityNameId
+        );
+        const dbGearResult = fHandleNewAbilitySelection(
+          "DB",
+          "Gear",
+          r,
+          abilityNameId
+        );
 
-          // --- Debug Log for Row/Ability ---
-          fMyConsoleLog(`   -> r="${r}", newAbilNameID="${newAbilNameID}"`);
-
-          // --- Check if Item is Gear ---
-          const isGearItem =
-            gUI.dbGearFSData?.rowTagsMap?.hasOwnProperty(abilID);
-
-          // Update Grid (Static Values)
-          let setSuccess = true;
-          setSuccess &&= fSetGridValue(r, "Sk1Typ", newSk1Typ);
-          setSuccess &&= fSetGridValue(r, "Sk1", newSk1);
-          if (r !== nishRowResolved) {
-            // EXCEPTION: Do not update Ability name for NishAtr_R
-            setSuccess &&= fSetGridValue(
-              r,
-              "Ability",
-              newAbilNameID || abilityNameId
-            );
-          }
-          setSuccess &&= fSetGridValue(r, "Sk2", newSk2);
-          setSuccess &&= fSetGridValue(r, "Sk2Typ", newSk2Typ);
-          setSuccess &&= fSetGridValue(r, "Ver", newVer);
-          setSuccess &&= fSetGridValue(r, "Notes", newNotes);
-          setSuccess &&= fSetGridValue(r, "Pic", newPic);
-          setSuccess &&= fSetGridValue(r, "Act", newAct);
-          setSuccess &&= fSetGridValue(r, "Dur", newDur);
-          setSuccess &&= fSetGridValue(r, "Rng", newRng);
-          setSuccess &&= fSetGridValue(r, "MetaCost", newMeta);
-          setSuccess &&= fSetGridValue(r, "Regain", newRgn);
-
-          // --- Update Gear-Specific Grid Values (Conditional) ---
-          if (isGearItem) {
-            fMyConsoleLog(
-              `      -> Item ${abilID} is Gear. Updating gear fields...`
-            );
-            setSuccess &&= fSetGridValue(r, "PossName", newGearName);
-            setSuccess &&= fSetGridValue(r, "PossCrEa", newCrEach);
-            setSuccess &&= fSetGridValue(r, "PossIsArtifact", newIsArtifact);
-            setSuccess &&= fSetGridValue(r, "PossAPEa", newAPEach);
-          } else {
-            fMyConsoleLog(
-              `      -> Item ${abilID} is not Gear. Skipping gear field updates.`
-            );
-          }
-          // --- End Conditional Gear Update ---
-
-          if (!setSuccess) {
-            fMyConsoleLog(
-              `      -> ⚠️ Error setting one or more grid values for row ${r}. Proceeding to recalc.`
-            );
-            refreshErrors++;
-          }
-
-          // --- Recalculate Gear Line (Conditional) ---
-          if (isGearItem) {
-            fMyConsoleLog(
-              `      -> Running fRefreshGearLineCalcs for Gear Item...`
-            );
-            const currentEnc = fGetGridValue(r, "PossEnc");
-            const currentCr = fGetGridValue(r, "PossCrTot");
-            const currentAp = fGetGridValue(r, "PossAPTot");
-            if (!fRefreshGearLineCalcs(r, currentEnc, currentCr, currentAp)) {
-              fMyConsoleLog(
-                `      -> ⚠️ Error occurred during fRefreshGearLineCalcs for row ${r}.`
-              );
-              refreshErrors++;
-            }
-          } else {
-            fMyConsoleLog(`      -> Skipping fRefreshGearLineCalcs.`);
-          }
-        } catch (error) {
-          console.error(
-            `${funcName}: Unexpected error processing row ${r} (ID: ${abilID}):`,
-            error
+        if (dbAbilityResult && klKnownAbilitiesResult && dbGearResult) {
+          fSaveNewAbilityToAbilTbl(
+            r,
+            dbAbilityResult,
+            klKnownAbilitiesResult,
+            dbGearResult
           );
-          fMyConsoleLog(
-            `   -> ❌ Unexpected error during Stage 2 for row ${r}: ${error.message}`
-          );
-          refreshErrors++;
         }
-      } // End row loop (r)
-    } // End range loop
+      }
+    }
 
-    // --- 3. Overall Recalculation & Save (Outside Loop) ---
+    // --- 3. Overall Recalculation & Save ---
     fMyConsoleLog(
       `   -> Refresh loop complete. Triggering final calculations and save...`
     );
-    await fCalculatesEnc_MR_AP(); // Update overall totals
-    fHandleAutoSaveTextToFirestore(); // Save all changes
+    await fCalculatesEnc_MR_AP();
+    fHandleAutoSaveTextToFirestore();
 
     fMyConsoleLog(
-      `✅ ${funcName} Complete. Processed: ${rowsProcessed}, Cleared: ${rowsCleared}, Refreshed: ${rowsRefreshed}${
-        refreshErrors > 0 ? ` (${refreshErrors} errors)` : ""
-      }.`
+      `✅ ${funcName} Complete. Processed: ${rowsProcessed}, Cleared: ${rowsCleared}, Refreshed: ${rowsRefreshed}.`
     );
-  } // End fTotalRereshOfAllAbilitiesAndAllGear
+  } // End function fTotalRereshOfAllAbilitiesAndAllGear
 
   // ==========================================================================
   // === Firestore Text Read/Write     (End of Header Button Click) ===
@@ -9105,13 +8811,13 @@
     );
   } // END fModalElementsAvailable
 
-  // fAttachGridListeners ////////////////////////////////////////////////////////////
-  // Purpose -> Attaches various delegated event listeners (click, change, blur, hover)
-  //            to the main grid container element.
-  // Inputs  -> gridElement (HTMLElement): The grid container element (#grid).
-  // Outputs -> None (Attaches event listeners).
+  /**
+   * Purpose: Attaches various delegated event listeners (click, change, blur, hover,
+   * dblclick, keydown) to the main grid container element.
+   * @param {HTMLElement} gridElement - The grid container element (#grid).
+   * @returns {void}
+   */
   function fAttachGridListeners(gridElement) {
-    // Validate grid element exists
     if (!gridElement) {
       console.error(
         "fAttachGridListeners: Could not find grid element to attach listeners."
@@ -9126,11 +8832,103 @@
     // Attach blur listener for handling edits in contentEditable cells (using capture phase)
     gridElement.addEventListener("blur", fHandleGridCellEdit, true);
 
+    // Attach dblclick listener for entering edit mode
+    gridElement.addEventListener("dblclick", fHandleGridDblClick);
+
+    // Attach keydown listener to handle Enter key for confirming edits
+    gridElement.addEventListener("keydown", fHandleGridKeyDown);
+
     // Attach hover listeners for tooltips, only if tooltip element exists
     if (gUI.tooltipElement) {
       fSetupGridHoverListeners(gridElement);
     }
-  } // END fAttachGridListeners
+  } // End function fAttachGridListeners
+
+  /**
+   * Purpose: Transforms an "Ability" cell into a contentEditable text input,
+   * preserving its current text and focusing it for editing.
+   * @param {HTMLElement} cell - The cell element to transform.
+   * @returns {void}
+   */
+  function fTransformAbilityCellToInput(cell) {
+    const funcName = "fTransformAbilityCellToInput";
+    if (!cell || !cell.classList.contains("cell")) {
+      console.warn(`${funcName}: Invalid cell element provided.`);
+      return;
+    }
+
+    // Get the current display text, whether from a <select> or direct textContent.
+    const selectElement = cell.querySelector("select.grid-dropdown");
+    let currentText = "";
+    if (selectElement) {
+      const selectedOption = selectElement.options[selectElement.selectedIndex];
+      currentText = selectedOption ? selectedOption.textContent : "";
+    } else {
+      currentText = cell.textContent;
+    }
+
+    // Clear the cell's content (like the <select> element).
+    cell.innerHTML = "";
+    cell.textContent = currentText;
+
+    // Make the cell editable.
+    cell.contentEditable = true;
+    cell.classList.add("left-align-text"); // Ensure text aligns left for editing.
+    cell.focus(); // Place the cursor in the cell.
+
+    // Move cursor to the end of the text for a better editing experience.
+    const range = document.createRange();
+    const sel = window.getSelection();
+    range.selectNodeContents(cell);
+    range.collapse(false); // false collapses to the end.
+    sel.removeAllRanges();
+    sel.addRange(range);
+
+    fMyConsoleLog(
+      `   -> Transformed cell [${cell.dataset.r}, ${cell.dataset.c}] to input.`
+    );
+  } // End function fTransformAbilityCellToInput
+
+  /**
+   * Purpose: Handles the delegated 'dblclick' event for the grid. Triggers edit
+   * mode for cells in the "Ability" column.
+   * @param {MouseEvent} event - The dblclick event object.
+   * @returns {void}
+   */
+  function fHandleGridDblClick(event) {
+    const cell = event.target.closest(".cell");
+    if (!cell) return;
+
+    const r = parseInt(cell.dataset.r, 10);
+    const c = parseInt(cell.dataset.c, 10);
+    if (isNaN(r) || isNaN(c)) return;
+
+    // Check if the double-clicked cell is in the "Ability" column.
+    const abilityCol = fResolveCol("Ability");
+    if (c === abilityCol) {
+      event.preventDefault(); // Prevent default dbl-click behavior like text selection.
+      fMyConsoleLog(`⚡ Edit Mode triggered for Ability cell [${r}, ${c}]`);
+      fTransformAbilityCellToInput(cell);
+    }
+  } // End function fHandleGridDblClick
+
+  /**
+   * Purpose: Handles 'keydown' events on the grid, specifically looking for the
+   * Enter key on contentEditable cells to confirm an edit.
+   * @param {KeyboardEvent} event - The keydown event object.
+   * @returns {void}
+   */
+  function fHandleGridKeyDown(event) {
+    // We only care about the Enter key.
+    if (event.key !== "Enter") return;
+
+    const cell = event.target.closest('.cell[contenteditable="true"]');
+    // Check if the event target is an editable cell.
+    if (cell) {
+      event.preventDefault(); // Prevent the default action of adding a new line.
+      cell.blur(); // Trigger the blur event, which saves the content via fHandleGridCellEdit.
+    }
+  } // End function fHandleGridKeyDown
 
   /**
    * Purpose: Orchestrate all post-render formatting steps for the Turbo grid UI.
