@@ -9499,7 +9499,6 @@
     fFetchAndApplyAbilityDropdowns(); // best-effort
 
     // Final polish
-    fMarkGridOverflowingCells();
     fClearSk1Sk2Checkboxes();
 
     // Listeners
@@ -9513,10 +9512,13 @@
     // Calculations that depend on final layout
     fCalculatesEnc_MR_AP();
 
+    // DEFER non-critical overflow check to improve perceived load time
+    setTimeout(() => fMarkGridOverflowingCells(), 500);
+
     fMyConsoleLog("✅ All Post-Render Formatting Done!");
     fHideMessage();
     return true;
-  } // End fRunPostRenderFormatting
+  } // End function fRunPostRenderFormatting
 
   /**
    * Purpose -> Initiates the process of loading and displaying the game sheet data.
