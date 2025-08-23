@@ -3070,6 +3070,45 @@
   } // END fHandleUrlClick
 
   /**
+   * Purpose: Flags a standard ability/gear item as custom (⚡) when one of its
+   * data cells is modified. It prepends the prefix to the name, updates the
+   * data model, and replaces the cell's dropdown with plain text.
+   * @param {number} r - The 0-based row index of the item to flag.
+   * @returns {void}
+   */
+  function fFlagAbilityAsCustom(r) {
+    const funcName = "fFlagAbilityAsCustom";
+    const abilityCol = fResolveCol("Ability");
+    if (isNaN(abilityCol)) return;
+
+    const cell = gUI.grid2D?.[r]?.[abilityCol];
+    const currentName = String(gUI.arr[r]?.[abilityCol] ?? "");
+
+    // Only proceed if the item is not already flagged as custom.
+    if (!cell || currentName.startsWith("⚡")) {
+      return;
+    }
+
+    fMyConsoleLog(
+      `   -> ${funcName}: Auto-flagging item in row ${r} as custom...`
+    );
+
+    const newCustomName = "⚡" + currentName;
+
+    // Update the data model first.
+    gUI.arr[r][abilityCol] = newCustomName;
+
+    // Update the DOM.
+    cell.innerHTML = ""; // Remove any existing <select> dropdown.
+    cell.textContent = newCustomName;
+    // Restore default cell styles that might have been changed for dropdowns.
+    cell.style.padding = "";
+    cell.style.overflow = "";
+
+    fMyConsoleLog(`   -> Row ${r} name changed to: "${newCustomName}"`);
+  } // End function fFlagAbilityAsCustom
+
+  /**
    * Purpose -> Handles the 'blur' event for contenteditable cells. Updates the
    * data model (gUI.arr), handles custom Ability/Gear name logic (adding ⚡),
    * and triggers specific calculations or alerts for other edited cells.
@@ -3094,30 +3133,25 @@
     }
 
     cellDiv.contentEditable = false;
+    fHideTooltip();
 
     const abilityCol = fResolveCol("Ability");
+    const colTag = Object.keys(gUI.colTag).find((tag) => gUI.colTag[tag] === c);
+
     if (c === abilityCol) {
       const newText = cellDiv.textContent.trim();
       const oldValueInModel = String(gUI.arr[r][c] ?? "");
 
-      // 1. Handle "Clear" actions (cell is empty or contains only the prefix).
       if (newText === "" || newText === "⚡") {
         if (oldValueInModel !== "") {
-          fMyConsoleLog(
-            `⚡ Ability cell [${r}, ${c}] cleared. Resetting row...`
-          );
-          fHandleClearAbilityRow(r); // This now correctly restores the placeholder
+          fHandleClearAbilityRow(r);
           fCalculatesEnc_MR_AP();
         }
         return;
       }
 
-      // 2. Handle "No Change" actions to prevent accidental flagging.
       const oldTextForCompare = oldValueInModel.replace(/^⚡\s*/, "").trim();
       if (newText === oldTextForCompare) {
-        fMyConsoleLog(
-          `Ability cell [${r}, ${c}] unchanged. Reverting to original visual state.`
-        );
         if (!oldValueInModel.startsWith("⚡")) {
           const abilityConfig = gUI.dropDownBox.find(
             (config) => config.gUIListKey === "myCSListFSData"
@@ -3134,24 +3168,83 @@
             cellDiv.style.padding = "0";
             cellDiv.style.overflow = "visible";
           } else {
-            cellDiv.textContent = oldValueInModel; // Fallback
+            cellDiv.textContent = oldValueInModel;
           }
         } else {
-          cellDiv.textContent = oldValueInModel; // Restore custom text
+          cellDiv.textContent = oldValueInModel;
         }
         return;
       }
 
-      // 3. Handle "Save Custom" actions (a real change was made).
       let finalValueToStore = newText;
       if (!finalValueToStore.startsWith("⚡")) {
         finalValueToStore = "⚡" + finalValueToStore;
       }
       cellDiv.textContent = finalValueToStore;
       gUI.arr[r][c] = finalValueToStore;
+      fHandleAutoSaveTextToFirestore();
+      return;
+    }
+
+    const customizableDataCols = [
+      "Sk1Typ",
+      "Sk1",
+      "Sk2Typ",
+      "Sk2",
+      "Act",
+      "Dur",
+      "Rng",
+      "Meta",
+    ];
+    if (colTag && customizableDataCols.includes(colTag)) {
+      const newText = cellDiv.textContent.trim();
+      const oldValueInModel = String(gUI.arr[r][c] ?? "");
+
+      const validateAndGetFinalValue = (text, list) => {
+        if (list) {
+          const lowerText = text.toLowerCase();
+          const match = list.find((item) => item.toLowerCase() === lowerText);
+          return match || null;
+        } else {
+          if (text === "") return "";
+          const num = parseInt(text, 10);
+          if (!isNaN(num) && num >= 1 && String(num) === text) {
+            return num;
+          }
+          return null;
+        }
+      };
+
+      const validationList = gUI.validationLists?.[colTag];
+      let finalValue = validateAndGetFinalValue(newText, validationList);
+
+      if (colTag === "Rng" && finalValue === null) {
+        const num = parseInt(newText, 10);
+        if (!isNaN(num) && num >= 1 && String(num) === newText) {
+          finalValue = num;
+        }
+      }
+
+      if (finalValue === null) {
+        fMyConsoleLog(
+          `   -> ❌ Invalid input for ${colTag}: "${newText}". Reverting.`
+        );
+        cellDiv.textContent = oldValueInModel;
+        return;
+      }
+
+      if (String(finalValue) === oldValueInModel) {
+        cellDiv.textContent = oldValueInModel;
+        return;
+      }
+
       fMyConsoleLog(
-        `⚡ Custom Ability at [${r}, ${c}] updated to: "${finalValueToStore}"`
+        `   -> ✅ Valid change for ${colTag} at [${r}, ${c}]: "${oldValueInModel}" -> "${finalValue}"`
       );
+      gUI.arr[r][c] = finalValue;
+      cellDiv.textContent = finalValue;
+
+      fFlagAbilityAsCustom(r);
       fHandleAutoSaveTextToFirestore();
       return;
     }
@@ -3163,9 +3256,6 @@
     }
 
     const gearColumnsToCalculate = ["PossNum", "PossWorn", "PossPerOff"];
-    const editedColTag = Object.keys(gUI.colTag).find(
-      (tag) => gUI.colTag[tag] === c
-    );
     let finalValueToStore = newValue;
     let shouldUpdateModelAndSave = true;
     let specificCalcDone = false;
@@ -3239,7 +3329,7 @@
       specificCalcDone = true;
     }
 
-    if (!specificCalcDone && gearColumnsToCalculate.includes(editedColTag)) {
+    if (!specificCalcDone && gearColumnsToCalculate.includes(colTag)) {
       const validatedValue = await fCalcGearLine(
         r,
         c,
@@ -4500,8 +4590,8 @@
 
     const userConfirmed = await fShowPrompt(
       `<b>Refresh the UI Template Cache for v${gIndex.GameVer}?</b><br><br>
-    This will overwrite the cached UI layout in Firestore with the current version from the Master Character Sheet.<br><br>
-    This action is slow and should only be done after changing the 'Game' tab layout.`
+      This will overwrite the cached UI layout in Firestore with the current version from the Master Character Sheet.<br><br>
+      This action is slow and should only be done after changing the 'Game' tab layout.`
     );
 
     if (!userConfirmed) {
@@ -8261,6 +8351,77 @@
   } // End function fOnCSGameDataLoaded
 
   /**
+   * Purpose: Creates and caches lists of valid inputs for customizable data columns
+   * by reading and processing the gUI.myCSListFSData cache once upon loading.
+   * Assumptions: gUI.myCSListFSData is fully loaded and valid.
+   * @returns {boolean} True if lists were created successfully, false otherwise.
+   */
+  function fCreateValidationListsFromCache() {
+    const funcName = "fCreateValidationListsFromCache";
+    fMyConsoleLog(`⚙️ ${funcName}: Caching validation lists...`);
+
+    const listCache = gUI.myCSListFSData;
+    if (
+      !listCache ||
+      !listCache.text ||
+      !listCache.colTagsMap ||
+      !listCache.rowTagsMap
+    ) {
+      fMyConsoleLog(
+        `   -> ❌ ${funcName}: myCSListFSData cache is not available or invalid.`
+      );
+      return false;
+    }
+
+    const startRowTag = "TableFirstRow";
+    const startRowIndex = listCache.rowTagsMap[startRowTag];
+    if (typeof startRowIndex !== "number") {
+      fMyConsoleLog(
+        `   -> ❌ ${funcName}: Could not resolve start row tag '${startRowTag}'.`
+      );
+      return false;
+    }
+
+    // Helper to extract a unique, ordered list from a column
+    const extractList = (colTag) => {
+      const colIndex = listCache.colTagsMap[colTag];
+      if (typeof colIndex !== "number") {
+        fMyConsoleLog(
+          `   -> ⚠️ ${funcName}: Could not resolve column tag '${colTag}'. Skipping list creation.`
+        );
+        return [];
+      }
+
+      const valueSet = new Set();
+      for (let r = startRowIndex; r < listCache.text.length; r++) {
+        const value = listCache.text[r]?.[colIndex];
+        const trimmedValue = String(value ?? "").trim();
+        if (trimmedValue) {
+          valueSet.add(trimmedValue);
+        }
+      }
+      // Return the array in insertion order, without sorting.
+      return [...valueSet];
+    };
+
+    gUI.validationLists = {
+      Sk1Typ: extractList("SkTyp"),
+      Sk2Typ: extractList("SkTyp"),
+      Act: extractList("Act"),
+      Dur: extractList("Dur"),
+      Rng: extractList("Rng"),
+      Meta: extractList("Meta"),
+    };
+
+    fMyConsoleLog(
+      `   -> ✅ Validation lists created for: ${Object.keys(
+        gUI.validationLists
+      ).join(", ")}`
+    );
+    return true;
+  } // End function fCreateValidationListsFromCache
+
+  /**
    * Purpose: Loads all required background data caches by making a single, bulk request to the server.
    * It passes the gUI.cachesToLoadOnStartup list to the server, which handles the intelligent loading.
    * @param {string} ignored - Unused.
@@ -8307,7 +8468,6 @@
         );
         let allCriticalCachesLoaded = true;
 
-        // Populate gUI with the loaded caches
         for (const target of targets) {
           const cacheData = response.caches[target.key];
           if (cacheData) {
@@ -8317,7 +8477,6 @@
             log(
               `      -> ⚠️ WARNING: Cache for '${target.key}' was not returned from server.`
             );
-            // Check if a missing cache is critical
             if (
               target.key.startsWith("myCS") ||
               target.key.startsWith("myKL")
@@ -8337,7 +8496,6 @@
           return resolve(false);
         }
 
-        // Special handling for character info after myCSRaceClassFSData is loaded
         if (gUI.myCSRaceClassFSData) {
           log("      -> Triggering fPopulateGuiCharacterInfo...");
           if (!fPopulateGuiCharacterInfo()) {
@@ -8348,6 +8506,15 @@
             return resolve(false);
           }
           log("         -> ✅ Successfully populated character info.");
+        }
+
+        // Create validation lists from the newly loaded cache.
+        if (!fCreateValidationListsFromCache()) {
+          log(`   -> ❌ Critical error creating validation lists. Halting.`);
+          await fShowMessage(
+            `❌ CRITICAL ERROR: Could not create validation lists from cache.`
+          );
+          return resolve(false);
         }
 
         log("   -> ✅ Background cache loading completed.");
@@ -8890,8 +9057,58 @@
   } // End function fTransformAbilityCellToInput
 
   /**
+   * Purpose: Displays a validation tooltip with allowed values for an editable cell,
+   * positioning it smartly based on the mouse event to stay within the viewport.
+   * @param {HTMLElement} cell - The editable cell element that was double-clicked.
+   * @param {string} colTag - The column tag of the cell being edited.
+   * @param {MouseEvent} event - The dblclick event object, used for positioning.
+   * @returns {void}
+   */
+  function fShowValidationTooltip(cell, colTag, event) {
+    const funcName = "fShowValidationTooltip";
+    if (!gUI.tooltipElement || !cell || !colTag || !event) return;
+
+    let tooltipText = "<b>Allowed:</b> ";
+    const validationList = gUI.validationLists?.[colTag];
+
+    if (validationList && validationList.length > 0) {
+      tooltipText += validationList.join(", ");
+      // Append the integer rule specifically for the Rng column
+      if (colTag === "Rng") {
+        tooltipText += ", or any Integer ≥ 1";
+      }
+    } else if (colTag === "Sk1" || colTag === "Sk2") {
+      tooltipText += "Blank or Integer ≥ 1";
+    } else {
+      console.warn(
+        `${funcName}: No validation list found for tag '${colTag}'. Please check the 'MyCS/List' sheet for valid data under the corresponding header.`
+      );
+      return;
+    }
+
+    const tooltip = gUI.tooltipElement;
+    tooltip.innerHTML = tooltipText;
+    tooltip.style.visibility = "hidden";
+    tooltip.style.display = "block";
+
+    setTimeout(() => {
+      if (document.activeElement !== cell) {
+        tooltip.style.display = "none";
+        tooltip.style.visibility = "visible";
+        return;
+      }
+
+      fConfineNotesTooltipBox(tooltip, event);
+      tooltip.style.visibility = "visible";
+
+      cell.addEventListener("blur", fHideTooltip, { once: true });
+      fMyConsoleLog(`   -> ${funcName}: Showing tooltip for '${colTag}'.`);
+    }, 10);
+  } // End function fShowValidationTooltip
+
+  /**
    * Purpose: Handles the delegated 'dblclick' event for the grid. Triggers edit
-   * mode for cells in the "Ability" column.
+   * mode for the "Ability" column and other customizable data columns.
    * @param {MouseEvent} event - The dblclick event object.
    * @returns {void}
    */
@@ -8903,12 +9120,24 @@
     const c = parseInt(cell.dataset.c, 10);
     if (isNaN(r) || isNaN(c)) return;
 
-    // Check if the double-clicked cell is in the "Ability" column.
-    const abilityCol = fResolveCol("Ability");
-    if (c === abilityCol) {
-      event.preventDefault(); // Prevent default dbl-click behavior like text selection.
-      fMyConsoleLog(`⚡ Edit Mode triggered for Ability cell [${r}, ${c}]`);
+    const editableCols = [
+      "Ability",
+      "Sk1Typ",
+      "Sk1",
+      "Sk2Typ",
+      "Sk2",
+      "Act",
+      "Dur",
+      "Rng",
+      "Meta",
+    ];
+    const colTag = Object.keys(gUI.colTag).find((tag) => gUI.colTag[tag] === c);
+
+    if (editableCols.includes(colTag)) {
+      event.preventDefault();
+      fMyConsoleLog(`⚡ Edit Mode triggered for ${colTag} cell [${r}, ${c}]`);
       fTransformAbilityCellToInput(cell);
+      fShowValidationTooltip(cell, colTag, event); // Pass the event object for positioning
     }
   } // End function fHandleGridDblClick
 
