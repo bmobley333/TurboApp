@@ -3132,13 +3132,14 @@
       return;
     }
 
-    cellDiv.contentEditable = false;
     fHideTooltip();
 
     const abilityCol = fResolveCol("Ability");
     const colTag = Object.keys(gUI.colTag).find((tag) => gUI.colTag[tag] === c);
 
+    // === Custom Ability/Gear Name Handling ===
     if (c === abilityCol) {
+      cellDiv.contentEditable = false; // Turn off editing for this cell type now.
       const newText = cellDiv.textContent.trim();
       const oldValueInModel = String(gUI.arr[r][c] ?? "");
 
@@ -3186,6 +3187,7 @@
       return;
     }
 
+    // === Custom Data Column Handling (Sk1Typ, Sk1, etc.) ===
     const customizableDataCols = [
       "Sk1Typ",
       "Sk1",
@@ -3197,20 +3199,17 @@
       "Meta",
     ];
     if (colTag && customizableDataCols.includes(colTag)) {
+      cellDiv.contentEditable = false; // Turn off editing for this cell type now.
       const newText = cellDiv.textContent.trim();
       const oldValueInModel = String(gUI.arr[r][c] ?? "");
 
       const validateAndGetFinalValue = (text, list) => {
-        // Allow blank as a valid entry for all types.
         if (text === "") return "";
-
         if (list) {
-          // Text-based validation
           const lowerText = text.toLowerCase();
           const match = list.find((item) => item.toLowerCase() === lowerText);
           return match || null;
         } else {
-          // Numeric validation (for Sk1, Sk2)
           const num = parseInt(text, 10);
           if (!isNaN(num) && num >= 1 && String(num) === text) {
             return num;
@@ -3253,6 +3252,7 @@
       return;
     }
 
+    // === Original Logic for other cells (Meta, Gear, Vit) that should REMAIN editable ===
     const newValue = cellDiv.textContent;
     const oldValueInModel = gUI.arr[r][c];
     if (String(newValue ?? "") === String(oldValueInModel ?? "")) {
