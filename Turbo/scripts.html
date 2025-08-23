@@ -4431,26 +4431,19 @@
 
   /**
    * Purpose: Handles the "Update (Level, Slot, Names)" menu action. Force-refreshes
-   * user-specific caches (RaceClass, List, KnownAbilities) from Sheets to
-   * Firestore to gUI, validates the resulting slot number, sends an update
-   * log, UPDATES ABILITY DROPDOWNS, and triggers a full grid refresh.
-   * Assumptions: The cache refresh functions handle their own error messaging.
-   * @param {} - No parameters.
+   * user-specific caches from Sheets to Firestore to gUI, validates the resulting
+   * slot number, sends an update log, UPDATES ABILITY DROPDOWNS, and triggers a full grid refresh.
    * @returns {Promise<void>} Resolves after completing actions or handling errors.
    */
   async function fHandleNewLevelSlotName() {
     const funcName = "fHandleNewLevelSlotName";
     fMyConsoleLog(`⚙️ Menu Action: ${funcName} Triggered...`);
 
-    // === Show Initial Loading Message (MODIFIED) ===
     fShowMessageNoClose(
       "⏳ Refreshing Caches, Sending Log & Updating Grid...<br><br>This may take a minute.<br><br>Please wait."
     );
 
     try {
-      // Wrap the entire sequence in a try block
-
-      // === 1. Parallel Cache Refresh (Force Sheet->FS->gUI for user caches) ===
       const userCachesToRefresh = [
         {
           workbookAbr: "MyCS",
@@ -4477,100 +4470,67 @@
       const results = await Promise.allSettled(refreshPromises);
       fMyConsoleLog(`   -> Parallel cache refreshes completed.`);
 
-      // === 2. Process Refresh Results ===
       let allRefreshesSucceeded = true;
       let firstErrorMessage = null;
-      let failedCacheKey = null;
-
       for (let i = 0; i < results.length; i++) {
         const result = results[i];
-        const config = userCachesToRefresh[i]; // Get corresponding config
-        if (result.status === "rejected") {
+        const config = userCachesToRefresh[i];
+        if (result.status === "rejected" || result.value === false) {
           allRefreshesSucceeded = false;
-          failedCacheKey = config.gUIKey;
           firstErrorMessage =
-            result.reason?.message ||
-            `Unknown error refreshing ${failedCacheKey}`;
+            result.reason?.message || `Refresh failed for ${config.gUIKey}.`;
           fMyConsoleLog(
-            `      -> ❌ Refresh REJECTED for ${failedCacheKey}: ${firstErrorMessage}`
+            `      -> ❌ Refresh FAILED for ${config.gUIKey}: ${firstErrorMessage}`
           );
-          break; // Stop checking on first failure
-        } else if (result.value === false) {
-          // fRefreshAndCacheOneFSData resolved but indicated failure
-          allRefreshesSucceeded = false;
-          failedCacheKey = config.gUIKey;
-          // Note: fRefreshAndCacheOneFSData already showed a message in this case
-          firstErrorMessage = `Refresh failed for ${failedCacheKey}. Check logs for details.`;
-          fMyConsoleLog(
-            `      -> ❌ Refresh FAILED (returned false) for ${failedCacheKey}.`
-          );
-          break; // Stop checking on first failure
+          break;
         } else {
           fMyConsoleLog(`      -> ✅ Refresh SUCCEEDED for ${config.gUIKey}.`);
         }
       }
 
-      // Throw error if any refresh failed
       if (!allRefreshesSucceeded) {
-        // Use a generic message if the specific one wasn't captured well
         throw new Error(
           firstErrorMessage || `One or more cache refreshes failed.`
         );
       }
       fMyConsoleLog(`   -> All user cache refreshes successful.`);
 
-      // === 3. Update Ability Dropdowns ===
       fMyConsoleLog(
         "   -> Updating Ability Dropdowns based on refreshed List cache..."
       );
-      fProcessCachedAbilityList(); // Process new list and apply dropdowns
+      fProcessCachedAbilityList();
       fMyConsoleLog("      -> ✅ Ability Dropdowns updated.");
 
-      // === 4. Slot Validation ===
       fMyConsoleLog("   -> Validating Slot Number from refreshed data...");
       const currentSlot = gUI.characterInfo?.slotNum;
-      const slotRegex = /^Slot([1-9])$/i; // Expect "Slot#"
-
+      const slotRegex = /^Slot([1-9])$/i;
       if (!currentSlot || !slotRegex.test(currentSlot)) {
         const invalidSlotMsg = `Invalid or missing Slot # ("${
           currentSlot || "null"
-        }") found after cache refresh. Cannot send log or proceed.`;
-        fMyConsoleLog(`      -> ❌ ${invalidSlotMsg}`);
+        }") after cache refresh.`;
         throw new Error(invalidSlotMsg);
       }
       fMyConsoleLog(`      -> Slot validated: ${currentSlot}`);
 
-      // === 5. Send Log ===
       fMyConsoleLog("   -> Sending log update...");
-      const logSendSuccess = await fSendLogToGMScreenAndPS();
-      if (!logSendSuccess) {
-        fMyConsoleLog(
-          "      -> ⚠️ Log send failed or was skipped. Continuing process..."
-        );
-        // Do not throw error, continue to grid refresh
-      } else {
-        fMyConsoleLog("      -> ✅ Log send successful.");
-      }
+      await fSendLogToGMScreenAndPS();
+      fMyConsoleLog("      -> ✅ Log send successful.");
 
-      // === 6. Refresh Grid Rows ===
       fMyConsoleLog("   -> Refreshing grid rows (Abilities/Gear)...");
       await fTotalRereshOfAllAbilitiesAndAllGear();
       fMyConsoleLog("      -> ✅ Grid row refresh complete.");
 
-      // === 7. Final Success Message ===
-      fHideMessage(); // Hide the initial "Updating..." message
-      await fShowMessage("✅ Caches Refreshed, Log Sent & Grid Updated.");
       fMyConsoleLog(`✅ ${funcName} Completed Successfully.`);
+      fHideMessage(); // Hide the initial "Updating..." message
+      // Final success message is removed.
     } catch (error) {
-      // === Catch All Errors from the Sequence ===
-      fHideMessage(); // Ensure loading message is hidden on error
+      fHideMessage();
       const errorMsg = `Error during Update (Level, Slot, Names): ${
         error?.message || error
       }`;
-      console.error(errorMsg, error); // Log full error
+      console.error(errorMsg, error);
       fMyConsoleLog(`   -> ❌ ${errorMsg}`);
-      await fShowMessage(`❌ ${errorMsg}`); // Show the final error to the user
-      // Implicitly returns undefined on error
+      await fShowMessage(`❌ ${errorMsg}`);
     }
   } // End fHandleNewLevelSlotName
 
@@ -4578,7 +4538,6 @@
    * Purpose: Handles the 'Refresh UI Template Cache' designer menu action. Calls the
    * server to re-read the MasterCS 'Game' tab and save it to a versioned
    * collection in Firestore.
-   * @param {} - No parameters.
    * @returns {Promise<void>} Resolves after the operation is complete.
    */
   async function fHandleRefreshUITemplate() {
@@ -4594,8 +4553,8 @@
 
     const userConfirmed = await fShowPrompt(
       `<b>Refresh the UI Template Cache for v${gIndex.GameVer}?</b><br><br>
-      This will overwrite the cached UI layout in Firestore with the current version from the Master Character Sheet.<br><br>
-      This action is slow and should only be done after changing the 'Game' tab layout.`
+    This will overwrite the cached UI layout in Firestore with the current version from the Master Character Sheet.<br><br>
+    This action is slow and should only be done after changing the 'Game' tab layout.`
     );
 
     if (!userConfirmed) {
@@ -4604,7 +4563,7 @@
     }
 
     fShowMessageNoClose(
-      "⏳ Refreshing and saving UI Template... This may take a minute."
+      "⏳ Refreshing UI Template Cache...<br><br>This may take a minute.<br><br>Please wait."
     );
     try {
       const result = await new Promise((resolve, reject) => {
@@ -4616,8 +4575,10 @@
 
       fHideMessage();
       if (result && result.success) {
-        fMyConsoleLog(`✅ ${funcName}: Server confirmed success.`);
-        await fShowMessage(`✅ ${result.message || "Success!"}`);
+        fMyConsoleLog(
+          `✅ ${funcName}: Server confirmed success. ${result.message || ""}`
+        );
+        // Final success message is removed.
       } else {
         throw new Error(
           result.message || "An unknown error occurred on the server."
@@ -7030,57 +6991,48 @@
     fPromptForDesignerPassword(); // Start the password process
   } // END fHandleDesignerOnlyClick
 
-  // fPromptForDesignerPassword //////////////////////////////////////////////////
-  // Purpose -> Prompts the user for the Designer Password using window.prompt
-  //            and calls the server-side validation function if a password is entered.
-  // Inputs  -> None.
-  // Outputs -> None (Calls google.script.run or shows messages).
+  /**
+   * Purpose -> Prompts the user for the Designer Password using window.prompt
+   * and calls the server-side validation function if a password is entered.
+   * @returns {Promise<void>}
+   */
   async function fPromptForDesignerPassword() {
     fMyConsoleLog("🔑 Prompting for Designer Password...");
 
-    // Use the browser's native prompt for password input
     const enteredPassword = window.prompt("Enter Designer Password:");
 
-    // Check if the user entered a password (prompt returns null if Cancel is clicked)
     if (enteredPassword !== null) {
       fMyConsoleLog("   -> Password entered. Calling server for validation...");
-      // Show a temporary message while verifying
-      const verifyingMsg = fShowMessage("🔐 Verifying Password..."); // Don't await
+      fShowMessageNoClose("⏳ Verifying Password...<br><br>Please wait.");
 
       google.script.run
         .withSuccessHandler((isValid) => {
-          // Success handler for the server call
-          fHandleDesignerPasswordResult(isValid); // Handle the boolean result
+          fHandleDesignerPasswordResult(isValid);
         })
         .withFailureHandler((error) => {
-          // Failure handler for the server call (transport error)
-          fHideMessage(); // Ensure verifying message is hidden
+          fHideMessage();
           const errorMsg = `Error communicating with server for password validation: ${error.message}`;
-          console.error("fPromptForDesignerPassword Failure:", error);
           fMyConsoleLog(`   -> ❌ ${errorMsg}`);
-          fShowMessage(`❌ ${errorMsg}`); // Show error to user
-          // Ensure designer mode is off if communication fails
+          fShowMessage(`❌ ${errorMsg}`);
           gUI.isDesignerMode = false;
           const designerButton = document.getElementById("btn-designer-menu");
           if (designerButton) designerButton.style.display = "none";
         })
-        .fSrvValidateDesignerPassword(enteredPassword); // Call the server function
+        .fSrvValidateDesignerPassword(enteredPassword);
     } else {
-      // User clicked Cancel on the prompt
       fMyConsoleLog("   -> User cancelled password prompt.");
-      // Optionally show a message indicating cancellation
-      // await fShowMessage("Designer password entry cancelled.");
     }
   } // END fPromptForDesignerPassword
 
-  // fHandleDesignerPasswordResult ///////////////////////////////////////////////
-  // Purpose -> Handles the boolean result from the server-side password validation.
-  //            Shows/hides the Designer button and updates state accordingly.
-  // Inputs  -> isValid (Boolean): The result from fSrvValidateDesignerPassword.
-  // Outputs -> None (Modifies DOM, gUI state, shows messages).
+  /**
+   * Purpose -> Handles the boolean result from the server-side password validation.
+   * Shows/hides the Designer button and updates state accordingly.
+   * @param {boolean} isValid - The result from fSrvValidateDesignerPassword.
+   * @returns {void}
+   */
   function fHandleDesignerPasswordResult(isValid) {
     fMyConsoleLog(`🔑 Handling Password Validation Result: ${isValid}`);
-    fHideMessage(); // Hide any "Verifying..." message
+    fHideMessage(); // Hide the "Verifying..." message
 
     const designerButton = document.getElementById("btn-designer-menu");
     if (!designerButton) {
@@ -7088,20 +7040,20 @@
         "fHandleDesignerPasswordResult: Could not find Designer button (#btn-designer-menu)."
       );
       fShowMessage("Error: Could not find the Designer menu button element.");
-      gUI.isDesignerMode = false; // Ensure mode is off
+      gUI.isDesignerMode = false;
       return;
     }
 
     if (isValid) {
       fMyConsoleLog("   -> Password CORRECT. Enabling Designer Mode.");
-      designerButton.style.display = "inline-flex"; // Make button visible (use inline-flex like others)
-      gUI.isDesignerMode = true; // Set flag
-      fShowMessage("✅ Designer Mode Enabled!"); // Show success feedback
+      designerButton.style.display = "inline-flex";
+      gUI.isDesignerMode = true;
+      // The success message is removed; the button appearing is the feedback.
     } else {
       fMyConsoleLog("   -> Password INCORRECT.");
-      designerButton.style.display = "none"; // Ensure button is hidden
-      gUI.isDesignerMode = false; // Ensure flag is false
-      fShowMessage("❌ Incorrect Password."); // Show failure feedback
+      designerButton.style.display = "none";
+      gUI.isDesignerMode = false;
+      fShowMessage("❌ Incorrect Password."); // Keep failure feedback
     }
   } // END fHandleDesignerPasswordResult
 
@@ -9255,19 +9207,18 @@
   //            that waits for the HTML DOM to be fully loaded and parsed, then calls
   //            initial setup functions to load data and attach event listeners.
   window.addEventListener("DOMContentLoaded", () => {
-    // MODIFIED: Show the "Loading..." message first
     fShowMessageNoClose(
-      "Turbo is Loading.<br><br>This may take a minute.<br><br>Please wait."
+      "⏳ Turbo is Loading...<br><br>This may take a minute.<br><br>Please wait."
     );
 
     // Initiate data loading from the Google Sheet
     fLoadGameSheet();
 
     // Setup interactivity for UI elements
-    fSetupMenuInteractivity(); // Menu bar buttons, dropdowns, actions
-    fSetupMessageModalListeners(); // Message box (OK button, Escape key)
-    fSetupPromptModalListeners(); // Prompt box (Yes/No buttons)
-    fSetupSidebarActionListeners(); // Buttons within the Roll Log sidebar
+    fSetupMenuInteractivity();
+    fSetupMessageModalListeners();
+    fSetupPromptModalListeners();
+    fSetupSidebarActionListeners();
   });
 
   /**
