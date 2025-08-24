@@ -2783,6 +2783,41 @@
   } // End function fHandleCustomNoteClear
 
   /**
+   * Purpose: Scans the entire grid after initial render and applies the blue
+   * .custom-data-cell border to any editable cells that contain user data.
+   * Assumptions: This is called once after the grid DOM is fully rendered.
+   * Notes: This ensures the visual state is correct on page load.
+   * @param {} - No parameters.
+   * @returns {void}
+   */
+  function fApplyInitialCustomDataIndicators() {
+    fMyConsoleLog("Applying initial custom data indicators...");
+    const numRows = gUI.arr?.length || 0;
+    if (numRows === 0) return;
+    const numCols = gUI.arr[0]?.length || 0;
+    let cellsStyled = 0;
+
+    for (let r = 0; r < numRows; r++) {
+      for (let c = 0; c < numCols; c++) {
+        // The logic is already in fUpdateCustomDataIndicator, so we just call it.
+        // It internally checks if the cell is editable and has data.
+        const cell = gUI.grid2D?.[r]?.[c];
+        if (cell) {
+          const hadClass = cell.classList.contains("custom-data-cell");
+          fUpdateCustomDataIndicator(r, c);
+          const hasClass = cell.classList.contains("custom-data-cell");
+          if (!hadClass && hasClass) {
+            cellsStyled++;
+          }
+        }
+      }
+    }
+    fMyConsoleLog(
+      `✅ Initial Custom Data Indicators applied to ${cellsStyled} cells.`
+    );
+  } // End function fApplyInitialCustomDataIndicators
+
+  /**
    * Purpose: Adds or removes a visual indicator (.custom-data-cell) for blank
    * cells that contain user-entered text or a custom note.
    * Assumptions: The cell at (r, c) exists in the DOM.
@@ -9485,6 +9520,9 @@
     fApplyGridManualColoring(); // 6) font colors, etc.
     fApplySpecialAlignments();
     fSetTurbosGridHeaderRows(); // 7) sticky header
+
+    // Apply custom data indicators on load
+    fApplyInitialCustomDataIndicators();
 
     // Static interactive elements
     fApplyDropdownsToGrid();
