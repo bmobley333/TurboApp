@@ -8062,27 +8062,26 @@
   // === Firestore Text Read/Write     (End of Header Button Click) ===
   // ==========================================================================
 
-  // fHandleAutoSaveTextToFirestore /////////////////////////////////////////////////////
-  // Purpose -> Orchestrates the background auto-saving of gUI.arr and gUI.characterInfo
-  //            to Firestore within the user's email collection.
-  //            Initiates server call to fSrvSaveTurboDataToFirestore.
-  // Inputs  -> None.
-  // Outputs -> None (Initiates async server call).
+  /**
+   * Purpose -> Orchestrates the background auto-saving of gUI.arr and gUI.customNotes
+   * to Firestore within the user's email collection.
+   * Assumptions: Initiates server call to fSrvSaveTurboDataToFirestore.
+   * Notes: This is the primary trigger for persisting user changes.
+   * @param {} - No parameters.
+   * @returns {void}
+   */
   function fHandleAutoSaveTextToFirestore() {
-    fMyConsoleLog("💾 Handling Auto-Save Data (Grid & CharInfo)...");
+    fMyConsoleLog("💾 Handling Auto-Save Data (Grid & Custom Notes)...");
 
     // === 1. Check if essential data exists ===
     if (!gUI.arr || !Array.isArray(gUI.arr) || gUI.arr.length === 0) {
-      fMyConsoleLog(
-        "   -> No grid data (gUI.arr) found to save. Skipping server call."
-      );
-      return; // Nothing to save if grid is empty
+      fMyConsoleLog("   -> No grid data (gUI.arr) found to save. Skipping.");
+      return;
     }
-    if (!gUI.characterInfo || typeof gUI.characterInfo !== "object") {
+    if (!gUI.customNotes || !Array.isArray(gUI.customNotes)) {
       fMyConsoleLog(
-        "   -> No character info (gUI.characterInfo) found to save. Skipping server call."
+        "   -> No custom notes data (gUI.customNotes) found to save. Skipping."
       );
-      // Optional: Consider if saving should proceed with just arr if charInfo is missing
       return;
     }
     if (!gIndex.CSID || typeof gIndex.CSID !== "string") {
@@ -8107,7 +8106,7 @@
     google.script.run
       .withSuccessHandler(fHandleAutoSaveToFirestoreSuccess)
       .withFailureHandler(fHandleAutoSaveToFirestoreFailure)
-      .fSrvSaveTurboDataToFirestore(gIndex, gUI.arr, gUI.characterInfo); // Pass email, csId, arr, charInfo
+      .fSrvSaveTurboDataToFirestore(gIndex, gUI.arr, gUI.customNotes, null); // Pass gUI.customNotes, charInfo is null
   } // END fHandleAutoSaveTextToFirestore
 
   // fHandleAutoSaveToFirestoreSuccess //////////////////////////////////////////////////////
@@ -8485,11 +8484,13 @@
     // This new function creates an empty customNotes array with the correct dimensions
     fInitializeCustomNotesArray();
 
-    // Check Firestore for Overriding gUI.arr Data
-    fMyConsoleLog("⚙️ Checking Firestore for saved Grid (gUI.arr) data...");
+    // Check Firestore for Overriding gUI.arr and gUI.customNotes Data
+    fMyConsoleLog(
+      "⚙️ Checking Firestore for saved Grid (gUI.arr) and Custom Notes data..."
+    );
     if (!gIndex.Email || !gIndex.CSID) {
       fMyConsoleLog(
-        "   -> ⚠️ Skipping Firestore gUI.arr check: Missing Email or CSID."
+        "   -> ⚠️ Skipping Firestore data check: Missing Email or CSID."
       );
       fSetupTooltipAndModal();
       fMyConsoleLog("   -> Proceeding to fetch background caches...");
@@ -8507,18 +8508,23 @@
 
     google.script.run
       .withSuccessHandler(async (firestoreResponse) => {
-        if (
-          firestoreResponse?.success === true &&
-          firestoreResponse.firestoreArr
-        ) {
-          fMyConsoleLog(
-            "   -> ✅ Firestore Grid data found. Overwriting gUI.arr."
-          );
-          gUI.arr = firestoreResponse.firestoreArr;
+        if (firestoreResponse?.success) {
+          if (firestoreResponse.firestoreArr) {
+            fMyConsoleLog(
+              "   -> ✅ Firestore Grid data found. Overwriting gUI.arr."
+            );
+            gUI.arr = firestoreResponse.firestoreArr;
+          }
+          if (firestoreResponse.customNotes) {
+            fMyConsoleLog(
+              "   -> ✅ Firestore Custom Notes found. Overwriting gUI.customNotes."
+            );
+            gUI.customNotes = firestoreResponse.customNotes;
+          }
         } else {
           const reason = firestoreResponse?.message || "Reason unknown.";
           fMyConsoleLog(
-            `   -> ℹ️ Firestore Grid check returned false (${reason}). Using template/Sheet data for gUI.arr.`
+            `   -> ℹ️ Firestore data check returned false (${reason}). Using template/Sheet data.`
           );
         }
 
@@ -8535,14 +8541,14 @@
         }
       })
       .withFailureHandler(async (error) => {
-        const errorMsg = `Error checking Firestore for Grid data: ${error.message}`;
+        const errorMsg = `Error checking Firestore for data: ${error.message}`;
         console.error(errorMsg, error);
         fMyConsoleLog(
-          `   -> ❌ ${errorMsg}. Using template/Sheet data for gUI.arr as fallback.`
+          `   -> ❌ ${errorMsg}. Using template/Sheet data as fallback.`
         );
         fSetupTooltipAndModal();
         fMyConsoleLog(
-          "   -> Proceeding to fetch background caches (Firestore arr check failed)..."
+          "   -> Proceeding to fetch background caches (Firestore check failed)..."
         );
         const cachesLoaded = await fBulkCacheFSData();
         if (cachesLoaded) {
