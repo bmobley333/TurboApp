@@ -372,16 +372,30 @@
     // Range //////////////////////////////////////////////////////////////////////
     // Named ranges for easy access to specific cells/areas
     range: {
-      entireAbiliyNGearTables: [
+      abilityTable: [
         {
           r1: "AbilTblStartR",
           c1: "PermMorph1",
+          r2: "AbilTblEnd_R",
+          c2: "Regain",
+        },
+        {
+          r1: "GearTblStart_R",
+          c1: "PermMorph1",
+          r2: "GearTblEnd_R",
+          c2: "Regain",
+        },
+      ],
+      gearTable: [
+        {
+          r1: "AbilTblStartR",
+          c1: "PossNum",
           r2: "AbilTblEnd_R",
           c2: "PossAPTot",
         },
         {
           r1: "GearTblStart_R",
-          c1: "PermMorph1",
+          c1: "PossNum",
           r2: "GearTblEnd_R",
           c2: "PossAPTot",
         },

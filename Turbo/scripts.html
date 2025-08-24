@@ -2818,8 +2818,47 @@
   } // End function fApplyInitialCustomDataIndicators
 
   /**
+   * Purpose: Checks if a cell's coordinates fall within any of the major defined
+   * table ranges in gUI.range.
+   * Assumptions: gUI.range contains the necessary table range definitions.
+   * Notes: This is the core of the "Logical" approach to prevent free-form
+   * data cells from being styled inside structured tables.
+   * @param {number} r - The 0-based row index of the cell.
+   * @param {number} c - The 0-based column index of the cell.
+   * @returns {boolean} True if the cell is inside a defined table, false otherwise.
+   */
+  function fIsCellInAnyDefinedTable(r, c) {
+    // A comprehensive list of all ranges we consider to be "tables"
+    const tableRanges = [
+      ...(gUI.range?.abilityTable || []),
+      ...(gUI.range?.gearTable || []),
+      gUI.range?.monsters,
+      gUI.range?.meta,
+      gUI.range?.metaChannel,
+      gUI.range?.luckBox,
+      gUI.range?.luckBoxPlus,
+      gUI.range?.actTotal,
+      gUI.range?.actPlus,
+      gUI.range?.vit1stTo3rd, // Covers the main wound input area
+      gUI.range?.chaosGems,
+      gUI.range?.socketedGear,
+      // Define a range for the MR/Carry table for this check
+      {
+        r1: "GearMRTbl",
+        c1: "GearMRCol1",
+        r2: "GearCarryTbl",
+        c2: "GearMRCol6",
+      },
+    ];
+
+    // Use our existing utility to check if the cell is in any of these ranges
+    return fIsCellInRangeArray(r, c, tableRanges);
+  } // End function fIsCellInAnyDefinedTable
+
+  /**
    * Purpose: Adds or removes a visual indicator (.custom-data-cell) for blank
-   * cells that contain user-entered text or a custom note.
+   * cells that contain user-entered text or a custom note, but only if the
+   * cell is NOT part of a defined table structure.
    * Assumptions: The cell at (r, c) exists in the DOM.
    * Notes: This centralizes the logic for the blue border indicator.
    * @param {number} r - The 0-based row index of the cell.
@@ -2830,8 +2869,9 @@
     const cell = gUI.grid2D?.[r]?.[c];
     if (!cell) return;
 
-    // Only apply this indicator to cells that are designated as editable.
-    if (cell.isContentEditable) {
+    // Only apply this indicator to cells that are designated as editable
+    // AND are NOT inside one of our defined tables.
+    if (cell.isContentEditable && !fIsCellInAnyDefinedTable(r, c)) {
       const hasText = !!String(gUI.arr[r][c] ?? "").trim();
       const hasCustomNote = !!gUI.customNotes?.[r]?.[c]?.trim();
 
@@ -2840,6 +2880,9 @@
       } else {
         cell.classList.remove("custom-data-cell");
       }
+    } else {
+      // If the cell is not eligible, ensure the class is removed.
+      cell.classList.remove("custom-data-cell");
     }
   } // End function fUpdateCustomDataIndicator
 
