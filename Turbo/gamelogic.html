@@ -5,13 +5,16 @@
   // === Core Ability Roll Logic ===
   // ==========================================================================
 
-  // fMain_AbilityRoll ///////////////////////////////////////////////////////////
-  // Purpose -> Top-level handler for initiating an ability/gear roll. Coordinates
-  //            validation, data population, morphs, costs, roll logic branching,
-  //            cost application, Nish update, and final logging (HTML & plain text)
-  //            to sidebar and GMScreen.
-  // Inputs  -> None (Relies on gUI state).
-  // Outputs -> None (Orchestrates updates to gUI, DOM, sidebar, GMScreen).
+  /**
+   * Purpose: Top-level handler for initiating an ability/gear roll. Coordinates
+   * validation, data population, morphs, costs, roll logic branching,
+   * cost application, Nish update, and final logging (HTML & plain text)
+   * to sidebar and GMScreen.
+   * Assumptions: Relies on gUI state being correctly set.
+   * Notes: This is the central function for all player-initiated rolls.
+   * @param {} - No parameters.
+   * @returns {void}
+   */
   async function fMain_AbilityRoll() {
     fMyConsoleLog("🎲 Roll Dice Action Triggered");
     let logHtmlToSend = ""; // Store final log HTML for sidebar
@@ -228,18 +231,30 @@
       initialLogHtml += titleHtml;
       initialLogText += titleText;
 
-      const morph =
-        typeof gUI.roll.skMorph === "string" && gUI.roll.skMorph !== ","
-          ? gUI.roll.skMorph.trim()
-          : "";
-      if (morph) {
-        initialLogHtml += `<br>morph: ${morph}`;
-        initialLogText += `\nmorph: ${morph}`;
+      const permMorph = gUI.roll.permMorph || "";
+      const tempMorph = gUI.roll.tempMorph || "";
+      let formattedMorph = "";
+
+      if (permMorph) {
+        formattedMorph += `Perm(${permMorph})`;
       }
+      if (tempMorph) {
+        if (formattedMorph) {
+          formattedMorph += ",";
+        }
+        formattedMorph += tempMorph;
+      }
+
+      if (formattedMorph) {
+        const cleanedMorph = formattedMorph
+          .replace(/,+/g, ",")
+          .replace(/^,|,$/g, "");
+        initialLogHtml += `<br>morph: ${cleanedMorph}`;
+        initialLogText += `\nmorph: ${cleanedMorph}`;
+      }
+
       initialLogHtml = initialLogHtml.trim();
       initialLogText = initialLogText.trim();
-
-      // gUI.roll.htmlHeader = initialLogHtml; // Not strictly needed anymore
 
       // === 7. Branch Roll Logic ===
       let finalLogResult = null;
@@ -390,7 +405,6 @@
       } else {
         fMyConsoleLog("ℹ️ No final log message generated.");
       }
-      // gUI.roll.htmlHeader = ''; // Not needed anymore
     } catch (err) {
       // --- Catch Unexpected Errors ---
       console.error("Critical Error in fMain_AbilityRoll:", err);
@@ -410,7 +424,7 @@
 
     // Send the final log state to the GMScreen (with slight delay)
     setTimeout(() => fSendLogToGMScreenAndPS(), 0);
-  } // END fMain_AbilityRoll
+  } // End function fMain_AbilityRoll
 
   // fIsSk1Sk2RadioCheckbox //////////////////////////////////////////////////////////////
   // Purpose -> Validates that the provided coordinates (r, c) correspond to a valid
@@ -448,14 +462,17 @@
       // Determine if Sk1 or Sk2 checkbox was clicked
       const isSk1 = c === fResolveCol("Sk1ChkBox");
 
-      // Combine permanent and temporary morph strings
-      const permMorph = isSk1 ? getVal("PermMorph1") : getVal("PermMorph2");
-      const tempMorph = isSk1 ? getVal("Morph1") : getVal("Morph2");
+      // Get permanent and temporary morph strings and clean them
+      const permMorph = String(
+        isSk1 ? getVal("PermMorph1") : getVal("PermMorph2") || ""
+      ).trim();
+      const tempMorph = String(
+        isSk1 ? getVal("Morph1") : getVal("Morph2") || ""
+      ).trim();
 
-      // Clean up the combined string to remove extra commas and whitespace
+      // Create a combined string for the parsing logic
       const combinedMorph = [permMorph, tempMorph]
-        .map((s) => String(s || "").trim())
-        .filter(Boolean)
+        .filter(Boolean) // Remove empty strings
         .join(",")
         .replace(/,+/g, ",") // Replace multiple commas with a single one
         .replace(/^,|,$/g, ""); // Remove leading or trailing commas
@@ -464,8 +481,11 @@
       gUI.roll = {
         ability_R: r,
         sk1CB: isSk1,
+        // Store all three versions of the morph string
+        skMorph: combinedMorph, // Combined for parsing logic
+        permMorph: permMorph, // Separate for logging
+        tempMorph: tempMorph, // Separate for logging
         // Get values based on whether Sk1 or Sk2 column was checked
-        skMorph: combinedMorph, // Use the combined morph string
         skTyp: isSk1 ? getVal("Sk1Typ") : getVal("Sk2Typ"),
         skSk: isSk1 ? getVal("Sk1") : getVal("Sk2"),
         skIsOn: getVal("On"),
@@ -497,7 +517,6 @@
       };
 
       // --- Set isNish Flag ---
-      // Resolve Nish row index and compare with current row 'r'
       const nishRowResolved = fResolveRow("NishAtr_R");
       if (!isNaN(nishRowResolved) && r === nishRowResolved) {
         gUI.roll.isNish = true;
@@ -508,37 +527,28 @@
       const rData = gUI.roll; // Alias for convenience
 
       // === Clean String Fields ===
-      // Remove trailing ID, trim whitespace, remove leading commas from morph
       rData.skName = String(rData.skNameID || "")
         .replace(/\s{2,}_\w{6}$/, "")
         .trim();
-      rData.skMorph = String(rData.skMorph || "")
-        .trim()
-        .replace(/^,+/, "");
       rData.skTyp = String(rData.skTyp || "").trim();
       rData.skIsOn = String(rData.skIsOn || "").trim();
       rData.skDur = String(rData.skDur || "").trim();
       rData.skMeta = String(rData.skMeta || "")
         .trim()
         .toUpperCase(); // Store Meta tag uppercase
-      // Ensure skMeta tag is valid, otherwise clear it
       if (rData.skMeta && !(gUI.list?.metaColor || []).includes(rData.skMeta)) {
         rData.skMeta = "";
       }
 
       // === Clean Numeric Fields ===
-      // Convert Sk to number >= 1, else empty string
       const sk = parseInt(rData.skSk, 10);
       rData.skSk = !isNaN(sk) && sk >= 1 ? sk : "";
-      // Convert Act to number >= 1, else empty string
       const act = parseInt(String(rData.skAct || "").trim(), 10);
       rData.skAct = !isNaN(act) && act >= 1 ? act : "";
-      // Convert Uses to number, allow any integer (including 0 or negative), else empty string
       const uses = parseInt(rData.skUses, 10);
       rData.skUses = !isNaN(uses) ? uses : "";
 
       // === Set Initial Derived Values ===
-      // Default resulting type to the base skill type
       rData.resTyp = rData.skTyp;
 
       fMyConsoleLog(
@@ -549,11 +559,10 @@
       // --- Error Handling ---
       console.error("fClearAndSetGUIRoll: Error processing ability data:", err);
       fMyConsoleLog(`❌ Error populating/cleaning gUI.roll: ${err.message}`);
-      // Show error to user via sidebar
       await fShowMessage(`❌ Error processing skill data: ${err.message}`);
       return false; // Indicate failure
     }
-  } // END fClearAndSetGUIRoll
+  } // End function fClearAndSetGUIRoll
 
   // fVerifyAbilityHasSkAndType //////////////////////////////////////////////////////////////////
   // Purpose -> Performs basic validation on the populated gUI.roll object, ensuring

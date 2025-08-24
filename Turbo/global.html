@@ -72,7 +72,9 @@
       // --- Input values from Sheet (populated by fClearAndSetGUIRoll) ---
       sk1CB: false, // Flag: True if roll originated from Sk1 CheckBox column, false if Sk2
       ability_R: "", // 0-based row index of the ability/gear being rolled
-      skMorph: "", // Raw morph string from sheet ('Morph1' or 'Morph2' col)
+      skMorph: "", // Raw COMBINED morph string for roll calculations
+      permMorph: "", // Raw permanent morph string for logging
+      tempMorph: "", // Raw temporary morph string for logging
       skTyp: "", // Base skill type string ('Sk', 'Atr', 'Atk', etc.) from sheet ('Sk1Typ' or 'Sk2Typ' col)
       skSk: "", // Base skill value (numeric >= 1 or '') from sheet ('Sk1' or 'Sk2' col)
 
