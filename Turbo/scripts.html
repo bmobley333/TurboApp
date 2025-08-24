@@ -136,15 +136,16 @@
       valStr === "TRUE" ||
       valStr === "FALSE";
 
-    // === Set Base Attributes & Check Editability/Note ===
+    // === Set Base Attributes & Check Editability ===
     const bgColor = rowFormat.bg?.[c];
     const isEditable = fCheckIfEditable(r, c, bgColor, isCheckbox);
     fSetCellAttributes(cell, r, c, isEditable);
-    fCheckAndTagNote(cell, r, c); // For sheet notes
 
-    // === Add Custom Note Indicator ===
+    // === Add Note Indicator (Custom note takes precedence) ===
     if (gUI.customNotes?.[r]?.[c]?.trim()) {
-      cell.classList.add("has-custom-note");
+      cell.classList.add("has-custom-note"); // Red triangle
+    } else {
+      fCheckAndTagNote(cell, r, c); // Check for sheet note (black triangle)
     }
 
     // === Determine Content Type (Dropdown or Standard) ===
@@ -2783,8 +2784,8 @@
 
   /**
    * Purpose: Handles the save action from the custom note editor modal. Updates the
-   * gUI.customNotes array, adds/removes the visual indicator class on the cell,
-   * and hides the modal.
+   * gUI.customNotes array, manages the visual indicator (switching between custom
+   * and sheet notes), hides the modal, and triggers an auto-save.
    * Assumptions: The modal's dataset contains the correct 'r' and 'c' for the target cell.
    * Notes: An empty or whitespace-only note is treated as a deletion.
    * @param {} - No parameters.
@@ -2801,6 +2802,7 @@
 
     const newNoteText = textarea.value.trim();
     const cell = gUI.grid2D?.[r]?.[c];
+    const sheetNoteExists = !!gUI.notes?.[r]?.[c]?.trim();
 
     // Update the data model
     gUI.customNotes[r][c] = newNoteText;
@@ -2808,9 +2810,16 @@
     // Update the visual indicator on the cell
     if (cell) {
       if (newNoteText) {
-        cell.classList.add("has-custom-note");
+        // If a custom note exists, it always gets the red triangle.
+        cell.classList.remove("has-note"); // Remove black triangle if present
+        cell.classList.add("has-custom-note"); // Add red triangle
       } else {
+        // If the custom note is cleared, remove the red triangle.
         cell.classList.remove("has-custom-note");
+        // If a sheet note exists for this cell, restore the black triangle.
+        if (sheetNoteExists) {
+          cell.classList.add("has-note");
+        }
       }
     }
 
@@ -2818,8 +2827,9 @@
       `   -> Custom note for [${r}, ${c}] saved to memory. Length: ${newNoteText.length}.`
     );
 
-    // Hide the modal
+    // Hide the modal and trigger auto-save
     modal.style.display = "none";
+    fHandleAutoSaveTextToFirestore();
   } // End function fHandleCustomNoteSave
 
   /**
@@ -2865,8 +2875,7 @@
 
   /**
    * Purpose: Handles the delegated 'contextmenu' (right-click) event for the grid.
-   * Opens the custom note editor for a cell if it doesn't already have an
-   * existing sheet-based note tooltip.
+   * Opens the custom note editor for any cell.
    * Assumptions: The grid has a 'contextmenu' event listener attached.
    * Notes: Prevents the default browser right-click menu.
    * @param {MouseEvent} event - The contextmenu event object.
@@ -2883,19 +2892,7 @@
     const c = parseInt(cell.dataset.c, 10);
     if (isNaN(r) || isNaN(c)) return;
 
-    // Only block custom notes if a sheet note (black triangle) already exists.
-    const hasSheetNote = cell.classList.contains("has-note");
-
-    if (hasSheetNote) {
-      fMyConsoleLog(
-        `   -> Custom note for [${r}, ${c}] blocked (hasSheetNote: ${hasSheetNote}).`
-      );
-      fShowMessage(
-        "Cannot add a custom note to a cell that already has a sheet note."
-      );
-      return;
-    }
-
+    // No restrictions - allow adding a custom note to any cell.
     fMyConsoleLog(`✒️ Custom Note Editor triggered for cell [${r}, ${c}]`);
     fShowCustomNoteEditor(r, c);
   } // End function fHandleGridRightClick
