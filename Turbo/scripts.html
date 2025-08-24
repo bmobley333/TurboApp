@@ -347,29 +347,33 @@
     return { displayValue, isUrl };
   } // END fCheckAndTagUrl
 
-  // fPopulateCellContent ////////////////////////////////////////////////////////////
-  // Purpose -> Populates a cell element with either a checkbox (using fMakeCorrectCheckBoxType)
-  //            or text content. Strips trailing ID patterns from text content.
-  // Inputs  -> cell (HTMLElement): The cell div element.
-  //         -> r (Number): 0-based row index (passed to fMakeCorrectCheckBoxType).
-  //         -> c (Number): 0-based column index (passed to fMakeCorrectCheckBoxType).
-  //         -> displayValue (Any): The value to display (used for text content).
-  //         -> isCheckbox (Boolean): True if the cell should contain a checkbox.
-  // Outputs -> None (Modifies the input cell element's content).
+  /**
+   * Purpose -> Populates a cell element with either a checkbox (using fMakeCorrectCheckBoxType)
+   * or text content wrapped in a span. Strips trailing ID patterns from text content.
+   * Inputs  -> cell (HTMLElement): The cell div element.
+   * -> r (Number): 0-based row index (passed to fMakeCorrectCheckBoxType).
+   * -> c (Number): 0-based column index (passed to fMakeCorrectCheckBoxType).
+   * -> displayValue (Any): The value to display (used for text content).
+   * -> isCheckbox (Boolean): True if the cell should contain a checkbox.
+   * Outputs -> None (Modifies the input cell element's content).
+   */
   function fPopulateCellContent(cell, r, c, displayValue, isCheckbox) {
     if (isCheckbox) {
       // Append a checkbox if required
       cell.appendChild(fMakeCorrectCheckBoxType(r, c));
     } else {
-      // Otherwise, set text content, stripping any trailing ID
+      // Otherwise, set text content inside a span
       const idPattern = /\s{2,}_\w{6}$/; // Matches '  _XXXXXX' at end of string
       const text =
         typeof displayValue === "string" && idPattern.test(displayValue)
           ? displayValue.replace(idPattern, "") // Strip ID if found
           : displayValue; // Use original value otherwise
-      cell.textContent = text;
+
+      const textSpan = document.createElement("span");
+      textSpan.textContent = text ?? ""; // Use empty string for null/undefined
+      cell.appendChild(textSpan);
     }
-  } // END fPopulateCellContent
+  } // End function fPopulateCellContent
 
   // fApplyCellFormatting ////////////////////////////////////////////////////////////
   // Purpose -> Applies styles (background, font weight/size/style/family, wrap)
@@ -1694,17 +1698,28 @@
 
   /**
    * Purpose -> Determines if a tooltip should be shown for a given cell based on
-   * whether its content overflows or if it has an associated sheet note or custom note.
+   * whether its content overflows (horizontally or vertically) or if it has an
+   * associated sheet note or custom note.
    * Assumptions: gUI.notes and gUI.customNotes are populated.
-   * Notes: Checks three conditions: overflow, sheet note, custom note.
+   * Notes: Checks for overflow within the cell's inner span, and also checks for
+   * sheet notes and custom notes.
    * @param {number} r - 0-based row index.
    * @param {number} c - 0-based column index.
    * @param {HTMLElement} cell - The cell element.
    * @returns {boolean} True if tooltip should be shown, false otherwise.
    */
   function fIsTooltipBoxNeeded(r, c, cell) {
-    // Check for horizontal overflow (scrollWidth > clientWidth)
-    const isOverflowing = cell.scrollWidth > cell.clientWidth + 1; // +1 for tolerance
+    const textSpan = cell.querySelector("span");
+
+    // Check for overflow within the inner span if it exists
+    let isOverflowing = false;
+    if (textSpan) {
+      const isHorizontallyOverflowing =
+        textSpan.scrollWidth > textSpan.clientWidth + 1;
+      const isVerticallyOverflowing =
+        textSpan.scrollHeight > textSpan.clientHeight + 1;
+      isOverflowing = isHorizontallyOverflowing || isVerticallyOverflowing;
+    }
 
     // Check if a sheet note exists for this cell
     const sheetNoteText = gUI.notes?.[r]?.[c]?.trim();
@@ -1727,14 +1742,22 @@
    * @returns {string} HTML string content for the tooltip.
    */
   function fBuildsTooltipBoxesContent(r, c, cell) {
-    const isOverflowing = cell.scrollWidth > cell.clientWidth + 1;
+    const textSpan = cell.querySelector("span");
     const sheetNoteText = gUI.notes?.[r]?.[c]?.trim();
     const customNoteText = gUI.customNotes?.[r]?.[c]?.trim();
     let tooltipContent = "";
 
-    // Add cell's text content if it's overflowing
-    if (isOverflowing) {
-      tooltipContent += cell.textContent.trim();
+    // Check for overflow within the inner span if it exists
+    let isOverflowing = false;
+    if (textSpan) {
+      isOverflowing =
+        textSpan.scrollWidth > textSpan.clientWidth + 1 ||
+        textSpan.scrollHeight > textSpan.clientHeight + 1;
+    }
+
+    // Add the span's full text content if it's overflowing
+    if (isOverflowing && textSpan) {
+      tooltipContent += textSpan.textContent.trim();
     }
 
     // Add sheet note text if it exists
@@ -2843,7 +2866,7 @@
   /**
    * Purpose: Handles the delegated 'contextmenu' (right-click) event for the grid.
    * Opens the custom note editor for a cell if it doesn't already have an
-   * overflow or sheet-based note tooltip.
+   * existing sheet-based note tooltip.
    * Assumptions: The grid has a 'contextmenu' event listener attached.
    * Notes: Prevents the default browser right-click menu.
    * @param {MouseEvent} event - The contextmenu event object.
@@ -2860,16 +2883,15 @@
     const c = parseInt(cell.dataset.c, 10);
     if (isNaN(r) || isNaN(c)) return;
 
-    // Check for existing tooltips that should prevent custom notes
+    // Only block custom notes if a sheet note (black triangle) already exists.
     const hasSheetNote = cell.classList.contains("has-note");
-    const isOverflowing = cell.scrollWidth > cell.clientWidth + 1;
 
-    if (hasSheetNote || isOverflowing) {
+    if (hasSheetNote) {
       fMyConsoleLog(
-        `   -> Custom note for [${r}, ${c}] blocked (hasSheetNote: ${hasSheetNote}, isOverflowing: ${isOverflowing}).`
+        `   -> Custom note for [${r}, ${c}] blocked (hasSheetNote: ${hasSheetNote}).`
       );
       fShowMessage(
-        "Cannot add a custom note to a cell that already has a sheet note or overflowing text."
+        "Cannot add a custom note to a cell that already has a sheet note."
       );
       return;
     }

@@ -96,6 +96,34 @@ body {
 .cell.wrap {
   white-space: normal;
   word-wrap: break-word;
+  /* overflow is now handled by the child span */
+  align-items: flex-start; /* Align text to the top */
+}
+
+.cell > span {
+  /* This span will contain the text inside every cell */
+  width: 100%;
+  overflow: hidden; /* Hide overflow for non-wrapping cells */
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.cell.wrap > span {
+  /* This applies ONLY to the span inside a wrapped cell */
+  height: 100%; /* Allow the span to fill the cell's height */
+  white-space: normal;
+  word-wrap: break-word;
+  overflow-y: auto; /* Make ONLY the span scrollable */
+  text-overflow: clip;
+
+  /* --- Hide the scrollbar --- */
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}
+
+/* Hide scrollbar for Chrome, Safari and Opera */
+.cell.wrap > span::-webkit-scrollbar {
+  display: none;
 }
 
 .cell-header {
@@ -151,14 +179,15 @@ body {
 
 .cell.has-custom-note::after {
   content: "";
-  position: absolute;
+  position: absolute; /* Anchor to the .cell parent */
   top: 0;
   right: 0;
   width: 0;
   height: 0;
   border-style: solid;
   border-width: 0 6px 6px 0; /* Adjust size of triangle here */
-  border-color: transparent #FF0000 transparent transparent; /* Red triangle */
+  border-color: transparent #ff0000 transparent transparent; /* Red triangle */
+  z-index: 1; /* Ensure it's above the text content */
 }
 
 .cell.has-note {
@@ -532,3 +561,4 @@ body {
   white-space: pre-wrap; /* Allow newlines from notes to work */
   word-wrap: break-word; /* Wrap long words */
 }
+
