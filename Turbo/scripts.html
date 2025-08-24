@@ -1745,12 +1745,13 @@
       tooltipContent += `Note: ${sheetNoteText}`;
     }
 
-    // Add custom note text if it exists
+    // Add custom note text if it exists, with new formatting
     if (customNoteText) {
       if (tooltipContent) {
         tooltipContent += "\n---\n"; // Add a separator
       }
-      tooltipContent += `Custom Note: ${customNoteText}`;
+      // Add a styled, underlined, bold red title for the custom note
+      tooltipContent += `<span style="color: red; font-weight: bold; text-decoration: underline;">Custom Note:</span>\n${customNoteText}`;
     }
 
     // Convert newlines to HTML line breaks for display
@@ -2742,6 +2743,22 @@
   // ==========================================================================
 
   /**
+   * Purpose: Handles the click event for the 'Clear Note' button in the custom note modal.
+   * It clears the textarea and then calls the save handler to process the deletion.
+   * Assumptions: The modal is open and its elements are available in the DOM.
+   * Notes: This provides a quick way for users to delete a note without manual backspacing.
+   * @param {} - No parameters.
+   * @returns {void}
+   */
+  function fHandleCustomNoteClear() {
+    const textarea = document.getElementById("customNoteTextarea");
+    if (textarea) {
+      textarea.value = ""; // Clear the text area
+      fHandleCustomNoteSave(); // Call the save function to process the empty note
+    }
+  } // End function fHandleCustomNoteClear
+
+  /**
    * Purpose: Handles the save action from the custom note editor modal. Updates the
    * gUI.customNotes array, adds/removes the visual indicator class on the cell,
    * and hides the modal.
@@ -2784,7 +2801,7 @@
 
   /**
    * Purpose: Sets up event listeners for the custom note editor modal, handling
-   * save, cancel, and escape key actions.
+   * save, clear, cancel, and escape key actions.
    * Assumptions: The modal HTML exists in ui.html.
    * Notes: This wires up the UI for the custom note feature.
    * @param {} - No parameters.
@@ -2794,9 +2811,10 @@
     fMyConsoleLog("🖱️ Setting up Custom Note Modal Listeners...");
     const modal = document.getElementById("customNoteModal");
     const saveBtn = document.getElementById("customNoteSaveButton");
+    const clearBtn = document.getElementById("customNoteClearButton");
     const cancelBtn = document.getElementById("customNoteCancelButton");
 
-    if (!modal || !saveBtn || !cancelBtn) {
+    if (!modal || !saveBtn || !clearBtn || !cancelBtn) {
       console.error(
         "Custom note modal listener setup failed: elements not found."
       );
@@ -2804,6 +2822,7 @@
     }
 
     saveBtn.addEventListener("click", fHandleCustomNoteSave);
+    clearBtn.addEventListener("click", fHandleCustomNoteClear);
     cancelBtn.addEventListener("click", () => {
       modal.style.display = "none";
     });
