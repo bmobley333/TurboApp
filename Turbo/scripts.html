@@ -4208,6 +4208,9 @@
         case "game-toggleSidebar":
           fToggleSidebar();
           break;
+        case "game-togglePermMorphs":
+          fTogglePermMorphColumns();
+          break;
         case "game-updateLevelSlotName":
           fHandleNewLevelSlotName();
           break;
@@ -6033,6 +6036,74 @@
       fShowGridsColumnRange(gearRanges); // Show all defined gear ranges
     }
   } // END fToggleGearColumns
+
+  /**
+   * Purpose: Handles the <Game><Perm Morphs (Show/Hide)> menu action. Checks if any column
+   * within the permanent morph ranges (defined in gUI.permMorphCols) is currently visible.
+   * Calls fHideGridsColumnRange or fShowGridsColumnRange accordingly to toggle visibility.
+   * Assumptions: gUI.permMorphCols is defined in global.html.
+   * Notes: This is a direct adaptation of function fToggleGearColumns.
+   * @param {} - No parameters.
+   * @returns {void}
+   */
+  function fTogglePermMorphColumns() {
+    const permMorphRanges = gUI.permMorphCols; // Get the array of perm morph column ranges
+
+    // === Validate Configuration ===
+    if (!Array.isArray(permMorphRanges) || permMorphRanges.length === 0) {
+      console.error(
+        "fTogglePermMorphColumns: gUI.permMorphCols is not a valid array or is empty."
+      );
+      fMyConsoleLog(
+        "❌ Error: Permanent Morph column definition missing or invalid."
+      );
+      return;
+    }
+
+    // === Check Current Visibility ===
+    // Determine if *any* column within the defined ranges is currently visible
+    let isCurrentlyVisible = false;
+    for (const range of permMorphRanges) {
+      if (
+        !range ||
+        typeof range.c1 === "undefined" ||
+        typeof range.c2 === "undefined"
+      ) {
+        console.warn(
+          "fTogglePermMorphColumns: Skipping invalid range object:",
+          range
+        );
+        continue;
+      }
+      const startCol = fResolveCol(range.c1);
+      const endCol = fResolveCol(range.c2);
+      if (isNaN(startCol) || isNaN(endCol)) {
+        console.warn(
+          `fTogglePermMorphColumns: Skipping range due to invalid tags/indices: ${range.c1}, ${range.c2}`
+        );
+        continue;
+      }
+
+      const cMin = Math.min(startCol, endCol);
+      const cMax = Math.max(startCol, endCol);
+      for (let c = cMin; c <= cMax; c++) {
+        if (!gUI.hiddenColumns.has(c)) {
+          isCurrentlyVisible = true;
+          break;
+        }
+      }
+      if (isCurrentlyVisible) break;
+    }
+
+    // === Toggle Visibility ===
+    if (isCurrentlyVisible) {
+      fMyConsoleLog("⚙️ Toggling Perm Morphs: Currently Visible -> Hiding...");
+      fHideGridsColumnRange(permMorphRanges);
+    } else {
+      fMyConsoleLog("⚙️ Toggling Perm Morphs: Currently Hidden -> Showing...");
+      fShowGridsColumnRange(permMorphRanges);
+    }
+  } // End function fTogglePermMorphColumns
 
   // fLoot_RollRndTreasure ///////////////////////////////////////////////////////
   // Purpose -> Rolls 1d12 to randomly determine and trigger a specific type of
