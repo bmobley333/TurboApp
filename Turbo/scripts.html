@@ -2783,6 +2783,32 @@
   } // End function fHandleCustomNoteClear
 
   /**
+   * Purpose: Adds or removes a visual indicator (.custom-data-cell) for blank
+   * cells that contain user-entered text or a custom note.
+   * Assumptions: The cell at (r, c) exists in the DOM.
+   * Notes: This centralizes the logic for the blue border indicator.
+   * @param {number} r - The 0-based row index of the cell.
+   * @param {number} c - The 0-based column index of the cell.
+   * @returns {void}
+   */
+  function fUpdateCustomDataIndicator(r, c) {
+    const cell = gUI.grid2D?.[r]?.[c];
+    if (!cell) return;
+
+    // Only apply this indicator to cells that are designated as editable.
+    if (cell.isContentEditable) {
+      const hasText = !!String(gUI.arr[r][c] ?? "").trim();
+      const hasCustomNote = !!gUI.customNotes?.[r]?.[c]?.trim();
+
+      if (hasText || hasCustomNote) {
+        cell.classList.add("custom-data-cell");
+      } else {
+        cell.classList.remove("custom-data-cell");
+      }
+    }
+  } // End function fUpdateCustomDataIndicator
+
+  /**
    * Purpose: Handles the save action from the custom note editor modal. Updates the
    * gUI.customNotes array, manages the visual indicator (switching between custom
    * and sheet notes), hides the modal, and triggers an auto-save.
@@ -2822,6 +2848,9 @@
         }
       }
     }
+
+    // Update the blue border indicator
+    fUpdateCustomDataIndicator(r, c);
 
     fMyConsoleLog(
       `   -> Custom note for [${r}, ${c}] saved to memory. Length: ${newNoteText.length}.`
@@ -3321,7 +3350,8 @@
   /**
    * Purpose -> Handles the 'blur' event for contenteditable cells. Updates the
    * data model (gUI.arr), handles custom Ability/Gear name logic (adding ⚡),
-   * and triggers specific calculations or alerts for other edited cells.
+   * and triggers specific calculations or alerts for other edited cells. Also
+   * updates the custom data indicator.
    * @param {FocusEvent} event - The blur event object.
    * @returns {void}
    */
@@ -3462,7 +3492,7 @@
       return;
     }
 
-    // === Original Logic for other cells (Meta, Gear, Vit) that should REMAIN editable ===
+    // === Original Logic for other cells (Meta, Gear, Vit, and BLANK WHITE CELLS) ===
     const newValue = cellDiv.textContent;
     const oldValueInModel = gUI.arr[r][c];
     if (String(newValue ?? "") === String(oldValueInModel ?? "")) {
@@ -3578,6 +3608,8 @@
         fMyConsoleLog(
           `   -> Data model gUI.arr[${r}][${c}] updated to: "${finalValueToStore}"`
         );
+        // Update the blue border indicator for the cell
+        fUpdateCustomDataIndicator(r, c);
         fHandleAutoSaveTextToFirestore();
         if (metaOrChannelAlertPosted) {
           setTimeout(() => fSendLogToGMScreenAndPS(), 0);
@@ -3585,6 +3617,10 @@
       } else if (metaOrChannelAlertPosted) {
         setTimeout(() => fSendLogToGMScreenAndPS(), 0);
       }
+    } else {
+      // If the update was aborted (e.g., validation failed), still run the indicator update
+      // to ensure the border is removed if the cell was cleared back to its original state.
+      fUpdateCustomDataIndicator(r, c);
     }
   } // End function fHandleGridCellEdit
 
