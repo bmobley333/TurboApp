@@ -145,6 +145,21 @@ body {
   color: #dd00dd;
 }
 
+.cell.has-custom-note {
+  position: relative; /* Anchor for the pseudo-element */
+}
+
+.cell.has-custom-note::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 0 6px 6px 0; /* Adjust size of triangle here */
+  border-color: transparent #FF0000 transparent transparent; /* Red triangle */
+}
 
 .cell.has-note {
   position: relative; /* Anchor for the pseudo-element */
