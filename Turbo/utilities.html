@@ -1254,6 +1254,36 @@
     gUI.promptPromiseReject = null;
   } // END fHandlePromptResponse
 
+  /**
+   * Purpose: Hides the input prompt modal and resolves the pending Promise with the user's response.
+   * Assumptions: Called by event listeners in fSetupInputPromptModalListeners.
+   * Notes: This is the specific handler for the input prompt modal.
+   * @param {string | object | null} response - The user's response (text, clear object, or null).
+   * @returns {void}
+   */
+  function fHandleInputPromptResponse(response) {
+    const overlay = document.getElementById("inputPromptModal");
+    if (overlay) {
+      overlay.style.display = "none";
+    } else {
+      console.error(
+        "Input prompt modal overlay element (#inputPromptModal) not found when trying to hide."
+      );
+    }
+
+    if (typeof gUI.promptPromiseResolve === "function") {
+      gUI.promptPromiseResolve(response);
+      fMyConsoleLog(`Input Prompt Promise Resolved.`);
+    } else {
+      console.error(
+        "Input prompt promise resolve function not found when trying to resolve."
+      );
+    }
+
+    gUI.promptPromiseResolve = null;
+    gUI.promptPromiseReject = null;
+  } // End function fHandleInputPromptResponse
+
   // fSetupPromptModalListeners //////////////////////////////////////////////////////
   // Purpose -> Sets up event listeners for the prompt modal 'Yes' and 'No' buttons.
   //            Clicks call fHandlePromptResponse with true or false respectively.
@@ -1309,4 +1339,87 @@
 
     fMyConsoleLog("✅ Prompt Modal Listeners Attached.");
   } // END fSetupPromptModalListeners
+
+  /**
+   * Purpose: Sets up event listeners for the custom input prompt modal buttons.
+   * Assumptions: Modal HTML and fHandleInputPromptResponse exist.
+   * Notes: Wires up Save, Clear, and Cancel buttons.
+   * @param {} - No parameters.
+   * @returns {void}
+   */
+  function fSetupInputPromptModalListeners() {
+    fMyConsoleLog("🖱️ Setting up Input Prompt Modal Listeners...");
+
+    const saveBtn = document.getElementById("inputPromptSaveButton");
+    const clearBtn = document.getElementById("inputPromptClearButton");
+    const cancelBtn = document.getElementById("inputPromptCancelButton");
+    const inputEl = document.getElementById("inputPromptText");
+
+    if (!saveBtn || !clearBtn || !cancelBtn || !inputEl) {
+      console.error("Input prompt modal buttons or input field not found.");
+      return;
+    }
+
+    // Use the new, specific handler fHandleInputPromptResponse
+    saveBtn.addEventListener("click", () =>
+      fHandleInputPromptResponse(inputEl.value)
+    );
+    clearBtn.addEventListener("click", () =>
+      fHandleInputPromptResponse({ clear: true })
+    );
+    cancelBtn.addEventListener("click", () => fHandleInputPromptResponse(null));
+
+    // Allow "Enter" key to submit
+    inputEl.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        fHandleInputPromptResponse(inputEl.value);
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        fHandleInputPromptResponse(null);
+      }
+    });
+
+    fMyConsoleLog("✅ Input Prompt Modal Listeners Attached.");
+  } // End function fSetupInputPromptModalListeners
+
+  /**
+   * Purpose: Displays a custom modal with a text input and returns a Promise.
+   * Assumptions: The corresponding modal HTML exists in the DOM.
+   * Notes: The promise resolves with the input text on 'Save', an object { clear: true }
+   * on 'Clear', or null on 'Cancel'. It focuses the 'Save' button by default to fix a browser
+   * rendering bug with text alignment and provide a better user experience.
+   * @param {string} title - The title to display in the modal.
+   * @param {string} prefillText - The initial text to populate the input field with.
+   * @returns {Promise<string | object | null>} A Promise resolving with the result.
+   */
+  async function fShowInputPrompt(title, prefillText = "") {
+    const overlay = document.getElementById("inputPromptModal");
+    const titleEl = document.getElementById("inputPromptTitle");
+    const inputEl = document.getElementById("inputPromptText");
+    const saveBtn = document.getElementById("inputPromptSaveButton");
+
+    if (!overlay || !titleEl || !inputEl || !saveBtn) {
+      console.error("Input prompt modal elements not found in DOM!");
+      return Promise.reject(
+        new Error("Input prompt modal elements not found.")
+      );
+    }
+
+    titleEl.textContent = title;
+    inputEl.value = prefillText;
+    overlay.style.display = "flex";
+
+    // Defer focus logic to fix a browser rendering bug with text-align
+    setTimeout(() => {
+      // Set focus to the Save button. This serves two purposes:
+      // 1. It removes focus from the input, forcing a re-render that corrects the text-align.
+      // 2. It provides a good UX default, allowing the user to press Enter to save.
+      saveBtn.focus();
+    }, 0); // Use a 0ms timeout to run this after the current render cycle
+
+    return new Promise((resolve) => {
+      gUI.promptPromiseResolve = resolve; // Re-use the existing promise resolver
+    });
+  } // End function fShowInputPrompt
 </script>

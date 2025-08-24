@@ -148,6 +148,16 @@
       fCheckAndTagNote(cell, r, c); // Check for sheet note (black triangle)
     }
 
+    // === Add Custom Ability Cursor Class ===
+    const abilityCol = fResolveCol("Ability");
+    if (
+      c === abilityCol &&
+      typeof value === "string" &&
+      value.startsWith("⚡")
+    ) {
+      cell.classList.add("custom-ability-cell");
+    }
+
     // === Determine Content Type (Dropdown or Standard) ===
     const dropConfig = fFindDropdownMatch(r, c);
     if (dropConfig) {
@@ -2073,27 +2083,6 @@
   } // End fProcessAbilityChange
 
   /**
-   * Purpose: Replaces the content of a given cell with a dropdown placeholder.
-   * @param {number} r - The 0-based row index of the cell.
-   * @param {number} c - The 0-based column index of the cell.
-   * @returns {void}
-   */
-  function fRestoreDropdownPlaceholderToCell(r, c) {
-    const cell = gUI.grid2D?.[r]?.[c];
-    if (!cell) return;
-
-    cell.innerHTML = ""; // Clear existing content.
-    const placeholder = document.createElement("div");
-    placeholder.className = "dropdown-placeholder";
-    cell.appendChild(placeholder);
-
-    // Restore styles for a dropdown-type cell.
-    cell.style.padding = "0";
-    cell.style.overflow = "visible";
-    cell.classList.remove("left-align-text"); // Remove edit-mode alignment.
-  } // End function fRestoreDropdownPlaceholderToCell
-
-  /**
    * Purpose -> Helper function to clear relevant cells in a grid row when an
    * Ability selection is removed or when preparing for a new selection.
    * @param {number} r - Row index to clear.
@@ -2109,8 +2098,6 @@
       }...`
     );
 
-    const abilityCol = fResolveCol("Ability");
-
     gUI.list?.clearAbilityColTags_EmptyString?.forEach((tag) => {
       const c = fResolveCol(tag);
       if (isNaN(c)) return;
@@ -2120,9 +2107,30 @@
           `     -> Skipping clear for column '${tag}' due to saveAbilityNameID=true.`
         );
       } else if (tag === "Ability") {
-        // For the main ability cell, update the model and restore the placeholder
-        gUI.arr[r][c] = "";
-        fRestoreDropdownPlaceholderToCell(r, c);
+        // Find the config for the ability dropdown
+        const abilityConfig = gUI.dropDownBox.find(
+          (config) => config.gUIListKey === "myCSListFSData"
+        );
+        const cell = gUI.grid2D?.[r]?.[c];
+
+        if (cell && abilityConfig) {
+          // Create a new, functional dropdown
+          const dropdown = fCreateDropdownElement(
+            r,
+            c,
+            abilityConfig.choices,
+            ""
+          );
+          cell.innerHTML = "";
+          cell.appendChild(dropdown);
+          cell.classList.remove("custom-ability-cell"); // Remove the cursor class
+          cell.style.padding = "0";
+          cell.style.overflow = "visible";
+          gUI.arr[r][c] = ""; // Update the data model
+        } else {
+          // Fallback to just clearing the value if something is wrong
+          fSetGridValue(r, c, "");
+        }
       } else {
         // For all other cells, use the standard setter
         fSetGridValue(r, c, "");
@@ -3452,58 +3460,7 @@
 
     fHideTooltip();
 
-    const abilityCol = fResolveCol("Ability");
     const colTag = Object.keys(gUI.colTag).find((tag) => gUI.colTag[tag] === c);
-
-    // === Custom Ability/Gear Name Handling ===
-    if (c === abilityCol) {
-      cellDiv.contentEditable = false; // Turn off editing for this cell type now.
-      const newText = cellDiv.textContent.trim();
-      const oldValueInModel = String(gUI.arr[r][c] ?? "");
-
-      if (newText === "" || newText === "⚡") {
-        if (oldValueInModel !== "") {
-          fHandleClearAbilityRow(r);
-          fCalculatesEnc_MR_AP();
-        }
-        return;
-      }
-
-      const oldTextForCompare = oldValueInModel.replace(/^⚡\s*/, "").trim();
-      if (newText === oldTextForCompare) {
-        if (!oldValueInModel.startsWith("⚡")) {
-          const abilityConfig = gUI.dropDownBox.find(
-            (config) => config.gUIListKey === "myCSListFSData"
-          );
-          if (abilityConfig) {
-            const dropdown = fCreateDropdownElement(
-              r,
-              c,
-              abilityConfig.choices,
-              oldValueInModel
-            );
-            cellDiv.innerHTML = "";
-            cellDiv.appendChild(dropdown);
-            cellDiv.style.padding = "0";
-            cellDiv.style.overflow = "visible";
-          } else {
-            cellDiv.textContent = oldValueInModel;
-          }
-        } else {
-          cellDiv.textContent = oldValueInModel;
-        }
-        return;
-      }
-
-      let finalValueToStore = newText;
-      if (!finalValueToStore.startsWith("⚡")) {
-        finalValueToStore = "⚡" + finalValueToStore;
-      }
-      cellDiv.textContent = finalValueToStore;
-      gUI.arr[r][c] = finalValueToStore;
-      fHandleAutoSaveTextToFirestore();
-      return;
-    }
 
     // === Custom Data Column Handling (Sk1Typ, Sk1, etc.) ===
     const customizableDataCols = [
@@ -9477,11 +9434,11 @@
 
   /**
    * Purpose: Handles the delegated 'dblclick' event for the grid. Triggers edit
-   * mode for customizable columns, but only if the row has a valid ability name.
+   * mode for customizable columns or opens a prompt for editing an Ability name.
    * @param {MouseEvent} event - The dblclick event object.
    * @returns {void}
    */
-  function fHandleGridDblClick(event) {
+  async function fHandleGridDblClick(event) {
     const cell = event.target.closest(".cell");
     if (!cell) return;
 
@@ -9502,23 +9459,101 @@
     ];
     const colTag = Object.keys(gUI.colTag).find((tag) => gUI.colTag[tag] === c);
 
-    if (editableCols.includes(colTag)) {
-      // Validate that the ability/gear has a name before allowing data edits.
-      const abilityCol = fResolveCol("Ability");
-      const abilityName = gUI.arr[r]?.[abilityCol];
+    if (!editableCols.includes(colTag)) {
+      return; // Not a designated editable column
+    }
 
-      // Do not allow editing of data cells if the ability name itself is empty.
-      if (colTag !== "Ability" && !String(abilityName || "").trim()) {
-        fShowMessage("Empty ability name. Please edit a named ability.");
-        return; // Stop the edit from starting.
+    event.preventDefault();
+
+    if (colTag === "Ability") {
+      // --- NEW: Use custom prompt for editing ability names ---
+      fMyConsoleLog(`⚡ Edit Name Prompt triggered for cell [${r}, ${c}]`);
+      const currentName = String(gUI.arr[r]?.[c] ?? "")
+        .replace(/^⚡\s*/, "")
+        .trim();
+      try {
+        const result = await fShowInputPrompt(
+          "Enter new custom ability/gear name:",
+          currentName
+        );
+        fHandleAbilityNameEdit(r, c, result); // Handle the result
+      } catch (error) {
+        console.error("Error showing input prompt:", error);
       }
-
-      event.preventDefault();
+    } else {
+      // --- Existing logic for other data cells ---
+      const abilityName = fGetGridValue(r, "Ability");
+      if (!String(abilityName || "").trim()) {
+        fShowMessage("Empty ability name. Please edit a named ability.");
+        return;
+      }
       fMyConsoleLog(`⚡ Edit Mode triggered for ${colTag} cell [${r}, ${c}]`);
       fTransformAbilityCellToInput(cell);
       fShowValidationTooltip(cell, colTag, event);
     }
   } // End function fHandleGridDblClick
+
+  /**
+   * Purpose: Processes the result of an ability name edit from the custom input prompt.
+   * Assumptions: Called after the promise from fShowInputPrompt resolves.
+   * Notes: Updates the data model and DOM, clears the row if requested,
+   * and triggers an auto-save.
+   * @param {number} r - The 0-based row index of the edited cell.
+   * @param {number} c - The 0-based column index of the edited cell.
+   * @param {string | object | null} result - The result from the prompt.
+   * @returns {void}
+   */
+  function fHandleAbilityNameEdit(r, c, result) {
+    // Case 1: User cancelled (result is null)
+    if (result === null) {
+      fMyConsoleLog(`   -> User cancelled ability name edit for [${r}, ${c}].`);
+      return;
+    }
+
+    const cell = gUI.grid2D?.[r]?.[c];
+    if (!cell) return;
+
+    // Case 2: User clicked "Clear Ability" (result is { clear: true })
+    if (typeof result === "object" && result.clear === true) {
+      fMyConsoleLog(
+        `   -> User chose to clear ability for [${r}, ${c}]. Clearing row...`
+      );
+      fHandleClearAbilityRow(r);
+      fCalculatesEnc_MR_AP();
+      return;
+    }
+
+    // Case 3: User clicked "Save" (result is a string)
+    const trimmedNewName = String(result).trim();
+
+    // Sub-case: User saved an empty name, which is equivalent to clearing
+    if (trimmedNewName === "") {
+      fMyConsoleLog(
+        `   -> User saved an empty name for [${r}, ${c}]. Clearing row...`
+      );
+      fHandleClearAbilityRow(r);
+      fCalculatesEnc_MR_AP();
+      return;
+    }
+
+    // Sub-case: User entered a new name
+    const finalValueToStore = "⚡" + trimmedNewName;
+    fMyConsoleLog(
+      `   -> User set new ability name for [${r}, ${c}] to: "${finalValueToStore}"`
+    );
+
+    gUI.arr[r][c] = finalValueToStore;
+
+    cell.innerHTML = "";
+    const textSpan = document.createElement("span");
+    textSpan.textContent = finalValueToStore;
+    cell.appendChild(textSpan);
+    cell.classList.add("custom-ability-cell"); // Add the cursor class
+    cell.style.padding = "";
+    cell.style.overflow = "";
+
+    fHandleAutoSaveTextToFirestore();
+  } // End function fHandleAbilityNameEdit
 
   /**
    * Purpose: Handles 'keydown' events on the grid, specifically looking for the
@@ -9656,6 +9691,7 @@
     fSetupMenuInteractivity();
     fSetupMessageModalListeners();
     fSetupPromptModalListeners();
+    fSetupInputPromptModalListeners(); // <<< ADD THIS LINE
     fSetupCustomNoteModalListeners();
     fSetupSidebarActionListeners();
   });
