@@ -113,6 +113,38 @@
   // === Core Rendering & Grid Tag Setup  (End of Core Cell Creation Helpers) ===
   // ==========================================================================
 
+  /** function fCheckIfEditable
+   * Purpose -> [FINAL VERSION] Determines if a cell should be contentEditable,
+   * explicitly preventing header button cells from being editable.
+   * Assumptions: gUI.headerButtonCoords has been populated.
+   * @param {number} r - 0-based row index of the cell.
+   * @param {number} c - 0-based column index of the cell.
+   * @param {string | null} bgColor - Background color hex string or null.
+   * @param {boolean} isCheckbox - True if the cell contains a checkbox.
+   * @returns {boolean} True if the cell should be editable, false otherwise.
+   */
+  function fCheckIfEditable(r, c, bgColor, isCheckbox) {
+    // Absolutely prevent header button cells from being editable. This is the
+    // primary fix for the vanishing button bug.
+    if (gUI.headerButtonCoords.has(`${r},${c}`)) {
+      return false;
+    }
+
+    const isMetaRange =
+      gUI.range?.meta && fIsCellInRangeArray(r, c, [gUI.range.meta]);
+    const isMetaChannelRange =
+      gUI.range?.metaChannel &&
+      fIsCellInRangeArray(r, c, [gUI.range.metaChannel]);
+
+    if (isMetaRange || isMetaChannelRange) {
+      return true;
+    }
+
+    const isWhiteBg =
+      !bgColor || bgColor.toLowerCase() === "#ffffff" || bgColor === "white";
+    return isWhiteBg && !isCheckbox;
+  } // End function fCheckIfEditable
+
   /**
    * Purpose -> Creates and formats a single grid cell div element. Handles content
    * (text, checkbox, dropdown), URL/image/note tags, editability, and styling.
@@ -257,50 +289,31 @@
     return select;
   } // END fMakeDropdown
 
-  // fCheckIfEditable //////////////////////////////////////////////////////////////
-  // Purpose -> Determines if a cell should be contentEditable based on background
-  //            color, type (not a checkbox), or if it's a designated Meta/Channel cell.
-  // Inputs  -> r (Number): 0-based row index of the cell.
-  //         -> c (Number): 0-based column index of the cell.
-  //         -> bgColor (String | null): Background color hex string or null.
-  //         -> isCheckbox (Boolean): True if the cell contains a checkbox.
-  // Outputs -> (Boolean): True if the cell should be editable, false otherwise.
-  function fCheckIfEditable(r, c, bgColor, isCheckbox) {
-    // Check if the cell is within the Meta or Meta Channel ranges
-    const isMetaRange =
-      gUI.range?.meta && fIsCellInRangeArray(r, c, [gUI.range.meta]);
-    const isMetaChannelRange =
-      gUI.range?.metaChannel &&
-      fIsCellInRangeArray(r, c, [gUI.range.metaChannel]);
-
-    if (isMetaRange || isMetaChannelRange) {
-      return true; // Meta and Meta Channel cells are always editable (if not a checkbox, though they shouldn't be)
-    }
-
-    // Original logic for other cells
-    const isWhiteBg =
-      !bgColor || bgColor.toLowerCase() === "#ffffff" || bgColor === "white";
-    return isWhiteBg && !isCheckbox;
-  } // END fCheckIfEditable
-
-  // fSetCellAttributes //////////////////////////////////////////////////////////////
-  // Purpose -> Sets the data-r and data-c attributes on a cell element. Also sets
-  //            contentEditable and related styles if the cell is designated as editable.
-  // Inputs  -> cell (HTMLElement): The cell div element.
-  //         -> r (Number): 0-based row index.
-  //         -> c (Number): 0-based column index.
-  //         -> isEditable (Boolean): True if the cell should be contentEditable.
-  // Outputs -> None (Modifies the input cell element).
+  /** function fSetCellAttributes
+   * Purpose -> [FINAL VERSION] Sets data attributes, contentEditable, and styles for a cell,
+   * ensuring text-alignment styles are NOT applied to header button cells.
+   * Assumptions: The cell element is being created.
+   * @param {HTMLElement} cell - The cell div element.
+   * @param {number} r - 0-based row index.
+   * @param {number} c - 0-based column index.
+   * @param {boolean} isEditable - True if the cell should be contentEditable.
+   * @returns {void}
+   */
   function fSetCellAttributes(cell, r, c, isEditable) {
     cell.dataset.r = r;
     cell.dataset.c = c;
 
     if (isEditable) {
       cell.contentEditable = true;
-      cell.style.justifyContent = "flex-start"; // Align text left for editing
-      cell.style.textAlign = "left";
+
+      // This is the critical fix: Only apply text-alignment styles if the
+      // cell is NOT a designated header button cell.
+      if (!gUI.headerButtonCoords.has(`${r},${c}`)) {
+        cell.style.justifyContent = "flex-start"; // Align text left for editing
+        cell.style.textAlign = "left";
+      }
     }
-  } // END fSetCellAttributes
+  } // End function fSetCellAttributes
 
   // fCheckAndTagNote ////////////////////////////////////////////////////////////////
   // Purpose -> Adds the 'has-note' CSS class to a cell element if a corresponding
@@ -1146,26 +1159,27 @@
     );
   } // END fApplyGridManualColoring
 
-  // fAddGridsHeaderRowButtons ///////////////////////////////////////////////////////////////
-  // Purpose -> Finds specific cells designated by tags in headerButtonConfigs, clears
-  //            their content, and inserts configured image buttons.
-  // Inputs  -> None (Uses gUI.grid2D, calls helper functions).
-  // Outputs -> None (Modifies DOM by inserting images into cells).
+  /** function fAddGridsHeaderRowButtons
+   * Purpose -> Finds specific cells designated by tags in headerButtonConfigs, clears
+   * their content, and inserts configured image buttons. Also populates
+   * gUI.headerButtonCoords with the button locations.
+   * Assumptions: gUI.grid2D is populated, calls helper functions.
+   * @returns {void}
+   */
   function fAddGridsHeaderRowButtons() {
     fMyConsoleLog("⚙️ Adding Header Buttons...");
     let buttonsAdded = 0;
 
     // === Button Configurations ===
-    // Define where each button image should go and what action it performs.
     const headerButtonConfigs = [
       {
-        rowTag: "Button_R", // Row tag of the target cell
-        colTag: "DieButtonC", // Column tag of the target cell
-        action: "action-rollDice", // data-button-action attribute value
+        rowTag: "Button_R",
+        colTag: "DieButtonC",
+        action: "action-rollDice",
         imageUrl:
-          "https://raw.githubusercontent.com/bmobley333/TurboApp/main/Pics/Buttons/Button_d20.png", // Image source URL
-        altText: "Roll Dice", // Image alt text
-        titleText: "Roll Dice", // Image title text (tooltip)
+          "https://raw.githubusercontent.com/bmobley333/TurboApp/main/Pics/Buttons/Button_d20.png",
+        altText: "Roll Dice",
+        titleText: "Roll Dice",
       },
       {
         rowTag: "Button_R",
@@ -1203,30 +1217,32 @@
         altText: "Show Monsters",
         titleText: "Show Monsters",
       },
-      // Add more button configurations here
     ];
 
     // === Apply Buttons ===
-    // Iterate through configurations and add buttons to grid
     headerButtonConfigs.forEach((config) => {
-      // Find the target cell using tags
-      const cell = fGetGridCellFromRTagCTag(config.rowTag, config.colTag);
-      if (!cell) return; // Skip if cell not found or tags invalid
+      const r = fResolveRow(config.rowTag);
+      const c = fResolveCol(config.colTag);
+      if (isNaN(r) || isNaN(c)) {
+        console.warn(`Could not resolve coords for button: ${config.action}`);
+        return;
+      }
+      gUI.headerButtonCoords.add(`${r},${c}`); // Record the coordinate
 
-      // Create the image element
+      const cell = fGetGridCellFromRTagCTag(config.rowTag, config.colTag);
+      if (!cell) return;
+
       const img = fCreateGridHeaderRowButtonImage(config);
-      // Clear cell and insert the image
       fApplyGridButtonToCell(cell, img);
       buttonsAdded++;
     });
 
-    // Log summary
     fMyConsoleLog(
       buttonsAdded > 0
-        ? `✅ Added ${buttonsAdded} Header Button(s).`
+        ? `✅ Added ${buttonsAdded} Header Button(s) and recorded their coordinates.`
         : `ℹ️ No valid Header Buttons found or added.`
     );
-  } // END fAddGridsHeaderRowButtons
+  } // End function fAddGridsHeaderRowButtons
 
   /**
    * Purpose: Resize header button images to a consistent size based on their host cell's actual (post-merge) height.
@@ -1967,15 +1983,14 @@
     }
   } // END fHandleDropdownChange
 
-  /**
+  /** function fProcessAbilityChange
    * Purpose: Handles the logic when an Ability dropdown value changes. Dispatches
    * to helper functions for clearing or processing the new selection,
    * using synchronous calls to fHandleNewAbilitySelection which reads from caches.
-   * Assumptions: Helper functions (fHandleClearAbilityRow, fHandleNewAbilitySelection,
-   * fCalculatesEnc_MR_AP, fSaveNewAbilityToAbilTbl) exist and are correct.
+   * Assumptions: Helper functions exist and are correct.
    * @param {number} r - Row index of the changed ability cell.
-   * @param {number} c - Column index of the changed ability cell (likely 'Ability' col).
-   * @param {any} newValue - The new value selected in the dropdown (expected format 'Name_id').
+   * @param {number} c - Column index of the changed ability cell.
+   * @param {any} newValue - The new value selected in the dropdown.
    * @param {any} oldValue - The previous value in the cell.
    * @returns {void}
    */
@@ -1985,11 +2000,9 @@
       `⚙️ ${funcName}: Processing change for Ability/Gear at row ${r}.`
     );
 
-    // Ensure values are strings for comparison, trimming whitespace
     const newValueStr = String(newValue ?? "").trim();
     const oldValueStr = String(oldValue ?? "").trim();
 
-    // Exit if the trimmed value hasn't actually changed
     if (newValueStr === oldValueStr) {
       fMyConsoleLog(
         `   -> No significant change detected ('${oldValueStr}' -> '${newValueStr}'). Exiting.`
@@ -1997,21 +2010,16 @@
       return;
     }
 
-    // --- Dispatch based on new value ---
     if (newValueStr === "") {
-      // Scenario 1: New value is empty - call helper to clear row
-      fHandleClearAbilityRow(r); // Uses default saveAbilityNameID = false
-      // Recalculate Enc/MR AFTER clearing the row
+      fHandleClearAbilityRow(r);
       fCalculatesEnc_MR_AP();
     } else {
-      // Scenario 2: New value is not empty - Process data from relevant sources using caches
-      fHandleClearAbilityRow(r, true); // Clears fields BUT preserves 'Ability' name
+      fHandleClearAbilityRow(r, true);
       fMyConsoleLog(
         `   -> ${funcName}: New Ability/Gear selected: "${newValueStr}". Processing caches...`
       );
-      // Set loading indicator (will be cleared by fSaveNewAbilityToAbilTbl)
       fSetGridValue(r, "Sk1", "⏳");
-      // Call handlers synchronously - they now read from cache
+
       const dbAbilityResult = fHandleNewAbilitySelection(
         "DB",
         "Abilities",
@@ -2030,7 +2038,7 @@
         r,
         newValueStr
       );
-      // Check for critical errors during cache access/processing within handlers
+
       if (
         dbAbilityResult === null ||
         klKnownAbilitiesResult === null ||
@@ -2039,34 +2047,29 @@
         fMyConsoleLog(
           `--> ❌ ${funcName}: Critical error occurred during cache processing for row ${r}. Halting.`
         );
-        // Error message should have been shown by fHandleNewAbilitySelection
-        // Ensure indicator is cleared if it wasn't already
         if (fGetGridValue(r, "Sk1") === "⏳") fSetGridValue(r, "Sk1", "ERR");
-        return; // Stop processing
+        return;
       }
 
-      // Log individual outcomes based on the 'found' flag
       fMyConsoleLog(
         `   -> ${funcName}: Cache Processing Results - DB Ability Found: ${dbAbilityResult.found}, KL KnownAbil Found: ${klKnownAbilitiesResult.found}, DB Gear Found: ${dbGearResult.found}`
       );
-      // Check if we have *at least* Ability OR Gear dataRow to proceed
+
       const hasAbilityData =
         dbAbilityResult.found || klKnownAbilitiesResult.found;
       const hasGearData = dbGearResult.found;
 
       if (!hasAbilityData && !hasGearData) {
-        // If neither ability nor gear data was found in caches, report error
         fMyConsoleLog(
           `--> ❌ ${funcName}: Could not find ID "${newValueStr}" in DB Abilities, MyKL, or DB Gear caches for row ${r}.`
         );
-        fSetGridValue(r, "Sk1", "NF"); // Indicate Not Found
+        fSetGridValue(r, "Sk1", "NF");
         fShowMessage(
-          `Error processing selection: Could not find data in Abilities, MyAbilities, or Gear definitions.`
+          `❌ Error processing selection: Could not find data in Abilities, MyAbilities, or Gear definitions.`
         ).catch((e) => console.error("ShowMessage Error:", e));
-        return; // Stop processing
+        return;
       }
 
-      // Proceed to apply data
       fMyConsoleLog(
         `--> ${funcName}: Cache processing complete for row ${r}. Applying data...`
       );
@@ -2077,10 +2080,9 @@
         dbGearResult
       );
 
-      // Recalculate Enc/MR AFTER saving the new data
       fCalculatesEnc_MR_AP();
-    } // End else (newValueStr !== '')
-  } // End fProcessAbilityChange
+    }
+  } // End function fProcessAbilityChange
 
   /**
    * Purpose -> Helper function to clear relevant cells in a grid row when an
@@ -2147,19 +2149,16 @@
     fHandleAutoSaveTextToFirestore();
   } // End function fHandleClearAbilityRow
 
-  /**
+  /** function fHandleNewAbilitySelection
    * Purpose: Handles selection of a new ability/gear item synchronously using cached data.
    * Finds the data row for the selected item ID within the appropriate cached
-   * FSData object (DB Abilities, MyKL KnownAbilities, or DB Gear).
-   * Assumptions: The relevant cache objects (gUI.dbAbilitiesFSData, gUI.myKLKnownAbilitiesFSData, etc.)
-   * have been pre-loaded. Helper function fGetIDFromNameID is available.
+   * FSData object.
+   * Assumptions: The relevant cache objects have been pre-loaded.
    * @param {string} workbookAbr - The workbook abbreviation ('DB' or 'MyKL').
    * @param {string} sheetName - The sheet name ('Abilities', 'KnownAbilities', or 'Gear').
-   * @param {number} r - Row index in the grid where the ability was selected (for logging).
+   * @param {number} r - Row index in the grid where the ability was selected.
    * @param {string} newValueStr - The new ability value selected (e.g., 'Name_id').
-   * @returns {object | null} Returns { dataRow, headerRow, colTagsMap, found: boolean } on success,
-   * or null if critical errors occur (like cache not loaded).
-   * 'found' is true if the item's ID was located in the respective cache.
+   * @returns {object | null} Returns { dataRow, headerRow, colTagsMap, found: boolean } or null on critical errors.
    */
   function fHandleNewAbilitySelection(workbookAbr, sheetName, r, newValueStr) {
     const funcName = "fHandleNewAbilitySelection";
@@ -2167,7 +2166,6 @@
       `   -> ${funcName}: Processing "${newValueStr}" for ${workbookAbr}/${sheetName} using CACHE...`
     );
 
-    // --- 1. Determine Target Cache and Key ---
     let targetCache = null;
     let cacheKey = "";
     const lowerWorkbookAbr = workbookAbr.toLowerCase();
@@ -2193,7 +2191,6 @@
       return null;
     }
 
-    // --- 2. Validate Cache Loaded ---
     if (
       !targetCache ||
       !targetCache.text ||
@@ -2204,17 +2201,15 @@
         `      -> ❌ ${funcName} Error: Required cache ${cacheKey} is not loaded or invalid.`
       );
       fShowMessage(
-        `Error: Required definition data (${cacheKey}) not loaded. Please reload.`
+        `❌ Error: Required definition data (${cacheKey}) not loaded. Please reload.`
       ).catch((e) => console.error("ShowMessage Error:", e));
       fSetGridValue(r, "Sk1", "ERR");
       return null;
     }
 
-    // --- 3. Extract Ability ID using Helper Function ---
-    const abilID = fGetIDFromNameID(newValueStr); // Use the helper function
+    const abilID = fGetIDFromNameID(newValueStr);
 
     if (!abilID) {
-      // Check if helper returned null (ID not found/invalid)
       fMyConsoleLog(
         `      -> ❌ ${funcName} Error: Could not extract valid ID from selected value "${newValueStr}".`
       );
@@ -2225,30 +2220,25 @@
       `       -> Extracted ID: "${abilID}" for ${workbookAbr}/${sheetName}`
     );
 
-    // --- 4. Find Row Index using FSData Resolver ---
-    const rowIndex = fResolveFSDataRow(cacheKey.replace("gUI.", ""), abilID); // Use resolver, pass gUI key without 'gUI.'
+    const rowIndex = fResolveFSDataRow(cacheKey.replace("gUI.", ""), abilID);
     let dataRow = null;
     let found = false;
 
     if (isNaN(rowIndex)) {
-      // ID not found or index out of bounds (fResolveFSDataRow handles this)
       const isOptionalNotFound =
         (lowerWorkbookAbr === "mykl" && lowerSheetName === "knownabilities") ||
         (lowerWorkbookAbr === "db" && lowerSheetName === "gear");
       if (isOptionalNotFound) {
-        // Log INFO for optional sources
         if (lowerWorkbookAbr === "db" && lowerSheetName === "gear") {
           fMyConsoleLog(
             `       -> INFO: ID "${abilID}" not found in ${cacheKey}. Expected for non-gear.`
           );
         } else {
-          // MyKL/KnownAbilities case
           fMyConsoleLog(
             `       -> ID "${abilID}" not found in ${cacheKey}. Expected/handled.`
           );
         }
       } else {
-        // DB/Abilities case (Should ideally be found)
         fMyConsoleLog(
           `       -> ⚠️ ${funcName} Warning: ID "${abilID}" NOT found in ${cacheKey} or index invalid.`
         );
@@ -2256,7 +2246,6 @@
       found = false;
       dataRow = null;
     } else {
-      // Row index is valid and within bounds
       dataRow = targetCache.text[rowIndex];
       if (Array.isArray(dataRow)) {
         found = true;
@@ -2267,13 +2256,11 @@
         fMyConsoleLog(
           `       -> ⚠️ ${funcName} Warning: Found index ${rowIndex} for ID "${abilID}", but data at index is not an array in ${cacheKey}.`
         );
-        dataRow = null; // Treat non-array data as not found
+        dataRow = null;
         found = false;
       }
     }
-    // --- END 4. Find Row Index ---
 
-    // --- 5. Prepare Return Object ---
     const headerRow = targetCache.text?.[0] || [];
     const colTagsMap = targetCache.colTagsMap || {};
 
@@ -2283,7 +2270,7 @@
       colTagsMap: colTagsMap,
       found: found,
     };
-  } // End fHandleNewAbilitySelection
+  } // End function fHandleNewAbilitySelection
 
   /**
    * Purpose: Saves data fetched from DB Abilities, DB Gear, and KL KnownAbilities sources
@@ -2621,35 +2608,33 @@
     fMyConsoleLog(`✅ Applied ${dropdownsApplied} Dropdowns.`);
   } // End function fApplyDropdownsToGrid
 
-  // fFetchAndApplyAbilityDropdowns //////////////////////////////////////////////
-  // Purpose -> Ensures the ability list ('MyCS'/'List') is processed from the cache
-  //            and applied to the grid dropdowns. Assumes the cache has already been loaded.
-  // Inputs  -> None.
-  // Outputs -> None (Calls fProcessCachedAbilityList).
+  /** function fFetchAndApplyAbilityDropdowns
+   * Purpose: Ensures the ability list ('MyCS'/'List') is processed from the cache
+   * and applied to the grid dropdowns.
+   * Assumptions: The cache has already been loaded.
+   * @param {} - No parameters.
+   * @returns {void}
+   */
   function fFetchAndApplyAbilityDropdowns() {
     const funcName = "fFetchAndApplyAbilityDropdowns";
     fMyConsoleLog(
       `⚙️ ${funcName}: Triggering processing of cached Ability List...`
     );
 
-    // --- Validate Prerequisite Cache ---
-    // Check if the cache load mechanism should have already run and populated the cache
     if (!gUI.myCSListFSData) {
       const errorMsg = `Cannot process ability list: Required cache (gUI.myCSListFSData) was not loaded during initial setup.`;
       console.error(`${funcName}: ${errorMsg}`);
       fMyConsoleLog(`   -> ❌ ${funcName} Error: ${errorMsg}`);
-      fShowMessage(`Error: ${errorMsg}`).catch((e) =>
+      fShowMessage(`❌ Error: ${errorMsg}`).catch((e) =>
         console.error("ShowMessage Error:", e)
       );
-      return; // Stop if the cache isn't ready
+      return;
     }
 
-    // --- Call Processing Function ---
-    // The cache exists, now process it and apply dropdowns
     fProcessCachedAbilityList();
-  } // END fFetchAndApplyAbilityDropdowns
+  } // End function fFetchAndApplyAbilityDropdowns
 
-  /**
+  /** function fProcessCachedAbilityList
    * Purpose: Processes the cached MyCS/List data, extracting only rows from
    * 'TableFirstRow' down, sorts the relevant column ('AbilitiesNameID'),
    * adds an empty option, and applies it to the grid dropdowns.
@@ -2674,7 +2659,7 @@
       const errMsg = `MyCS/List cache (gUI.${cacheKey}) is missing. Cannot populate Ability dropdowns.`;
       console.error(`${funcName}: ${errMsg}`);
       fMyConsoleLog(`      -> ❌ ${funcName} Error: ${errMsg}`);
-      fShowMessage(`Error: ${errMsg}`).catch((e) =>
+      fShowMessage(`❌ Error: ${errMsg}`).catch((e) =>
         console.error("ShowMessage Error:", e)
       );
       return;
@@ -2689,7 +2674,7 @@
       const errMsg = `Column tag '${colTagForAbilities}' not found or invalid in ${cacheKey} maps.`;
       console.error(`${funcName}: ${errMsg}`);
       fMyConsoleLog(`      -> ❌ ${funcName} Error: ${errMsg}`);
-      fShowMessage(`Error: ${errMsg}`).catch((e) =>
+      fShowMessage(`❌ Error: ${errMsg}`).catch((e) =>
         console.error("ShowMessage Error:", e)
       );
       return;
@@ -2698,7 +2683,7 @@
       const errMsg = `Start row tag '${startRowTag}' not found or invalid in ${cacheKey} maps.`;
       console.error(`${funcName}: ${errMsg}`);
       fMyConsoleLog(`      -> ❌ ${funcName} Error: ${errMsg}`);
-      fShowMessage(`Error: ${errMsg}`).catch((e) =>
+      fShowMessage(`❌ Error: ${errMsg}`).catch((e) =>
         console.error("ShowMessage Error:", e)
       );
       return;
@@ -2768,7 +2753,7 @@
 
     // --- 5. Apply Dropdowns to Grid ---
     fApplyDropdownsToGrid();
-  } // End fProcessCachedAbilityList
+  } // End function fProcessCachedAbilityList
 
   // ==========================================================================
   // === Grid Interaction Logic          (End of Dropdown Boxes ) ===
@@ -3433,16 +3418,30 @@
     fMyConsoleLog(`   -> Row ${r} name changed to: "${newCustomName}"`);
   } // End function fFlagAbilityAsCustom
 
-  /**
-   * Purpose -> Handles the 'blur' event for contenteditable cells. Updates the
-   * data model (gUI.arr), handles custom Ability/Gear name logic (adding ⚡),
-   * and triggers specific calculations or alerts for other edited cells. Also
-   * updates the custom data indicator.
+  /** function fHandleGridCellEdit
+   * Purpose -> [FINAL, BRUTE-FORCE FIX] Handles the 'blur' event, with a hardcoded
+   * guard to prevent execution on header button cells.
+   * Assumptions: This is the primary handler for saving user-edited text.
    * @param {FocusEvent} event - The blur event object.
    * @returns {void}
    */
   async function fHandleGridCellEdit(event) {
     const cellDiv = event.target;
+
+    // === NEW BRUTE-FORCE GUARD CLAUSE ===
+    // This is the definitive fix. We check the coordinates of the blurred cell.
+    // If it's a known button cell, we stop execution immediately, bypassing any
+    // incorrect browser behavior related to the contentEditable attribute.
+    const r_check = parseInt(cellDiv?.dataset?.r, 10);
+    const c_check = parseInt(cellDiv?.dataset?.c, 10);
+    if (
+      !isNaN(r_check) &&
+      !isNaN(c_check) &&
+      gUI.headerButtonCoords.has(`${r_check},${c_check}`)
+    ) {
+      return; // It's a button cell. Do nothing.
+    }
+    // === END BRUTE-FORCE GUARD CLAUSE ===
 
     if (
       !cellDiv ||
@@ -3462,7 +3461,6 @@
 
     const colTag = Object.keys(gUI.colTag).find((tag) => gUI.colTag[tag] === c);
 
-    // === Custom Data Column Handling (Sk1Typ, Sk1, etc.) ===
     const customizableDataCols = [
       "Sk1Typ",
       "Sk1",
@@ -3474,10 +3472,9 @@
       "Meta",
     ];
     if (colTag && customizableDataCols.includes(colTag)) {
-      cellDiv.contentEditable = false; // Turn off editing for this cell type now.
+      cellDiv.contentEditable = false;
       const newText = cellDiv.textContent.trim();
       const oldValueInModel = String(gUI.arr[r][c] ?? "");
-
       const validateAndGetFinalValue = (text, list) => {
         if (text === "") return "";
         if (list) {
@@ -3492,65 +3489,47 @@
           return null;
         }
       };
-
       const validationList = gUI.validationLists?.[colTag];
       let finalValue = validateAndGetFinalValue(newText, validationList);
-
       if (colTag === "Rng" && finalValue === null) {
         const num = parseInt(newText, 10);
         if (!isNaN(num) && num >= 1 && String(num) === newText) {
           finalValue = num;
         }
       }
-
       if (finalValue === null) {
-        fMyConsoleLog(
-          `   -> ❌ Invalid input for ${colTag}: "${newText}". Reverting.`
-        );
         cellDiv.textContent = oldValueInModel;
         return;
       }
-
       if (String(finalValue) === oldValueInModel) {
         cellDiv.textContent = oldValueInModel;
         return;
       }
-
-      fMyConsoleLog(
-        `   -> ✅ Valid change for ${colTag} at [${r}, ${c}]: "${oldValueInModel}" -> "${finalValue}"`
-      );
       gUI.arr[r][c] = finalValue;
       cellDiv.textContent = finalValue;
-
       fFlagAbilityAsCustom(r);
       fHandleAutoSaveTextToFirestore();
       return;
     }
-
-    // === Original Logic for other cells (Meta, Gear, Vit, and BLANK WHITE CELLS) ===
     const newValue = cellDiv.textContent;
     const oldValueInModel = gUI.arr[r][c];
     if (String(newValue ?? "") === String(oldValueInModel ?? "")) {
       return;
     }
-
     const gearColumnsToCalculate = ["PossNum", "PossWorn", "PossPerOff"];
     let finalValueToStore = newValue;
     let shouldUpdateModelAndSave = true;
     let specificCalcDone = false;
     let metaOrChannelAlertPosted = false;
-
     const isMetaCell =
       gUI.range?.meta && fIsCellInRangeArray(r, c, [gUI.range.meta]);
     const isMetaChannelCell =
       gUI.range?.metaChannel &&
       fIsCellInRangeArray(r, c, [gUI.range.metaChannel]);
-
     if (isMetaCell || isMetaChannelCell) {
       const trimmedNewValue = newValue.trim();
       let parsedNum = parseInt(trimmedNewValue, 10);
       let isValidInput = false;
-
       if (trimmedNewValue === "") {
         finalValueToStore = "";
         isValidInput = true;
@@ -3579,12 +3558,10 @@
           isValidInput = true;
         }
       }
-
       if (!isValidInput) {
         cellDiv.textContent = String(oldValueInModel ?? "");
         shouldUpdateModelAndSave = false;
       }
-
       if (shouldUpdateModelAndSave && finalValueToStore !== oldValueInModel) {
         const metaType = isMetaCell ? "Meta Color" : "Meta Channel Color";
         const colorTag =
@@ -3607,7 +3584,6 @@
       }
       specificCalcDone = true;
     }
-
     if (!specificCalcDone && gearColumnsToCalculate.includes(colTag)) {
       const validatedValue = await fCalcGearLine(
         r,
@@ -3622,7 +3598,6 @@
       }
       specificCalcDone = true;
     }
-
     if (!specificCalcDone) {
       const isVitMaxPlus =
         gUI.range?.vitMaxPlus &&
@@ -3636,14 +3611,9 @@
         finalValueToStore = gUI.arr[r][c];
       }
     }
-
     if (shouldUpdateModelAndSave) {
       if (gUI.arr[r][c] !== finalValueToStore) {
         gUI.arr[r][c] = finalValueToStore;
-        fMyConsoleLog(
-          `   -> Data model gUI.arr[${r}][${c}] updated to: "${finalValueToStore}"`
-        );
-        // Update the blue border indicator for the cell
         fUpdateCustomDataIndicator(r, c);
         fHandleAutoSaveTextToFirestore();
         if (metaOrChannelAlertPosted) {
@@ -3653,8 +3623,6 @@
         setTimeout(() => fSendLogToGMScreenAndPS(), 0);
       }
     } else {
-      // If the update was aborted (e.g., validation failed), still run the indicator update
-      // to ensure the border is removed if the cell was cleared back to its original state.
       fUpdateCustomDataIndicator(r, c);
     }
   } // End function fHandleGridCellEdit
@@ -4713,10 +4681,10 @@
     }
   } // END fToggleSidebar
 
-  /**
-   * Purpose: Handles the "Update (Level, Slot, Names)" menu action. Force-refreshes
-   * user-specific caches from Sheets to Firestore to gUI, validates the resulting
-   * slot number, sends an update log, UPDATES ABILITY DROPDOWNS, and triggers a full grid refresh.
+  /** function fHandleNewLevelSlotName
+   * Purpose: Handles the "Update (Level, Slot, Names)" menu action by force-refreshing
+   * user-specific caches, validating data, sending a log, and refreshing the grid.
+   * Assumptions: Relies on a chain of asynchronous helper functions.
    * @returns {Promise<void>} Resolves after completing actions or handling errors.
    */
   async function fHandleNewLevelSlotName() {
@@ -4805,23 +4773,22 @@
       fMyConsoleLog("      -> ✅ Grid row refresh complete.");
 
       fMyConsoleLog(`✅ ${funcName} Completed Successfully.`);
-      fHideMessage(); // Hide the initial "Updating..." message
-      // Final success message is removed.
+      fHideMessage();
     } catch (error) {
       fHideMessage();
-      const errorMsg = `Error during Update (Level, Slot, Names): ${
+      const errorMsg = `❌ Error during Update (Level, Slot, Names): ${
         error?.message || error
       }`;
       console.error(errorMsg, error);
       fMyConsoleLog(`   -> ❌ ${errorMsg}`);
-      await fShowMessage(`❌ ${errorMsg}`);
+      await fShowMessage(errorMsg);
     }
-  } // End fHandleNewLevelSlotName
+  } // End function fHandleNewLevelSlotName
 
-  /**
-   * Purpose: Handles the 'Refresh UI Template Cache' designer menu action. Calls the
-   * server to re-read the MasterCS 'Game' tab and save it to a versioned
-   * collection in Firestore.
+  /** function fHandleRefreshUITemplate
+   * Purpose: Handles the 'Refresh UI Template Cache' designer menu action by
+   * calling the server to re-read and cache the MasterCS 'Game' tab.
+   * Assumptions: Requires Designer Mode.
    * @returns {Promise<void>} Resolves after the operation is complete.
    */
   async function fHandleRefreshUITemplate() {
@@ -4836,9 +4803,9 @@
     }
 
     const userConfirmed = await fShowPrompt(
-      `<b>Refresh the UI Template Cache for v${gIndex.GameVer}?</b><br><br>
-    This will overwrite the cached UI layout in Firestore with the current version from the Master Character Sheet.<br><br>
-    This action is slow and should only be done after changing the 'Game' tab layout.`
+      `⚠️ <b>Refresh the UI Template Cache for v${gIndex.GameVer}?</b><br><br>
+      This will overwrite the cached UI layout in Firestore with the current version from the Master Character Sheet.<br><br>
+      This action is slow and should only be done after changing the 'Game' tab layout.`
     );
 
     if (!userConfirmed) {
@@ -4862,7 +4829,6 @@
         fMyConsoleLog(
           `✅ ${funcName}: Server confirmed success. ${result.message || ""}`
         );
-        // Final success message is removed.
       } else {
         throw new Error(
           result.message || "An unknown error occurred on the server."
@@ -4954,11 +4920,13 @@
     fMyConsoleLog(`✅ ${funcName}: Completed.`);
   } // END fHandleGMAward
 
-  // fMetaFlood ///////////////////////////////////////////////////////////////////
-  // Purpose -> Handles <Game><Meta><Flood>. Selects Meta col, increases values, caps,
-  //            updates grid, logs action to sidebar, and triggers GMScreen update.
-  // Inputs  -> None.
-  // Outputs -> None (Modifies grid data/DOM, calls fShowMessage, logs to sidebar/GMScreen).
+  /** function fMetaFlood
+   * Purpose: Handles <Game><Meta><Flood>. Selects Meta col, increases values, caps,
+   * updates grid, logs action to sidebar, and triggers GMScreen update.
+   * Assumptions: gUI.range and gUI.list for Meta are correctly defined.
+   * @param {} - No parameters.
+   * @returns {void}
+   */
   async function fMetaFlood() {
     fMyConsoleLog("⚙️ Menu Action: Meta Flood...");
     const metaRangeDef = gUI.range?.meta;
@@ -4969,11 +4937,10 @@
       errorMsg = "Meta range definition missing or invalid.";
     else if (!Array.isArray(metaCaps) || metaCaps.length === 0)
       errorMsg = "Meta caps list (gUI.list.metaFull) missing or invalid.";
-    // Allow missing metaColorTags for now
     if (errorMsg) {
       console.warn(`fMetaFlood: ${errorMsg}`);
       fMyConsoleLog(`⚠️ Meta Flood failed: ${errorMsg}`);
-      await fShowMessage(`Error: ${errorMsg}`);
+      await fShowMessage(`❌ Error: ${errorMsg}`);
       return;
     }
 
@@ -4984,7 +4951,7 @@
       errorMsg = `Could not resolve Meta column tags: ${metaRangeDef.c1}, ${metaRangeDef.c2}.`;
       console.warn(`fMetaFlood: ${errorMsg}`);
       fMyConsoleLog(`⚠️ Meta Flood failed: ${errorMsg}`);
-      await fShowMessage(`Error: ${errorMsg}`);
+      await fShowMessage(`❌ Error: ${errorMsg}`);
       return;
     }
     const numMetaCols = Math.abs(endCol - startCol) + 1;
@@ -4992,7 +4959,7 @@
       errorMsg = `Mismatch between number of Meta columns (${numMetaCols}) and Meta caps (${metaCaps.length}).`;
       console.warn(`fMetaFlood: ${errorMsg}`);
       fMyConsoleLog(`⚠️ Meta Flood failed: ${errorMsg}`);
-      await fShowMessage(`Error: ${errorMsg}`);
+      await fShowMessage(`❌ Error: ${errorMsg}`);
       return;
     }
 
@@ -5039,7 +5006,7 @@
     if (!success) {
       errorMsg = `fSetRangeOfGridValues failed to update Meta grid.`;
       fMyConsoleLog(`   -> ⚠️ Meta Flood Error: ${errorMsg}`);
-      await fShowMessage(`Error: ${errorMsg}`);
+      await fShowMessage(`❌ Error: ${errorMsg}`);
     } else {
       fMyConsoleLog("✅ Meta Flood Update Complete.");
       const sidebarMsgHtml = `<span class="blue-bold">ℹ️ Meta Flood (Rolled ${selectedColTag}):</span>`;
@@ -5047,17 +5014,17 @@
       fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
       fShowSidebar();
 
-      // Send log update to GMScreen (with slight delay) <<< ADDED CALL >>>
       setTimeout(() => fSendLogToGMScreenAndPS(), 0);
     }
-  } // END fMetaFlood
+  } // End function fMetaFlood
 
-  // fMetaChannel ////////////////////////////////////////////////////////////////////
-  // Purpose -> Handles Meta Channeling calculation. Selects Meta Channel column,
-  //            increments value, updates grid, logs to sidebar. (No GMScreen call needed here,
-  //            as called by fHandleNishStartOrEnd which sends the final log state).
-  // Inputs  -> None.
-  // Outputs -> None (Modifies grid data/DOM, calls fShowMessage, logs to sidebar).
+  /** function fMetaChannel
+   * Purpose: Handles Meta Channeling calculation. Selects Meta Channel column,
+   * increments value, updates grid, and logs to sidebar.
+   * Assumptions: gUI.range and gUI.list for Meta are correctly defined.
+   * @param {} - No parameters.
+   * @returns {void}
+   */
   async function fMetaChannel() {
     fMyConsoleLog("⚙️ Calculating Meta Channel...");
     const channelRangeDef = gUI.range?.metaChannel;
@@ -5065,11 +5032,10 @@
     let errorMsg = "";
     if (!channelRangeDef || !fDoesObjectHaveR1C1R2C2Properties(channelRangeDef))
       errorMsg = "Meta Channel range definition missing or invalid.";
-    // Allow missing metaColorTags
     if (errorMsg) {
       console.warn(`fMetaChannel: ${errorMsg}`);
       fMyConsoleLog(`⚠️ Meta Channel failed: ${errorMsg}`);
-      await fShowMessage(`Error: ${errorMsg}`);
+      await fShowMessage(`❌ Error: ${errorMsg}`);
       return;
     }
 
@@ -5080,7 +5046,7 @@
       errorMsg = `Could not resolve Meta Channel column tags: ${channelRangeDef.c1}, ${channelRangeDef.c2}.`;
       console.warn(`fMetaChannel: ${errorMsg}`);
       fMyConsoleLog(`⚠️ Meta Channel failed: ${errorMsg}`);
-      await fShowMessage(`Error: ${errorMsg}`);
+      await fShowMessage(`❌ Error: ${errorMsg}`);
       return;
     }
 
@@ -5105,16 +5071,14 @@
     if (!success) {
       errorMsg = `fSetGridValue failed to update Meta Channel grid cell [${channelRowTag}, ${finalColIndex}].`;
       fMyConsoleLog(`   -> ⚠️ Meta Channel Error: ${errorMsg}`);
-      await fShowMessage(`Error: ${errorMsg}`);
+      await fShowMessage(`❌ Error: ${errorMsg}`);
     } else {
       fMyConsoleLog("✅ Meta Channel Update Complete.");
-      // Build and Display Sidebar Message (HTML and Plain Text)
       const sidebarMsgHtml = `<span class="blue-bold">ℹ️ Meta Channeled (${selectedColTag}):</span> ${currentVal} &rarr; ${newValue}`;
       const sidebarMsgText = `ℹ️ Meta Channeled (${selectedColTag}): ${currentVal} -> ${newValue}`;
-      fPostToSidebar(sidebarMsgHtml, sidebarMsgText); // Update sidebar and plain text log
-      // No GMScreen update here - handled by calling function
+      fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
     }
-  } // END fMetaChannel
+  } // End function fMetaChannel
 
   // fIsOn_NewNishSet ////////////////////////////////////////////////////////////////
   // Purpose -> Processes the 'Is On' / 'Duration' columns at the start of a Nish turn.
@@ -5228,11 +5192,13 @@
     );
   } // END fIsOn_NewNishSet
 
-  // fCalc_NaturalHealing ////////////////////////////////////////////////////////////
-  // Purpose -> Handles <Game><Healing><Natural Healing>. Calculates healing, updates
-  //            wound cells, recalculates Vit Now/Percent, logs results, and sends update.
-  // Inputs  -> None.
-  // Outputs -> None (Modifies grid data/DOM, calls sidebar/GMScreen functions).
+  /** function fCalc_NaturalHealing
+   * Purpose: Handles <Game><Healing><Natural Healing>. Calculates healing, updates
+   * wound cells, recalculates Vit Now/Percent, logs results, and sends update.
+   * Assumptions: gUI.range definitions for Vit and Wounds are correct.
+   * @param {} - No parameters.
+   * @returns {void}
+   */
   async function fCalc_NaturalHealing() {
     fMyConsoleLog("⚙️ Menu Action: Natural Healing...");
     // === 1. Get Vit Max ===
@@ -5243,7 +5209,7 @@
     if (errorMsg) {
       console.warn(`fCalc_NaturalHealing: ${errorMsg}`);
       fMyConsoleLog(`⚠️ Natural Healing failed: ${errorMsg}`);
-      await fShowMessage(`Error: ${errorMsg}`);
+      await fShowMessage(`❌ Error: ${errorMsg}`);
       return;
     }
     const vitMax = fGetGridValue(vitMaxRange.r1, vitMaxRange.c1, true);
@@ -5251,7 +5217,7 @@
       errorMsg = `Vit Max value ('${vitMax}') is invalid or zero. Cannot calculate healing.`;
       console.warn(`fCalc_NaturalHealing: ${errorMsg}`);
       fMyConsoleLog(`⚠️ Natural Healing failed: ${errorMsg}`);
-      await fShowMessage(`Error: ${errorMsg}`);
+      await fShowMessage(`❌ Error: ${errorMsg}`);
       return;
     }
     fMyConsoleLog(`   -> Vit Max for healing calc: ${vitMax}`);
@@ -5316,17 +5282,18 @@
 
     // === 5. Send Log Update (with slight delay) ===
     setTimeout(() => fSendLogToGMScreenAndPS(), 0);
-  } // END fCalc_NaturalHealing
+  } // End function fCalc_NaturalHealing
 
-  // fProcessWoundHealing ////////////////////////////////////////////////////////////
-  // Purpose -> Helper for natural healing. Gets current wounds for a specific degree,
-  //            rolls appropriate healing die (based on Vit Max / divisor), calculates
-  //            new wound total (min 0), updates the grid, and returns the amount healed.
-  // Inputs  -> woundRangeTag (String): Tag for the specific wound cell (e.g., 'vit1stWnds').
-  //         -> vitMax (Number): Character's maximum vitality.
-  //         -> divisor (Number): Divisor for Vit Max to determine healing die size (4, 8, 16).
-  //         -> degreeLabel (String): Label for logging ('1st', '2nd', '3rd').
-  // Outputs -> (Promise<Number | null>): The actual amount healed (>= 0), or null if an error occurred.
+  /** function fProcessWoundHealing
+   * Purpose: Helper for natural healing. Calculates and applies healing for a
+   * specific wound degree, updates the grid, and returns the amount healed.
+   * Assumptions: Called by function fCalc_NaturalHealing.
+   * @param {string} woundRangeTag - Tag for the specific wound cell.
+   * @param {number} vitMax - Character's maximum vitality.
+   * @param {number} divisor - Divisor for Vit Max to determine healing die size.
+   * @param {string} degreeLabel - Label for logging ('1st', '2nd', '3rd').
+   * @returns {Promise<number | null>} The amount healed, or null on error.
+   */
   async function fProcessWoundHealing(
     woundRangeTag,
     vitMax,
@@ -5341,18 +5308,16 @@
       const msg = `Wound range definition missing for tag: ${woundRangeTag}.`;
       console.warn(`fProcessWoundHealing: ${msg}`);
       fMyConsoleLog(`         -> ⚠️ Error: ${msg}`);
-      await fShowMessage(`Error processing ${degreeLabel} wounds: ${msg}`);
+      await fShowMessage(`❌ Error processing ${degreeLabel} wounds: ${msg}`);
       return null; // Indicate error
     }
 
     // === Get Current Wounds ===
-    // Default to 0 if invalid/missing, ensure non-negative
     let currentWounds = Math.max(
       0,
       fGetGridValue(woundRange.r1, woundRange.c1, true) || 0
     );
     if (isNaN(currentWounds)) {
-      // Should be caught by || 0, but extra check
       fMyConsoleLog(
         `         -> Warning: Invalid current wound value for ${degreeLabel}. Assuming 0.`
       );
@@ -5360,38 +5325,38 @@
     }
 
     // === Calculate Healing ===
-    const healingDieSize = Math.max(1, Math.round(vitMax / divisor)); // Die size is at least 1
-    const healingRoll = fdRoll(healingDieSize); // Roll the healing die
+    const healingDieSize = Math.max(1, Math.round(vitMax / divisor));
+    const healingRoll = fdRoll(healingDieSize);
     fMyConsoleLog(
       `         -> Healing roll (${degreeLabel}): d${healingDieSize} = ${healingRoll}`
     );
 
     // === Calculate New Wounds and Amount Healed ===
-    const newWounds = Math.max(0, currentWounds - healingRoll); // Cannot go below 0 wounds
-    const actualHealed = currentWounds - newWounds; // Calculate the positive amount healed
+    const newWounds = Math.max(0, currentWounds - healingRoll);
+    const actualHealed = currentWounds - newWounds;
     fMyConsoleLog(
       `         -> Wounds: ${currentWounds} -> ${newWounds} (Healed: ${actualHealed})`
     );
 
     // === Update Grid ===
-    // Set the new wound value
     if (!fSetGridValue(woundRange.r1, woundRange.c1, newWounds)) {
       const msg = `Failed to update grid for ${degreeLabel} wounds.`;
       console.warn(`fProcessWoundHealing: ${msg}`);
       fMyConsoleLog(`         -> ⚠️ Error: ${msg}`);
-      await fShowMessage(`Error updating ${degreeLabel} wounds: ${msg}`);
+      await fShowMessage(`❌ Error updating ${degreeLabel} wounds: ${msg}`);
       return null; // Indicate failure
     }
 
-    // Return the actual amount healed (positive number or zero)
     return actualHealed;
-  } // END fProcessWoundHealing
+  } // End function fProcessWoundHealing
 
-  // fHealAllWounds //////////////////////////////////////////////////////////////////
-  // Purpose -> Handles <Game><Healing><All wounds>. Sets wound cells to 0, updates
-  //            Vit Now/Percent, logs action, and sends update.
-  // Inputs  -> None.
-  // Outputs -> None (Modifies grid data/DOM, calls sidebar/GMScreen functions).
+  /** function fHealAllWounds
+   * Purpose: Handles <Game><Healing><All wounds>. Sets wound cells to 0, updates
+   * Vit Now/Percent, logs action, and sends update.
+   * Assumptions: gUI.range definitions for wounds are correct.
+   * @param {} - No parameters.
+   * @returns {void}
+   */
   async function fHealAllWounds() {
     fMyConsoleLog("⚙️ Menu Action: Clearing All Wounds...");
     const woundTags = ["vit1stWnds", "vit2ndWnds", "vit3rdWnds"];
@@ -5404,14 +5369,14 @@
         const msg = `Wound range definition missing for tag: ${tag}.`;
         console.warn(`fHealAllWounds: ${msg}`);
         fMyConsoleLog(`   -> ⚠️ Error: ${msg}`);
-        await fShowMessage(`Error clearing wounds: ${msg}`);
+        await fShowMessage(`❌ Error clearing wounds: ${msg}`);
         errorsOccurred = true;
         continue;
       }
       if (!fSetGridValue(woundRange.r1, woundRange.c1, 0)) {
         const msg = `Failed to update grid for tag: ${tag}.`;
         fMyConsoleLog(`   -> ⚠️ Error: ${msg}`);
-        await fShowMessage(`Error clearing wounds: ${msg}`);
+        await fShowMessage(`❌ Error clearing wounds: ${msg}`);
         errorsOccurred = true;
       } else {
         fMyConsoleLog(`   -> Cleared wounds for tag: ${tag}`);
@@ -5439,9 +5404,8 @@
       }.`
     );
 
-    // Send log update to GMScreen (with slight delay) <<< MODIFIED >>>
     setTimeout(() => fSendLogToGMScreenAndPS(), 0);
-  } // END fHealAllWounds
+  } // End function fHealAllWounds
 
   // fHandleRestTimeRest /////////////////////////////////////////////////////////////
   // Purpose -> Handles <Game><Rest> or <Time><Rest>. Runs Meta Flood, logs action,
@@ -5553,11 +5517,13 @@
     }
   } // END fMeta_SetToMax
 
-  // fLuck_SetToMax //////////////////////////////////////////////////////////////////
-  // Purpose -> Handles <Game><Set to Max><Luck>. Calculates max luck, updates cell,
-  //            logs action, and sends update.
-  // Inputs  -> None.
-  // Outputs -> None (Calls helpers, potentially fShowMessage, logs to sidebar/GMScreen).
+  /** function fLuck_SetToMax
+   * Purpose: Handles <Game><Set to Max><Luck>. Calculates max luck, updates cell,
+   * logs action, and sends update.
+   * Assumptions: gUI.list and gUI.range definitions for Luck are correct.
+   * @param {} - No parameters.
+   * @returns {void}
+   */
   async function fLuck_SetToMax() {
     fMyConsoleLog("⚙️ Menu Action: Setting Luck to Max...");
     const baseLuck = gUI.list?.luckBoxMax;
@@ -5573,7 +5539,7 @@
     if (errorMsg) {
       console.warn(`fLuck_SetToMax: ${errorMsg}`);
       fMyConsoleLog(`⚠️ Cannot set Luck to max: ${errorMsg}`);
-      await fShowMessage(`Error: ${errorMsg}`);
+      await fShowMessage(`❌ Error: ${errorMsg}`);
       return;
     }
 
@@ -5607,7 +5573,9 @@
 
     if (!success) {
       fMyConsoleLog(`⚠️ Failed to set Luck to max value (${newLuckValue}).`);
-      await fShowMessage(`Error: Failed to update the Luck value in the grid.`);
+      await fShowMessage(
+        `❌ Error: Failed to update the Luck value in the grid.`
+      );
     } else {
       fMyConsoleLog(`✅ Luck Set to Max (${newLuckValue}).`);
       const sidebarMsgHtml = `<span class="blue-bold">ℹ️ Luck Set to Max</span>`;
@@ -5615,17 +5583,17 @@
       fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
       fShowSidebar();
 
-      // Send log update to GMScreen (with slight delay) <<< MODIFIED >>>
       setTimeout(() => fSendLogToGMScreenAndPS(), 0);
     }
-  } // END fLuck_SetToMax
+  } // End function fLuck_SetToMax
 
-  // fAct_SetToMax ///////////////////////////////////////////////////////////////////
-  // Purpose -> Sets the current Action Points value (in cell defined by gUI.range.actTotal)
-  //            to its maximum, calculated as gUI.list.actMax + the integer value of the
-  //            cell defined by gUI.range.actPlus. Typically called during Nish sequence.
-  // Inputs  -> None.
-  // Outputs -> None (Calls fGetGridValue, fSetGridValue, potentially fShowMessage).
+  /** function fAct_SetToMax
+   * Purpose: Sets the current Action Points value to its maximum, calculated from
+   * a base value and a bonus from the grid.
+   * Assumptions: gUI.list and gUI.range definitions for Action Points are correct.
+   * @param {} - No parameters.
+   * @returns {void}
+   */
   async function fAct_SetToMax() {
     fMyConsoleLog("⚙️ Setting Action Points to Max...");
 
@@ -5647,15 +5615,14 @@
     if (errorMsg) {
       console.warn(`fAct_SetToMax: ${errorMsg}`);
       fMyConsoleLog(`⚠️ Cannot set Act to max: ${errorMsg}`);
-      await fShowMessage(`Error: ${errorMsg}`);
+      await fShowMessage(`❌ Error: ${errorMsg}`);
       return;
     }
 
     // === 3. Get Act Plus Bonus ===
     const actPlusValueRaw = fGetGridValue(actPlusRange.r1, actPlusRange.c1);
-    let actPlusBonus = 0; // Default bonus to 0
+    let actPlusBonus = 0;
 
-    // Convert bonus to integer if it's a valid number
     if (
       actPlusValueRaw !== null &&
       actPlusValueRaw !== "" &&
@@ -5669,10 +5636,6 @@
       fMyConsoleLog(
         `   -> No valid Act Plus Bonus found in cell (${actPlusRange.r1}, ${actPlusRange.c1}). Using 0.`
       );
-      // Optional Warning:
-      // if (actPlusValueRaw !== null && actPlusValueRaw !== '') {
-      //    await fShowMessage(`Warning: Value "${actPlusValueRaw}" in Act Plus cell is not valid number. Using 0 bonus.`);
-      // }
     }
 
     // === 4. Calculate and Set New Act Value ===
@@ -5689,26 +5652,24 @@
 
     // === 5. Log Result ===
     if (!success) {
-      // fSetGridValue logs specific errors
       fMyConsoleLog(
         `⚠️ Failed to set Act to max value (${newActValue}) in cell (${actTotalRange.r1}, ${actTotalRange.c1}).`
       );
       await fShowMessage(
-        `Error: Failed to update the Action Points value in the grid.`
+        `❌ Error: Failed to update the Action Points value in the grid.`
       );
     } else {
       fMyConsoleLog(`✅ Action Points Set to Max (${newActValue}).`);
-      // Note: No sidebar message here as it's usually part of Nish sequence
     }
-  } // END fAct_SetToMax
+  } // End function fAct_SetToMax
 
-  // fCalc_VitMaxNowPerc /////////////////////////////////////////////////////////////
-  // Purpose -> Handles the <Game><Set to Max><Vit Max> menu action. Calculates the
-  //            character's maximum vitality (Vit Max = Fortitude Sk1 + Vit Bonus),
-  //            updates the Vit Max cell, then calls fVitNowNPercent_Calc to update
-  //            the derived Vit Now and Vit Now Percent cells. Calls fSendLogToGMScreenAndPS.
-  // Inputs  -> None.
-  // Outputs -> None (Modifies grid data/DOM via helpers, potentially calls fShowMessage, logs to GMScreen/PS).
+  /** function fCalc_VitMaxNowPerc
+   * Purpose: Handles the <Game><Set to Max><Vit Max> menu action. Calculates and
+   * updates Vit Max, Vit Now, and Vit Now Percent.
+   * Assumptions: gUI.range definitions for Vit and Fortitude are correct.
+   * @param {} - No parameters.
+   * @returns {void}
+   */
   async function fCalc_VitMaxNowPerc() {
     fMyConsoleLog("⚙️ Menu Action: Setting Vit to Max...");
 
@@ -5729,7 +5690,7 @@
     if (errorMsg) {
       console.warn(`fCalc_VitMaxNowPerc: ${errorMsg}`);
       fMyConsoleLog(`⚠️ Cannot set Vit to max: ${errorMsg}`);
-      await fShowMessage(`Error: ${errorMsg}`);
+      await fShowMessage(`❌ Error: ${errorMsg}`);
       return;
     }
 
@@ -5738,14 +5699,13 @@
       fortitudeRange.r1,
       fortitudeRange.c1
     );
-    const fortitudeValue = Number(fortitudeValueRaw); // Convert to number
+    const fortitudeValue = Number(fortitudeValueRaw);
 
     if (isNaN(fortitudeValue)) {
-      // Validate Fortitude value
       errorMsg = `Fortitude Sk1 value ('${fortitudeValueRaw}') is not a valid number.`;
       console.warn(`fCalc_VitMaxNowPerc: ${errorMsg}`);
       fMyConsoleLog(`⚠️ Cannot set Vit to max: ${errorMsg}`);
-      await fShowMessage(`Error: ${errorMsg}`);
+      await fShowMessage(`❌ Error: ${errorMsg}`);
       return;
     }
     fMyConsoleLog(`   -> Fortitude Sk1 value: ${fortitudeValue}`);
@@ -5755,9 +5715,8 @@
       vitMaxPlusRange.r1,
       vitMaxPlusRange.c1
     );
-    let vitMaxPlusBonus = 0; // Default bonus to 0
+    let vitMaxPlusBonus = 0;
 
-    // Convert bonus to integer if it's a valid number
     if (
       vitMaxPlusValueRaw !== null &&
       vitMaxPlusValueRaw !== "" &&
@@ -5772,12 +5731,11 @@
     }
 
     // === 5. Calculate and Set New Vit Max ===
-    const newVitMax = Math.round(fortitudeValue + vitMaxPlusBonus); // Ensure integer
+    const newVitMax = Math.round(fortitudeValue + vitMaxPlusBonus);
     fMyConsoleLog(
       `   -> Calculated New Vit Max: ${fortitudeValue} (For) + ${vitMaxPlusBonus} (Bonus) = ${newVitMax}`
     );
 
-    // Update the Vit Max cell in the grid
     const setMaxSuccess = fSetGridValue(
       vitMaxRange.r1,
       vitMaxRange.c1,
@@ -5789,31 +5747,30 @@
         `⚠️ Failed to set Vit Max value (${newVitMax}) in cell (${vitMaxRange.r1}, ${vitMaxRange.c1}). Aborting further updates.`
       );
       await fShowMessage(
-        `Error: Failed to update the Vit Max value in the grid.`
+        `❌ Error: Failed to update the Vit Max value in the grid.`
       );
-      return; // Stop if essential Vit Max update failed
+      return;
     }
     fMyConsoleLog(`   -> Successfully set Vit Max to ${newVitMax}.`);
 
     // === 6. Update Derived Vit Values ===
-    // Call helper to update Vit Now and Vit Now Percent based on the new Vit Max
-    await fVitNowNPercent_Calc(); // This function itself became async if it wasn't already
+    await fVitNowNPercent_Calc();
 
     fMyConsoleLog("✅ Vit Set to Max sequence complete.");
 
     // === 7. Send Log to GM Screen & Party Sheet ===
     fMyConsoleLog(
-      "   -> Calling fSendLogToGMScreenAndPS from fCalc_VitMaxNowPerc..."
+      "   -> Calling function fSendLogToGMScreenAndPS from function fCalc_VitMaxNowPerc..."
     );
-    setTimeout(() => fSendLogToGMScreenAndPS(), 0); // Call with a slight delay
-  } // END fCalc_VitMaxNowPerc
+    setTimeout(() => fSendLogToGMScreenAndPS(), 0);
+  } // End function fCalc_VitMaxNowPerc
 
-  // fVitNowNPercent_Calc ////////////////////////////////////////////////////////////
-  // Purpose -> Helper function to calculate 'Vit Now' (Vit Max - Total Wounds) and
-  //            'Vit Now Percent'. Updates the corresponding grid cells. Typically called
-  //            after Vit Max or Wounds change.
-  // Inputs  -> None (Reads Vit Max and Wound values from grid).
-  // Outputs -> None (Modifies Vit Now and Vit Now Percent cells in grid data/DOM).
+  /** function fVitNowNPercent_Calc
+   * Purpose: Helper to calculate 'Vit Now' and 'Vit Now Percent' and update the grid.
+   * Assumptions: Called after Vit Max or Wounds change. gUI.range definitions are correct.
+   * @param {} - No parameters.
+   * @returns {void}
+   */
   async function fVitNowNPercent_Calc() {
     fMyConsoleLog("   -> Calculating Vit Now & Percent...");
 
@@ -5847,24 +5804,22 @@
     if (errorMsg) {
       console.warn(`fVitNowNPercent_Calc: ${errorMsg}`);
       fMyConsoleLog(`   -> ⚠️ Calculation aborted: ${errorMsg}`);
-      await fShowMessage(`Error: ${errorMsg}`);
+      await fShowMessage(`❌ Error: ${errorMsg}`);
       return;
     }
 
     // === 3. Get Current Vit Max ===
     const currentVitMaxRaw = fGetGridValue(vitMaxRange.r1, vitMaxRange.c1);
-    const currentVitMax = Number(currentVitMaxRaw); // Convert to number
+    const currentVitMax = Number(currentVitMaxRaw);
     if (isNaN(currentVitMax)) {
-      // Validate Vit Max is usable number
       errorMsg = `Vit Max value ('${currentVitMaxRaw}') needed for calculation is not a number.`;
       console.warn(`fVitNowNPercent_Calc: ${errorMsg}`);
       fMyConsoleLog(`   -> ⚠️ Calculation aborted: ${errorMsg}`);
-      await fShowMessage(`Error: ${errorMsg}`);
+      await fShowMessage(`❌ Error: ${errorMsg}`);
       return;
     }
 
     // === 4. Get and Sum Wound Values ===
-    // Helper to get wound value, defaulting invalid/empty to 0
     const getWoundVal = (range) => {
       const raw = fGetGridValue(range.r1, range.c1);
       return raw !== null && raw !== "" && !isNaN(Number(raw))
@@ -5880,7 +5835,7 @@
     );
 
     // === 5. Calculate and Set Vit Now ===
-    const newVitNow = Math.round(currentVitMax - totalWounds); // Ensure integer
+    const newVitNow = Math.round(currentVitMax - totalWounds);
     fMyConsoleLog(
       `      -> Calculated Vit Now: ${currentVitMax} (Max) - ${totalWounds} (Wounds) = ${newVitNow}`
     );
@@ -5892,15 +5847,13 @@
 
     if (!setNowSuccess) {
       fMyConsoleLog(`   -> ⚠️ Failed to set Vit Now value (${newVitNow}).`);
-      await fShowMessage(`Error: Failed to update the Vit Now value.`);
-      // Continue to attempt percentage calculation even if Vit Now fails? Currently yes.
+      await fShowMessage(`❌ Error: Failed to update the Vit Now value.`);
     }
 
     // === 6. Calculate and Set Vit Now Percentage ===
-    // Calculate percentage, handle division by zero if Vit Max is 0
     const percent =
       currentVitMax === 0 ? 0 : Math.round((newVitNow / currentVitMax) * 100);
-    const percentString = percent + "%"; // Format as string with '%'
+    const percentString = percent + "%";
     fMyConsoleLog(`      -> Calculated Vit Now Percent: ${percentString}`);
 
     const setPercentSuccess = fSetGridValue(
@@ -5912,20 +5865,24 @@
       fMyConsoleLog(
         `   -> ⚠️ Failed to set Vit Now Percent value (${percentString}).`
       );
-      await fShowMessage(`Error: Failed to update the Vit Now Percent value.`);
+      await fShowMessage(
+        `❌ Error: Failed to update the Vit Now Percent value.`
+      );
     }
 
     fMyConsoleLog("   -> Vit Now & Percent Calculation complete.");
-  } // END fVitNowNPercent_Calc
+  } // End function fVitNowNPercent_Calc
 
-  // fHandleResetAllToMax ////////////////////////////////////////////////////////////
-  // Purpose -> Handles <Game><Set to Max><Reset All to Max>. Prompts user, runs reset
-  //            functions, logs completion, and sends ONE final update.
-  // Inputs  -> None.
-  // Outputs -> (Promise<void>): Resolves after completing actions or if cancelled.
+  /** function fHandleResetAllToMax
+   * Purpose: Handles <Game><Set to Max><Reset All to Max>. Prompts user, runs reset
+   * functions, logs completion, and sends ONE final update.
+   * Assumptions: Relies on various helper functions to perform the reset actions.
+   * @param {} - No parameters.
+   * @returns {Promise<void>} Resolves after completing actions or if cancelled.
+   */
   async function fHandleResetAllToMax() {
     fMyConsoleLog("⚙️ Menu Action: Reset All to Max Triggered...");
-    const promptMessage = `<b>Reset All to Max?</b><br><br>This will:<br>-- Clear Roll Log<br>-- Clear current Nish roll<br>-- Flood Meta<br>-- Clear Channeled Meta<br>-- Set Luck to Max<br>-- Set Action Points to Max<br>-- Heal All Wounds<br>-- Clear Morphs<br>-- Clear 'Is On' Column<br>-- Clear Monsters<b><br>Are you sure?</b>`;
+    const promptMessage = `⚠️ <b>Reset All to Max?</b><br><br>This will:<br>-- Clear Roll Log<br>-- Clear current Nish roll<br>-- Flood Meta<br>-- Clear Channeled Meta<br>-- Set Luck to Max<br>-- Set Action Points to Max<br>-- Heal All Wounds<br>-- Clear Morphs<br>-- Clear 'Is On' Column<br>-- Clear Monsters<b><br>Are you sure?</b>`;
     fMyConsoleLog("   -> Displaying confirmation prompt...");
     const userConfirmed = await fShowPrompt(promptMessage);
 
@@ -5939,7 +5896,7 @@
       fMyConsoleLog("   -> Cleared local logs (HTML & array).");
 
       // --- Execute Reset Sequence ---
-      // NOTE: These functions log AND call fSendLogToGMScreenAndPS (delayed)
+      // NOTE: These functions log AND call function fSendLogToGMScreenAndPS (delayed)
       fClearCurrentNish(); // Sync
       fMeta_SetToMax(); // Async (Logs only)
       fClearChanneledMeta(); // Sync
@@ -5964,14 +5921,15 @@
     } else {
       fMyConsoleLog("   -> User cancelled Reset All action.");
     }
-  } // END fHandleResetAllToMax
+  } // End function fHandleResetAllToMax
 
-  // fClearChanneledMeta /////////////////////////////////////////////////////////////
-  // Purpose -> Handles the <Game><Clear><Channeled Meta> menu action. Clears the
-  //            values in the Channeled Meta range (defined by gUI.range.metaChannel)
-  //            by setting them to empty strings using fSetRangeOfGridValues.
-  // Inputs  -> None.
-  // Outputs -> None (Modifies grid data/DOM).
+  /** function fClearChanneledMeta
+   * Purpose: Handles the <Game><Clear><Channeled Meta> menu action. Clears the
+   * values in the Channeled Meta range by setting them to empty strings.
+   * Assumptions: gUI.range.metaChannel is defined.
+   * @param {} - No parameters.
+   * @returns {void}
+   */
   function fClearChanneledMeta() {
     fMyConsoleLog("⚙️ Menu Action: Clearing Channeled Meta...");
 
@@ -5989,12 +5947,11 @@
       fMyConsoleLog(
         "⚠️ Cannot clear Channeled Meta: Range definition missing or incomplete."
       );
-      fShowMessage("Error: Channeled Meta range definition is missing.");
+      fShowMessage("❌ Error: Channeled Meta range definition is missing.");
       return;
     }
 
     // === 3. Clear Range Values ===
-    // Call fSetRangeOfGridValues to set all cells in the range to empty string
     const success = fSetRangeOfGridValues(
       metaChannelRange.r1,
       metaChannelRange.c1,
@@ -6005,15 +5962,13 @@
 
     // === 4. Log Result ===
     if (!success) {
-      // fSetRangeOfGridValues logs specific errors
       fMyConsoleLog(
         `⚠️ Failed to clear Channeled Meta range (${metaChannelRange.r1},${metaChannelRange.c1} to ${metaChannelRange.r2},${metaChannelRange.c2}).`
       );
-      // Optional: fShowMessage("Error clearing the channeled meta range.");
     } else {
       fMyConsoleLog("✅ Channeled Meta Range Cleared.");
     }
-  } // END fClearChanneledMeta
+  } // End function fClearChanneledMeta
 
   // fClearSk1Sk2Checkboxes ////////////////////////////////////////////////////////
   // Purpose -> Handles the <Game><Clear><All Check Boxes...> menu action. Clears
@@ -6422,11 +6377,13 @@
     // Note: The called function handles sidebar logging and GMScreen update
   } // END fLoot_RollRndTreasure
 
-  // fLoot_RollValuables /////////////////////////////////////////////////////////
-  // Purpose -> Rolls level-appropriate Valuables from the dbCritFSData cache and
-  //            logs the result to the sidebar.
-  // Inputs  -> isRandomRoll (Boolean, optional): True if called via fLoot_RollRndTreasure (default: false).
-  // Outputs -> None. Posts selected valuable or error message to sidebar and GMScreen/PS.
+  /** function fLoot_RollValuables
+   * Purpose: Rolls level-appropriate Valuables from the dbCritFSData cache and
+   * logs the result to the sidebar.
+   * Assumptions: gUI.characterInfo and gUI.dbCritFSData are populated.
+   * @param {boolean} [isRandomRoll=false] - True if called via function fLoot_RollRndTreasure.
+   * @returns {void}
+   */
   async function fLoot_RollValuables(isRandomRoll = false) {
     const funcName = "fLoot_RollValuables";
     const lootType = "Valuables";
@@ -6436,7 +6393,7 @@
 
     // === 1. Get Prerequisites ===
     const charLvl = Number(gUI.characterInfo?.level) || 0;
-    const treasureColorArr = gUI.list?.metaColor; // Assuming R,O,Y,G,B map to treasure levels
+    const treasureColorArr = gUI.list?.metaColor;
     const cacheKey = "dbCritFSData";
     const critCache = gUI[cacheKey];
 
@@ -6445,7 +6402,7 @@
       const errorMsg = `Treasure color list (gUI.list.metaColor) is missing or invalid.`;
       console.error(`${funcName}: ${errorMsg}`);
       fMyConsoleLog(`   -> ❌ ${funcName} Error: ${errorMsg}`);
-      await fShowMessage(`Error: ${errorMsg}`);
+      await fShowMessage(`❌ Error: ${errorMsg}`);
       return;
     }
     if (
@@ -6460,20 +6417,20 @@
       const errorMsg = `Required cache ${cacheKey} is not loaded or invalid.`;
       console.error(`${funcName}: ${errorMsg}`);
       fMyConsoleLog(`   -> ❌ ${funcName} Error: ${errorMsg}`);
-      await fShowMessage(`Error: ${errorMsg}`);
+      await fShowMessage(`❌ Error: ${errorMsg}`);
       return;
     }
 
     // === 3. Resolve Tags & Indices ===
     const treasureColor_C = fResolveFSDataCol(cacheKey, "TreasureColor");
-    const treasureDesc_C = fResolveFSDataCol(cacheKey, "Treasure"); // Corrected tag based on user prompt
-    const startRowTag = "RowBeforeFirstDataRow"; // Use standard start tag
+    const treasureDesc_C = fResolveFSDataCol(cacheKey, "Treasure");
+    const startRowTag = "RowBeforeFirstDataRow";
     const dataFirst_R_idx = fResolveFSDataRow(cacheKey, startRowTag) + 1;
     const dataLast_R_idx = critCache.text.length - 1;
 
     const failedTags = [];
     if (isNaN(treasureColor_C)) failedTags.push("TreasureColor");
-    if (isNaN(treasureDesc_C)) failedTags.push("Treasure"); // Check resolved tag
+    if (isNaN(treasureDesc_C)) failedTags.push("Treasure");
     if (isNaN(dataFirst_R_idx)) failedTags.push(startRowTag);
 
     if (failedTags.length > 0) {
@@ -6482,7 +6439,7 @@
       )}.`;
       console.error(`${funcName}: ${errorMsg}`);
       fMyConsoleLog(`   -> ❌ ${funcName} Error: ${errorMsg}`);
-      await fShowMessage(`Error: ${errorMsg}`);
+      await fShowMessage(`❌ Error: ${errorMsg}`);
       return;
     }
 
@@ -6490,7 +6447,7 @@
       const errorMsg = `Start row index (${dataFirst_R_idx}) is after last row index (${dataLast_R_idx}) in ${cacheKey}.`;
       console.error(`${funcName}: ${errorMsg}`);
       fMyConsoleLog(`   -> ❌ ${funcName} Error: ${errorMsg}`);
-      await fShowMessage(`Error: ${errorMsg}`);
+      await fShowMessage(`❌ Error: ${errorMsg}`);
       return;
     }
     fMyConsoleLog(
@@ -6499,10 +6456,9 @@
 
     // === 4. Determine Max Treasure Color Index based on Level & Random Rolls ===
     let maxTreasureColorIndexBase;
-    if (charLvl <= 4) maxTreasureColorIndexBase = 2; // Up to Yellow (index 2)
-    else if (charLvl <= 9)
-      maxTreasureColorIndexBase = 3; // Up to Green (index 3)
-    else maxTreasureColorIndexBase = 4; // Up to Blue (index 4)
+    if (charLvl <= 4) maxTreasureColorIndexBase = 2;
+    else if (charLvl <= 9) maxTreasureColorIndexBase = 3;
+    else maxTreasureColorIndexBase = 4;
 
     const roll1 = fdRoll(maxTreasureColorIndexBase + 1);
     const roll2 = fdRoll(maxTreasureColorIndexBase + 1);
@@ -6522,9 +6478,8 @@
         rowData[treasureColor_C] ?? ""
       ).toUpperCase();
       const treasureDesc = String(rowData[treasureDesc_C] ?? "").trim();
-      const treasureColorIndex = treasureColorArr.indexOf(treasureColor); // Find index of this treasure's color
+      const treasureColorIndex = treasureColorArr.indexOf(treasureColor);
 
-      // Check if valid color, below max index, and has description
       if (
         treasureColorIndex !== -1 &&
         treasureColorIndex <= maxTreasureColorIndex &&
@@ -6540,8 +6495,8 @@
     if (eligibleValuables.length === 0) {
       const errorMsg = `No valuables found matching level ${charLvl} criteria (Max Color: ${treasureColorArr[maxTreasureColorIndex]}).`;
       fMyConsoleLog(`   -> ⚠️ ${funcName} Warning: ${errorMsg}`);
-      await fShowMessage(`Warning: ${errorMsg}`);
-      return; // Halt execution
+      await fShowMessage(`⚠️ Warning: ${errorMsg}`);
+      return;
     }
     fMyConsoleLog(
       `   -> Found ${eligibleValuables.length} eligible valuables.`
@@ -6563,7 +6518,6 @@
       titleHtml = `<span class="red-bold">SPECIFIC</span> <span class="blue-bold">Loot ${lootType}:</span>`;
       titleText = `SPECIFIC Loot ${lootType}:`;
     }
-    // Format message body
     const messageBodyHtml = selectedValuable.description;
     const messageBodyText = selectedValuable.description;
 
@@ -6573,11 +6527,10 @@
     fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
     fShowSidebar();
 
-    // Ensure log is sent
     setTimeout(() => fSendLogToGMScreenAndPS(), 0);
 
     fMyConsoleLog(`✅ ${funcName}: Valuables loot posted.`);
-  } // END fLoot_RollValuables
+  } // End function fLoot_RollValuables
 
   // fLoot_RollGear //////////////////////////////////////////////////////////////
   // Purpose -> Rolls a random, level-appropriate, non-artifact gear item from the
@@ -7376,10 +7329,11 @@
     }
   } // END fPromptForDesignerPassword
 
-  /**
-   * Purpose -> Handles the boolean result from the server-side password validation.
+  /** function fHandleDesignerPasswordResult
+   * Purpose: Handles the boolean result from the server-side password validation.
    * Shows/hides the Designer button and updates state accordingly.
-   * @param {boolean} isValid - The result from fSrvValidateDesignerPassword.
+   * Assumptions: The #btn-designer-menu element exists.
+   * @param {boolean} isValid - The result from function fSrvValidateDesignerPassword.
    * @returns {void}
    */
   function fHandleDesignerPasswordResult(isValid) {
@@ -7391,7 +7345,9 @@
       console.error(
         "fHandleDesignerPasswordResult: Could not find Designer button (#btn-designer-menu)."
       );
-      fShowMessage("Error: Could not find the Designer menu button element.");
+      fShowMessage(
+        "❌ Error: Could not find the Designer menu button element."
+      );
       gUI.isDesignerMode = false;
       return;
     }
@@ -7400,27 +7356,25 @@
       fMyConsoleLog("   -> Password CORRECT. Enabling Designer Mode.");
       designerButton.style.display = "inline-flex";
       gUI.isDesignerMode = true;
-      // The success message is removed; the button appearing is the feedback.
     } else {
       fMyConsoleLog("   -> Password INCORRECT.");
       designerButton.style.display = "none";
       gUI.isDesignerMode = false;
-      fShowMessage("❌ Incorrect Password."); // Keep failure feedback
+      fShowMessage("❌ Incorrect Password.");
     }
-  } // END fHandleDesignerPasswordResult
+  } // End function fHandleDesignerPasswordResult
 
   // ==========================================================================
   // === MENU BAR "LIKE"     (End of Menu Bar Click) ===
   // ==========================================================================
 
-  // fCalculatesEnc_MR_AP ///////////////////////////////////////////////////
-  // Purpose -> Calculates Movement Rate (MR) tiers and Carry Capacity tiers based on Agility,
-  //            Strength, and bonuses. Determines the character's current MR by comparing
-  //            current encumbrance to carry capacity tiers. Updates the MR/Carry table,
-  //            checkboxes, and the main MR display cell. Calculates total AP of all gear.
-  // Inputs  -> None (Reads values directly from gUI.arr using tags).
-  // Outputs -> (Promise<void>): Resolves when calculations and updates are complete. May show
-  //                              an alert message if over-encumbered.
+  /** function fCalculatesEnc_MR_AP
+   * Purpose: Calculates Movement Rate (MR) and Carry Capacity tiers, determines the
+   * character's current MR, updates the MR/Carry table, and calculates total AP.
+   * Assumptions: Relies on various values and range definitions in the gUI object.
+   * @param {} - No parameters.
+   * @returns {Promise<void>} Resolves when calculations and updates are complete.
+   */
   async function fCalculatesEnc_MR_AP() {
     fMyConsoleLog("⚙️ Calculating Movement Rate and Encumbrance...");
 
@@ -7443,10 +7397,10 @@
     let errorMsg = "";
     const agilityValue = fGetGridValue("Agi", "Sk1", true);
     const strengthValue = fGetGridValue("Str", "Sk1", true);
-    const plusMRValue = fGetGridValue("GearPlusMR", "GearPlusMR", true) || 0; // Default 0 if NaN/empty
+    const plusMRValue = fGetGridValue("GearPlusMR", "GearPlusMR", true) || 0;
     const plusCarryValue =
-      fGetGridValue("GearPlusCarry", "GearPlusCarry", true) || 0; // Default 0 if NaN/empty
-    const currentEncumbrance = fCalcTotalEnc() || 0; // Default 0 if NaN/empty
+      fGetGridValue("GearPlusCarry", "GearPlusCarry", true) || 0;
+    const currentEncumbrance = fCalcTotalEnc() || 0;
 
     // Validate essential inputs
     if (isNaN(agilityValue))
@@ -7462,7 +7416,7 @@
         `fCalculatesEnc_MR_AP: Input validation failed: ${errorMsg}`
       );
       fMyConsoleLog(`❌ MR/Enc Calc Failed: ${errorMsg}`);
-      await fShowMessage(`Error calculating MR/Enc: ${errorMsg}`);
+      await fShowMessage(`❌ Error calculating MR/Enc: ${errorMsg}`);
       return;
     }
 
@@ -7479,7 +7433,6 @@
       fMyConsoleLog(
         "   -> ⚠️ Warning: Failed to update GearSpe/GearStr overview cells."
       );
-      // Continue calculation even if these fail? For now, yes.
     }
 
     // === 4. Calculate and Update MR & Carry Tables & Checkboxes ===
@@ -7490,7 +7443,6 @@
     for (let i = 0; i < mrColumnTags.length; i++) {
       const colTag = mrColumnTags[i];
 
-      // Calculate MR and Carry for this column
       const movementRate = Math.round(
         (6 + agilityValue / 5 + plusMRValue) * movementMultipliers[i]
       );
@@ -7498,28 +7450,22 @@
         (50 + strengthValue + plusCarryValue) * carryMultipliers[i]
       );
 
-      // Update Grid Cells for this column
       let mrSet = fSetGridValue(MR_TABLE_ROW, colTag, movementRate);
       let carrySet = fSetGridValue(CARRY_TABLE_ROW, colTag, carryCapacity);
-      let cbSetInitial = fSetGridValue(CHECKBOX_ROW, colTag, false); // Set to false initially
+      let cbSetInitial = fSetGridValue(CHECKBOX_ROW, colTag, false);
 
       if (!mrSet || !carrySet || !cbSetInitial) {
         fMyConsoleLog(
           `   -> ⚠️ Error setting MR/Carry/Checkbox values for column ${colTag}.`
         );
         calculationErrors = true;
-        // Continue processing other columns despite error? For now, yes.
-      } else {
-        // fMyConsoleLog(`   -> Col '${colTag}': MR=${movementRate}, Carry=${carryCapacity}`);
       }
 
-      // Check if this is the active MR level
       if (!foundActiveMRLevel && currentEncumbrance <= carryCapacity) {
         fMyConsoleLog(
           `   -> Active MR Level Found: Col '${colTag}' (Enc ${currentEncumbrance} <= Carry ${carryCapacity})`
         );
         if (!fSetGridValue(CHECKBOX_ROW, colTag, true)) {
-          // Try to check the box
           fMyConsoleLog(
             `   -> ⚠️ Error setting Checkbox to TRUE for column ${colTag}.`
           );
@@ -7530,7 +7476,7 @@
           fMyConsoleLog(`   -> Final MR set to: ${finalMovementRate}`);
         }
       }
-    } // End loop
+    }
 
     // === 5. Update Final MR Cell ===
     if (!fSetGridValue("MR", "MR", finalMovementRate)) {
@@ -7540,9 +7486,8 @@
 
     // === 6. Show Over-Encumbered Alert ===
     if (!foundActiveMRLevel || finalMovementRate === 0) {
-      // Check if no level was found OR MR ended up 0
       fMyConsoleLog("   -> 🚨 Character is over-encumbered!");
-      await fShowMessage("You are over encumbered, MR is 0.");
+      await fShowMessage("⚠️ You are over encumbered, MR is 0.");
     }
 
     // === 5. Update Final AP Total Cell ===
@@ -7554,7 +7499,7 @@
     } else {
       fMyConsoleLog("✅ MR/Enc/AP Calc Completed successfully.");
     }
-  } // END fCalculatesEnc_MR_AP
+  } // End function fCalculatesEnc_MR_AP
 
   // fCalcTotalEnc ///////////////////////////////////////////////////////////////////
   // Purpose -> Sums all Turbo grid values in the ranges defined by gUI.range.gearEncCol,
@@ -7820,15 +7765,15 @@
   // === Grid Button Click     (End of MENU BAR "LIKE") ===
   // ==========================================================================
 
-  // fHandleGridButtonClick //////////////////////////////////////////////////////
-  // Purpose -> Handles clicks delegated from the grid specifically for header button images.
-  //            Routes the click to the appropriate action handler based on the
-  //            image's 'data-button-action' attribute. Simulates a click on the
-  //            main '#btn-roll' for the 'action-rollDice' button or the corresponding
-  //            menu item for 'action-refreshData'.
-  // Inputs  -> event (MouseEvent): The original click event object.
-  //         -> buttonImg (HTMLImageElement): The header button image element that was clicked.
-  // Outputs -> None (Calls other action functions or simulates clicks).
+  /** function fHandleGridButtonClick
+   * Purpose: Handles clicks delegated from the grid specifically for header button images.
+   * Routes the click to the appropriate action handler based on the
+   * image's 'data-button-action' attribute.
+   * Assumptions: Buttons and their target elements/actions are correctly configured.
+   * @param {MouseEvent} event - The original click event object.
+   * @param {HTMLImageElement} buttonImg - The header button image element that was clicked.
+   * @returns {void}
+   */
   function fHandleGridButtonClick(event, buttonImg) {
     const action = buttonImg.dataset.buttonAction;
     fMyConsoleLog(`🖱️ Header Button Clicked: ${action}`);
@@ -7841,22 +7786,19 @@
     // === Dispatch Action ===
     switch (action) {
       case "action-rollDice":
-        // Simulate a click on the main Roll button in the menu bar
         const rollButton = document.getElementById("btn-roll");
         if (rollButton) {
           fMyConsoleLog("   -> Simulating click on #btn-roll...");
-          rollButton.click(); // Trigger the main roll button's logic
+          rollButton.click();
         } else {
           console.error(
             "fHandleGridButtonClick: Could not find #btn-roll element to simulate click!"
           );
           fMyConsoleLog("   -> ❌ Error: Could not find #btn-roll.");
-          // Optional: fShowMessage("Error: Could not find the main Roll button.");
         }
         break;
       case "action-refreshData":
         fMyConsoleLog("   -> Refresh Data action triggered.");
-        // Simulate a click on the 'Update (Level, Slot, Names)' menu item
         const updateMenuItem = document.querySelector(
           'a[data-action="game-updateLevelSlotName"]'
         );
@@ -7864,7 +7806,7 @@
           fMyConsoleLog(
             "   -> Simulating click on 'game-updateLevelSlotName' menu item..."
           );
-          updateMenuItem.click(); // Trigger the menu item's logic
+          updateMenuItem.click();
         } else {
           console.error(
             "fHandleGridButtonClick: Could not find menu item a[data-action='game-updateLevelSlotName']!"
@@ -7872,23 +7814,22 @@
           fMyConsoleLog(
             "   -> ❌ Error: Could not find 'Update (Level, Slot, Names)' menu item."
           );
-          // Optional: fShowMessage("Error: Could not trigger the Update action.");
         }
         break;
       case "action-jumpTop":
-        fScrollGridToTop(grid); // Scroll grid viewport to top
+        fScrollGridToTop(grid);
         break;
       case "action-jumpBottom":
-        fScrollGridToBottom(grid); // Scroll grid viewport to bottom (Gear section)
+        fScrollGridToBottom(grid);
         break;
       case "action-showMonsters":
-        fRefreshMonsterData(); // Refresh monster data from sheet
+        fRefreshMonsterData();
         break;
       default:
         console.warn(`Unhandled header button action: ${action}`);
-        fShowMessage(`Action "${action}" not yet implemented.`); // Show message for unhandled
+        fShowMessage(`ℹ️ Action "${action}" is not yet implemented.`);
     }
-  } // END fHandleGridButtonClick
+  } // End function fHandleGridButtonClick
 
   // fScrollGridToTop ////////////////////////////////////////////////////////////////
   // Purpose -> Scrolls the grid container smoothly to the top (0px scroll).
@@ -7951,10 +7892,10 @@
     );
   } // END fScrollGridToBottom
 
-  /**
-   * Purpose -> Handles the 'Show Monsters' header button action. Displays a loading
-   * message, clears the Turbo monster table, fetches fresh monster data from the
-   * GM Screen DB via the server, and then populates the Turbo table with the result.
+  /** function fRefreshMonsterData
+   * Purpose: Handles the 'Show Monsters' header button action by fetching and
+   * populating fresh monster data from the GM Screen DB.
+   * Assumptions: gUI.range and gUI.rangeDB definitions are correct.
    * @returns {Promise<void>}
    */
   async function fRefreshMonsterData() {
@@ -7971,7 +7912,7 @@
       const msg =
         "Turbo Monster range definition (gUI.range.monsters) is missing or invalid.";
       fHideMessage();
-      await fShowMessage(`Error: ${msg}`);
+      await fShowMessage(`❌ Error: ${msg}`);
       return;
     }
 
@@ -7983,7 +7924,7 @@
       const msg =
         "GM Screen DB Monster range definition (gUI.rangeDB.monstersDB) is missing or invalid.";
       fHideMessage();
-      await fShowMessage(`Error: ${msg}`);
+      await fShowMessage(`❌ Error: ${msg}`);
       return;
     }
 
@@ -8010,7 +7951,7 @@
         ) {
           const errMsg =
             "Received invalid data structure from server for monsters.";
-          fShowMessage(`Error: ${errMsg}`);
+          fShowMessage(`❌ Error: ${errMsg}`);
           return;
         }
 
@@ -8032,7 +7973,7 @@
         fHideMessage();
         const errorMsgFromServer = error.message || "Unknown server error";
         const finalErrorMsg = `Failed to fetch monster data from server: ${errorMsgFromServer}`;
-        fShowMessage(`Error: ${finalErrorMsg}`);
+        fShowMessage(`❌ Error: ${finalErrorMsg}`);
       })
       .fSrvGetSheetRangeDataNTags("db", "GMScreen", gmMonsterRangeDef);
   } // End function fRefreshMonsterData
@@ -9432,9 +9373,10 @@
     }, 10);
   } // End function fShowValidationTooltip
 
-  /**
+  /** function fHandleGridDblClick
    * Purpose: Handles the delegated 'dblclick' event for the grid. Triggers edit
    * mode for customizable columns or opens a prompt for editing an Ability name.
+   * Assumptions: The grid and its cells have correct data attributes.
    * @param {MouseEvent} event - The dblclick event object.
    * @returns {void}
    */
@@ -9484,7 +9426,7 @@
       // --- Existing logic for other data cells ---
       const abilityName = fGetGridValue(r, "Ability");
       if (!String(abilityName || "").trim()) {
-        fShowMessage("Empty ability name. Please edit a named ability.");
+        fShowMessage("⚠️ Empty ability name. Please edit a named ability.");
         return;
       }
       fMyConsoleLog(`⚡ Edit Mode triggered for ${colTag} cell [${r}, ${c}]`);

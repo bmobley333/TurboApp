@@ -918,12 +918,14 @@
     }
   } // END fApplyMorphResults
 
-  // fAct_VerifyAndProcessCost ///////////////////////////////////////////////////////
-  // Purpose -> Cost Verification Helper: Checks Action Points. Prompts if insufficient.
-  //            Collects change to AP and sidebar log headers (HTML & text).
-  // Inputs  -> None.
-  // Outputs -> (Promise<Object>): { success, cancelledByUser, changes, headers, headersText }
-  //            'headers' is HTML, 'headersText' is plain text.
+  /** function fAct_VerifyAndProcessCost
+   * Purpose: Cost Verification Helper: Checks Action Points. Prompts if insufficient.
+   * Collects change to AP and sidebar log headers (HTML & text).
+   * Assumptions: fGetGridValue and fShowMessage/fShowPrompt are available.
+   * Notes: 'headers' is HTML, 'headersText' is plain text.
+   * @param {} - No parameters.
+   * @returns {Promise<object>} { success, cancelledByUser, changes, headers, headersText }
+   */
   async function fAct_VerifyAndProcessCost() {
     const { skAct, skName } = gUI.roll;
     const actCost = Number(skAct);
@@ -954,7 +956,7 @@
           `⚠️ Insufficient Action Points (Need ${actCost}, Have ${currentAct})`
         );
         const proceed = await fShowPrompt(
-          `Not Enough Action Points (${currentAct}) to use '${skName}' (Cost: ${actCost})<br><br>Do you want to go negative?`
+          `⚠️ Not Enough Action Points (${currentAct}) to use '${skName}' (Cost: ${actCost})<br><br>Do you want to go negative?`
         );
         if (!proceed) {
           fMyConsoleLog(
@@ -992,13 +994,15 @@
       headers: headers,
       headersText: headersText,
     };
-  } // END fAct_VerifyAndProcessCost
+  } // End function fAct_VerifyAndProcessCost
 
-  // fUses_VerifyAndProcessCost //////////////////////////////////////////////////////
-  // Purpose -> Cost Verification Helper: Checks Uses. Prompts if insufficient.
-  //            Collects change to Uses and sidebar log headers (HTML & text).
-  // Inputs  -> multiRollCount (Number).
-  // Outputs -> (Promise<Object>): { success, cancelledByUser, changes, headers, headersText }
+  /** function fUses_VerifyAndProcessCost
+   * Purpose: Cost Verification Helper: Checks Uses. Prompts if insufficient.
+   * Collects change to Uses and sidebar log headers (HTML & text).
+   * Assumptions: gUI.roll is populated. fShowPrompt is available.
+   * @param {number} multiRollCount - The number of uses required for the action.
+   * @returns {Promise<object>} { success, cancelledByUser, changes, headers, headersText }
+   */
   async function fUses_VerifyAndProcessCost(multiRollCount) {
     const { skUses, skName, ability_R } = gUI.roll;
     const changes = [];
@@ -1028,7 +1032,7 @@
         `⚠️ Insufficient Uses Left (Need ${totalUsesCost}, Have ${currentUses})`
       );
       const proceed = await fShowPrompt(
-        `Not Enough Uses Left (${currentUses}) to use '${skName}' ${multiRollCount} times (Cost: ${totalUsesCost})<br><br>Do you want to go negative?`
+        `⚠️ Not Enough Uses Left (${currentUses}) to use '${skName}' ${multiRollCount} times (Cost: ${totalUsesCost})<br><br>Do you want to go negative?`
       );
       if (!proceed) {
         fMyConsoleLog(
@@ -1059,7 +1063,7 @@
       headers: headers,
       headersText: headersText,
     };
-  } // END fUses_VerifyAndProcessCost
+  } // End function fUses_VerifyAndProcessCost
 
   // fIsOn_VerifyAndProcessCost //////////////////////////////////////////////////////
   // Purpose -> Cost "Verification" Helper: Prepares the change object to copy the
@@ -3903,18 +3907,16 @@
     return false; // Indicate no valid roll was handled
   } // END fHandleAdHocRoll
 
-  // fCalcGearLine ///////////////////////////////////////////////////////////////////
-  // Purpose -> Handles edits to gear-related input cells (PossNum, PossWorn, PossPerOff).
-  //            Validates the new input value, updates the edited cell in the grid,
-  //            triggers fRefreshGearLineCalcs to update derived values, and if successful,
-  //            triggers fCalculatesEnc_MR_AP for the overall totals. Reverts changes on failure.
-  // Inputs  -> r (Number): The 0-based row index of the edited cell.
-  //         -> c (Number): The 0-based column index of the edited cell.
-  //         -> newValue (Any): The proposed new value for the edited cell.
-  //         -> oldValue (Any): The previous value of the edited cell (for reverting).
-  // Outputs -> (Promise<Any | null>): Resolves with the validated `newValue` if successful, or `null`
-  //                                  if validation or subsequent calculations fail (signaling not
-  //                                  to update gUI.arr in caller).
+  /** function fCalcGearLine
+   * Purpose: Handles edits to gear-related input cells, validates input, updates
+   * the grid, and triggers recalculations for derived values and overall totals.
+   * Assumptions: Relies on several helper functions and gUI state.
+   * @param {number} r - The 0-based row index of the edited cell.
+   * @param {number} c - The 0-based column index of the edited cell.
+   * @param {any} newValue - The proposed new value for the edited cell.
+   * @param {any} oldValue - The previous value of the edited cell (for reverting).
+   * @returns {Promise<any | null>} Resolves with the validated `newValue` or `null` on failure.
+   */
   async function fCalcGearLine(r, c, newValue, oldValue) {
     const funcName = "fCalcGearLine";
     fMyConsoleLog(
@@ -3944,7 +3946,7 @@
         `   -> Skipping ${funcName}: PossName invalid or missing ID for row ${r}.`
       );
       await fShowMessage(
-        "Cannot modify gear numbers/status until a valid item with an ID is selected in the 'Ability' column."
+        "ℹ️ Cannot modify gear numbers/status until a valid item with an ID is selected in the 'Ability' column."
       );
       fRevertCellDOM(r, c, oldValue); // Revert the change in the DOM
       return null; // Signal failure to caller
@@ -3954,7 +3956,7 @@
         `   -> ❌ Error: DB/Gear cache (gUI.dbGearFSData) not loaded or invalid.`
       );
       await fShowMessage(
-        "Error: Gear definition cache not loaded. Cannot calculate gear line."
+        "❌ Error: Gear definition cache not loaded. Cannot calculate gear line."
       );
       fRevertCellDOM(r, c, oldValue);
       return null;
@@ -3980,32 +3982,29 @@
       case possNumColTag:
         const numInput = Number(newValue);
         if (isNaN(numInput) || !Number.isInteger(numInput) || numInput < 0) {
-          validationError = `Invalid number ("${newValue}"). '${possNumColTag}' must be a whole number >= 0.`;
+          validationError = `❌ Invalid number ("${newValue}"). '${possNumColTag}' must be a whole number >= 0.`;
           validatedValue = null; // Mark as invalid
         } else {
           validatedValue = numInput; // Store the valid number
         }
         break;
       case possWornColTag:
-        // newValue is expected to be boolean true/false from checkbox handler
         if (typeof newValue !== "boolean") {
-          // Fallback conversion if somehow called with string/other
           validatedValue = String(newValue).toUpperCase() === "TRUE";
         } else {
-          validatedValue = newValue; // Already boolean
+          validatedValue = newValue;
         }
         break;
       case possPerOffColTag:
         const perOffInput = String(newValue ?? "").trim();
-        // Allow empty string OR a valid percentage format
         if (
           perOffInput !== "" &&
           (!perOffInput.endsWith("%") || isNaN(parseFloat(perOffInput)))
         ) {
-          validationError = `Invalid format ("${newValue}"). '${possPerOffColTag}' must be blank or a percentage (e.g., 50%).`;
-          validatedValue = null; // Mark as invalid
+          validationError = `❌ Invalid format ("${newValue}"). '${possPerOffColTag}' must be blank or a percentage (e.g., 50%).`;
+          validatedValue = null;
         } else {
-          validatedValue = perOffInput; // Store valid string (empty or 'X%')
+          validatedValue = perOffInput;
         }
         break;
     }
@@ -4019,7 +4018,6 @@
     }
 
     // === 3. Get Current Derived Values (BEFORE applying changes) ===
-    // These are needed by the helper to revert if *it* fails
     const previousEnc = fGetGridValue(r, possEncColTag);
     const previousCr = fGetGridValue(r, possCrTotColTag);
     const previousAp = fGetGridValue(r, possAPTotColTag);
@@ -4030,9 +4028,8 @@
         `   -> ❌ Error setting validated value for edited cell [${r}, ${c}].`
       );
       await fShowMessage(
-        `Error updating edited cell [${r}, ${c}] with validated value.`
+        `❌ Error updating edited cell [${r}, ${c}] with validated value.`
       );
-      // No need to revert DOM here as fSetGridValue failed, but signal failure
       return null;
     }
     fMyConsoleLog(
@@ -4045,31 +4042,27 @@
       previousEnc,
       previousCr,
       previousAp
-    ); // Call the helper
+    );
 
     // === 6. Recalculate Overall Totals OR Revert Edited Cell on Failure ===
     if (refreshSuccess) {
-      // Refresh helper succeeded and updated derived cells
       fMyConsoleLog(
-        `   -> Triggering fCalculatesEnc_MR_AP after successful refresh for row ${r}...`
+        `   -> Triggering function fCalculatesEnc_MR_AP after successful refresh for row ${r}...`
       );
-      await fCalculatesEnc_MR_AP(); // Update overall totals
+      await fCalculatesEnc_MR_AP();
       fMyConsoleLog(`✅ ${funcName} completed successfully for [${r}, ${c}].`);
-      return validatedValue; // Return validated value on full success
+      return validatedValue;
     } else {
-      // Refresh helper failed and reverted derived cells
       fMyConsoleLog(
-        `   -> ❌ Error occurred during fRefreshGearLineCalcs for row ${r}.`
+        `   -> ❌ Error occurred during function fRefreshGearLineCalcs for row ${r}.`
       );
-      // fRefreshGearLineCalcs logs its error & possibly shows msg
-      // CRITICAL: Revert the originally edited cell back to its old value
       fMyConsoleLog(
         `      -> Reverting edited cell [${r}, ${c}] back to old value: "${oldValue}"`
       );
-      fSetGridValue(r, c, oldValue); // Revert the initial change
-      return null; // Signal failure
+      fSetGridValue(r, c, oldValue);
+      return null;
     }
-  } // END fCalcGearLine
+  } // End function fCalcGearLine
 
   // fRefreshGearLineCalcs ///////////////////////////////////////////////////////
   // Purpose -> Helper to calculate and update derived gear values (Enc, CR Total, AP Total)

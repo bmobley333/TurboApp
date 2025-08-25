@@ -703,23 +703,19 @@
     return updateErrors === 0; // Return true only if no errors occurred
   } // END fSetRangeOfGridValues
 
-  /**
+  /** function fSetGridValue
    * Purpose -> Updates a value in the data model (gUI.arr) and the corresponding
-   * cell display in the DOM (gUI.grid2D). Handles dynamic URL styling and
-   * ensures text content is wrapped in a span.
-   * Inputs  -> rowRef (String|Number): Row tag or 0-based index.
-   * -> colRef (String|Number): Column tag or 0-based index.
-   * -> newValue (Any): The new value to set.
-   * Outputs -> (Boolean): True if the update was successful (data and optionally DOM),
-   * false if resolution failed or row/cell doesn't exist.
+   * cell display in the DOM (gUI.grid2D). Protects header button cells.
+   * Assumptions: The grid and its data arrays are populated. gUI.headerButtonCoords is populated.
+   * @param {string|number} rowRef - Row tag or 0-based index.
+   * @param {string|number} colRef - Column tag or 0-based index.
+   * @param {any} newValue - The new value to set.
+   * @returns {boolean} True if the update was successful, false if resolution failed.
    */
   function fSetGridValue(rowRef, colRef, newValue) {
     // === 1. Resolve Coordinates ===
     const r = fResolveRow(rowRef);
     const c = fResolveCol(colRef);
-    let valueToSet = newValue; // Use a temporary variable
-
-    // Validate resolved indices
     if (isNaN(r) || isNaN(c)) {
       console.warn(
         `fSetGridValue: Could not resolve (${rowRef}, ${colRef}) to valid indices [${r}, ${c}].`
@@ -727,26 +723,29 @@
       return false;
     }
 
-    // === 2. Validate Row Existence in Data Model ===
+    // === 2. Protect Header Button Cells ===
+    if (gUI.headerButtonCoords.has(`${r},${c}`)) {
+      return true; // This is a button cell, do not modify its DOM content.
+    }
+
+    // === 3. Validate Row Existence & Update Data Model ===
     if (!gUI.arr?.[r]) {
       console.warn(`fSetGridValue: Row ${r} does not exist in gUI.arr.`);
       return false;
     }
-
-    // === 3. Update Data Model ===
-    gUI.arr[r][c] = valueToSet;
+    gUI.arr[r][c] = newValue;
 
     // === 4. Update DOM ===
     const cell = gUI.grid2D?.[r]?.[c];
     if (!cell) {
       console.warn(
-        `fSetGridValue: Cell element not found in gUI.grid2D at [${r}, ${c}]. Data model updated, DOM not.`
+        `fSetGridValue: Cell element not found at [${r}, ${c}]. Data model updated, DOM not.`
       );
       return true;
     }
 
     // === 5. Handle Dynamic URL Styling & Attributes ===
-    const valueStr = String(valueToSet ?? "").trim();
+    const valueStr = String(newValue ?? "").trim();
     const isUrl =
       valueStr.startsWith("http://") || valueStr.startsWith("https://");
 
@@ -757,7 +756,6 @@
         /drive\.google\.com\/file\/d\/([-\w]+)/
       );
       const imgExts = /\.(png|jpg|jpeg|gif|webp|svg)$/i;
-
       if (driveMatch && driveMatch[1]) {
         const fileId = driveMatch[1];
         const imageUrl = "https://drive.google.com/uc?export=view&id=" + fileId;
@@ -781,25 +779,23 @@
     const dropdown = cell.querySelector("select.grid-dropdown");
 
     if (checkbox) {
-      const valUpper = String(valueToSet).toUpperCase();
-      checkbox.checked = valueToSet === true || valUpper === "TRUE";
+      const valUpper = String(newValue).toUpperCase();
+      checkbox.checked = newValue === true || valUpper === "TRUE";
     } else if (dropdown) {
-      dropdown.value = String(valueToSet ?? "");
+      dropdown.value = String(newValue ?? "");
     } else {
-      // For text content, clear the cell and append a new span
       const idPattern = /\s{2,}_\w{6}$/;
       const text =
-        typeof valueToSet === "string" && idPattern.test(valueToSet)
-          ? valueToSet.replace(idPattern, "")
-          : valueToSet;
-
-      cell.innerHTML = ""; // Clear any old content (including old spans)
+        typeof newValue === "string" && idPattern.test(newValue)
+          ? newValue.replace(idPattern, "")
+          : newValue;
+      cell.innerHTML = "";
       const textSpan = document.createElement("span");
       textSpan.textContent = text ?? "";
       cell.appendChild(textSpan);
     }
 
-    return true; // Indicate success
+    return true;
   } // End function fSetGridValue
 
   // ==========================================================================

@@ -57,6 +57,8 @@
     isSendingLog: false, // Flag/Lock to prevent concurrent log sends
     isDesignerMode: false, // Flag for designer mode access >>>
     isCurrentMessageModalUserCloseable: true, // ADDED: Tracks if the message modal can be closed by user action
+    headerButtonCoords: new Set(), // Set to store "r,c" strings of button cells
+    hiddenColumns: new Set(), // Stores indices of currently hidden columns
 
     //
     // === Character RaceClass Info ===
