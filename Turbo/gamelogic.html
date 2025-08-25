@@ -1,6 +1,11 @@
 <script>
   // gamelogic.html //
 
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  // End - n/a
+  // Start - Core Roll Action
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
   /** function fMain_AbilityRoll
    * Purpose: Top-level handler for initiating an ability/gear roll.
    * Assumptions: gUI state is ready for a roll action.
@@ -387,6 +392,11 @@
     setTimeout(() => fSendLogToGMScreenAndPS(), 0);
   } // End function fMain_AbilityRoll
 
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  // End - Core Roll Action
+  // Start - Roll Preparation & Validation
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
   /** function fClearAndSetGUIRoll
    * Purpose: Resets and populates the global gUI.roll object with data from a specific grid row.
    * Assumptions: The action originates from a valid Sk1/Sk2 checkbox click.
@@ -511,6 +521,11 @@
     }
     return true;
   } // End function fVerifyAbilityHasSkAndType
+
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  // End - Roll Preparation & Validation
+  // Start - Morph Logic
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
   /** function fProcessMorph
    * Purpose: Parses the morph string from gUI.roll.skMorph and updates gUI.roll with modifiers.
@@ -762,6 +777,11 @@
       if (!isNaN(num)) r.resDif = num;
     }
   } // End function fApplyMorphResults
+
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  // End - Morph Logic
+  // Start - Cost Verification
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
   /** function fAct_VerifyAndProcessCost
    * Purpose: Verifies and processes the Action Point cost for an ability.
@@ -1177,6 +1197,11 @@
       };
     }
   } // End function fFocus_VerifyAndProcessCost
+
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  // End - Cost Verification
+  // Start - Roll Execution
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
   /** function fPerformMultiRolls
    * Purpose: Handles the standard multi-roll loop for abilities.
@@ -2119,171 +2144,10 @@
     };
   } // End function fPerformPlayerArmorRolls
 
-  /** function fdRoll
-   * Purpose: Rolls a standard linear distribution die (e.g., 1d6).
-   * Assumptions: Input is a positive integer.
-   * @param {number} die - The number of sides on the die.
-   * @returns {number} The result of the roll (integer from 1 to die).
-   */
-  function fdRoll(die) {
-    const numDie = Number(die);
-    if (isNaN(numDie) || numDie < 1) {
-      console.error(`fdRoll received invalid die size: ${die}`);
-      return 1;
-    }
-    return Math.floor(Math.random() * numDie) + 1;
-  } // End function fdRoll
-
-  /** function fMetaDieRoll
-   * Purpose: Performs a non-linear "exploding" dice roll common in MetaScape.
-   * Assumptions: Input is a positive integer.
-   * @param {number} die - The base value (skill/attribute) for the roll.
-   * @returns {number} The integer result of the roll (minimum 1).
-   */
-  function fMetaDieRoll(die) {
-    const numDie = Number(die);
-    if (isNaN(numDie) || numDie < 1) {
-      console.error(`fMetaDieRoll received invalid die value: ${die}`);
-      return 1;
-    }
-    const rand1 = Math.random();
-    let rand2 = Math.random();
-    if (rand2 < 0.0001) rand2 = 0.0001;
-    return Math.floor((numDie * rand1) / rand2) + 1;
-  } // End function fMetaDieRoll
-
-  /** function fTC
-   * Purpose: Rolls 1d16 to determine a Tremendous or Critical result suffix.
-   * Assumptions: None.
-   * @param {}
-   * @returns {string} Formatted "T", "C", or an empty string.
-   */
-  function fTC() {
-    const roll = fdRoll(16);
-    return roll === 1
-      ? `<span class="tremendous">T</span>`
-      : roll === 2
-      ? `<span class="red-bold">C</span>`
-      : "";
-  } // End function fTC
-
-  /** function fSkRoll
-   * Purpose: Performs a standard MetaScape Skill roll.
-   * Assumptions: Averages a linear d(die*2) and a non-linear fMetaDieRoll(die).
-   * @param {number} die - The base skill value.
-   * @returns {number} The rounded integer result of the skill roll.
-   */
-  function fSkRoll(die) {
-    const numDie = Number(die);
-    if (isNaN(numDie) || numDie < 1) {
-      console.error(`fSkRoll received invalid die value: ${die}`);
-      return 1;
-    }
-    return Math.round((fdRoll(numDie * 2) + fMetaDieRoll(numDie)) / 2);
-  } // End function fSkRoll
-
-  /** function fAtkRoll
-   * Purpose: Performs a MetaScape Attack roll.
-   * Assumptions: Currently identical to fSkRoll.
-   * @param {number} die - The base attack skill value.
-   * @returns {number} The rounded integer result of the attack roll.
-   */
-  function fAtkRoll(die) {
-    const numDie = Number(die);
-    if (isNaN(numDie) || numDie < 1) {
-      console.error(`fAtkRoll received invalid die value: ${die}`);
-      return 1;
-    }
-    return Math.round((fdRoll(numDie * 2) + fMetaDieRoll(numDie)) / 2);
-  } // End function fAtkRoll
-
-  /** function fDefRoll
-   * Purpose: Performs a MetaScape Defense roll.
-   * Assumptions: Based on fMetaDieRoll(die) * 0.75.
-   * @param {number} die - The base defense value.
-   * @returns {number} The rounded integer result of the defense roll.
-   */
-  function fDefRoll(die) {
-    const numDie = Number(die);
-    if (isNaN(numDie) || numDie < 1) {
-      console.error(`fDefRoll received invalid die value: ${die}`);
-      return 1;
-    }
-    return Math.round(fMetaDieRoll(numDie) * 0.75);
-  } // End function fDefRoll
-
-  /** function fDmgRoll
-   * Purpose: Rolls standard PC Damage.
-   * Assumptions: Currently identical to fSkRoll.
-   * @param {number} pcDmg - The base damage value.
-   * @returns {number} The result of the damage roll.
-   */
-  function fDmgRoll(pcDmg) {
-    return fSkRoll(pcDmg);
-  } // End function fDmgRoll
-
-  /** function fARRoll
-   * Purpose: Rolls standard PC Armor.
-   * Assumptions: Uses fSkRoll result divided by 15.
-   * @param {number} pcAR - The base armor value.
-   * @returns {number} The result of the armor roll (min 1.0, two decimals).
-   */
-  function fARRoll(pcAR) {
-    const skillRoll = fSkRoll(pcAR);
-    const result = Math.trunc((skillRoll / 15) * 100) / 100;
-    return Math.max(1, result);
-  } // End function fARRoll
-
-  /** function fRollRPGDieString
-   * Purpose: Parses and rolls a standard RPG die string (e.g., "2d8+5").
-   * Assumptions: The die string is in a standard format.
-   * @param {string} dieString - The dice notation string.
-   * @returns {number | null} The numerical result of the roll, or null if parsing fails.
-   */
-  function fRollRPGDieString(dieString) {
-    if (typeof dieString !== "string" || !dieString.trim()) {
-      console.warn(
-        "fRollRPGDieString: Invalid input - requires a non-empty string."
-      );
-      return null;
-    }
-    const dieStringRegex = /^\s*(\d+)?\s*d\s*(\d+)\s*(?:([-+])\s*(\d+))?\s*$/i;
-    const match = dieString.trim().match(dieStringRegex);
-    if (!match) {
-      return null;
-    }
-    const numDice = match[1] ? parseInt(match[1], 10) : 1;
-    const numSides = parseInt(match[2], 10);
-    const modifierSign = match[3];
-    const modifierValue = match[4] ? parseInt(match[4], 10) : 0;
-    if (
-      isNaN(numDice) ||
-      numDice < 1 ||
-      isNaN(numSides) ||
-      numSides < 1 ||
-      isNaN(modifierValue)
-    ) {
-      console.warn(
-        `fRollRPGDieString: Invalid numeric components in parsed string "${dieString}"`
-      );
-      return null;
-    }
-    let total = 0;
-    fMyConsoleLog(`   -> Rolling Die String: ${numDice}d${numSides}`);
-    for (let i = 0; i < numDice; i++) {
-      const roll = fdRoll(numSides);
-      total += roll;
-    }
-    fMyConsoleLog(`   -> Base Roll Total: ${total}`);
-    if (modifierSign === "+") {
-      total += modifierValue;
-      fMyConsoleLog(`   -> Applying Modifier: +${modifierValue} => ${total}`);
-    } else if (modifierSign === "-") {
-      total -= modifierValue;
-      fMyConsoleLog(`   -> Applying Modifier: -${modifierValue} => ${total}`);
-    }
-    return total;
-  } // End function fRollRPGDieString
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  // End - Roll Execution
+  // Start - Roll Calculation
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
   /** function fCalcGUIRollResSk
    * Purpose: Calculates the final resulting skill value before the die roll.
@@ -2463,312 +2327,181 @@
     fMyConsoleLog(`⚙️ Calculated final resRoll: ${gUI.roll.resRoll}`);
   } // End function fCalcGUIRollResRoll
 
-  /** function fCalculatesEnc_MR_AP
-   * Purpose: Calculates Movement Rate (MR) and Carry Capacity, updates the grid, and recalculates total AP.
-   * Assumptions: Relies on various values and range definitions in the gUI object.
-   * Notes: This is a core calculation function triggered after gear or stat changes.
-   * @returns {Promise<void>} Resolves when calculations and updates are complete.
-   */
-  async function fCalculatesEnc_MR_AP() {
-    fMyConsoleLog("⚙️ Calculating Movement Rate and Encumbrance...");
-    const movementMultipliers = [1, 0.9, 0.8, 0.65, 0.5, 0.25];
-    const carryMultipliers = [1, 2, 4, 8, 12, 16];
-    const mrColumnTags = [
-      "GearMRCol1",
-      "GearMRCol2",
-      "GearMRCol3",
-      "GearMRCol4",
-      "GearMRCol5",
-      "GearMRCol6",
-    ];
-    const MR_TABLE_ROW = "GearMRTbl";
-    const CARRY_TABLE_ROW = "GearCarryTbl";
-    const CHECKBOX_ROW = "GearMRCheckBox";
-    let errorMsg = "";
-    const agilityValue = fGetGridValue("Agi", "Sk1", true);
-    const strengthValue = fGetGridValue("Str", "Sk1", true);
-    const plusMRValue = fGetGridValue("GearPlusMR", "GearPlusMR", true) || 0;
-    const plusCarryValue =
-      fGetGridValue("GearPlusCarry", "GearPlusCarry", true) || 0;
-    const currentEncumbrance = fCalcTotalEnc() || 0;
-    if (isNaN(agilityValue))
-      errorMsg += "Agility ('Agi', 'Sk1') is not a valid number. ";
-    if (isNaN(strengthValue))
-      errorMsg += "Strength ('Str', 'Sk1') is not a valid number. ";
-    if (isNaN(currentEncumbrance))
-      errorMsg +=
-        "Current Encumbrance ('PossEncTot', 'PossEncTot') is not a valid number.";
-    if (errorMsg) {
-      console.error(
-        `fCalculatesEnc_MR_AP: Input validation failed: ${errorMsg}`
-      );
-      fMyConsoleLog(`❌ MR/Enc Calc Failed: ${errorMsg}`);
-      await fShowMessage(`❌ Error calculating MR/Enc: ${errorMsg}`);
-      return;
-    }
-    fMyConsoleLog(
-      `   -> Inputs: Agi=${agilityValue}, Str=${strengthValue}, +MR=${plusMRValue}, +Carry=${plusCarryValue}, CurrentEnc=${currentEncumbrance}`
-    );
-    let updateSuccess = true;
-    updateSuccess &&= fSetGridValue("GearSpe", "GearSpeAndStr", agilityValue);
-    updateSuccess &&= fSetGridValue("GearStr", "GearSpeAndStr", strengthValue);
-    if (!updateSuccess) {
-      fMyConsoleLog(
-        "   -> ⚠️ Warning: Failed to update GearSpe/GearStr overview cells."
-      );
-    }
-    let foundActiveMRLevel = false;
-    let finalMovementRate = 0;
-    let calculationErrors = false;
-    for (let i = 0; i < mrColumnTags.length; i++) {
-      const colTag = mrColumnTags[i];
-      const movementRate = Math.round(
-        (6 + agilityValue / 5 + plusMRValue) * movementMultipliers[i]
-      );
-      const carryCapacity = Math.round(
-        (50 + strengthValue + plusCarryValue) * carryMultipliers[i]
-      );
-      let mrSet = fSetGridValue(MR_TABLE_ROW, colTag, movementRate);
-      let carrySet = fSetGridValue(CARRY_TABLE_ROW, colTag, carryCapacity);
-      let cbSetInitial = fSetGridValue(CHECKBOX_ROW, colTag, false);
-      if (!mrSet || !carrySet || !cbSetInitial) {
-        fMyConsoleLog(
-          `   -> ⚠️ Error setting MR/Carry/Checkbox values for column ${colTag}.`
-        );
-        calculationErrors = true;
-      }
-      if (!foundActiveMRLevel && currentEncumbrance <= carryCapacity) {
-        fMyConsoleLog(
-          `   -> Active MR Level Found: Col '${colTag}' (Enc ${currentEncumbrance} <= Carry ${carryCapacity})`
-        );
-        if (!fSetGridValue(CHECKBOX_ROW, colTag, true)) {
-          fMyConsoleLog(
-            `   -> ⚠️ Error setting Checkbox to TRUE for column ${colTag}.`
-          );
-          calculationErrors = true;
-        } else {
-          foundActiveMRLevel = true;
-          finalMovementRate = movementRate;
-          fMyConsoleLog(`   -> Final MR set to: ${finalMovementRate}`);
-        }
-      }
-    }
-    if (!fSetGridValue("MR", "MR", finalMovementRate)) {
-      fMyConsoleLog("   -> ⚠️ Error setting final MR value in ('MR', 'MR').");
-      calculationErrors = true;
-    }
-    if (!foundActiveMRLevel || finalMovementRate === 0) {
-      fMyConsoleLog("   -> 🚨 Character is over-encumbered!");
-      await fShowMessage("⚠️ You are over encumbered, MR is 0.");
-    }
-    fCalcTotalAP();
-    if (calculationErrors) {
-      fMyConsoleLog("❌ MR/Enc/AP Calc Completed with errors.");
-    } else {
-      fMyConsoleLog("✅ MR/Enc/AP Calc Completed successfully.");
-    }
-  } // End function fCalculatesEnc_MR_AP
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  // End - Roll Calculation
+  // Start - Core Dice Mechanics
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-  /** function fCalcTotalEnc
-   * Purpose: Calculates total encumbrance from gear and updates the grid.
-   * Assumptions: gUI.range.gearEncCol and gUI.range.currentEnc are defined.
-   * Notes: Sums values from all defined encumbrance columns.
-   * @returns {number} The calculated and rounded total encumbrance, or 0 on error.
+  /** function fdRoll
+   * Purpose: Rolls a standard linear distribution die (e.g., 1d6).
+   * Assumptions: Input is a positive integer.
+   * @param {number} die - The number of sides on the die.
+   * @returns {number} The result of the roll (integer from 1 to die).
    */
-  function fCalcTotalEnc() {
-    const funcName = "fCalcTotalEnc";
-    fMyConsoleLog(`⚖️ Calculating Total Encumbrance...`);
-    let totalEnc = 0;
-    let errorsOccurred = false;
-    const encRangeDefs = gUI.range?.gearEncCol;
-    const targetCellDef = gUI.range?.currentEnc;
-    if (!Array.isArray(encRangeDefs) || encRangeDefs.length === 0) {
-      console.error(
-        `${funcName}: Encumbrance source range definition (gUI.range.gearEncCol) is missing or invalid.`
-      );
-      fMyConsoleLog(
-        `❌ ${funcName} Error: Encumbrance source range definition missing.`
-      );
-      errorsOccurred = true;
+  function fdRoll(die) {
+    const numDie = Number(die);
+    if (isNaN(numDie) || numDie < 1) {
+      console.error(`fdRoll received invalid die size: ${die}`);
+      return 1;
     }
-    if (
-      !targetCellDef ||
-      typeof targetCellDef.r1 === "undefined" ||
-      typeof targetCellDef.c1 === "undefined"
-    ) {
-      console.error(
-        `${funcName}: Target cell definition (gUI.range.currentEnc is "${gUI.range.currentEnc}") is missing or invalid (requires r1, c1).`
-      );
-      fMyConsoleLog(
-        `❌ ${funcName} Error: Target cell definition missing or invalid.`
-      );
-      errorsOccurred = true;
-    }
-    if (errorsOccurred) return 0;
-    encRangeDefs.forEach((rangeDef, index) => {
-      if (!fDoesObjectHaveR1C1R2C2Properties(rangeDef)) {
-        console.warn(
-          `${funcName}: Skipping invalid range object at index ${index}:`,
-          rangeDef
-        );
-        errorsOccurred = true;
-        return;
-      }
-      const resolved = fConvertsR1C1R2C2TagOrNumToIndices(rangeDef);
-      if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
-        console.warn(
-          `${funcName}: Skipping range at index ${index} due to unresolved indices:`,
-          rangeDef
-        );
-        errorsOccurred = true;
-        return;
-      }
-      const rMin = Math.min(resolved.r1, resolved.r2);
-      const rMax = Math.max(resolved.r1, resolved.r2);
-      const cMin = Math.min(resolved.c1, resolved.c2);
-      const cMax = Math.max(resolved.c1, resolved.c2);
-      for (let r = rMin; r <= rMax; r++) {
-        for (let c = cMin; c <= cMax; c++) {
-          const value = fGetGridValue(r, c);
-          const numericValue = Number(value) || 0;
-          totalEnc += numericValue;
-        }
-      }
-    });
-    const roundedTotalEnc = Math.round(totalEnc * 100) / 100;
-    fMyConsoleLog(
-      `   -> Raw Total Enc: ${totalEnc}, Rounded: ${roundedTotalEnc}`
-    );
-    const targetR = fResolveRow(targetCellDef.r1);
-    const targetC = fResolveCol(targetCellDef.c1);
-    if (isNaN(targetR) || isNaN(targetC)) {
-      console.error(
-        `${funcName}: Could not resolve target cell coordinates from gUI.range.currentEnc:`,
-        targetCellDef
-      );
-      fMyConsoleLog(
-        `❌ ${funcName} Error: Could not resolve target cell coordinates.`
-      );
-      errorsOccurred = true;
-    } else {
-      if (!fSetGridValue(targetR, targetC, roundedTotalEnc)) {
-        fMyConsoleLog(
-          `   -> ⚠️ Warning: Failed to update target cell [${targetR}, ${targetC}] with total encumbrance.`
-        );
-        errorsOccurred = true;
-      } else {
-        fMyConsoleLog(
-          `   -> Target cell [${targetR}, ${targetC}] updated with: ${roundedTotalEnc}`
-        );
-      }
-    }
-    fMyConsoleLog(
-      `✅ ${funcName} finished ${
-        errorsOccurred ? "with errors" : "successfully"
-      }. Returning: ${roundedTotalEnc}`
-    );
-    return roundedTotalEnc;
-  } // End function fCalcTotalEnc
+    return Math.floor(Math.random() * numDie) + 1;
+  } // End function fdRoll
 
-  /** function fCalcTotalAP
-   * Purpose: Calculates total Action Points from gear and updates the grid.
-   * Assumptions: gUI.range.gearApTotalCol and gUI.range.gearAPTotal are defined.
-   * Notes: Sums values from all defined AP Total columns.
-   * @returns {number} The calculated total Action Points from gear, or 0 on error.
+  /** function fMetaDieRoll
+   * Purpose: Performs a non-linear "exploding" dice roll common in MetaScape.
+   * Assumptions: Input is a positive integer.
+   * @param {number} die - The base value (skill/attribute) for the roll.
+   * @returns {number} The integer result of the roll (minimum 1).
    */
-  function fCalcTotalAP() {
-    const funcName = "fCalcTotalAP";
-    fMyConsoleLog(`⚙️ Calculating Total Action Points from Gear...`);
-    let apTotal = 0;
-    let errorsOccurred = false;
-    const apSourceRangeDefs = gUI.range?.gearApTotalCol;
-    const targetCellDef = gUI.range?.gearAPTotal;
-    if (!Array.isArray(apSourceRangeDefs) || apSourceRangeDefs.length === 0) {
-      console.error(
-        `${funcName}: AP source range definition (gUI.range.gearApTotalCol) is missing or invalid.`
-      );
-      fMyConsoleLog(
-        `❌ ${funcName} Error: AP source range definition missing.`
-      );
-      errorsOccurred = true;
+  function fMetaDieRoll(die) {
+    const numDie = Number(die);
+    if (isNaN(numDie) || numDie < 1) {
+      console.error(`fMetaDieRoll received invalid die value: ${die}`);
+      return 1;
     }
+    const rand1 = Math.random();
+    let rand2 = Math.random();
+    if (rand2 < 0.0001) rand2 = 0.0001;
+    return Math.floor((numDie * rand1) / rand2) + 1;
+  } // End function fMetaDieRoll
+
+  /** function fTC
+   * Purpose: Rolls 1d16 to determine a Tremendous or Critical result suffix.
+   * Assumptions: None.
+   * @param {}
+   * @returns {string} Formatted "T", "C", or an empty string.
+   */
+  function fTC() {
+    const roll = fdRoll(16);
+    return roll === 1
+      ? `<span class="tremendous">T</span>`
+      : roll === 2
+      ? `<span class="red-bold">C</span>`
+      : "";
+  } // End function fTC
+
+  /** function fSkRoll
+   * Purpose: Performs a standard MetaScape Skill roll.
+   * Assumptions: Averages a linear d(die*2) and a non-linear fMetaDieRoll(die).
+   * @param {number} die - The base skill value.
+   * @returns {number} The rounded integer result of the skill roll.
+   */
+  function fSkRoll(die) {
+    const numDie = Number(die);
+    if (isNaN(numDie) || numDie < 1) {
+      console.error(`fSkRoll received invalid die value: ${die}`);
+      return 1;
+    }
+    return Math.round((fdRoll(numDie * 2) + fMetaDieRoll(numDie)) / 2);
+  } // End function fSkRoll
+
+  /** function fAtkRoll
+   * Purpose: Performs a MetaScape Attack roll.
+   * Assumptions: Currently identical to fSkRoll.
+   * @param {number} die - The base attack skill value.
+   * @returns {number} The rounded integer result of the attack roll.
+   */
+  function fAtkRoll(die) {
+    const numDie = Number(die);
+    if (isNaN(numDie) || numDie < 1) {
+      console.error(`fAtkRoll received invalid die value: ${die}`);
+      return 1;
+    }
+    return Math.round((fdRoll(numDie * 2) + fMetaDieRoll(numDie)) / 2);
+  } // End function fAtkRoll
+
+  /** function fDefRoll
+   * Purpose: Performs a MetaScape Defense roll.
+   * Assumptions: Based on fMetaDieRoll(die) * 0.75.
+   * @param {number} die - The base defense value.
+   * @returns {number} The rounded integer result of the defense roll.
+   */
+  function fDefRoll(die) {
+    const numDie = Number(die);
+    if (isNaN(numDie) || numDie < 1) {
+      console.error(`fDefRoll received invalid die value: ${die}`);
+      return 1;
+    }
+    return Math.round(fMetaDieRoll(numDie) * 0.75);
+  } // End function fDefRoll
+
+  /** function fDmgRoll
+   * Purpose: Rolls standard PC Damage.
+   * Assumptions: Currently identical to fSkRoll.
+   * @param {number} pcDmg - The base damage value.
+   * @returns {number} The result of the damage roll.
+   */
+  function fDmgRoll(pcDmg) {
+    return fSkRoll(pcDmg);
+  } // End function fDmgRoll
+
+  /** function fARRoll
+   * Purpose: Rolls standard PC Armor.
+   * Assumptions: Uses fSkRoll result divided by 15.
+   * @param {number} pcAR - The base armor value.
+   * @returns {number} The result of the armor roll (min 1.0, two decimals).
+   */
+  function fARRoll(pcAR) {
+    const skillRoll = fSkRoll(pcAR);
+    const result = Math.trunc((skillRoll / 15) * 100) / 100;
+    return Math.max(1, result);
+  } // End function fARRoll
+
+  /** function fRollRPGDieString
+   * Purpose: Parses and rolls a standard RPG die string (e.g., "2d8+5").
+   * Assumptions: The die string is in a standard format.
+   * @param {string} dieString - The dice notation string.
+   * @returns {number | null} The numerical result of the roll, or null if parsing fails.
+   */
+  function fRollRPGDieString(dieString) {
+    if (typeof dieString !== "string" || !dieString.trim()) {
+      console.warn(
+        "fRollRPGDieString: Invalid input - requires a non-empty string."
+      );
+      return null;
+    }
+    const dieStringRegex = /^\s*(\d+)?\s*d\s*(\d+)\s*(?:([-+])\s*(\d+))?\s*$/i;
+    const match = dieString.trim().match(dieStringRegex);
+    if (!match) {
+      return null;
+    }
+    const numDice = match[1] ? parseInt(match[1], 10) : 1;
+    const numSides = parseInt(match[2], 10);
+    const modifierSign = match[3];
+    const modifierValue = match[4] ? parseInt(match[4], 10) : 0;
     if (
-      !targetCellDef ||
-      typeof targetCellDef.r1 === "undefined" ||
-      typeof targetCellDef.c1 === "undefined"
+      isNaN(numDice) ||
+      numDice < 1 ||
+      isNaN(numSides) ||
+      numSides < 1 ||
+      isNaN(modifierValue)
     ) {
-      console.error(
-        `${funcName}: Target cell definition (gUI.range.gearAPTotal) is missing or invalid (requires r1, c1).`
+      console.warn(
+        `fRollRPGDieString: Invalid numeric components in parsed string "${dieString}"`
       );
-      fMyConsoleLog(
-        `❌ ${funcName} Error: Target cell definition missing or invalid.`
-      );
-      errorsOccurred = true;
+      return null;
     }
-    if (errorsOccurred) return 0;
-    apSourceRangeDefs.forEach((rangeDef, index) => {
-      if (!fDoesObjectHaveR1C1R2C2Properties(rangeDef)) {
-        console.warn(
-          `${funcName}: Skipping invalid range object at index ${index}:`,
-          rangeDef
-        );
-        errorsOccurred = true;
-        return;
-      }
-      const resolved = fConvertsR1C1R2C2TagOrNumToIndices(rangeDef);
-      if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
-        console.warn(
-          `${funcName}: Skipping range at index ${index} due to unresolved indices:`,
-          rangeDef
-        );
-        errorsOccurred = true;
-        return;
-      }
-      const rMin = Math.min(resolved.r1, resolved.r2);
-      const rMax = Math.max(resolved.r1, resolved.r2);
-      const cMin = Math.min(resolved.c1, resolved.c2);
-      const cMax = Math.max(resolved.c1, resolved.c2);
-      for (let r = rMin; r <= rMax; r++) {
-        for (let c = cMin; c <= cMax; c++) {
-          const value = fGetGridValue(r, c, true);
-          if (!isNaN(value)) {
-            apTotal += value;
-          }
-        }
-      }
-    });
-    const roundedTotalAp = Math.round(apTotal);
-    fMyConsoleLog(`   -> Raw Total AP: ${apTotal}, Rounded: ${roundedTotalAp}`);
-    const targetR = fResolveRow(targetCellDef.r1);
-    const targetC = fResolveCol(targetCellDef.c1);
-    if (isNaN(targetR) || isNaN(targetC)) {
-      console.error(
-        `${funcName}: Could not resolve target cell coordinates from gUI.range.gearAPTotal:`,
-        targetCellDef
-      );
-      fMyConsoleLog(
-        `❌ ${funcName} Error: Could not resolve target cell coordinates.`
-      );
-      errorsOccurred = true;
-    } else {
-      if (!fSetGridValue(targetR, targetC, roundedTotalAp)) {
-        fMyConsoleLog(
-          `   -> ⚠️ Warning: Failed to update target cell [${targetR}, ${targetC}] with total AP.`
-        );
-        errorsOccurred = true;
-      } else {
-        fMyConsoleLog(
-          `   -> Target cell [${targetR}, ${targetC}] updated with: ${roundedTotalAp}`
-        );
-      }
+    let total = 0;
+    fMyConsoleLog(`   -> Rolling Die String: ${numDice}d${numSides}`);
+    for (let i = 0; i < numDice; i++) {
+      const roll = fdRoll(numSides);
+      total += roll;
     }
-    fMyConsoleLog(
-      `✅ ${funcName} finished ${
-        errorsOccurred ? "with errors" : "successfully"
-      }. Returning: ${roundedTotalAp}`
-    );
-    return roundedTotalAp;
-  } // End function fCalcTotalAP
+    fMyConsoleLog(`   -> Base Roll Total: ${total}`);
+    if (modifierSign === "+") {
+      total += modifierValue;
+      fMyConsoleLog(`   -> Applying Modifier: +${modifierValue} => ${total}`);
+    } else if (modifierSign === "-") {
+      total -= modifierValue;
+      fMyConsoleLog(`   -> Applying Modifier: -${modifierValue} => ${total}`);
+    }
+    return total;
+  } // End function fRollRPGDieString
+
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  // End - Core Dice Mechanics
+  // Start - Log String Construction
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
   /** function fBuildSidebarHTMLAndSimpleText
    * Purpose: Constructs formatted HTML and plain text log lines for a single roll result.
@@ -2904,458 +2637,406 @@
     };
   } // End function fBuildSidebarHTMLAndSimpleText
 
-  /////////////////////////////////////////////////////////////////////
-  //                   Start - Menu Action Logic                     //
-  /////////////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  // End - Log String Construction
+  // Start - Ad-Hoc & Chaos Gem Actions
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-  /** function fHandleNishStartOrEnd
-   * Purpose: Handles the "Nish Start or End" menu action.
-   * Assumptions: Relies on fMetaFlood, fClearChanneledMeta, fAct_SetToMax, and fClearIsOnDurationRange.
-   * Notes: This orchestrates several actions: flooding meta, clearing durations, maximizing AP, and logging.
-   * @returns {Promise<void>} Resolves after all actions are complete.
+  /** function fHandleAdHocRoll
+   * Purpose: Parses and rolls dice based on cell text, logging the result to the sidebar.
+   * Assumptions: fMetaDieRoll and fRollRPGDieString are available.
+   * @param {string} cellText - The text content of the clicked cell.
+   * @returns {Promise<boolean>} True if a roll was parsed and logged, false otherwise.
    */
-  async function fHandleNishStartOrEnd() {
-    fMyConsoleLog("⚙️ Menu Action: Nish Start or End Triggered...");
-    await fMetaFlood();
-    fClearChanneledMeta();
-    await fAct_SetToMax();
-    fClearIsOnDurationRange();
-    const sidebarMsgHtml = `🚩<span class="blue-bold">Nish Start or End</span>`;
-    const sidebarMsgText = `🚩 Nish Start or End`;
-    fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
-    fShowSidebar();
-    fMyConsoleLog("✅ Nish Start or End Action Completed.");
-    setTimeout(() => fSendLogToGMScreenAndPS(), 0);
-  } // End function fHandleNishStartOrEnd
-
-  /** function fClearIsOnDurationRange
-   * Purpose: Clears all cells within the 'Is On / Duration' ranges.
-   * Assumptions: gUI.range.isONDur contains an array of valid range definition objects.
-   * Notes: Sets the value of all cells in the defined ranges to an empty string.
-   * @returns {void}
-   */
-  function fClearIsOnDurationRange() {
-    fMyConsoleLog("⚙️ Clearing 'Is On/Duration' Range...");
-    let allSucceeded = true;
-    const rangesToClear = gUI.range?.isONDur;
-    if (!Array.isArray(rangesToClear) || rangesToClear.length === 0) {
-      console.warn(
-        "fClearIsOnDurationRange: No 'Is On/Duration' ranges defined in gUI.range.isONDur."
-      );
-      fMyConsoleLog("⚠️ Cannot clear 'Is On/Duration': Ranges not defined.");
-      return;
+  async function fHandleAdHocRoll(cellText) {
+    fMyConsoleLog(`🎲 Attempting Ad-Hoc Roll for text: "${cellText}"`);
+    if (typeof cellText !== "string" || !cellText.trim()) {
+      fMyConsoleLog("   -> No valid text provided for ad-hoc roll.");
+      return false;
     }
-    rangesToClear.forEach((range) => {
-      if (!fDoesObjectHaveR1C1R2C2Properties(range)) {
-        console.warn(
-          "fClearIsOnDurationRange: Skipping invalid range object within gUI.range.isONDur:",
-          range
-        );
-        allSucceeded = false;
-        return;
-      }
-      const r1 = fResolveRow(range.r1);
-      const c1 = fResolveCol(range.c1);
-      const r2 = fResolveRow(range.r2);
-      const c2 = fResolveCol(range.c2);
-      if ([r1, c1, r2, c2].some(isNaN)) {
-        console.warn(
-          `fClearIsOnDurationRange: Skipping invalid range definition:`,
-          range
-        );
-        allSucceeded = false;
-        return;
-      }
-      const success = fSetRangeOfGridValues(r1, c1, r2, c2, "");
-      if (!success) {
-        allSucceeded = false;
-      }
-    });
-    if (!allSucceeded) {
-      fMyConsoleLog("⚠️ Failed to clear one or more 'Is On/Duration' ranges.");
-    } else {
-      fMyConsoleLog("✅ 'Is On/Duration' Ranges Cleared.");
-    }
-  } // End function fClearIsOnDurationRange
+    const text = cellText.trim();
 
-  /** function fHandleNewLevelSlotName
-   * Purpose: Handles the "Update (Level, Slot, Names)" menu action.
-   * Assumptions: Relies on a chain of async helper functions for cache refreshing and grid updates.
-   * Notes: Force-refreshes user-specific caches, validates data, sends a log, and re-processes the grid.
-   * @returns {Promise<void>} Resolves after completing actions or handling errors.
-   */
-  async function fHandleNewLevelSlotName() {
-    const funcName = "fHandleNewLevelSlotName";
-    fMyConsoleLog(`⚙️ Menu Action: ${funcName} Triggered...`);
-    fShowMessageNoClose(
-      "⏳ Refreshing Caches, Sending Log & Updating Grid...<br><br>This may take a minute.<br><br>Please wait."
-    );
-    try {
-      const userCachesToRefresh = [
-        {
-          workbookAbr: "MyCS",
-          sheetName: "RaceClass",
-          gUIKey: "myCSRaceClassFSData",
-        },
-        {
-          workbookAbr: "MyCS",
-          sheetName: "List",
-          gUIKey: "myCSListFSData",
-        },
-        {
-          workbookAbr: "MyKL",
-          sheetName: "KnownAbilities",
-          gUIKey: "myKLKnownAbilitiesFSData",
-        },
-      ];
-      const refreshPromises = userCachesToRefresh.map((config) =>
-        fRefreshAndCacheOneFSData(
-          config.workbookAbr,
-          config.sheetName,
-          config.gUIKey
-        )
-      );
-      fMyConsoleLog(
-        `   -> Starting parallel refresh for ${userCachesToRefresh.length} user caches...`
-      );
-      const results = await Promise.allSettled(refreshPromises);
-      fMyConsoleLog(`   -> Parallel cache refreshes completed.`);
-      let allRefreshesSucceeded = true;
-      let firstErrorMessage = null;
-      for (let i = 0; i < results.length; i++) {
-        const result = results[i];
-        const config = userCachesToRefresh[i];
-        if (result.status === "rejected" || result.value === false) {
-          allRefreshesSucceeded = false;
-          firstErrorMessage =
-            result.reason?.message || `Refresh failed for ${config.gUIKey}.`;
+    let rollResult = null;
+    let logHeaderHtml = "";
+    let logHeaderText = "";
+    let logDetailsHtml = "";
+    let logDetailsText = "";
+    let patternMatched = false;
+    let matchedString = "";
+
+    const skExactPattern = /^sk(\d+)$/i;
+    const dieStringExactPattern = /^((\d+)?d(\d+)\s*(?:([-+])\s*(\d+))?)$/i;
+    const numberExactPattern = /^\d+$/;
+    const parsePattern = /(sk(\d+))|((\d+)?d(\d+)\s*(?:([-+])\s*(\d+))?)/i;
+
+    let match;
+
+    if ((match = text.match(skExactPattern))) {
+      const num = parseInt(match[1], 10);
+      if (!isNaN(num) && num > 0) {
+        rollResult = fMetaDieRoll(num);
+        matchedString = match[0];
+        logHeaderHtml = '🎲 <span class="blue-bold">Custom Roll</span> Sk';
+        logHeaderText = "🎲 Custom Roll Sk";
+        logDetailsHtml = `Sk(${num}) 🎲${rollResult}`;
+        logDetailsText = `Sk(${num}) 🎲${rollResult}`;
+        patternMatched = true;
+        fMyConsoleLog(
+          `   -> Matched EXACT Sk pattern: ${matchedString}. Result: ${rollResult}`
+        );
+      }
+    } else if ((match = text.match(dieStringExactPattern))) {
+      matchedString = match[0].trim();
+      rollResult = fRollRPGDieString(matchedString);
+      if (rollResult !== null) {
+        logHeaderHtml = '🎲 <span class="blue-bold">Die Roll</span>';
+        logHeaderText = "🎲 Die Roll";
+        logDetailsHtml = `Die(${matchedString}) 🎲${rollResult}`;
+        logDetailsText = `Die(${matchedString}) 🎲${rollResult}`;
+        patternMatched = true;
+        fMyConsoleLog(
+          `   -> Matched EXACT Die String pattern: ${matchedString}. Result: ${rollResult}`
+        );
+      }
+    } else if (numberExactPattern.test(text)) {
+      const num = parseInt(text, 10);
+      if (!isNaN(num) && num > 0) {
+        matchedString = `d${num}`;
+        rollResult = fRollRPGDieString(matchedString);
+        if (rollResult !== null) {
+          logHeaderHtml = '🎲 <span class="blue-bold">Die Roll</span>';
+          logHeaderText = "🎲 Die Roll";
+          logDetailsHtml = `Die(${matchedString}) 🎲${rollResult}`;
+          logDetailsText = `Die(${matchedString}) 🎲${rollResult}`;
+          patternMatched = true;
           fMyConsoleLog(
-            `      -> ❌ Refresh FAILED for ${config.gUIKey}: ${firstErrorMessage}`
+            `   -> Matched EXACT Number pattern: ${num} (rolled as ${matchedString}). Result: ${rollResult}`
           );
-          break;
-        } else {
-          fMyConsoleLog(`      -> ✅ Refresh SUCCEEDED for ${config.gUIKey}.`);
         }
       }
-      if (!allRefreshesSucceeded) {
-        throw new Error(
-          firstErrorMessage || `One or more cache refreshes failed.`
-        );
-      }
-      fMyConsoleLog(`   -> All user cache refreshes successful.`);
-      fMyConsoleLog(
-        "   -> Updating Ability Dropdowns based on refreshed List cache..."
-      );
-      fProcessCachedAbilityList();
-      fMyConsoleLog("      -> ✅ Ability Dropdowns updated.");
-      fMyConsoleLog("   -> Validating Slot Number from refreshed data...");
-      const currentSlot = gUI.characterInfo?.slotNum;
-      const slotRegex = /^Slot([1-9])$/i;
-      if (!currentSlot || !slotRegex.test(currentSlot)) {
-        const invalidSlotMsg = `Invalid or missing Slot # ("${
-          currentSlot || "null"
-        }") after cache refresh.`;
-        throw new Error(invalidSlotMsg);
-      }
-      fMyConsoleLog(`      -> Slot validated: ${currentSlot}`);
-      fMyConsoleLog("   -> Sending log update...");
-      await fSendLogToGMScreenAndPS();
-      fMyConsoleLog("      -> ✅ Log send successful.");
-      fMyConsoleLog("   -> Refreshing grid rows (Abilities/Gear)...");
-      await fTotalRereshOfAllAbilitiesAndAllGear();
-      fMyConsoleLog("      -> ✅ Grid row refresh complete.");
-      fMyConsoleLog(`✅ ${funcName} Completed Successfully.`);
-      fHideMessage();
-    } catch (error) {
-      fHideMessage();
-      const errorMsg = `❌ Error during Update (Level, Slot, Names): ${
-        error?.message || error
-      }`;
-      console.error(errorMsg, error);
-      fMyConsoleLog(`   -> ❌ ${errorMsg}`);
-      await fShowMessage(errorMsg);
     }
-  } // End function fHandleNewLevelSlotName
 
-  /** function fHandleGMAward
-   * Purpose: Handles the "GM Award" menu action.
-   * Assumptions: The gUI.dbCritFSData cache is populated and contains the GM Award data.
-   * Notes: Selects a random award from the cache and posts it to the sidebar and GMScreen.
-   * @returns {Promise<void>} Resolves after completing the action.
-   */
-  async function fHandleGMAward() {
-    const funcName = "fHandleGMAward";
-    fMyConsoleLog(`⚙️ Menu Action: ${funcName} Triggered...`);
-    const cacheKey = "dbCritFSData";
-    if (!gUI[cacheKey]) {
-      console.error(`${funcName}: Cache object gUI['${cacheKey}'] is missing.`);
-      return;
-    }
-    const gmawardColTag = "GMAward";
-    const startRowTag = "RowBeforeFirstDataRow";
-    const gmawardColIndex = fResolveFSDataCol(cacheKey, gmawardColTag);
-    const startRowIndex = fResolveFSDataRow(cacheKey, startRowTag) + 1;
-    if (isNaN(gmawardColIndex) || isNaN(startRowIndex)) {
-      return;
-    }
-    const awardsList = [];
-    const cachedText = gUI[cacheKey].text;
-    const numRows = cachedText.length;
-    for (let r = startRowIndex; r < numRows; r++) {
-      const cellValue = cachedText[r]?.[gmawardColIndex];
-      const trimmedValue = String(cellValue ?? "").trim();
-      if (trimmedValue !== "") {
-        awardsList.push(trimmedValue);
+    if (!patternMatched) {
+      fMyConsoleLog(`   -> No exact match. Parsing text for first pattern...`);
+      match = text.match(parsePattern);
+      if (match) {
+        if (match[1]) {
+          matchedString = match[1];
+          const num = parseInt(match[2], 10);
+          if (!isNaN(num) && num > 0) {
+            rollResult = fMetaDieRoll(num);
+            logHeaderHtml = '🎲 <span class="blue-bold">Custom Roll</span> Sk';
+            logHeaderText = "🎲 Custom Roll Sk";
+            logDetailsHtml = `Sk(${num}) 🎲${rollResult}`;
+            logDetailsText = `Sk(${num}) 🎲${rollResult}`;
+            patternMatched = true;
+            fMyConsoleLog(
+              `   -> PARSED first Sk pattern: ${matchedString}. Result: ${rollResult}`
+            );
+          }
+        } else if (match[3]) {
+          matchedString = match[3].trim();
+          rollResult = fRollRPGDieString(matchedString);
+          if (rollResult !== null) {
+            logHeaderHtml = '🎲 <span class="blue-bold">Die Roll</span>';
+            logHeaderText = "🎲 Die Roll";
+            logDetailsHtml = `Die(${matchedString}) 🎲${rollResult}`;
+            logDetailsText = `Die(${matchedString}) 🎲${rollResult}`;
+            patternMatched = true;
+            fMyConsoleLog(
+              `   -> PARSED first Die String pattern: ${matchedString}. Result: ${rollResult}`
+            );
+          }
+        }
+      } else {
+        fMyConsoleLog(`   -> No parsable pattern found within text.`);
       }
     }
-    if (awardsList.length === 0) {
-      fMyConsoleLog(
-        `   -> ${funcName}: No valid GM Awards found in '${gmawardColTag}' column starting from row '${startRowTag}'. Skipping display.`
-      );
-      return;
+
+    if (patternMatched && rollResult !== null) {
+      const headerSuffixHtml =
+        text === matchedString ? ":" : ` (from "${text}"):`;
+      const headerSuffixText =
+        text === matchedString ? ":" : ` (from "${text}"):`;
+      const formattedHeaderHtml = `${logHeaderHtml}${headerSuffixHtml}`;
+      const formattedHeaderText = `${logHeaderText}${headerSuffixText}`;
+
+      let tcSuffixHtml = "";
+      let tcSuffixText = "";
+      if (logHeaderText.startsWith("🎲 Custom Roll Sk")) {
+        const tcResult = fTC();
+        if (tcResult) {
+          tcSuffixHtml = `   ${tcResult}`;
+          tcSuffixText = tcResult.includes("red-bold") ? " C" : " T";
+        }
+      }
+
+      const finalLogHtml = `${formattedHeaderHtml}<br>${logDetailsHtml}${tcSuffixHtml}`;
+      const finalLogText = `${formattedHeaderText}\n${logDetailsText}${
+        tcSuffixText ? " " + tcSuffixText : ""
+      }`;
+      fPostToSidebar(finalLogHtml, finalLogText);
+      fShowSidebar();
+      fMyConsoleLog(`   -> Ad-Hoc Roll logged to sidebar.`);
+
+      setTimeout(() => fSendLogToGMScreenAndPS(), 0);
+
+      return true;
     }
-    const randomIndex = Math.floor(Math.random() * awardsList.length);
-    const selectedAward = awardsList[randomIndex];
-    fMyConsoleLog(`   -> Randomly selected award: "${selectedAward}"`);
-    const sidebarMsgHtml = `<span class="blue-bold">GM Award:</span><br>${selectedAward}`;
-    const sidebarMsgText = `GM Award:\n${selectedAward}`;
+
+    if (!patternMatched) {
+      fMyConsoleLog("   -> No ad-hoc roll pattern matched (exact or parsed).");
+    }
+    return false;
+  } // End function fHandleAdHocRoll
+
+  /** function fHandleChaosGemClick
+   * Purpose: Handles Chaos Gem clicks, decrementing uses and logging the ability text.
+   * Assumptions: The user has clicked within the Chaos Gem range defined in gUI.range.
+   * @param {number} r - The 0-based row index of the clicked cell.
+   * @param {number} c - The 0-based column index of the clicked cell.
+   * @returns {Promise<boolean>} True if a Chaos Gem was processed, false otherwise.
+   */
+  async function fHandleChaosGemClick(r, c) {
+    fMyConsoleLog("💎 Checking for Chaos Gem click...");
+    if (r === null || c === null || isNaN(r) || isNaN(c)) {
+      fMyConsoleLog(
+        "   -> Cannot check Chaos Gem: Invalid coordinates passed."
+      );
+      return false;
+    }
+    const chaosRangeDef = gUI.range?.chaosGems;
+    if (!chaosRangeDef || !fDoesObjectHaveR1C1R2C2Properties(chaosRangeDef)) {
+      fMyConsoleLog(
+        "   -> Cannot check Chaos Gem: Range definition missing/invalid."
+      );
+      return false;
+    }
+    const resolved = fConvertsR1C1R2C2TagOrNumToIndices(chaosRangeDef);
+    if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
+      fMyConsoleLog(
+        `   -> Cannot check Chaos Gem: Failed to resolve range tags: ${JSON.stringify(
+          chaosRangeDef
+        )}`
+      );
+      return false;
+    }
+    const rMin = Math.min(resolved.r1, resolved.r2);
+    const rMax = Math.max(resolved.r1, resolved.r2);
+    const cMin = Math.min(resolved.c1, resolved.c2);
+    const cMax = Math.max(resolved.c1, resolved.c2);
+    if (r < rMin || r > rMax || c < cMin || c > cMax) {
+      fMyConsoleLog(`   -> Click [${r}, ${c}] is outside Chaos Gem range.`);
+      return false;
+    }
+    fMyConsoleLog(`   -> Click [${r}, ${c}] is inside Chaos Gem range.`);
+    const usesCol = fResolveCol("ChaosUses");
+    const abilityCol = fResolveCol("ChaosAbility");
+    if (isNaN(usesCol) || isNaN(abilityCol)) {
+      fMyConsoleLog(
+        "   -> Cannot check Chaos Gem: Could not resolve 'ChaosUses' or 'ChaosAbility' column tags."
+      );
+      await fShowMessage(
+        "Error: Chaos Gem column tags are not defined correctly."
+      );
+      return false;
+    }
+    const currentUses = fGetGridValue(r, usesCol, true);
+    if (isNaN(currentUses) || currentUses < 1) {
+      fMyConsoleLog(
+        `   -> Chaos Gem condition unmet: Uses are ${currentUses}.`
+      );
+      await fShowMessage("Chaos Crystal has no uses left!");
+      return true;
+    }
+    const abilityText = fGetGridValue(r, abilityCol);
+    if (!abilityText || String(abilityText).trim() === "") {
+      fMyConsoleLog(`   -> Chaos Gem condition unmet: Ability text is empty.`);
+      await fShowMessage("Chaos Crystal has no ability text defined!");
+      return true;
+    }
+    fMyConsoleLog(
+      `   -> Chaos Gem conditions met: Uses=${currentUses}, Ability="${String(
+        abilityText
+      ).substring(0, 30)}..."`
+    );
+    const newUses = currentUses - 1;
+    if (!fSetGridValue(r, usesCol, newUses)) {
+      fMyConsoleLog(
+        `   -> ❌ Failed to update ChaosUses cell [${r}, ${usesCol}].`
+      );
+      await fShowMessage("Error: Failed to update Chaos Crystal uses.");
+      return true;
+    }
+    const trimmedAbilityText = String(abilityText).trim();
+    const sidebarMsgHtml = `💎 <span class="blue-bold">Chaos Crystal</span> (${newUses} Uses Left):<br>${trimmedAbilityText}`;
+    const sidebarMsgText = `💎 Chaos Crystal (${newUses} Uses Left):\n${trimmedAbilityText}`;
     fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
     fShowSidebar();
-    fMyConsoleLog(`   -> Queueing log send for GM Award.`);
+    fMyConsoleLog("✅ Chaos Gem Used Successfully.");
     setTimeout(() => fSendLogToGMScreenAndPS(), 0);
-    fMyConsoleLog(`✅ ${funcName}: Completed.`);
-  } // End function fHandleGMAward
+    return true;
+  } // End function fHandleChaosGemClick
 
-  /** function fMetaFlood
-   * Purpose: Handles the "Meta Flood" menu action.
-   * Assumptions: gUI.range.meta and gUI.list.metaFull are correctly defined.
-   * Notes: Randomly selects a Meta column, increases its value and preceding values, caps them, and logs.
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  // End - Ad-Hoc & Chaos Gem Actions
+  // Start - Menu Action Logic
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+  /** function fHandleRestTimeRest
+   * Purpose: Handles the "Rest" menu action.
+   * Assumptions: function fMetaFlood is available.
+   * Notes: Runs a Meta Flood, logs the rest action, and sends an update.
+   * @returns {Promise<void>} Resolves after completing actions.
+   */
+  async function fHandleRestTimeRest() {
+    fMyConsoleLog("⚙️ Menu Action: Rest Triggered...");
+    await fMetaFlood();
+    const sidebarMsgHtml = `🕒 <span class="blue-bold">Character Rested</span>`;
+    const sidebarMsgText = `🕒 Character Rested`;
+    fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
+    fShowSidebar();
+    fMyConsoleLog("✅ Rest Action Completed.");
+    setTimeout(() => fSendLogToGMScreenAndPS(), 0);
+  } // End function fHandleRestTimeRest
+
+  /** function fHandleRestTimeNewSession
+   * Purpose: Handles the "New Game Session" menu action.
+   * Assumptions: function fLuck_SetToMax is available.
+   * Notes: Sets Luck to Max, logs the new session action, and sends an update.
+   * @returns {Promise<void>} Resolves after completing actions.
+   */
+  async function fHandleRestTimeNewSession() {
+    fMyConsoleLog("⚙️ Menu Action: New Game Session Triggered...");
+    await fLuck_SetToMax();
+    const sidebarMsgHtml = `⚡ <span class="blue-bold">New Game Session</span>`;
+    const sidebarMsgText = `⚡ New Game Session`;
+    fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
+    fShowSidebar();
+    fMyConsoleLog("✅ New Game Session Action Completed.");
+    setTimeout(() => fSendLogToGMScreenAndPS(), 0);
+  } // End function fHandleRestTimeNewSession
+
+  /** function fHandleRestTimeSleep
+   * Purpose: Handles the "Sleep" menu action.
+   * Assumptions: function fMeta_SetToMax and function fCalc_NaturalHealing are available.
+   * Notes: Sets Meta to Max, performs Natural Healing, logs the sleep action, and sends an update.
+   * @returns {Promise<void>} Resolves after completing actions.
+   */
+  async function fHandleRestTimeSleep() {
+    fMyConsoleLog("⚙️ Menu Action: Sleep Triggered...");
+    fMeta_SetToMax();
+    await fCalc_NaturalHealing();
+    const sidebarMsgHtml = `🕒 <span class="blue-bold">Character Slept</span>`;
+    const sidebarMsgText = `🕒 Character Slept`;
+    fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
+    fShowSidebar();
+    fMyConsoleLog("✅ Sleep Action Completed.");
+    setTimeout(() => fSendLogToGMScreenAndPS(), 0);
+  } // End function fHandleRestTimeSleep
+
+  /** function fHealAllWounds
+   * Purpose: Handles the "Heal All Wounds" menu action.
+   * Assumptions: gUI.range definitions for wounds are correct.
+   * Notes: Sets all wound cells to 0, updates Vit Now/Percent, logs the action, and sends an update.
    * @returns {Promise<void>} Resolves after the operation is complete.
    */
-  async function fMetaFlood() {
-    fMyConsoleLog("⚙️ Menu Action: Meta Flood...");
-    const metaRangeDef = gUI.range?.meta;
-    const metaCaps = gUI.list?.metaFull;
-    const metaColorTags = gUI.list?.metaColor;
-    let errorMsg = "";
-    if (!metaRangeDef || !fDoesObjectHaveR1C1R2C2Properties(metaRangeDef))
-      errorMsg = "Meta range definition missing or invalid.";
-    else if (!Array.isArray(metaCaps) || metaCaps.length === 0)
-      errorMsg = "Meta caps list (gUI.list.metaFull) missing or invalid.";
-    if (errorMsg) {
-      console.warn(`fMetaFlood: ${errorMsg}`);
-      fMyConsoleLog(`⚠️ Meta Flood failed: ${errorMsg}`);
-      await fShowMessage(`❌ Error: ${errorMsg}`);
-      return;
-    }
-    const metaRowTag = metaRangeDef.r1;
-    const startCol = fResolveCol(metaRangeDef.c1);
-    const endCol = fResolveCol(metaRangeDef.c2);
-    if ([startCol, endCol].some(isNaN)) {
-      errorMsg = `Could not resolve Meta column tags: ${metaRangeDef.c1}, ${metaRangeDef.c2}.`;
-      console.warn(`fMetaFlood: ${errorMsg}`);
-      fMyConsoleLog(`⚠️ Meta Flood failed: ${errorMsg}`);
-      await fShowMessage(`❌ Error: ${errorMsg}`);
-      return;
-    }
-    const numMetaCols = Math.abs(endCol - startCol) + 1;
-    if (metaCaps.length > 0 && numMetaCols !== metaCaps.length) {
-      errorMsg = `Mismatch between number of Meta columns (${numMetaCols}) and Meta caps (${metaCaps.length}).`;
-      console.warn(`fMetaFlood: ${errorMsg}`);
-      fMyConsoleLog(`⚠️ Meta Flood failed: ${errorMsg}`);
-      await fShowMessage(`❌ Error: ${errorMsg}`);
-      return;
-    }
-    const selectedIndex = Math.floor(Math.random() * numMetaCols);
-    const selectedColIndex = startCol + selectedIndex;
-    const selectedColTag =
-      metaColorTags?.[selectedIndex] ?? `Index ${selectedIndex}`;
-    fMyConsoleLog(
-      `   -> Selected Meta Index: ${selectedIndex} (Column ${selectedColIndex} - Tag: ${selectedColTag})`
-    );
-    const finalValues = [];
-    let amountToAdd = 1;
-    for (let i = selectedIndex; i >= 0; i--) {
-      const currentColIndex = startCol + i;
-      const currentColTag = metaColorTags?.[i] ?? `Index ${i}`;
-      const currentVal = fGetGridValue(metaRowTag, currentColIndex, true) || 0;
-      const newValRaw = currentVal + amountToAdd;
-      const cap =
-        metaCaps && metaCaps[i] !== undefined ? metaCaps[i] : Infinity;
-      const finalVal = Math.min(newValRaw, cap);
-      fMyConsoleLog(
-        `      -> Index ${i} (${currentColTag}): Current=${currentVal}, Add=${amountToAdd}, Raw=${newValRaw}, Cap=${
-          cap === Infinity ? "N/A" : cap
-        } => Final=${finalVal}`
-      );
-      finalValues.unshift(finalVal);
-      amountToAdd++;
-    }
-    fMyConsoleLog(
-      `   -> Updating Meta columns ${startCol} to ${selectedColIndex} with final values: [${finalValues.join(
-        ", "
-      )}]`
-    );
-    const success = fSetRangeOfGridValues(
-      metaRowTag,
-      startCol,
-      metaRowTag,
-      selectedColIndex,
-      finalValues
-    );
-    if (!success) {
-      errorMsg = `fSetRangeOfGridValues failed to update Meta grid.`;
-      fMyConsoleLog(`   -> ⚠️ Meta Flood Error: ${errorMsg}`);
-      await fShowMessage(`❌ Error: ${errorMsg}`);
-    } else {
-      fMyConsoleLog("✅ Meta Flood Update Complete.");
-      const sidebarMsgHtml = `<span class="blue-bold">ℹ️ Meta Flood (Rolled ${selectedColTag}):</span>`;
-      const sidebarMsgText = `ℹ️ Meta Flood (Rolled ${selectedColTag}):`;
-      fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
-      fShowSidebar();
-      setTimeout(() => fSendLogToGMScreenAndPS(), 0);
-    }
-  } // End function fMetaFlood
-
-  /** function fMetaChannel
-   * Purpose: Handles the Meta Channeling calculation.
-   * Assumptions: gUI.range.metaChannel and gUI.list.metaColor are correctly defined.
-   * Notes: Randomly selects a Meta Channel column, increments its value, updates the grid, and logs the action.
-   * @returns {Promise<void>} Resolves after the operation is complete.
-   */
-  async function fMetaChannel() {
-    fMyConsoleLog("⚙️ Calculating Meta Channel...");
-    const channelRangeDef = gUI.range?.metaChannel;
-    const metaColorTags = gUI.list?.metaColor;
-    let errorMsg = "";
-    if (!channelRangeDef || !fDoesObjectHaveR1C1R2C2Properties(channelRangeDef))
-      errorMsg = "Meta Channel range definition missing or invalid.";
-    if (errorMsg) {
-      console.warn(`fMetaChannel: ${errorMsg}`);
-      fMyConsoleLog(`⚠️ Meta Channel failed: ${errorMsg}`);
-      await fShowMessage(`❌ Error: ${errorMsg}`);
-      return;
-    }
-    const channelRowTag = channelRangeDef.r1;
-    const startCol = fResolveCol(channelRangeDef.c1);
-    const endCol = fResolveCol(channelRangeDef.c2);
-    if ([startCol, endCol].some(isNaN)) {
-      errorMsg = `Could not resolve Meta Channel column tags: ${channelRangeDef.c1}, ${channelRangeDef.c2}.`;
-      console.warn(`fMetaChannel: ${errorMsg}`);
-      fMyConsoleLog(`⚠️ Meta Channel failed: ${errorMsg}`);
-      await fShowMessage(`❌ Error: ${errorMsg}`);
-      return;
-    }
-    const numMetaCols = Math.abs(endCol - startCol) + 1;
-    const roll1 = Math.floor(Math.random() * numMetaCols);
-    const roll2 = Math.floor(Math.random() * numMetaCols);
-    const lowestSelectedIndex = Math.min(roll1, roll2);
-    const finalColIndex = startCol + lowestSelectedIndex;
-    const selectedColTag =
-      metaColorTags?.[lowestSelectedIndex] ?? `Index ${lowestSelectedIndex}`;
-    fMyConsoleLog(
-      `   -> Meta Channel Rolls: ${roll1}, ${roll2}. Lowest Index: ${lowestSelectedIndex} (Column ${finalColIndex} - Tag: ${selectedColTag})`
-    );
-    const currentVal = fGetGridValue(channelRowTag, finalColIndex, true) || 0;
-    const newValue = currentVal + 1;
-    fMyConsoleLog(
-      `      -> Index ${lowestSelectedIndex} (${selectedColTag}): Current=${currentVal}, Add=1 => New=${newValue}`
-    );
-    const success = fSetGridValue(channelRowTag, finalColIndex, newValue);
-    if (!success) {
-      errorMsg = `fSetGridValue failed to update Meta Channel grid cell [${channelRowTag}, ${finalColIndex}].`;
-      fMyConsoleLog(`   -> ⚠️ Meta Channel Error: ${errorMsg}`);
-      await fShowMessage(`❌ Error: ${errorMsg}`);
-    } else {
-      fMyConsoleLog("✅ Meta Channel Update Complete.");
-      const sidebarMsgHtml = `<span class="blue-bold">ℹ️ Meta Channeled (${selectedColTag}):</span> ${currentVal} &rarr; ${newValue}`;
-      const sidebarMsgText = `ℹ️ Meta Channeled (${selectedColTag}): ${currentVal} -> ${newValue}`;
-      fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
-    }
-  } // End function fMetaChannel
-
-  /** function fIsOn_NewNishSet
-   * Purpose: Processes the 'Is On' / 'Duration' columns at the start of a Nish turn.
-   * Assumptions: gUI.range.isONDur contains valid range definitions.
-   * Notes: Decrements positive integer durations by 1 and clears specific non-numeric states (e.g., 'i', 'p').
-   * @returns {Promise<void>} Resolves after processing all defined ranges.
-   */
-  async function fIsOn_NewNishSet() {
-    fMyConsoleLog("⚙️ Processing 'Is On/Duration' cells for Nish turn...");
-    const rangeDefs = gUI.range?.isONDur;
-    if (!Array.isArray(rangeDefs) || rangeDefs.length === 0) {
-      fMyConsoleLog(
-        "⚠️ Cannot process 'Is On': Range definitions missing or empty in gUI.range.isONDur."
-      );
-      return;
-    }
-    let cellsProcessed = 0;
-    let cellsChanged = 0;
-    let errorsEncountered = false;
-    for (const range of rangeDefs) {
-      if (!fDoesObjectHaveR1C1R2C2Properties(range)) {
-        console.warn("fIsOn_NewNishSet: Skipping invalid range object", range);
-        errorsEncountered = true;
+  async function fHealAllWounds() {
+    fMyConsoleLog("⚙️ Menu Action: Clearing All Wounds...");
+    const woundTags = ["vit1stWnds", "vit2ndWnds", "vit3rdWnds"];
+    let errorsOccurred = false;
+    for (const tag of woundTags) {
+      const woundRange = gUI.range?.[tag];
+      if (!woundRange || !woundRange.r1 || !woundRange.c1) {
+        const msg = `Wound range definition missing for tag: ${tag}.`;
+        console.warn(`fHealAllWounds: ${msg}`);
+        fMyConsoleLog(`   -> ⚠️ Error: ${msg}`);
+        await fShowMessage(`❌ Error clearing wounds: ${msg}`);
+        errorsOccurred = true;
         continue;
       }
-      const resolved = fConvertsR1C1R2C2TagOrNumToIndices(range);
-      if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
-        console.warn(
-          "fIsOn_NewNishSet: Skipping range due to unresolved indices",
-          range
-        );
-        errorsEncountered = true;
-        continue;
-      }
-      const rMin = Math.min(resolved.r1, resolved.r2);
-      const rMax = Math.max(resolved.r1, resolved.r2);
-      const cMin = Math.min(resolved.c1, resolved.c2);
-      const cMax = Math.max(resolved.c1, resolved.c2);
-      for (let r = rMin; r <= rMax; r++) {
-        for (let c = cMin; c <= cMax; c++) {
-          cellsProcessed++;
-          const currentValue = fGetGridValue(r, c);
-          let newValue = currentValue;
-          if (currentValue === null || typeof currentValue === "undefined") {
-            newValue = "";
-          } else {
-            const currentValueStrLower = String(currentValue).toLowerCase();
-            if (
-              currentValueStrLower === "i" ||
-              currentValueStrLower === "p" ||
-              currentValueStrLower === "n"
-            ) {
-              newValue = "";
-            } else {
-              const numericValue = Number(currentValue);
-              if (!isNaN(numericValue)) {
-                if (numericValue > 0) {
-                  newValue = numericValue - 1;
-                  if (newValue === 0) {
-                    newValue = "";
-                  }
-                } else if (numericValue === 0) {
-                  newValue = "";
-                }
-              }
-            }
-          }
-          if (newValue !== currentValue) {
-            if (fSetGridValue(r, c, newValue)) {
-              cellsChanged++;
-            } else {
-              errorsEncountered = true;
-            }
-          }
-        }
+      if (!fSetGridValue(woundRange.r1, woundRange.c1, 0)) {
+        const msg = `Failed to update grid for tag: ${tag}.`;
+        fMyConsoleLog(`   -> ⚠️ Error: ${msg}`);
+        await fShowMessage(`❌ Error clearing wounds: ${msg}`);
+        errorsOccurred = true;
+      } else {
+        fMyConsoleLog(`   -> Cleared wounds for tag: ${tag}`);
       }
     }
+    if (!errorsOccurred) {
+      await fVitNowNPercent_Calc();
+    } else {
+      fMyConsoleLog(
+        "   -> Skipping Vit Now/Percent update due to errors clearing wounds."
+      );
+    }
+    const sidebarMsgHtml = `<span class="blue-bold">ℹ️ All Wounds Healed</span>`;
+    const sidebarMsgText = `ℹ️ All Wounds Healed`;
+    fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
+    fShowSidebar();
     fMyConsoleLog(
-      `✅ 'Is On/Duration' Processing Complete. Processed: ${cellsProcessed}, Changed: ${cellsChanged}${
-        errorsEncountered ? " (with errors)" : ""
+      `✅ Clear All Wounds Process Complete ${
+        errorsOccurred ? "(with errors)" : ""
       }.`
     );
-  } // End function fIsOn_NewNishSet
+    setTimeout(() => fSendLogToGMScreenAndPS(), 0);
+  } // End function fHealAllWounds
+
+  /** function fProcessWoundHealing
+   * Purpose: Calculates and applies healing for a specific wound degree.
+   * Assumptions: Called by function fCalc_NaturalHealing.
+   * Notes: This is a helper function for the natural healing process.
+   * @param {string} woundRangeTag - Tag for the specific wound cell.
+   * @param {number} vitMax - Character's maximum vitality.
+   * @param {number} divisor - Divisor for Vit Max to determine healing die size.
+   * @param {string} degreeLabel - Label for logging ('1st', '2nd', '3rd').
+   * @returns {Promise<number | null>} The amount healed, or null on error.
+   */
+  async function fProcessWoundHealing(
+    woundRangeTag,
+    vitMax,
+    divisor,
+    degreeLabel
+  ) {
+    fMyConsoleLog(`      -> Processing ${degreeLabel} Degree wounds...`);
+    const woundRange = gUI.range?.[woundRangeTag];
+    if (!woundRange || !woundRange.r1 || !woundRange.c1) {
+      const msg = `Wound range definition missing for tag: ${woundRangeTag}.`;
+      console.warn(`fProcessWoundHealing: ${msg}`);
+      fMyConsoleLog(`         -> ⚠️ Error: ${msg}`);
+      await fShowMessage(`❌ Error processing ${degreeLabel} wounds: ${msg}`);
+      return null;
+    }
+    let currentWounds = Math.max(
+      0,
+      fGetGridValue(woundRange.r1, woundRange.c1, true) || 0
+    );
+    if (isNaN(currentWounds)) {
+      fMyConsoleLog(
+        `         -> Warning: Invalid current wound value for ${degreeLabel}. Assuming 0.`
+      );
+      currentWounds = 0;
+    }
+    const healingDieSize = Math.max(1, Math.round(vitMax / divisor));
+    const healingRoll = fdRoll(healingDieSize);
+    fMyConsoleLog(
+      `         -> Healing roll (${degreeLabel}): d${healingDieSize} = ${healingRoll}`
+    );
+    const newWounds = Math.max(0, currentWounds - healingRoll);
+    const actualHealed = currentWounds - newWounds;
+    fMyConsoleLog(
+      `         -> Wounds: ${currentWounds} -> ${newWounds} (Healed: ${actualHealed})`
+    );
+    if (!fSetGridValue(woundRange.r1, woundRange.c1, newWounds)) {
+      const msg = `Failed to update grid for ${degreeLabel} wounds.`;
+      console.warn(`fProcessWoundHealing: ${msg}`);
+      fMyConsoleLog(`         -> ⚠️ Error: ${msg}`);
+      await fShowMessage(`❌ Error updating ${degreeLabel} wounds: ${msg}`);
+      return null;
+    }
+    return actualHealed;
+  } // End function fProcessWoundHealing
 
   /** function fCalc_NaturalHealing
    * Purpose: Handles the "Natural Healing" menu action.
@@ -3437,161 +3118,6 @@
     );
     setTimeout(() => fSendLogToGMScreenAndPS(), 0);
   } // End function fCalc_NaturalHealing
-
-  /** function fProcessWoundHealing
-   * Purpose: Calculates and applies healing for a specific wound degree.
-   * Assumptions: Called by function fCalc_NaturalHealing.
-   * Notes: This is a helper function for the natural healing process.
-   * @param {string} woundRangeTag - Tag for the specific wound cell.
-   * @param {number} vitMax - Character's maximum vitality.
-   * @param {number} divisor - Divisor for Vit Max to determine healing die size.
-   * @param {string} degreeLabel - Label for logging ('1st', '2nd', '3rd').
-   * @returns {Promise<number | null>} The amount healed, or null on error.
-   */
-  async function fProcessWoundHealing(
-    woundRangeTag,
-    vitMax,
-    divisor,
-    degreeLabel
-  ) {
-    fMyConsoleLog(`      -> Processing ${degreeLabel} Degree wounds...`);
-    const woundRange = gUI.range?.[woundRangeTag];
-    if (!woundRange || !woundRange.r1 || !woundRange.c1) {
-      const msg = `Wound range definition missing for tag: ${woundRangeTag}.`;
-      console.warn(`fProcessWoundHealing: ${msg}`);
-      fMyConsoleLog(`         -> ⚠️ Error: ${msg}`);
-      await fShowMessage(`❌ Error processing ${degreeLabel} wounds: ${msg}`);
-      return null;
-    }
-    let currentWounds = Math.max(
-      0,
-      fGetGridValue(woundRange.r1, woundRange.c1, true) || 0
-    );
-    if (isNaN(currentWounds)) {
-      fMyConsoleLog(
-        `         -> Warning: Invalid current wound value for ${degreeLabel}. Assuming 0.`
-      );
-      currentWounds = 0;
-    }
-    const healingDieSize = Math.max(1, Math.round(vitMax / divisor));
-    const healingRoll = fdRoll(healingDieSize);
-    fMyConsoleLog(
-      `         -> Healing roll (${degreeLabel}): d${healingDieSize} = ${healingRoll}`
-    );
-    const newWounds = Math.max(0, currentWounds - healingRoll);
-    const actualHealed = currentWounds - newWounds;
-    fMyConsoleLog(
-      `         -> Wounds: ${currentWounds} -> ${newWounds} (Healed: ${actualHealed})`
-    );
-    if (!fSetGridValue(woundRange.r1, woundRange.c1, newWounds)) {
-      const msg = `Failed to update grid for ${degreeLabel} wounds.`;
-      console.warn(`fProcessWoundHealing: ${msg}`);
-      fMyConsoleLog(`         -> ⚠️ Error: ${msg}`);
-      await fShowMessage(`❌ Error updating ${degreeLabel} wounds: ${msg}`);
-      return null;
-    }
-    return actualHealed;
-  } // End function fProcessWoundHealing
-
-  /** function fHealAllWounds
-   * Purpose: Handles the "Heal All Wounds" menu action.
-   * Assumptions: gUI.range definitions for wounds are correct.
-   * Notes: Sets all wound cells to 0, updates Vit Now/Percent, logs the action, and sends an update.
-   * @returns {Promise<void>} Resolves after the operation is complete.
-   */
-  async function fHealAllWounds() {
-    fMyConsoleLog("⚙️ Menu Action: Clearing All Wounds...");
-    const woundTags = ["vit1stWnds", "vit2ndWnds", "vit3rdWnds"];
-    let errorsOccurred = false;
-    for (const tag of woundTags) {
-      const woundRange = gUI.range?.[tag];
-      if (!woundRange || !woundRange.r1 || !woundRange.c1) {
-        const msg = `Wound range definition missing for tag: ${tag}.`;
-        console.warn(`fHealAllWounds: ${msg}`);
-        fMyConsoleLog(`   -> ⚠️ Error: ${msg}`);
-        await fShowMessage(`❌ Error clearing wounds: ${msg}`);
-        errorsOccurred = true;
-        continue;
-      }
-      if (!fSetGridValue(woundRange.r1, woundRange.c1, 0)) {
-        const msg = `Failed to update grid for tag: ${tag}.`;
-        fMyConsoleLog(`   -> ⚠️ Error: ${msg}`);
-        await fShowMessage(`❌ Error clearing wounds: ${msg}`);
-        errorsOccurred = true;
-      } else {
-        fMyConsoleLog(`   -> Cleared wounds for tag: ${tag}`);
-      }
-    }
-    if (!errorsOccurred) {
-      await fVitNowNPercent_Calc();
-    } else {
-      fMyConsoleLog(
-        "   -> Skipping Vit Now/Percent update due to errors clearing wounds."
-      );
-    }
-    const sidebarMsgHtml = `<span class="blue-bold">ℹ️ All Wounds Healed</span>`;
-    const sidebarMsgText = `ℹ️ All Wounds Healed`;
-    fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
-    fShowSidebar();
-    fMyConsoleLog(
-      `✅ Clear All Wounds Process Complete ${
-        errorsOccurred ? "(with errors)" : ""
-      }.`
-    );
-    setTimeout(() => fSendLogToGMScreenAndPS(), 0);
-  } // End function fHealAllWounds
-
-  /** function fHandleRestTimeRest
-   * Purpose: Handles the "Rest" menu action.
-   * Assumptions: function fMetaFlood is available.
-   * Notes: Runs a Meta Flood, logs the rest action, and sends an update.
-   * @returns {Promise<void>} Resolves after completing actions.
-   */
-  async function fHandleRestTimeRest() {
-    fMyConsoleLog("⚙️ Menu Action: Rest Triggered...");
-    await fMetaFlood();
-    const sidebarMsgHtml = `🕒 <span class="blue-bold">Character Rested</span>`;
-    const sidebarMsgText = `🕒 Character Rested`;
-    fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
-    fShowSidebar();
-    fMyConsoleLog("✅ Rest Action Completed.");
-    setTimeout(() => fSendLogToGMScreenAndPS(), 0);
-  } // End function fHandleRestTimeRest
-
-  /** function fHandleRestTimeNewSession
-   * Purpose: Handles the "New Game Session" menu action.
-   * Assumptions: function fLuck_SetToMax is available.
-   * Notes: Sets Luck to Max, logs the new session action, and sends an update.
-   * @returns {Promise<void>} Resolves after completing actions.
-   */
-  async function fHandleRestTimeNewSession() {
-    fMyConsoleLog("⚙️ Menu Action: New Game Session Triggered...");
-    await fLuck_SetToMax();
-    const sidebarMsgHtml = `⚡ <span class="blue-bold">New Game Session</span>`;
-    const sidebarMsgText = `⚡ New Game Session`;
-    fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
-    fShowSidebar();
-    fMyConsoleLog("✅ New Game Session Action Completed.");
-    setTimeout(() => fSendLogToGMScreenAndPS(), 0);
-  } // End function fHandleRestTimeNewSession
-
-  /** function fHandleRestTimeSleep
-   * Purpose: Handles the "Sleep" menu action.
-   * Assumptions: function fMeta_SetToMax and function fCalc_NaturalHealing are available.
-   * Notes: Sets Meta to Max, performs Natural Healing, logs the sleep action, and sends an update.
-   * @returns {Promise<void>} Resolves after completing actions.
-   */
-  async function fHandleRestTimeSleep() {
-    fMyConsoleLog("⚙️ Menu Action: Sleep Triggered...");
-    fMeta_SetToMax();
-    await fCalc_NaturalHealing();
-    const sidebarMsgHtml = `🕒 <span class="blue-bold">Character Slept</span>`;
-    const sidebarMsgText = `🕒 Character Slept`;
-    fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
-    fShowSidebar();
-    fMyConsoleLog("✅ Sleep Action Completed.");
-    setTimeout(() => fSendLogToGMScreenAndPS(), 0);
-  } // End function fHandleRestTimeSleep
 
   /** function fMeta_SetToMax
    * Purpose: Handles the "Set Meta to Max" menu action.
@@ -3763,179 +3289,6 @@
     }
   } // End function fAct_SetToMax
 
-  /** function fCalc_VitMaxNowPerc
-   * Purpose: Handles the "Set Vit Max" menu action by recalculating derived vitality values.
-   * Assumptions: gUI.range definitions for Vit and Fortitude are correct.
-   * Notes: Calculates and updates Vit Max, Vit Now, and Vit Now Percent based on Fortitude and bonuses.
-   * @returns {Promise<void>} Resolves after the operation is complete.
-   */
-  async function fCalc_VitMaxNowPerc() {
-    fMyConsoleLog("⚙️ Menu Action: Setting Vit to Max...");
-    const fortitudeRange = gUI.range?.fortitudeSk1;
-    const vitMaxRange = gUI.range?.vitMax;
-    const vitMaxPlusRange = gUI.range?.vitMaxPlus;
-    let errorMsg = "";
-    if (!fortitudeRange || !fortitudeRange.r1 || !fortitudeRange.c1)
-      errorMsg = "Fortitude range definition missing.";
-    else if (!vitMaxRange || !vitMaxRange.r1 || !vitMaxRange.c1)
-      errorMsg = "Vit Max range definition missing.";
-    else if (!vitMaxPlusRange || !vitMaxPlusRange.r1 || !vitMaxPlusRange.c1)
-      errorMsg = "Vit Max Plus range definition missing.";
-    if (errorMsg) {
-      console.warn(`fCalc_VitMaxNowPerc: ${errorMsg}`);
-      fMyConsoleLog(`⚠️ Cannot set Vit to max: ${errorMsg}`);
-      await fShowMessage(`❌ Error: ${errorMsg}`);
-      return;
-    }
-    const fortitudeValueRaw = fGetGridValue(
-      fortitudeRange.r1,
-      fortitudeRange.c1
-    );
-    const fortitudeValue = Number(fortitudeValueRaw);
-    if (isNaN(fortitudeValue)) {
-      errorMsg = `Fortitude Sk1 value ('${fortitudeValueRaw}') is not a valid number.`;
-      console.warn(`fCalc_VitMaxNowPerc: ${errorMsg}`);
-      fMyConsoleLog(`⚠️ Cannot set Vit to max: ${errorMsg}`);
-      await fShowMessage(`❌ Error: ${errorMsg}`);
-      return;
-    }
-    fMyConsoleLog(`   -> Fortitude Sk1 value: ${fortitudeValue}`);
-    const vitMaxPlusValueRaw = fGetGridValue(
-      vitMaxPlusRange.r1,
-      vitMaxPlusRange.c1
-    );
-    let vitMaxPlusBonus = 0;
-    if (
-      vitMaxPlusValueRaw !== null &&
-      vitMaxPlusValueRaw !== "" &&
-      !isNaN(Number(vitMaxPlusValueRaw))
-    ) {
-      vitMaxPlusBonus = Math.round(Number(vitMaxPlusValueRaw));
-      fMyConsoleLog(
-        `   -> Vit Max Plus Bonus found: ${vitMaxPlusValueRaw} -> Rounded: ${vitMaxPlusBonus}`
-      );
-    } else {
-      fMyConsoleLog(`   -> No valid Vit Max Plus Bonus found. Using 0.`);
-    }
-    const newVitMax = Math.round(fortitudeValue + vitMaxPlusBonus);
-    fMyConsoleLog(
-      `   -> Calculated New Vit Max: ${fortitudeValue} (For) + ${vitMaxPlusBonus} (Bonus) = ${newVitMax}`
-    );
-    const setMaxSuccess = fSetGridValue(
-      vitMaxRange.r1,
-      vitMaxRange.c1,
-      newVitMax
-    );
-    if (!setMaxSuccess) {
-      fMyConsoleLog(
-        `⚠️ Failed to set Vit Max value (${newVitMax}) in cell (${vitMaxRange.r1}, ${vitMaxRange.c1}). Aborting further updates.`
-      );
-      await fShowMessage(
-        `❌ Error: Failed to update the Vit Max value in the grid.`
-      );
-      return;
-    }
-    fMyConsoleLog(`   -> Successfully set Vit Max to ${newVitMax}.`);
-    await fVitNowNPercent_Calc();
-    fMyConsoleLog("✅ Vit Set to Max sequence complete.");
-    fMyConsoleLog(
-      "   -> Calling function fSendLogToGMScreenAndPS from function fCalc_VitMaxNowPerc..."
-    );
-    setTimeout(() => fSendLogToGMScreenAndPS(), 0);
-  } // End function fCalc_VitMaxNowPerc
-
-  /** function fVitNowNPercent_Calc
-   * Purpose: Calculates 'Vit Now' and 'Vit Now Percent' and updates the grid.
-   * Assumptions: Called after Vit Max or Wounds have changed. gUI.range definitions are correct.
-   * Notes: This is a helper function to keep derived vitality fields synchronized.
-   * @returns {Promise<void>} Resolves after the operation is complete.
-   */
-  async function fVitNowNPercent_Calc() {
-    fMyConsoleLog("   -> Calculating Vit Now & Percent...");
-    const vitMaxRange = gUI.range?.vitMax;
-    const vit1stRange = gUI.range?.vit1stWnds;
-    const vit2ndRange = gUI.range?.vit2ndWnds;
-    const vit3rdRange = gUI.range?.vit3rdWnds;
-    const vitNowRange = gUI.range?.vitNow;
-    const vitNowPercentRange = gUI.range?.vitNowPercent;
-    let errorMsg = "";
-    if (!vitMaxRange || !vitMaxRange.r1 || !vitMaxRange.c1)
-      errorMsg = "Vit Max range definition missing.";
-    else if (!vit1stRange || !vit1stRange.r1 || !vit1stRange.c1)
-      errorMsg = "Vit 1st Wounds range definition missing.";
-    else if (!vit2ndRange || !vit2ndRange.r1 || !vit2ndRange.c1)
-      errorMsg = "Vit 2nd Wounds range definition missing.";
-    else if (!vit3rdRange || !vit3rdRange.r1 || !vit3rdRange.c1)
-      errorMsg = "Vit 3rd Wounds range definition missing.";
-    else if (!vitNowRange || !vitNowRange.r1 || !vitNowRange.c1)
-      errorMsg = "Vit Now range definition missing.";
-    else if (
-      !vitNowPercentRange ||
-      !vitNowPercentRange.r1 ||
-      !vitNowPercentRange.c1
-    )
-      errorMsg = "Vit Now Percent range definition missing.";
-    if (errorMsg) {
-      console.warn(`fVitNowNPercent_Calc: ${errorMsg}`);
-      fMyConsoleLog(`   -> ⚠️ Calculation aborted: ${errorMsg}`);
-      await fShowMessage(`❌ Error: ${errorMsg}`);
-      return;
-    }
-    const currentVitMaxRaw = fGetGridValue(vitMaxRange.r1, vitMaxRange.c1);
-    const currentVitMax = Number(currentVitMaxRaw);
-    if (isNaN(currentVitMax)) {
-      errorMsg = `Vit Max value ('${currentVitMaxRaw}') needed for calculation is not a number.`;
-      console.warn(`fVitNowNPercent_Calc: ${errorMsg}`);
-      fMyConsoleLog(`   -> ⚠️ Calculation aborted: ${errorMsg}`);
-      await fShowMessage(`❌ Error: ${errorMsg}`);
-      return;
-    }
-    const getWoundVal = (range) => {
-      const raw = fGetGridValue(range.r1, range.c1);
-      return raw !== null && raw !== "" && !isNaN(Number(raw))
-        ? Math.round(Number(raw))
-        : 0;
-    };
-    const wounds1st = getWoundVal(vit1stRange);
-    const wounds2nd = getWoundVal(vit2ndRange);
-    const wounds3rd = getWoundVal(vit3rdRange);
-    const totalWounds = wounds1st + wounds2nd + wounds3rd;
-    fMyConsoleLog(
-      `      -> Wounds: ${wounds1st}(1st) + ${wounds2nd}(2nd) + ${wounds3rd}(3rd) = ${totalWounds}`
-    );
-    const newVitNow = Math.round(currentVitMax - totalWounds);
-    fMyConsoleLog(
-      `      -> Calculated Vit Now: ${currentVitMax} (Max) - ${totalWounds} (Wounds) = ${newVitNow}`
-    );
-    const setNowSuccess = fSetGridValue(
-      vitNowRange.r1,
-      vitNowRange.c1,
-      newVitNow
-    );
-    if (!setNowSuccess) {
-      fMyConsoleLog(`   -> ⚠️ Failed to set Vit Now value (${newVitNow}).`);
-      await fShowMessage(`❌ Error: Failed to update the Vit Now value.`);
-    }
-    const percent =
-      currentVitMax === 0 ? 0 : Math.round((newVitNow / currentVitMax) * 100);
-    const percentString = percent + "%";
-    fMyConsoleLog(`      -> Calculated Vit Now Percent: ${percentString}`);
-    const setPercentSuccess = fSetGridValue(
-      vitNowPercentRange.r1,
-      vitNowPercentRange.c1,
-      percentString
-    );
-    if (!setPercentSuccess) {
-      fMyConsoleLog(
-        `   -> ⚠️ Failed to set Vit Now Percent value (${percentString}).`
-      );
-      await fShowMessage(
-        `❌ Error: Failed to update the Vit Now Percent value.`
-      );
-    }
-    fMyConsoleLog("   -> Vit Now & Percent Calculation complete.");
-  } // End function fVitNowNPercent_Calc
-
   /** function fHandleResetAllToMax
    * Purpose: Handles the 'Reset All to Max' menu action.
    * Assumptions: Relies on various helper functions to perform the reset actions.
@@ -3972,6 +3325,257 @@
       fMyConsoleLog("   -> User cancelled Reset All action.");
     }
   } // End function fHandleResetAllToMax
+
+  /** function fMetaFlood
+   * Purpose: Handles the "Meta Flood" menu action.
+   * Assumptions: gUI.range.meta and gUI.list.metaFull are correctly defined.
+   * Notes: Randomly selects a Meta column, increases its value and preceding values, caps them, and logs.
+   * @returns {Promise<void>} Resolves after the operation is complete.
+   */
+  async function fMetaFlood() {
+    fMyConsoleLog("⚙️ Menu Action: Meta Flood...");
+    const metaRangeDef = gUI.range?.meta;
+    const metaCaps = gUI.list?.metaFull;
+    const metaColorTags = gUI.list?.metaColor;
+    let errorMsg = "";
+    if (!metaRangeDef || !fDoesObjectHaveR1C1R2C2Properties(metaRangeDef))
+      errorMsg = "Meta range definition missing or invalid.";
+    else if (!Array.isArray(metaCaps) || metaCaps.length === 0)
+      errorMsg = "Meta caps list (gUI.list.metaFull) missing or invalid.";
+    if (errorMsg) {
+      console.warn(`fMetaFlood: ${errorMsg}`);
+      fMyConsoleLog(`⚠️ Meta Flood failed: ${errorMsg}`);
+      await fShowMessage(`❌ Error: ${errorMsg}`);
+      return;
+    }
+    const metaRowTag = metaRangeDef.r1;
+    const startCol = fResolveCol(metaRangeDef.c1);
+    const endCol = fResolveCol(metaRangeDef.c2);
+    if ([startCol, endCol].some(isNaN)) {
+      errorMsg = `Could not resolve Meta column tags: ${metaRangeDef.c1}, ${metaRangeDef.c2}.`;
+      console.warn(`fMetaFlood: ${errorMsg}`);
+      fMyConsoleLog(`⚠️ Meta Flood failed: ${errorMsg}`);
+      await fShowMessage(`❌ Error: ${errorMsg}`);
+      return;
+    }
+    const numMetaCols = Math.abs(endCol - startCol) + 1;
+    if (metaCaps.length > 0 && numMetaCols !== metaCaps.length) {
+      errorMsg = `Mismatch between number of Meta columns (${numMetaCols}) and Meta caps (${metaCaps.length}).`;
+      console.warn(`fMetaFlood: ${errorMsg}`);
+      fMyConsoleLog(`⚠️ Meta Flood failed: ${errorMsg}`);
+      await fShowMessage(`❌ Error: ${errorMsg}`);
+      return;
+    }
+    const selectedIndex = Math.floor(Math.random() * numMetaCols);
+    const selectedColIndex = startCol + selectedIndex;
+    const selectedColTag =
+      metaColorTags?.[selectedIndex] ?? `Index ${selectedIndex}`;
+    fMyConsoleLog(
+      `   -> Selected Meta Index: ${selectedIndex} (Column ${selectedColIndex} - Tag: ${selectedColTag})`
+    );
+    const finalValues = [];
+    let amountToAdd = 1;
+    for (let i = selectedIndex; i >= 0; i--) {
+      const currentColIndex = startCol + i;
+      const currentColTag = metaColorTags?.[i] ?? `Index ${i}`;
+      const currentVal = fGetGridValue(metaRowTag, currentColIndex, true) || 0;
+      const newValRaw = currentVal + amountToAdd;
+      const cap =
+        metaCaps && metaCaps[i] !== undefined ? metaCaps[i] : Infinity;
+      const finalVal = Math.min(newValRaw, cap);
+      fMyConsoleLog(
+        `      -> Index ${i} (${currentColTag}): Current=${currentVal}, Add=${amountToAdd}, Raw=${newValRaw}, Cap=${
+          cap === Infinity ? "N/A" : cap
+        } => Final=${finalVal}`
+      );
+      finalValues.unshift(finalVal);
+      amountToAdd++;
+    }
+    fMyConsoleLog(
+      `   -> Updating Meta columns ${startCol} to ${selectedColIndex} with final values: [${finalValues.join(
+        ", "
+      )}]`
+    );
+    const success = fSetRangeOfGridValues(
+      metaRowTag,
+      startCol,
+      metaRowTag,
+      selectedColIndex,
+      finalValues
+    );
+    if (!success) {
+      errorMsg = `fSetRangeOfGridValues failed to update Meta grid.`;
+      fMyConsoleLog(`   -> ⚠️ Meta Flood Error: ${errorMsg}`);
+      await fShowMessage(`❌ Error: ${errorMsg}`);
+    } else {
+      fMyConsoleLog("✅ Meta Flood Update Complete.");
+      const sidebarMsgHtml = `<span class="blue-bold">ℹ️ Meta Flood (Rolled ${selectedColTag}):</span>`;
+      const sidebarMsgText = `ℹ️ Meta Flood (Rolled ${selectedColTag}):`;
+      fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
+      fShowSidebar();
+      setTimeout(() => fSendLogToGMScreenAndPS(), 0);
+    }
+  } // End function fMetaFlood
+
+  /** function fMetaChannel
+   * Purpose: Handles the Meta Channeling calculation.
+   * Assumptions: gUI.range.metaChannel and gUI.list.metaColor are correctly defined.
+   * Notes: Randomly selects a Meta Channel column, increments its value, updates the grid, and logs the action.
+   * @returns {Promise<void>} Resolves after the operation is complete.
+   */
+  async function fMetaChannel() {
+    fMyConsoleLog("⚙️ Calculating Meta Channel...");
+    const channelRangeDef = gUI.range?.metaChannel;
+    const metaColorTags = gUI.list?.metaColor;
+    let errorMsg = "";
+    if (!channelRangeDef || !fDoesObjectHaveR1C1R2C2Properties(channelRangeDef))
+      errorMsg = "Meta Channel range definition missing or invalid.";
+    if (errorMsg) {
+      console.warn(`fMetaChannel: ${errorMsg}`);
+      fMyConsoleLog(`⚠️ Meta Channel failed: ${errorMsg}`);
+      await fShowMessage(`❌ Error: ${errorMsg}`);
+      return;
+    }
+    const channelRowTag = channelRangeDef.r1;
+    const startCol = fResolveCol(channelRangeDef.c1);
+    const endCol = fResolveCol(channelRangeDef.c2);
+    if ([startCol, endCol].some(isNaN)) {
+      errorMsg = `Could not resolve Meta Channel column tags: ${channelRangeDef.c1}, ${channelRangeDef.c2}.`;
+      console.warn(`fMetaChannel: ${errorMsg}`);
+      fMyConsoleLog(`⚠️ Meta Channel failed: ${errorMsg}`);
+      await fShowMessage(`❌ Error: ${errorMsg}`);
+      return;
+    }
+    const numMetaCols = Math.abs(endCol - startCol) + 1;
+    const roll1 = Math.floor(Math.random() * numMetaCols);
+    const roll2 = Math.floor(Math.random() * numMetaCols);
+    const lowestSelectedIndex = Math.min(roll1, roll2);
+    const finalColIndex = startCol + lowestSelectedIndex;
+    const selectedColTag =
+      metaColorTags?.[lowestSelectedIndex] ?? `Index ${lowestSelectedIndex}`;
+    fMyConsoleLog(
+      `   -> Meta Channel Rolls: ${roll1}, ${roll2}. Lowest Index: ${lowestSelectedIndex} (Column ${finalColIndex} - Tag: ${selectedColTag})`
+    );
+    const currentVal = fGetGridValue(channelRowTag, finalColIndex, true) || 0;
+    const newValue = currentVal + 1;
+    fMyConsoleLog(
+      `      -> Index ${lowestSelectedIndex} (${selectedColTag}): Current=${currentVal}, Add=1 => New=${newValue}`
+    );
+    const success = fSetGridValue(channelRowTag, finalColIndex, newValue);
+    if (!success) {
+      errorMsg = `fSetGridValue failed to update Meta Channel grid cell [${channelRowTag}, ${finalColIndex}].`;
+      fMyConsoleLog(`   -> ⚠️ Meta Channel Error: ${errorMsg}`);
+      await fShowMessage(`❌ Error: ${errorMsg}`);
+    } else {
+      fMyConsoleLog("✅ Meta Channel Update Complete.");
+      const sidebarMsgHtml = `<span class="blue-bold">ℹ️ Meta Channeled (${selectedColTag}):</span> ${currentVal} &rarr; ${newValue}`;
+      const sidebarMsgText = `ℹ️ Meta Channeled (${selectedColTag}): ${currentVal} -> ${newValue}`;
+      fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
+    }
+  } // End function fMetaChannel
+
+  /** function fHandleNishStartOrEnd
+   * Purpose: Handles the "Nish Start or End" menu action.
+   * Assumptions: Relies on fMetaFlood, fClearChanneledMeta, fAct_SetToMax, and fClearIsOnDurationRange.
+   * Notes: This orchestrates several actions: flooding meta, clearing durations, maximizing AP, and logging.
+   * @returns {Promise<void>} Resolves after all actions are complete.
+   */
+  async function fHandleNishStartOrEnd() {
+    fMyConsoleLog("⚙️ Menu Action: Nish Start or End Triggered...");
+    await fMetaFlood();
+    fClearChanneledMeta();
+    await fAct_SetToMax();
+    fClearIsOnDurationRange();
+    const sidebarMsgHtml = `🚩<span class="blue-bold">Nish Start or End</span>`;
+    const sidebarMsgText = `🚩 Nish Start or End`;
+    fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
+    fShowSidebar();
+    fMyConsoleLog("✅ Nish Start or End Action Completed.");
+    setTimeout(() => fSendLogToGMScreenAndPS(), 0);
+  } // End function fHandleNishStartOrEnd
+
+  /** function fIsOn_NewNishSet
+   * Purpose: Processes the 'Is On' / 'Duration' columns at the start of a Nish turn.
+   * Assumptions: gUI.range.isONDur contains valid range definitions.
+   * Notes: Decrements positive integer durations by 1 and clears specific non-numeric states (e.g., 'i', 'p').
+   * @returns {Promise<void>} Resolves after processing all defined ranges.
+   */
+  async function fIsOn_NewNishSet() {
+    fMyConsoleLog("⚙️ Processing 'Is On/Duration' cells for Nish turn...");
+    const rangeDefs = gUI.range?.isONDur;
+    if (!Array.isArray(rangeDefs) || rangeDefs.length === 0) {
+      fMyConsoleLog(
+        "⚠️ Cannot process 'Is On': Range definitions missing or empty in gUI.range.isONDur."
+      );
+      return;
+    }
+    let cellsProcessed = 0;
+    let cellsChanged = 0;
+    let errorsEncountered = false;
+    for (const range of rangeDefs) {
+      if (!fDoesObjectHaveR1C1R2C2Properties(range)) {
+        console.warn("fIsOn_NewNishSet: Skipping invalid range object", range);
+        errorsEncountered = true;
+        continue;
+      }
+      const resolved = fConvertsR1C1R2C2TagOrNumToIndices(range);
+      if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
+        console.warn(
+          "fIsOn_NewNishSet: Skipping range due to unresolved indices",
+          range
+        );
+        errorsEncountered = true;
+        continue;
+      }
+      const rMin = Math.min(resolved.r1, resolved.r2);
+      const rMax = Math.max(resolved.r1, resolved.r2);
+      const cMin = Math.min(resolved.c1, resolved.c2);
+      const cMax = Math.max(resolved.c1, resolved.c2);
+      for (let r = rMin; r <= rMax; r++) {
+        for (let c = cMin; c <= cMax; c++) {
+          cellsProcessed++;
+          const currentValue = fGetGridValue(r, c);
+          let newValue = currentValue;
+          if (currentValue === null || typeof currentValue === "undefined") {
+            newValue = "";
+          } else {
+            const currentValueStrLower = String(currentValue).toLowerCase();
+            if (
+              currentValueStrLower === "i" ||
+              currentValueStrLower === "p" ||
+              currentValueStrLower === "n"
+            ) {
+              newValue = "";
+            } else {
+              const numericValue = Number(currentValue);
+              if (!isNaN(numericValue)) {
+                if (numericValue > 0) {
+                  newValue = numericValue - 1;
+                  if (newValue === 0) {
+                    newValue = "";
+                  }
+                } else if (numericValue === 0) {
+                  newValue = "";
+                }
+              }
+            }
+          }
+          if (newValue !== currentValue) {
+            if (fSetGridValue(r, c, newValue)) {
+              cellsChanged++;
+            } else {
+              errorsEncountered = true;
+            }
+          }
+        }
+      }
+    }
+    fMyConsoleLog(
+      `✅ 'Is On/Duration' Processing Complete. Processed: ${cellsProcessed}, Changed: ${cellsChanged}${
+        errorsEncountered ? " (with errors)" : ""
+      }.`
+    );
+  } // End function fIsOn_NewNishSet
 
   /** function fClearChanneledMeta
    * Purpose: Handles the 'Clear Channeled Meta' menu action.
@@ -4195,6 +3799,56 @@
     fShowSidebar();
     setTimeout(() => fSendLogToGMScreenAndPS(), 0);
   } // End function fClearRollLog
+
+  /** function fClearIsOnDurationRange
+   * Purpose: Clears all cells within the 'Is On / Duration' ranges.
+   * Assumptions: gUI.range.isONDur contains an array of valid range definition objects.
+   * Notes: Sets the value of all cells in the defined ranges to an empty string.
+   * @returns {void}
+   */
+  function fClearIsOnDurationRange() {
+    fMyConsoleLog("⚙️ Clearing 'Is On/Duration' Range...");
+    let allSucceeded = true;
+    const rangesToClear = gUI.range?.isONDur;
+    if (!Array.isArray(rangesToClear) || rangesToClear.length === 0) {
+      console.warn(
+        "fClearIsOnDurationRange: No 'Is On/Duration' ranges defined in gUI.range.isONDur."
+      );
+      fMyConsoleLog("⚠️ Cannot clear 'Is On/Duration': Ranges not defined.");
+      return;
+    }
+    rangesToClear.forEach((range) => {
+      if (!fDoesObjectHaveR1C1R2C2Properties(range)) {
+        console.warn(
+          "fClearIsOnDurationRange: Skipping invalid range object within gUI.range.isONDur:",
+          range
+        );
+        allSucceeded = false;
+        return;
+      }
+      const r1 = fResolveRow(range.r1);
+      const c1 = fResolveCol(range.c1);
+      const r2 = fResolveRow(range.r2);
+      const c2 = fResolveCol(range.c2);
+      if ([r1, c1, r2, c2].some(isNaN)) {
+        console.warn(
+          `fClearIsOnDurationRange: Skipping invalid range definition:`,
+          range
+        );
+        allSucceeded = false;
+        return;
+      }
+      const success = fSetRangeOfGridValues(r1, c1, r2, c2, "");
+      if (!success) {
+        allSucceeded = false;
+      }
+    });
+    if (!allSucceeded) {
+      fMyConsoleLog("⚠️ Failed to clear one or more 'Is On/Duration' ranges.");
+    } else {
+      fMyConsoleLog("✅ 'Is On/Duration' Ranges Cleared.");
+    }
+  } // End function fClearIsOnDurationRange
 
   /** function fToggleGearColumns
    * Purpose: Handles the 'Gear (Show/Hide)' menu action.
@@ -5033,6 +4687,154 @@
     fMyConsoleLog(`✅ ${funcName}: Socketed Gear loot posted.`);
   } // End function fLoot_RollSockets
 
+  /** function fHandleNewLevelSlotName
+   * Purpose: Handles the "Update (Level, Slot, Names)" menu action.
+   * Assumptions: Relies on a chain of async helper functions for cache refreshing and grid updates.
+   * Notes: Force-refreshes user-specific caches, validates data, sends a log, and re-processes the grid.
+   * @returns {Promise<void>} Resolves after completing actions or handling errors.
+   */
+  async function fHandleNewLevelSlotName() {
+    const funcName = "fHandleNewLevelSlotName";
+    fMyConsoleLog(`⚙️ Menu Action: ${funcName} Triggered...`);
+    fShowMessageNoClose(
+      "⏳ Refreshing Caches, Sending Log & Updating Grid...<br><br>This may take a minute.<br><br>Please wait."
+    );
+    try {
+      const userCachesToRefresh = [
+        {
+          workbookAbr: "MyCS",
+          sheetName: "RaceClass",
+          gUIKey: "myCSRaceClassFSData",
+        },
+        {
+          workbookAbr: "MyCS",
+          sheetName: "List",
+          gUIKey: "myCSListFSData",
+        },
+        {
+          workbookAbr: "MyKL",
+          sheetName: "KnownAbilities",
+          gUIKey: "myKLKnownAbilitiesFSData",
+        },
+      ];
+      const refreshPromises = userCachesToRefresh.map((config) =>
+        fRefreshAndCacheOneFSData(
+          config.workbookAbr,
+          config.sheetName,
+          config.gUIKey
+        )
+      );
+      fMyConsoleLog(
+        `   -> Starting parallel refresh for ${userCachesToRefresh.length} user caches...`
+      );
+      const results = await Promise.allSettled(refreshPromises);
+      fMyConsoleLog(`   -> Parallel cache refreshes completed.`);
+      let allRefreshesSucceeded = true;
+      let firstErrorMessage = null;
+      for (let i = 0; i < results.length; i++) {
+        const result = results[i];
+        const config = userCachesToRefresh[i];
+        if (result.status === "rejected" || result.value === false) {
+          allRefreshesSucceeded = false;
+          firstErrorMessage =
+            result.reason?.message || `Refresh failed for ${config.gUIKey}.`;
+          fMyConsoleLog(
+            `      -> ❌ Refresh FAILED for ${config.gUIKey}: ${firstErrorMessage}`
+          );
+          break;
+        } else {
+          fMyConsoleLog(`      -> ✅ Refresh SUCCEEDED for ${config.gUIKey}.`);
+        }
+      }
+      if (!allRefreshesSucceeded) {
+        throw new Error(
+          firstErrorMessage || `One or more cache refreshes failed.`
+        );
+      }
+      fMyConsoleLog(`   -> All user cache refreshes successful.`);
+      fMyConsoleLog(
+        "   -> Updating Ability Dropdowns based on refreshed List cache..."
+      );
+      fProcessCachedAbilityList();
+      fMyConsoleLog("      -> ✅ Ability Dropdowns updated.");
+      fMyConsoleLog("   -> Validating Slot Number from refreshed data...");
+      const currentSlot = gUI.characterInfo?.slotNum;
+      const slotRegex = /^Slot([1-9])$/i;
+      if (!currentSlot || !slotRegex.test(currentSlot)) {
+        const invalidSlotMsg = `Invalid or missing Slot # ("${
+          currentSlot || "null"
+        }") after cache refresh.`;
+        throw new Error(invalidSlotMsg);
+      }
+      fMyConsoleLog(`      -> Slot validated: ${currentSlot}`);
+      fMyConsoleLog("   -> Sending log update...");
+      await fSendLogToGMScreenAndPS();
+      fMyConsoleLog("      -> ✅ Log send successful.");
+      fMyConsoleLog("   -> Refreshing grid rows (Abilities/Gear)...");
+      await fTotalRereshOfAllAbilitiesAndAllGear();
+      fMyConsoleLog("      -> ✅ Grid row refresh complete.");
+      fMyConsoleLog(`✅ ${funcName} Completed Successfully.`);
+      fHideMessage();
+    } catch (error) {
+      fHideMessage();
+      const errorMsg = `❌ Error during Update (Level, Slot, Names): ${
+        error?.message || error
+      }`;
+      console.error(errorMsg, error);
+      fMyConsoleLog(`   -> ❌ ${errorMsg}`);
+      await fShowMessage(errorMsg);
+    }
+  } // End function fHandleNewLevelSlotName
+
+  /** function fHandleGMAward
+   * Purpose: Handles the "GM Award" menu action.
+   * Assumptions: The gUI.dbCritFSData cache is populated and contains the GM Award data.
+   * Notes: Selects a random award from the cache and posts it to the sidebar and GMScreen.
+   * @returns {Promise<void>} Resolves after completing the action.
+   */
+  async function fHandleGMAward() {
+    const funcName = "fHandleGMAward";
+    fMyConsoleLog(`⚙️ Menu Action: ${funcName} Triggered...`);
+    const cacheKey = "dbCritFSData";
+    if (!gUI[cacheKey]) {
+      console.error(`${funcName}: Cache object gUI['${cacheKey}'] is missing.`);
+      return;
+    }
+    const gmawardColTag = "GMAward";
+    const startRowTag = "RowBeforeFirstDataRow";
+    const gmawardColIndex = fResolveFSDataCol(cacheKey, gmawardColTag);
+    const startRowIndex = fResolveFSDataRow(cacheKey, startRowTag) + 1;
+    if (isNaN(gmawardColIndex) || isNaN(startRowIndex)) {
+      return;
+    }
+    const awardsList = [];
+    const cachedText = gUI[cacheKey].text;
+    const numRows = cachedText.length;
+    for (let r = startRowIndex; r < numRows; r++) {
+      const cellValue = cachedText[r]?.[gmawardColIndex];
+      const trimmedValue = String(cellValue ?? "").trim();
+      if (trimmedValue !== "") {
+        awardsList.push(trimmedValue);
+      }
+    }
+    if (awardsList.length === 0) {
+      fMyConsoleLog(
+        `   -> ${funcName}: No valid GM Awards found in '${gmawardColTag}' column starting from row '${startRowTag}'. Skipping display.`
+      );
+      return;
+    }
+    const randomIndex = Math.floor(Math.random() * awardsList.length);
+    const selectedAward = awardsList[randomIndex];
+    fMyConsoleLog(`   -> Randomly selected award: "${selectedAward}"`);
+    const sidebarMsgHtml = `<span class="blue-bold">GM Award:</span><br>${selectedAward}`;
+    const sidebarMsgText = `GM Award:\n${selectedAward}`;
+    fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
+    fShowSidebar();
+    fMyConsoleLog(`   -> Queueing log send for GM Award.`);
+    setTimeout(() => fSendLogToGMScreenAndPS(), 0);
+    fMyConsoleLog(`✅ ${funcName}: Completed.`);
+  } // End function fHandleGMAward
+
   /** function fHandleDesignerOnlyClick
    * Purpose: Handles clicks on the "Designer Only" menu item.
    * Assumptions: This function initiates the password prompt flow.
@@ -5108,354 +4910,495 @@
     }
   } // End function fHandleDesignerPasswordResult
 
-  /////////////////////////////////////////////////////////////////////
-  //                   End - Menu Action Logic                       //
-  /////////////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  // End - Menu Action Logic
+  // Start - Character Stat Calculations
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-  /** function fExecuteNishSequence
-   * Purpose: Executes the common sequence of actions required at the start of a Nish turn.
-   * Assumptions: Skips Meta/Duration updates if Luck was used to trigger the Nish turn.
-   * @param {} - No parameters.
-   * @returns {void}
+  /** function fCalculatesEnc_MR_AP
+   * Purpose: Calculates Movement Rate (MR) and Carry Capacity, updates the grid, and recalculates total AP.
+   * Assumptions: Relies on various values and range definitions in the gUI object.
+   * Notes: This is a core calculation function triggered after gear or stat changes.
+   * @returns {Promise<void>} Resolves when calculations and updates are complete.
    */
-  async function fExecuteNishSequence() {
-    fMyConsoleLog("🎬 Executing Nish Sequence...");
-    fPostToSidebar(
-      '<hr class="nish-divider"><br>',
-      "\n======================\n"
-    );
-    fMyConsoleLog("   -> Sidebar divider added.");
-    if (!gUI.buttonOrMenu.isLuck) {
-      await fMetaChannel();
-      fMyConsoleLog("   -> fMetaChannel executed.");
-    } else {
-      fMyConsoleLog("   -> Skipping fMetaChannel (Luck trigger).");
-    }
-    await fAct_SetToMax();
-    fMyConsoleLog("   -> fAct_SetToMax executed.");
-    if (!gUI.buttonOrMenu.isLuck) {
-      await fIsOn_NewNishSet();
-      fMyConsoleLog("   -> fIsOn_NewNishSet executed.");
-    } else {
-      fMyConsoleLog("   -> Skipping fIsOn_NewNishSet (Luck trigger).");
-    }
-    fMyConsoleLog("✅ Nish Sequence Execution Complete.");
-  } // End function fExecuteNishSequence
-
-  /** function fNishTorCText
-   * Purpose: Selects and displays a random Tremendous or Critical Nish result to the sidebar.
-   * Assumptions: The dbCritFSData cache is populated.
-   * @param {string} tOrC - 't' for Tremendous, 'c' for Critical.
-   * @returns {void}
-   */
-  async function fNishTorCText(tOrC) {
-    const funcName = "fNishTorCText";
-    fMyConsoleLog(
-      `⚙️ ${funcName}: Processing Nish T/C result for input '${tOrC}'...`
-    );
-    const inputLower = String(tOrC ?? "").toLowerCase();
-    if (inputLower !== "t" && inputLower !== "c") {
-      fMyConsoleLog(
-        `   -> ${funcName}: Invalid input '${tOrC}'. Must be 't' or 'c'. Aborting.`
+  async function fCalculatesEnc_MR_AP() {
+    fMyConsoleLog("⚙️ Calculating Movement Rate and Encumbrance...");
+    const movementMultipliers = [1, 0.9, 0.8, 0.65, 0.5, 0.25];
+    const carryMultipliers = [1, 2, 4, 8, 12, 16];
+    const mrColumnTags = [
+      "GearMRCol1",
+      "GearMRCol2",
+      "GearMRCol3",
+      "GearMRCol4",
+      "GearMRCol5",
+      "GearMRCol6",
+    ];
+    const MR_TABLE_ROW = "GearMRTbl";
+    const CARRY_TABLE_ROW = "GearCarryTbl";
+    const CHECKBOX_ROW = "GearMRCheckBox";
+    let errorMsg = "";
+    const agilityValue = fGetGridValue("Agi", "Sk1", true);
+    const strengthValue = fGetGridValue("Str", "Sk1", true);
+    const plusMRValue = fGetGridValue("GearPlusMR", "GearPlusMR", true) || 0;
+    const plusCarryValue =
+      fGetGridValue("GearPlusCarry", "GearPlusCarry", true) || 0;
+    const currentEncumbrance = fCalcTotalEnc() || 0;
+    if (isNaN(agilityValue))
+      errorMsg += "Agility ('Agi', 'Sk1') is not a valid number. ";
+    if (isNaN(strengthValue))
+      errorMsg += "Strength ('Str', 'Sk1') is not a valid number. ";
+    if (isNaN(currentEncumbrance))
+      errorMsg +=
+        "Current Encumbrance ('PossEncTot', 'PossEncTot') is not a valid number.";
+    if (errorMsg) {
+      console.error(
+        `fCalculatesEnc_MR_AP: Input validation failed: ${errorMsg}`
       );
-      return;
-    }
-    const cacheKey = "dbCritFSData";
-    const cache = gUI[cacheKey];
-    if (
-      !cache ||
-      !cache.text ||
-      !Array.isArray(cache.text) ||
-      !cache.colTagsMap ||
-      !cache.rowTagsMap
-    ) {
-      const errorMsg = `Cannot get Nish T/C text: Required cache gUI['${cacheKey}'] is missing or invalid.`;
-      console.error(`${funcName}: ${errorMsg}`);
-      fMyConsoleLog(`   -> ❌ ${funcName} Error: ${errorMsg}`);
-      return;
-    }
-    const columnTag = inputLower === "t" ? "NishTrem" : "NishCrit";
-    const titleText =
-      inputLower === "t" ? "Tremendous Nish:" : "Critical Nish:";
-    const titleHtml = `<span class="red-bold">${titleText}</span>`;
-    const startRowTag = "RowBeforeFirstDataRow";
-    const resultColIndex = fResolveFSDataCol(cacheKey, columnTag);
-    const startRowIndex = fResolveFSDataRow(cacheKey, startRowTag) + 1;
-    if (isNaN(resultColIndex)) {
-      fMyConsoleLog(
-        `   -> ❌ ${funcName} Error: Column tag '${columnTag}' not found in ${cacheKey}.`
-      );
-      return;
-    }
-    if (isNaN(startRowIndex)) {
-      fMyConsoleLog(
-        `   -> ❌ ${funcName} Error: Start row tag '${startRowTag}' not found in ${cacheKey}.`
-      );
+      fMyConsoleLog(`❌ MR/Enc Calc Failed: ${errorMsg}`);
+      await fShowMessage(`❌ Error calculating MR/Enc: ${errorMsg}`);
       return;
     }
     fMyConsoleLog(
-      `   -> Resolved '${columnTag}' to index ${resultColIndex}, '${startRowTag}' to index ${startRowIndex}.`
+      `   -> Inputs: Agi=${agilityValue}, Str=${strengthValue}, +MR=${plusMRValue}, +Carry=${plusCarryValue}, CurrentEnc=${currentEncumbrance}`
     );
-    const resultsList = [];
-    const numRows = cache.text.length;
-    for (let r = startRowIndex; r < numRows; r++) {
-      const cellValue = cache.text[r]?.[resultColIndex];
-      const trimmedValue = String(cellValue ?? "").trim();
-      if (trimmedValue !== "") {
-        resultsList.push(trimmedValue);
+    let updateSuccess = true;
+    updateSuccess &&= fSetGridValue("GearSpe", "GearSpeAndStr", agilityValue);
+    updateSuccess &&= fSetGridValue("GearStr", "GearSpeAndStr", strengthValue);
+    if (!updateSuccess) {
+      fMyConsoleLog(
+        "   -> ⚠️ Warning: Failed to update GearSpe/GearStr overview cells."
+      );
+    }
+    let foundActiveMRLevel = false;
+    let finalMovementRate = 0;
+    let calculationErrors = false;
+    for (let i = 0; i < mrColumnTags.length; i++) {
+      const colTag = mrColumnTags[i];
+      const movementRate = Math.round(
+        (6 + agilityValue / 5 + plusMRValue) * movementMultipliers[i]
+      );
+      const carryCapacity = Math.round(
+        (50 + strengthValue + plusCarryValue) * carryMultipliers[i]
+      );
+      let mrSet = fSetGridValue(MR_TABLE_ROW, colTag, movementRate);
+      let carrySet = fSetGridValue(CARRY_TABLE_ROW, colTag, carryCapacity);
+      let cbSetInitial = fSetGridValue(CHECKBOX_ROW, colTag, false);
+      if (!mrSet || !carrySet || !cbSetInitial) {
+        fMyConsoleLog(
+          `   -> ⚠️ Error setting MR/Carry/Checkbox values for column ${colTag}.`
+        );
+        calculationErrors = true;
+      }
+      if (!foundActiveMRLevel && currentEncumbrance <= carryCapacity) {
+        fMyConsoleLog(
+          `   -> Active MR Level Found: Col '${colTag}' (Enc ${currentEncumbrance} <= Carry ${carryCapacity})`
+        );
+        if (!fSetGridValue(CHECKBOX_ROW, colTag, true)) {
+          fMyConsoleLog(
+            `   -> ⚠️ Error setting Checkbox to TRUE for column ${colTag}.`
+          );
+          calculationErrors = true;
+        } else {
+          foundActiveMRLevel = true;
+          finalMovementRate = movementRate;
+          fMyConsoleLog(`   -> Final MR set to: ${finalMovementRate}`);
+        }
       }
     }
-    if (resultsList.length === 0) {
-      fMyConsoleLog(
-        `   -> ${funcName}: No valid results found in '${columnTag}' column starting from row '${startRowTag}'. Skipping display.`
+    if (!fSetGridValue("MR", "MR", finalMovementRate)) {
+      fMyConsoleLog("   -> ⚠️ Error setting final MR value in ('MR', 'MR').");
+      calculationErrors = true;
+    }
+    if (!foundActiveMRLevel || finalMovementRate === 0) {
+      fMyConsoleLog("   -> 🚨 Character is over-encumbered!");
+      await fShowMessage("⚠️ You are over encumbered, MR is 0.");
+    }
+    fCalcTotalAP();
+    if (calculationErrors) {
+      fMyConsoleLog("❌ MR/Enc/AP Calc Completed with errors.");
+    } else {
+      fMyConsoleLog("✅ MR/Enc/AP Calc Completed successfully.");
+    }
+  } // End function fCalculatesEnc_MR_AP
+
+  /** function fCalcTotalEnc
+   * Purpose: Calculates total encumbrance from gear and updates the grid.
+   * Assumptions: gUI.range.gearEncCol and gUI.range.currentEnc are defined.
+   * Notes: Sums values from all defined encumbrance columns.
+   * @returns {number} The calculated and rounded total encumbrance, or 0 on error.
+   */
+  function fCalcTotalEnc() {
+    const funcName = "fCalcTotalEnc";
+    fMyConsoleLog(`⚖️ Calculating Total Encumbrance...`);
+    let totalEnc = 0;
+    let errorsOccurred = false;
+    const encRangeDefs = gUI.range?.gearEncCol;
+    const targetCellDef = gUI.range?.currentEnc;
+    if (!Array.isArray(encRangeDefs) || encRangeDefs.length === 0) {
+      console.error(
+        `${funcName}: Encumbrance source range definition (gUI.range.gearEncCol) is missing or invalid.`
       );
+      fMyConsoleLog(
+        `❌ ${funcName} Error: Encumbrance source range definition missing.`
+      );
+      errorsOccurred = true;
+    }
+    if (
+      !targetCellDef ||
+      typeof targetCellDef.r1 === "undefined" ||
+      typeof targetCellDef.c1 === "undefined"
+    ) {
+      console.error(
+        `${funcName}: Target cell definition (gUI.range.currentEnc is "${gUI.range.currentEnc}") is missing or invalid (requires r1, c1).`
+      );
+      fMyConsoleLog(
+        `❌ ${funcName} Error: Target cell definition missing or invalid.`
+      );
+      errorsOccurred = true;
+    }
+    if (errorsOccurred) return 0;
+    encRangeDefs.forEach((rangeDef, index) => {
+      if (!fDoesObjectHaveR1C1R2C2Properties(rangeDef)) {
+        console.warn(
+          `${funcName}: Skipping invalid range object at index ${index}:`,
+          rangeDef
+        );
+        errorsOccurred = true;
+        return;
+      }
+      const resolved = fConvertsR1C1R2C2TagOrNumToIndices(rangeDef);
+      if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
+        console.warn(
+          `${funcName}: Skipping range at index ${index} due to unresolved indices:`,
+          rangeDef
+        );
+        errorsOccurred = true;
+        return;
+      }
+      const rMin = Math.min(resolved.r1, resolved.r2);
+      const rMax = Math.max(resolved.r1, resolved.r2);
+      const cMin = Math.min(resolved.c1, resolved.c2);
+      const cMax = Math.max(resolved.c1, resolved.c2);
+      for (let r = rMin; r <= rMax; r++) {
+        for (let c = cMin; c <= cMax; c++) {
+          const value = fGetGridValue(r, c);
+          const numericValue = Number(value) || 0;
+          totalEnc += numericValue;
+        }
+      }
+    });
+    const roundedTotalEnc = Math.round(totalEnc * 100) / 100;
+    fMyConsoleLog(
+      `   -> Raw Total Enc: ${totalEnc}, Rounded: ${roundedTotalEnc}`
+    );
+    const targetR = fResolveRow(targetCellDef.r1);
+    const targetC = fResolveCol(targetCellDef.c1);
+    if (isNaN(targetR) || isNaN(targetC)) {
+      console.error(
+        `${funcName}: Could not resolve target cell coordinates from gUI.range.currentEnc:`,
+        targetCellDef
+      );
+      fMyConsoleLog(
+        `❌ ${funcName} Error: Could not resolve target cell coordinates.`
+      );
+      errorsOccurred = true;
+    } else {
+      if (!fSetGridValue(targetR, targetC, roundedTotalEnc)) {
+        fMyConsoleLog(
+          `   -> ⚠️ Warning: Failed to update target cell [${targetR}, ${targetC}] with total encumbrance.`
+        );
+        errorsOccurred = true;
+      } else {
+        fMyConsoleLog(
+          `   -> Target cell [${targetR}, ${targetC}] updated with: ${roundedTotalEnc}`
+        );
+      }
+    }
+    fMyConsoleLog(
+      `✅ ${funcName} finished ${
+        errorsOccurred ? "with errors" : "successfully"
+      }. Returning: ${roundedTotalEnc}`
+    );
+    return roundedTotalEnc;
+  } // End function fCalcTotalEnc
+
+  /** function fCalcTotalAP
+   * Purpose: Calculates total Action Points from gear and updates the grid.
+   * Assumptions: gUI.range.gearApTotalCol and gUI.range.gearAPTotal are defined.
+   * Notes: Sums values from all defined AP Total columns.
+   * @returns {number} The calculated total Action Points from gear, or 0 on error.
+   */
+  function fCalcTotalAP() {
+    const funcName = "fCalcTotalAP";
+    fMyConsoleLog(`⚙️ Calculating Total Action Points from Gear...`);
+    let apTotal = 0;
+    let errorsOccurred = false;
+    const apSourceRangeDefs = gUI.range?.gearApTotalCol;
+    const targetCellDef = gUI.range?.gearAPTotal;
+    if (!Array.isArray(apSourceRangeDefs) || apSourceRangeDefs.length === 0) {
+      console.error(
+        `${funcName}: AP source range definition (gUI.range.gearApTotalCol) is missing or invalid.`
+      );
+      fMyConsoleLog(
+        `❌ ${funcName} Error: AP source range definition missing.`
+      );
+      errorsOccurred = true;
+    }
+    if (
+      !targetCellDef ||
+      typeof targetCellDef.r1 === "undefined" ||
+      typeof targetCellDef.c1 === "undefined"
+    ) {
+      console.error(
+        `${funcName}: Target cell definition (gUI.range.gearAPTotal) is missing or invalid (requires r1, c1).`
+      );
+      fMyConsoleLog(
+        `❌ ${funcName} Error: Target cell definition missing or invalid.`
+      );
+      errorsOccurred = true;
+    }
+    if (errorsOccurred) return 0;
+    apSourceRangeDefs.forEach((rangeDef, index) => {
+      if (!fDoesObjectHaveR1C1R2C2Properties(rangeDef)) {
+        console.warn(
+          `${funcName}: Skipping invalid range object at index ${index}:`,
+          rangeDef
+        );
+        errorsOccurred = true;
+        return;
+      }
+      const resolved = fConvertsR1C1R2C2TagOrNumToIndices(rangeDef);
+      if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
+        console.warn(
+          `${funcName}: Skipping range at index ${index} due to unresolved indices:`,
+          rangeDef
+        );
+        errorsOccurred = true;
+        return;
+      }
+      const rMin = Math.min(resolved.r1, resolved.r2);
+      const rMax = Math.max(resolved.r1, resolved.r2);
+      const cMin = Math.min(resolved.c1, resolved.c2);
+      const cMax = Math.max(resolved.c1, resolved.c2);
+      for (let r = rMin; r <= rMax; r++) {
+        for (let c = cMin; c <= cMax; c++) {
+          const value = fGetGridValue(r, c, true);
+          if (!isNaN(value)) {
+            apTotal += value;
+          }
+        }
+      }
+    });
+    const roundedTotalAp = Math.round(apTotal);
+    fMyConsoleLog(`   -> Raw Total AP: ${apTotal}, Rounded: ${roundedTotalAp}`);
+    const targetR = fResolveRow(targetCellDef.r1);
+    const targetC = fResolveCol(targetCellDef.c1);
+    if (isNaN(targetR) || isNaN(targetC)) {
+      console.error(
+        `${funcName}: Could not resolve target cell coordinates from gUI.range.gearAPTotal:`,
+        targetCellDef
+      );
+      fMyConsoleLog(
+        `❌ ${funcName} Error: Could not resolve target cell coordinates.`
+      );
+      errorsOccurred = true;
+    } else {
+      if (!fSetGridValue(targetR, targetC, roundedTotalAp)) {
+        fMyConsoleLog(
+          `   -> ⚠️ Warning: Failed to update target cell [${targetR}, ${targetC}] with total AP.`
+        );
+        errorsOccurred = true;
+      } else {
+        fMyConsoleLog(
+          `   -> Target cell [${targetR}, ${targetC}] updated with: ${roundedTotalAp}`
+        );
+      }
+    }
+    fMyConsoleLog(
+      `✅ ${funcName} finished ${
+        errorsOccurred ? "with errors" : "successfully"
+      }. Returning: ${roundedTotalAp}`
+    );
+    return roundedTotalAp;
+  } // End function fCalcTotalAP
+
+  /** function fCalc_VitMaxNowPerc
+   * Purpose: Handles the "Set Vit Max" menu action by recalculating derived vitality values.
+   * Assumptions: gUI.range definitions for Vit and Fortitude are correct.
+   * Notes: Calculates and updates Vit Max, Vit Now, and Vit Now Percent based on Fortitude and bonuses.
+   * @returns {Promise<void>} Resolves after the operation is complete.
+   */
+  async function fCalc_VitMaxNowPerc() {
+    fMyConsoleLog("⚙️ Menu Action: Setting Vit to Max...");
+    const fortitudeRange = gUI.range?.fortitudeSk1;
+    const vitMaxRange = gUI.range?.vitMax;
+    const vitMaxPlusRange = gUI.range?.vitMaxPlus;
+    let errorMsg = "";
+    if (!fortitudeRange || !fortitudeRange.r1 || !fortitudeRange.c1)
+      errorMsg = "Fortitude range definition missing.";
+    else if (!vitMaxRange || !vitMaxRange.r1 || !vitMaxRange.c1)
+      errorMsg = "Vit Max range definition missing.";
+    else if (!vitMaxPlusRange || !vitMaxPlusRange.r1 || !vitMaxPlusRange.c1)
+      errorMsg = "Vit Max Plus range definition missing.";
+    if (errorMsg) {
+      console.warn(`fCalc_VitMaxNowPerc: ${errorMsg}`);
+      fMyConsoleLog(`⚠️ Cannot set Vit to max: ${errorMsg}`);
+      await fShowMessage(`❌ Error: ${errorMsg}`);
       return;
     }
-    const randomIndex = Math.floor(Math.random() * resultsList.length);
-    const selectedResult = resultsList[randomIndex];
-    fMyConsoleLog(`   -> Randomly selected result: "${selectedResult}"`);
-    const sidebarMsgHtml = `${titleHtml}<br>${selectedResult}`;
-    const sidebarMsgText = `${titleText}\n${selectedResult}`;
-    fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
-    fShowSidebar();
-    fMyConsoleLog(`✅ ${funcName}: Completed.`);
-  } // End function fNishTorCText
-
-  /** function fHandleChaosGemClick
-   * Purpose: Handles Chaos Gem clicks, decrementing uses and logging the ability text.
-   * Assumptions: The user has clicked within the Chaos Gem range defined in gUI.range.
-   * @param {number} r - The 0-based row index of the clicked cell.
-   * @param {number} c - The 0-based column index of the clicked cell.
-   * @returns {Promise<boolean>} True if a Chaos Gem was processed, false otherwise.
-   */
-  async function fHandleChaosGemClick(r, c) {
-    fMyConsoleLog("💎 Checking for Chaos Gem click...");
-    if (r === null || c === null || isNaN(r) || isNaN(c)) {
+    const fortitudeValueRaw = fGetGridValue(
+      fortitudeRange.r1,
+      fortitudeRange.c1
+    );
+    const fortitudeValue = Number(fortitudeValueRaw);
+    if (isNaN(fortitudeValue)) {
+      errorMsg = `Fortitude Sk1 value ('${fortitudeValueRaw}') is not a valid number.`;
+      console.warn(`fCalc_VitMaxNowPerc: ${errorMsg}`);
+      fMyConsoleLog(`⚠️ Cannot set Vit to max: ${errorMsg}`);
+      await fShowMessage(`❌ Error: ${errorMsg}`);
+      return;
+    }
+    fMyConsoleLog(`   -> Fortitude Sk1 value: ${fortitudeValue}`);
+    const vitMaxPlusValueRaw = fGetGridValue(
+      vitMaxPlusRange.r1,
+      vitMaxPlusRange.c1
+    );
+    let vitMaxPlusBonus = 0;
+    if (
+      vitMaxPlusValueRaw !== null &&
+      vitMaxPlusValueRaw !== "" &&
+      !isNaN(Number(vitMaxPlusValueRaw))
+    ) {
+      vitMaxPlusBonus = Math.round(Number(vitMaxPlusValueRaw));
       fMyConsoleLog(
-        "   -> Cannot check Chaos Gem: Invalid coordinates passed."
+        `   -> Vit Max Plus Bonus found: ${vitMaxPlusValueRaw} -> Rounded: ${vitMaxPlusBonus}`
       );
-      return false;
+    } else {
+      fMyConsoleLog(`   -> No valid Vit Max Plus Bonus found. Using 0.`);
     }
-    const chaosRangeDef = gUI.range?.chaosGems;
-    if (!chaosRangeDef || !fDoesObjectHaveR1C1R2C2Properties(chaosRangeDef)) {
+    const newVitMax = Math.round(fortitudeValue + vitMaxPlusBonus);
+    fMyConsoleLog(
+      `   -> Calculated New Vit Max: ${fortitudeValue} (For) + ${vitMaxPlusBonus} (Bonus) = ${newVitMax}`
+    );
+    const setMaxSuccess = fSetGridValue(
+      vitMaxRange.r1,
+      vitMaxRange.c1,
+      newVitMax
+    );
+    if (!setMaxSuccess) {
       fMyConsoleLog(
-        "   -> Cannot check Chaos Gem: Range definition missing/invalid."
-      );
-      return false;
-    }
-    const resolved = fConvertsR1C1R2C2TagOrNumToIndices(chaosRangeDef);
-    if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
-      fMyConsoleLog(
-        `   -> Cannot check Chaos Gem: Failed to resolve range tags: ${JSON.stringify(
-          chaosRangeDef
-        )}`
-      );
-      return false;
-    }
-    const rMin = Math.min(resolved.r1, resolved.r2);
-    const rMax = Math.max(resolved.r1, resolved.r2);
-    const cMin = Math.min(resolved.c1, resolved.c2);
-    const cMax = Math.max(resolved.c1, resolved.c2);
-    if (r < rMin || r > rMax || c < cMin || c > cMax) {
-      fMyConsoleLog(`   -> Click [${r}, ${c}] is outside Chaos Gem range.`);
-      return false;
-    }
-    fMyConsoleLog(`   -> Click [${r}, ${c}] is inside Chaos Gem range.`);
-    const usesCol = fResolveCol("ChaosUses");
-    const abilityCol = fResolveCol("ChaosAbility");
-    if (isNaN(usesCol) || isNaN(abilityCol)) {
-      fMyConsoleLog(
-        "   -> Cannot check Chaos Gem: Could not resolve 'ChaosUses' or 'ChaosAbility' column tags."
+        `⚠️ Failed to set Vit Max value (${newVitMax}) in cell (${vitMaxRange.r1}, ${vitMaxRange.c1}). Aborting further updates.`
       );
       await fShowMessage(
-        "Error: Chaos Gem column tags are not defined correctly."
+        `❌ Error: Failed to update the Vit Max value in the grid.`
       );
-      return false;
+      return;
     }
-    const currentUses = fGetGridValue(r, usesCol, true);
-    if (isNaN(currentUses) || currentUses < 1) {
-      fMyConsoleLog(
-        `   -> Chaos Gem condition unmet: Uses are ${currentUses}.`
-      );
-      await fShowMessage("Chaos Crystal has no uses left!");
-      return true;
-    }
-    const abilityText = fGetGridValue(r, abilityCol);
-    if (!abilityText || String(abilityText).trim() === "") {
-      fMyConsoleLog(`   -> Chaos Gem condition unmet: Ability text is empty.`);
-      await fShowMessage("Chaos Crystal has no ability text defined!");
-      return true;
-    }
+    fMyConsoleLog(`   -> Successfully set Vit Max to ${newVitMax}.`);
+    await fVitNowNPercent_Calc();
+    fMyConsoleLog("✅ Vit Set to Max sequence complete.");
     fMyConsoleLog(
-      `   -> Chaos Gem conditions met: Uses=${currentUses}, Ability="${String(
-        abilityText
-      ).substring(0, 30)}..."`
+      "   -> Calling function fSendLogToGMScreenAndPS from function fCalc_VitMaxNowPerc..."
     );
-    const newUses = currentUses - 1;
-    if (!fSetGridValue(r, usesCol, newUses)) {
-      fMyConsoleLog(
-        `   -> ❌ Failed to update ChaosUses cell [${r}, ${usesCol}].`
-      );
-      await fShowMessage("Error: Failed to update Chaos Crystal uses.");
-      return true;
-    }
-    const trimmedAbilityText = String(abilityText).trim();
-    const sidebarMsgHtml = `💎 <span class="blue-bold">Chaos Crystal</span> (${newUses} Uses Left):<br>${trimmedAbilityText}`;
-    const sidebarMsgText = `💎 Chaos Crystal (${newUses} Uses Left):\n${trimmedAbilityText}`;
-    fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
-    fShowSidebar();
-    fMyConsoleLog("✅ Chaos Gem Used Successfully.");
     setTimeout(() => fSendLogToGMScreenAndPS(), 0);
-    return true;
-  } // End function fHandleChaosGemClick
+  } // End function fCalc_VitMaxNowPerc
 
-  /** function fHandleAdHocRoll
-   * Purpose: Parses and rolls dice based on cell text, logging the result to the sidebar.
-   * Assumptions: fMetaDieRoll and fRollRPGDieString are available.
-   * @param {string} cellText - The text content of the clicked cell.
-   * @returns {Promise<boolean>} True if a roll was parsed and logged, false otherwise.
+  /** function fVitNowNPercent_Calc
+   * Purpose: Calculates 'Vit Now' and 'Vit Now Percent' and updates the grid.
+   * Assumptions: Called after Vit Max or Wounds have changed. gUI.range definitions are correct.
+   * Notes: This is a helper function to keep derived vitality fields synchronized.
+   * @returns {Promise<void>} Resolves after the operation is complete.
    */
-  async function fHandleAdHocRoll(cellText) {
-    fMyConsoleLog(`🎲 Attempting Ad-Hoc Roll for text: "${cellText}"`);
-    if (typeof cellText !== "string" || !cellText.trim()) {
-      fMyConsoleLog("   -> No valid text provided for ad-hoc roll.");
-      return false;
+  async function fVitNowNPercent_Calc() {
+    fMyConsoleLog("   -> Calculating Vit Now & Percent...");
+    const vitMaxRange = gUI.range?.vitMax;
+    const vit1stRange = gUI.range?.vit1stWnds;
+    const vit2ndRange = gUI.range?.vit2ndWnds;
+    const vit3rdRange = gUI.range?.vit3rdWnds;
+    const vitNowRange = gUI.range?.vitNow;
+    const vitNowPercentRange = gUI.range?.vitNowPercent;
+    let errorMsg = "";
+    if (!vitMaxRange || !vitMaxRange.r1 || !vitMaxRange.c1)
+      errorMsg = "Vit Max range definition missing.";
+    else if (!vit1stRange || !vit1stRange.r1 || !vit1stRange.c1)
+      errorMsg = "Vit 1st Wounds range definition missing.";
+    else if (!vit2ndRange || !vit2ndRange.r1 || !vit2ndRange.c1)
+      errorMsg = "Vit 2nd Wounds range definition missing.";
+    else if (!vit3rdRange || !vit3rdRange.r1 || !vit3rdRange.c1)
+      errorMsg = "Vit 3rd Wounds range definition missing.";
+    else if (!vitNowRange || !vitNowRange.r1 || !vitNowRange.c1)
+      errorMsg = "Vit Now range definition missing.";
+    else if (
+      !vitNowPercentRange ||
+      !vitNowPercentRange.r1 ||
+      !vitNowPercentRange.c1
+    )
+      errorMsg = "Vit Now Percent range definition missing.";
+    if (errorMsg) {
+      console.warn(`fVitNowNPercent_Calc: ${errorMsg}`);
+      fMyConsoleLog(`   -> ⚠️ Calculation aborted: ${errorMsg}`);
+      await fShowMessage(`❌ Error: ${errorMsg}`);
+      return;
     }
-    const text = cellText.trim();
-
-    let rollResult = null;
-    let logHeaderHtml = "";
-    let logHeaderText = "";
-    let logDetailsHtml = "";
-    let logDetailsText = "";
-    let patternMatched = false;
-    let matchedString = "";
-
-    const skExactPattern = /^sk(\d+)$/i;
-    const dieStringExactPattern = /^((\d+)?d(\d+)\s*(?:([-+])\s*(\d+))?)$/i;
-    const numberExactPattern = /^\d+$/;
-    const parsePattern = /(sk(\d+))|((\d+)?d(\d+)\s*(?:([-+])\s*(\d+))?)/i;
-
-    let match;
-
-    if ((match = text.match(skExactPattern))) {
-      const num = parseInt(match[1], 10);
-      if (!isNaN(num) && num > 0) {
-        rollResult = fMetaDieRoll(num);
-        matchedString = match[0];
-        logHeaderHtml = '🎲 <span class="blue-bold">Custom Roll</span> Sk';
-        logHeaderText = "🎲 Custom Roll Sk";
-        logDetailsHtml = `Sk(${num}) 🎲${rollResult}`;
-        logDetailsText = `Sk(${num}) 🎲${rollResult}`;
-        patternMatched = true;
-        fMyConsoleLog(
-          `   -> Matched EXACT Sk pattern: ${matchedString}. Result: ${rollResult}`
-        );
-      }
-    } else if ((match = text.match(dieStringExactPattern))) {
-      matchedString = match[0].trim();
-      rollResult = fRollRPGDieString(matchedString);
-      if (rollResult !== null) {
-        logHeaderHtml = '🎲 <span class="blue-bold">Die Roll</span>';
-        logHeaderText = "🎲 Die Roll";
-        logDetailsHtml = `Die(${matchedString}) 🎲${rollResult}`;
-        logDetailsText = `Die(${matchedString}) 🎲${rollResult}`;
-        patternMatched = true;
-        fMyConsoleLog(
-          `   -> Matched EXACT Die String pattern: ${matchedString}. Result: ${rollResult}`
-        );
-      }
-    } else if (numberExactPattern.test(text)) {
-      const num = parseInt(text, 10);
-      if (!isNaN(num) && num > 0) {
-        matchedString = `d${num}`;
-        rollResult = fRollRPGDieString(matchedString);
-        if (rollResult !== null) {
-          logHeaderHtml = '🎲 <span class="blue-bold">Die Roll</span>';
-          logHeaderText = "🎲 Die Roll";
-          logDetailsHtml = `Die(${matchedString}) 🎲${rollResult}`;
-          logDetailsText = `Die(${matchedString}) 🎲${rollResult}`;
-          patternMatched = true;
-          fMyConsoleLog(
-            `   -> Matched EXACT Number pattern: ${num} (rolled as ${matchedString}). Result: ${rollResult}`
-          );
-        }
-      }
+    const currentVitMaxRaw = fGetGridValue(vitMaxRange.r1, vitMaxRange.c1);
+    const currentVitMax = Number(currentVitMaxRaw);
+    if (isNaN(currentVitMax)) {
+      errorMsg = `Vit Max value ('${currentVitMaxRaw}') needed for calculation is not a number.`;
+      console.warn(`fVitNowNPercent_Calc: ${errorMsg}`);
+      fMyConsoleLog(`   -> ⚠️ Calculation aborted: ${errorMsg}`);
+      await fShowMessage(`❌ Error: ${errorMsg}`);
+      return;
     }
-
-    if (!patternMatched) {
-      fMyConsoleLog(`   -> No exact match. Parsing text for first pattern...`);
-      match = text.match(parsePattern);
-      if (match) {
-        if (match[1]) {
-          matchedString = match[1];
-          const num = parseInt(match[2], 10);
-          if (!isNaN(num) && num > 0) {
-            rollResult = fMetaDieRoll(num);
-            logHeaderHtml = '🎲 <span class="blue-bold">Custom Roll</span> Sk';
-            logHeaderText = "🎲 Custom Roll Sk";
-            logDetailsHtml = `Sk(${num}) 🎲${rollResult}`;
-            logDetailsText = `Sk(${num}) 🎲${rollResult}`;
-            patternMatched = true;
-            fMyConsoleLog(
-              `   -> PARSED first Sk pattern: ${matchedString}. Result: ${rollResult}`
-            );
-          }
-        } else if (match[3]) {
-          matchedString = match[3].trim();
-          rollResult = fRollRPGDieString(matchedString);
-          if (rollResult !== null) {
-            logHeaderHtml = '🎲 <span class="blue-bold">Die Roll</span>';
-            logHeaderText = "🎲 Die Roll";
-            logDetailsHtml = `Die(${matchedString}) 🎲${rollResult}`;
-            logDetailsText = `Die(${matchedString}) 🎲${rollResult}`;
-            patternMatched = true;
-            fMyConsoleLog(
-              `   -> PARSED first Die String pattern: ${matchedString}. Result: ${rollResult}`
-            );
-          }
-        }
-      } else {
-        fMyConsoleLog(`   -> No parsable pattern found within text.`);
-      }
+    const getWoundVal = (range) => {
+      const raw = fGetGridValue(range.r1, range.c1);
+      return raw !== null && raw !== "" && !isNaN(Number(raw))
+        ? Math.round(Number(raw))
+        : 0;
+    };
+    const wounds1st = getWoundVal(vit1stRange);
+    const wounds2nd = getWoundVal(vit2ndRange);
+    const wounds3rd = getWoundVal(vit3rdRange);
+    const totalWounds = wounds1st + wounds2nd + wounds3rd;
+    fMyConsoleLog(
+      `      -> Wounds: ${wounds1st}(1st) + ${wounds2nd}(2nd) + ${wounds3rd}(3rd) = ${totalWounds}`
+    );
+    const newVitNow = Math.round(currentVitMax - totalWounds);
+    fMyConsoleLog(
+      `      -> Calculated Vit Now: ${currentVitMax} (Max) - ${totalWounds} (Wounds) = ${newVitNow}`
+    );
+    const setNowSuccess = fSetGridValue(
+      vitNowRange.r1,
+      vitNowRange.c1,
+      newVitNow
+    );
+    if (!setNowSuccess) {
+      fMyConsoleLog(`   -> ⚠️ Failed to set Vit Now value (${newVitNow}).`);
+      await fShowMessage(`❌ Error: Failed to update the Vit Now value.`);
     }
-
-    if (patternMatched && rollResult !== null) {
-      const headerSuffixHtml =
-        text === matchedString ? ":" : ` (from "${text}"):`;
-      const headerSuffixText =
-        text === matchedString ? ":" : ` (from "${text}"):`;
-      const formattedHeaderHtml = `${logHeaderHtml}${headerSuffixHtml}`;
-      const formattedHeaderText = `${logHeaderText}${headerSuffixText}`;
-
-      let tcSuffixHtml = "";
-      let tcSuffixText = "";
-      if (logHeaderText.startsWith("🎲 Custom Roll Sk")) {
-        const tcResult = fTC();
-        if (tcResult) {
-          tcSuffixHtml = `   ${tcResult}`;
-          tcSuffixText = tcResult.includes("red-bold") ? " C" : " T";
-        }
-      }
-
-      const finalLogHtml = `${formattedHeaderHtml}<br>${logDetailsHtml}${tcSuffixHtml}`;
-      const finalLogText = `${formattedHeaderText}\n${logDetailsText}${
-        tcSuffixText ? " " + tcSuffixText : ""
-      }`;
-      fPostToSidebar(finalLogHtml, finalLogText);
-      fShowSidebar();
-      fMyConsoleLog(`   -> Ad-Hoc Roll logged to sidebar.`);
-
-      setTimeout(() => fSendLogToGMScreenAndPS(), 0);
-
-      return true;
+    const percent =
+      currentVitMax === 0 ? 0 : Math.round((newVitNow / currentVitMax) * 100);
+    const percentString = percent + "%";
+    fMyConsoleLog(`      -> Calculated Vit Now Percent: ${percentString}`);
+    const setPercentSuccess = fSetGridValue(
+      vitNowPercentRange.r1,
+      vitNowPercentRange.c1,
+      percentString
+    );
+    if (!setPercentSuccess) {
+      fMyConsoleLog(
+        `   -> ⚠️ Failed to set Vit Now Percent value (${percentString}).`
+      );
+      await fShowMessage(
+        `❌ Error: Failed to update the Vit Now Percent value.`
+      );
     }
+    fMyConsoleLog("   -> Vit Now & Percent Calculation complete.");
+  } // End function fVitNowNPercent_Calc
 
-    if (!patternMatched) {
-      fMyConsoleLog("   -> No ad-hoc roll pattern matched (exact or parsed).");
-    }
-    return false;
-  } // End function fHandleAdHocRoll
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  // End - Character Stat Calculations
+  // Start - Gear & Nish Logic
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
   /** function fCalcGearLine
    * Purpose: Handles edits to gear-related cells, validates input, and triggers recalculations.
@@ -5691,4 +5634,113 @@
     );
     return true;
   } // End function fRefreshGearLineCalcs
+
+  /** function fExecuteNishSequence
+   * Purpose: Executes the common sequence of actions required at the start of a Nish turn.
+   * Assumptions: Skips Meta/Duration updates if Luck was used to trigger the Nish turn.
+   * @param {} - No parameters.
+   * @returns {void}
+   */
+  async function fExecuteNishSequence() {
+    fMyConsoleLog("🎬 Executing Nish Sequence...");
+    fPostToSidebar(
+      '<hr class="nish-divider"><br>',
+      "\n======================\n"
+    );
+    fMyConsoleLog("   -> Sidebar divider added.");
+    if (!gUI.buttonOrMenu.isLuck) {
+      await fMetaChannel();
+      fMyConsoleLog("   -> fMetaChannel executed.");
+    } else {
+      fMyConsoleLog("   -> Skipping fMetaChannel (Luck trigger).");
+    }
+    await fAct_SetToMax();
+    fMyConsoleLog("   -> fAct_SetToMax executed.");
+    if (!gUI.buttonOrMenu.isLuck) {
+      await fIsOn_NewNishSet();
+      fMyConsoleLog("   -> fIsOn_NewNishSet executed.");
+    } else {
+      fMyConsoleLog("   -> Skipping fIsOn_NewNishSet (Luck trigger).");
+    }
+    fMyConsoleLog("✅ Nish Sequence Execution Complete.");
+  } // End function fExecuteNishSequence
+
+  /** function fNishTorCText
+   * Purpose: Selects and displays a random Tremendous or Critical Nish result to the sidebar.
+   * Assumptions: The dbCritFSData cache is populated.
+   * @param {string} tOrC - 't' for Tremendous, 'c' for Critical.
+   * @returns {void}
+   */
+  async function fNishTorCText(tOrC) {
+    const funcName = "fNishTorCText";
+    fMyConsoleLog(
+      `⚙️ ${funcName}: Processing Nish T/C result for input '${tOrC}'...`
+    );
+    const inputLower = String(tOrC ?? "").toLowerCase();
+    if (inputLower !== "t" && inputLower !== "c") {
+      fMyConsoleLog(
+        `   -> ${funcName}: Invalid input '${tOrC}'. Must be 't' or 'c'. Aborting.`
+      );
+      return;
+    }
+    const cacheKey = "dbCritFSData";
+    const cache = gUI[cacheKey];
+    if (
+      !cache ||
+      !cache.text ||
+      !Array.isArray(cache.text) ||
+      !cache.colTagsMap ||
+      !cache.rowTagsMap
+    ) {
+      const errorMsg = `Cannot get Nish T/C text: Required cache gUI['${cacheKey}'] is missing or invalid.`;
+      console.error(`${funcName}: ${errorMsg}`);
+      fMyConsoleLog(`   -> ❌ ${funcName} Error: ${errorMsg}`);
+      return;
+    }
+    const columnTag = inputLower === "t" ? "NishTrem" : "NishCrit";
+    const titleText =
+      inputLower === "t" ? "Tremendous Nish:" : "Critical Nish:";
+    const titleHtml = `<span class="red-bold">${titleText}</span>`;
+    const startRowTag = "RowBeforeFirstDataRow";
+    const resultColIndex = fResolveFSDataCol(cacheKey, columnTag);
+    const startRowIndex = fResolveFSDataRow(cacheKey, startRowTag) + 1;
+    if (isNaN(resultColIndex)) {
+      fMyConsoleLog(
+        `   -> ❌ ${funcName} Error: Column tag '${columnTag}' not found in ${cacheKey}.`
+      );
+      return;
+    }
+    if (isNaN(startRowIndex)) {
+      fMyConsoleLog(
+        `   -> ❌ ${funcName} Error: Start row tag '${startRowTag}' not found in ${cacheKey}.`
+      );
+      return;
+    }
+    fMyConsoleLog(
+      `   -> Resolved '${columnTag}' to index ${resultColIndex}, '${startRowTag}' to index ${startRowIndex}.`
+    );
+    const resultsList = [];
+    const numRows = cache.text.length;
+    for (let r = startRowIndex; r < numRows; r++) {
+      const cellValue = cache.text[r]?.[resultColIndex];
+      const trimmedValue = String(cellValue ?? "").trim();
+      if (trimmedValue !== "") {
+        resultsList.push(trimmedValue);
+      }
+    }
+    if (resultsList.length === 0) {
+      fMyConsoleLog(
+        `   -> ${funcName}: No valid results found in '${columnTag}' column starting from row '${startRowTag}'. Skipping display.`
+      );
+      return;
+    }
+    const randomIndex = Math.floor(Math.random() * resultsList.length);
+    const selectedResult = resultsList[randomIndex];
+    fMyConsoleLog(`   -> Randomly selected result: "${selectedResult}"`);
+    const sidebarMsgHtml = `${titleHtml}<br>${selectedResult}`;
+    const sidebarMsgText = `${titleText}\n${selectedResult}`;
+    fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
+    fShowSidebar();
+    fMyConsoleLog(`✅ ${funcName}: Completed.`);
+  } // End function fNishTorCText
 </script>
