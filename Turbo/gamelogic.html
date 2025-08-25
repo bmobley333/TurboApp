@@ -2307,12 +2307,12 @@
   } // End function fCalcGUIRollResRoll
 
   /** function fBuildSidebarHTMLAndSimpleText
-   * Purpose: Constructs the formatted HTML and plain text log lines for a single roll result.
-   * Assumptions: gUI.roll contains the data for the current roll.
-   * @param {number} rollNum - Current roll number in a multi-roll sequence.
-   * @param {number} totalRolls - Total number of rolls in the sequence.
-   * @param {boolean} isFirstRoll - True if this is the first roll (for T/C calculation).
-   * @returns {object} An object with { html: string, plainText: string }.
+   * Purpose: Constructs formatted HTML and plain text log lines for a single roll result.
+   * Assumptions: The gUI.roll object is fully populated for the current roll.
+   * @param {number} rollNum - The current roll number in a sequence (e.g., 1).
+   * @param {number} totalRolls - The total number of rolls in the sequence (e.g., 3).
+   * @param {boolean} isFirstRoll - True if this is the first roll in the sequence.
+   * @returns {object} An object { html: String, plainText: String } containing the formatted lines.
    */
   function fBuildSidebarHTMLAndSimpleText(rollNum, totalRolls, isFirstRoll) {
     const resTyp = (gUI.roll.resTyp || "").trim();
@@ -2325,8 +2325,10 @@
     const hasDifficulty =
       (typeof dif === "number" || (typeof dif === "string" && dif !== "")) &&
       dif != null;
+
     let htmlLine = "";
     let textLine = "";
+
     let htmlBase = resTyp;
     let textBase = resTyp;
     if (typeof skSk === "number" && skSk !== "") {
@@ -2338,6 +2340,7 @@
       htmlBase += `(${resSk})`;
       textBase += `(${resSk})`;
     }
+
     let htmlRollResult = "";
     let textRollResult = "";
     if (!(resTypLower === "ar" && hasDifficulty)) {
@@ -2355,21 +2358,22 @@
           : "";
       const showFinal = resRollStr !== "" && resRollStr !== rollStr;
       if (rollStr) {
-        htmlRollResult += ` ~${rollStr}${showFinal ? `->${resRollStr}` : ""}`;
-        textRollResult += ` ~${rollStr}${showFinal ? `->${resRollStr}` : ""}`;
+        htmlRollResult += ` 🎲${rollStr}${showFinal ? `->${resRollStr}` : ""}`;
+        textRollResult += ` 🎲${rollStr}${showFinal ? `->${resRollStr}` : ""}`;
       } else if (resRollStr) {
-        htmlRollResult += ` ~${resRollStr}`;
-        textRollResult += ` ~${resRollStr}`;
+        htmlRollResult += ` 🎲${resRollStr}`;
+        textRollResult += ` 🎲${resRollStr}`;
       }
     }
+
     let htmlDifIndicator = "";
     let textDifIndicator = "";
     if (hasDifficulty) {
       const difStr = String(dif);
       const resRollStr = typeof resRoll === "number" ? String(resRoll) : "?";
       if (resTypLower === "ar") {
-        htmlDifIndicator = ` ${difStr}/~${resRollStr}`;
-        textDifIndicator = ` ${difStr}/~${resRollStr}`;
+        htmlDifIndicator = ` ${difStr}/🎲${resRollStr}`;
+        textDifIndicator = ` ${difStr}/🎲${resRollStr}`;
       } else if (resTypLower === "dmg") {
         htmlDifIndicator = `/${difStr}`;
         textDifIndicator = `/${difStr}`;
@@ -2378,6 +2382,7 @@
         textDifIndicator = ` ^${difStr}`;
       }
     }
+
     let htmlSuccessDelta = "";
     let textSuccessDelta = "";
     if (hasDifficulty && typeof resRoll === "number") {
@@ -2401,16 +2406,19 @@
         }
       }
     }
+
     htmlLine =
       `${htmlBase}${htmlRollResult}${htmlDifIndicator}${htmlSuccessDelta}`.trim();
     textLine =
       `${textBase}${textRollResult}${textDifIndicator}${textSuccessDelta}`.trim();
+
     const tc = isFirstRoll ? fTC() : "";
     const tcText = tc ? (tc.includes("red-bold") ? " C" : " T") : "";
     if (tc) {
       htmlLine += `   ${tc}`;
       textLine += ` ${tcText}`;
     }
+
     if (gUI.roll.isNish && tc !== "") {
       const tOrCParam = tc.includes("red-bold") ? "c" : "t";
       fMyConsoleLog(
@@ -2418,12 +2426,14 @@
       );
       fNishTorCText(tOrCParam);
     }
+
     let htmlPrefix = "";
     let textPrefix = "";
     if (totalRolls > 1) {
       htmlPrefix = `<span class="roll-prefix">${rollNum}></span> `;
       textPrefix = `${rollNum}> `;
     }
+
     return {
       html: `${htmlPrefix}${htmlLine}`,
       plainText: `${textPrefix}${textLine}`,
@@ -3298,8 +3308,8 @@
   } // End function fHandleChaosGemClick
 
   /** function fHandleAdHocRoll
-   * Purpose: Parses and rolls dice based on cell text content (e.g., sk#, XdY+/-Z, #).
-   * Assumptions: The text contains a recognizable dice pattern.
+   * Purpose: Parses and rolls dice based on cell text, logging the result to the sidebar.
+   * Assumptions: fMetaDieRoll and fRollRPGDieString are available.
    * @param {string} cellText - The text content of the clicked cell.
    * @returns {Promise<boolean>} True if a roll was parsed and logged, false otherwise.
    */
@@ -3310,6 +3320,7 @@
       return false;
     }
     const text = cellText.trim();
+
     let rollResult = null;
     let logHeaderHtml = "";
     let logHeaderText = "";
@@ -3317,11 +3328,14 @@
     let logDetailsText = "";
     let patternMatched = false;
     let matchedString = "";
+
     const skExactPattern = /^sk(\d+)$/i;
     const dieStringExactPattern = /^((\d+)?d(\d+)\s*(?:([-+])\s*(\d+))?)$/i;
     const numberExactPattern = /^\d+$/;
     const parsePattern = /(sk(\d+))|((\d+)?d(\d+)\s*(?:([-+])\s*(\d+))?)/i;
+
     let match;
+
     if ((match = text.match(skExactPattern))) {
       const num = parseInt(match[1], 10);
       if (!isNaN(num) && num > 0) {
@@ -3329,8 +3343,8 @@
         matchedString = match[0];
         logHeaderHtml = '🎲 <span class="blue-bold">Custom Roll</span> Sk';
         logHeaderText = "🎲 Custom Roll Sk";
-        logDetailsHtml = `Sk(${num}) ~${rollResult}`;
-        logDetailsText = `Sk(${num}) ~${rollResult}`;
+        logDetailsHtml = `Sk(${num}) 🎲${rollResult}`;
+        logDetailsText = `Sk(${num}) 🎲${rollResult}`;
         patternMatched = true;
         fMyConsoleLog(
           `   -> Matched EXACT Sk pattern: ${matchedString}. Result: ${rollResult}`
@@ -3342,8 +3356,8 @@
       if (rollResult !== null) {
         logHeaderHtml = '🎲 <span class="blue-bold">Die Roll</span>';
         logHeaderText = "🎲 Die Roll";
-        logDetailsHtml = `Die(${matchedString}) ~${rollResult}`;
-        logDetailsText = `Die(${matchedString}) ~${rollResult}`;
+        logDetailsHtml = `Die(${matchedString}) 🎲${rollResult}`;
+        logDetailsText = `Die(${matchedString}) 🎲${rollResult}`;
         patternMatched = true;
         fMyConsoleLog(
           `   -> Matched EXACT Die String pattern: ${matchedString}. Result: ${rollResult}`
@@ -3357,8 +3371,8 @@
         if (rollResult !== null) {
           logHeaderHtml = '🎲 <span class="blue-bold">Die Roll</span>';
           logHeaderText = "🎲 Die Roll";
-          logDetailsHtml = `Die(${matchedString}) ~${rollResult}`;
-          logDetailsText = `Die(${matchedString}) ~${rollResult}`;
+          logDetailsHtml = `Die(${matchedString}) 🎲${rollResult}`;
+          logDetailsText = `Die(${matchedString}) 🎲${rollResult}`;
           patternMatched = true;
           fMyConsoleLog(
             `   -> Matched EXACT Number pattern: ${num} (rolled as ${matchedString}). Result: ${rollResult}`
@@ -3366,6 +3380,7 @@
         }
       }
     }
+
     if (!patternMatched) {
       fMyConsoleLog(`   -> No exact match. Parsing text for first pattern...`);
       match = text.match(parsePattern);
@@ -3377,8 +3392,8 @@
             rollResult = fMetaDieRoll(num);
             logHeaderHtml = '🎲 <span class="blue-bold">Custom Roll</span> Sk';
             logHeaderText = "🎲 Custom Roll Sk";
-            logDetailsHtml = `Sk(${num}) ~${rollResult}`;
-            logDetailsText = `Sk(${num}) ~${rollResult}`;
+            logDetailsHtml = `Sk(${num}) 🎲${rollResult}`;
+            logDetailsText = `Sk(${num}) 🎲${rollResult}`;
             patternMatched = true;
             fMyConsoleLog(
               `   -> PARSED first Sk pattern: ${matchedString}. Result: ${rollResult}`
@@ -3390,8 +3405,8 @@
           if (rollResult !== null) {
             logHeaderHtml = '🎲 <span class="blue-bold">Die Roll</span>';
             logHeaderText = "🎲 Die Roll";
-            logDetailsHtml = `Die(${matchedString}) ~${rollResult}`;
-            logDetailsText = `Die(${matchedString}) ~${rollResult}`;
+            logDetailsHtml = `Die(${matchedString}) 🎲${rollResult}`;
+            logDetailsText = `Die(${matchedString}) 🎲${rollResult}`;
             patternMatched = true;
             fMyConsoleLog(
               `   -> PARSED first Die String pattern: ${matchedString}. Result: ${rollResult}`
@@ -3402,6 +3417,7 @@
         fMyConsoleLog(`   -> No parsable pattern found within text.`);
       }
     }
+
     if (patternMatched && rollResult !== null) {
       const headerSuffixHtml =
         text === matchedString ? ":" : ` (from "${text}"):`;
@@ -3409,6 +3425,7 @@
         text === matchedString ? ":" : ` (from "${text}"):`;
       const formattedHeaderHtml = `${logHeaderHtml}${headerSuffixHtml}`;
       const formattedHeaderText = `${logHeaderText}${headerSuffixText}`;
+
       let tcSuffixHtml = "";
       let tcSuffixText = "";
       if (logHeaderText.startsWith("🎲 Custom Roll Sk")) {
@@ -3418,6 +3435,7 @@
           tcSuffixText = tcResult.includes("red-bold") ? " C" : " T";
         }
       }
+
       const finalLogHtml = `${formattedHeaderHtml}<br>${logDetailsHtml}${tcSuffixHtml}`;
       const finalLogText = `${formattedHeaderText}\n${logDetailsText}${
         tcSuffixText ? " " + tcSuffixText : ""
@@ -3425,9 +3443,12 @@
       fPostToSidebar(finalLogHtml, finalLogText);
       fShowSidebar();
       fMyConsoleLog(`   -> Ad-Hoc Roll logged to sidebar.`);
+
       setTimeout(() => fSendLogToGMScreenAndPS(), 0);
+
       return true;
     }
+
     if (!patternMatched) {
       fMyConsoleLog("   -> No ad-hoc roll pattern matched (exact or parsed).");
     }
