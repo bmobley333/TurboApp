@@ -1,28 +1,17 @@
 <script>
   // gamelogic.html //
 
-  // ==========================================================================
-  // === Core Ability Roll Logic ===
-  // ==========================================================================
-
-  /**
-   * Purpose: Top-level handler for initiating an ability/gear roll. Coordinates
-   * validation, data population, morphs, costs, roll logic branching,
-   * cost application, Nish update, and final logging (HTML & plain text)
-   * to sidebar and GMScreen.
-   * Assumptions: Relies on gUI state being correctly set.
-   * Notes: This is the central function for all player-initiated rolls.
+  /** function fMain_AbilityRoll
+   * Purpose: Top-level handler for an ability/gear roll, coordinating validation, costs, logic, and logging.
+   * Assumptions: Relies on gUI state being correctly set by a user action (e.g., clicking a checkbox and a roll button).
    * @param {} - No parameters.
    * @returns {void}
    */
   async function fMain_AbilityRoll() {
     fMyConsoleLog("🎲 Roll Dice Action Triggered");
-    let logHtmlToSend = ""; // Store final log HTML for sidebar
-    let logTextToSend = ""; // Store final log text for GMScreen update
-
+    let logHtmlToSend = "";
+    let logTextToSend = "";
     try {
-      // Add try block for better error handling during the sequence
-      // === 1. Initial Validation & Base gUI.roll Setup ===
       const { r, c } = gUI.currentSkRadioChecked;
       if (!(await fIsSk1Sk2RadioCheckbox(r, c))) {
         fSetButtonOrMenuState(null);
@@ -36,29 +25,23 @@
         fSetButtonOrMenuState(null);
         return;
       }
-
-      // === 2. Nish Ability Pre-Sequence Check ===
       const nishRowIndex = fResolveRow("NishAtr_R");
       const isNishAbilityRoll = gUI.roll.ability_R === nishRowIndex;
       if (isNishAbilityRoll && !gUI.buttonOrMenu.isNish) {
         fMyConsoleLog(
           "   -> Nish ability triggered via Checkbox + Roll/Free/Luck. Executing Nish sequence first..."
         );
-        await fExecuteNishSequence(); // This function also logs to sidebar
+        await fExecuteNishSequence();
       } else if (isNishAbilityRoll && gUI.buttonOrMenu.isNish) {
         fMyConsoleLog(
           "   -> Nish ability triggered via Nish Button. Pre-sequence already executed."
         );
       }
-
-      // === 3. Process Morph String ===
       fMyConsoleLog("   -> Processing morph string...");
       await fProcessMorph();
       if (typeof gUI.roll.multiRollCount === "undefined") {
         gUI.roll.multiRollCount = 1;
       }
-
-      // === 4. Determine Final Flags & Prepare for Costs/Rolls ===
       const multiRollCount = gUI.roll.multiRollCount;
       const isFreeRoll =
         gUI.buttonOrMenu.isFree ||
@@ -70,17 +53,14 @@
       const resTyp = gUI.roll.resTyp;
       const hasDifficultyMorph =
         typeof gUI.roll.resDif === "number" && gUI.roll.resDif !== "";
-
       fMyConsoleLog(
         `   -> Final Roll Type: ${resTyp}, Multi-Roll: ${multiRollCount}, Free: ${isFreeRoll}, Lucked: ${isLuckedRoll}, Difficulty Morph: ${hasDifficultyMorph}`
       );
-
-      const pendingHeadersHtml = []; // Headers for sidebar log (HTML)
-      const pendingHeadersText = []; // Headers for sidebar log (Plain Text)
+      const pendingHeadersHtml = [];
+      const pendingHeadersText = [];
       let allCostsMet = true;
       let userCancelled = false;
       gUI.pendingChangesMap = {};
-
       const addChangesToMap = (changesArray) => {
         if (!Array.isArray(changesArray)) return;
         changesArray.forEach((change) => {
@@ -96,8 +76,6 @@
           }
         });
       };
-
-      // === 5. Add Pre-Cost Headers & Verify Costs ===
       if (isLuckedRoll) {
         pendingHeadersHtml.push(
           '⚠️ <span class="blue-bold">Lucked Roll Below:</span>'
@@ -110,8 +88,6 @@
         );
         pendingHeadersText.push("⚠️ Free Roll Below:");
       }
-
-      // --- Verify Costs (Skip if Free Roll) ---
       if (!isFreeRoll) {
         fMyConsoleLog("🛡️ Verifying Costs (Luck and/or Standard)...");
         if (isLuckedRoll) {
@@ -132,13 +108,18 @@
             allCostsMet = false;
           } else {
             const newLuck = currentLuck - luckCost;
-            addChangesToMap([{ r: "LuckBox", c: "LuckBox", value: newLuck }]);
+            addChangesToMap([
+              {
+                r: "LuckBox",
+                c: "LuckBox",
+                value: newLuck,
+              },
+            ]);
             fMyConsoleLog(
               `      -> Luck Cost OK (${currentLuck} -> ${newLuck}). Change added to map.`
             );
           }
         }
-
         if (!isLuckedRoll && allCostsMet) {
           fMyConsoleLog("   -> Verifying Standard Costs...");
           const usesResult = await fUses_VerifyAndProcessCost(multiRollCount);
@@ -150,7 +131,6 @@
             pendingHeadersHtml.push(...usesResult.headers);
             pendingHeadersText.push(...usesResult.headersText);
           }
-
           if (allCostsMet) {
             const actResult = await fAct_VerifyAndProcessCost();
             if (!actResult.success) {
@@ -187,7 +167,6 @@
             }
           }
         }
-
         if (!allCostsMet || userCancelled) {
           const reason = userCancelled
             ? "cost verification cancelled by user"
@@ -206,16 +185,12 @@
         fMyConsoleLog(`✅ Skipping ALL Cost Verification (Free Roll).`);
         gUI.pendingChangesMap = {};
       }
-      // --- End Cost Verification ---
-
-      // === 6. Build Initial Log Header ===
       let initialLogHtml = "";
       let initialLogText = "";
       pendingHeadersHtml.forEach(
         (header) => (initialLogHtml += `${header}<br>`)
       );
       pendingHeadersText.forEach((header) => (initialLogText += `${header}\n`));
-
       let titleHtml = `<span class="sidebar-ability-name">${
         gUI.roll.skName || "Unknown Ability"
       }</span>`;
@@ -230,11 +205,9 @@
       }
       initialLogHtml += titleHtml;
       initialLogText += titleText;
-
       const permMorph = gUI.roll.permMorph || "";
       const tempMorph = gUI.roll.tempMorph || "";
       let formattedMorph = "";
-
       if (permMorph) {
         formattedMorph += `Perm(${permMorph})`;
       }
@@ -244,7 +217,6 @@
         }
         formattedMorph += tempMorph;
       }
-
       if (formattedMorph) {
         const cleanedMorph = formattedMorph
           .replace(/,+/g, ",")
@@ -252,16 +224,12 @@
         initialLogHtml += `<br>morph: ${cleanedMorph}`;
         initialLogText += `\nmorph: ${cleanedMorph}`;
       }
-
       initialLogHtml = initialLogHtml.trim();
       initialLogText = initialLogText.trim();
-
-      // === 7. Branch Roll Logic ===
       let finalLogResult = null;
       let helperSucceeded = false;
       let wasMonsterInteractionRoll = false;
       const resTypLower = resTyp.toLowerCase();
-
       if (resTypLower === "atk" && !hasDifficultyMorph) {
         fMyConsoleLog("⚔️ Performing Player Attack Rolls...");
         finalLogResult = await fPerformPlayerAttackRolls(
@@ -318,7 +286,6 @@
         helperSucceeded = true;
         wasMonsterInteractionRoll = false;
       }
-
       if (!helperSucceeded) {
         fMyConsoleLog("   -> Roll sequence halted. Costs NOT applied.");
         gUI.pendingChangesMap = {};
@@ -330,8 +297,6 @@
           wasMonsterInteractionRoll ? "Monster interaction" : "Standard"
         } roll sequence completed.`
       );
-
-      // === 8. Apply Pending Costs ===
       let applyErrors = false;
       if (Object.keys(gUI.pendingChangesMap).length > 0) {
         fMyConsoleLog(
@@ -378,8 +343,6 @@
           "✅ Roll sequence successful. No Pending Cost Changes to Apply."
         );
       }
-
-      // === 9. Update Nish Cell (if applicable) ===
       if (isNishAbilityRoll) {
         const finalNishRoll = gUI.roll.resRoll;
         if (typeof finalNishRoll === "number" || finalNishRoll === "") {
@@ -397,104 +360,78 @@
           );
         }
       }
-
-      // === 10. Log Result to Sidebar ===
       if (logHtmlToSend) {
         fPostToSidebar(logHtmlToSend, logTextToSend);
-        fShowSidebar(); // Ensure sidebar is visible
+        fShowSidebar();
       } else {
         fMyConsoleLog("ℹ️ No final log message generated.");
       }
     } catch (err) {
-      // --- Catch Unexpected Errors ---
       console.error("Critical Error in fMain_AbilityRoll:", err);
       fMyConsoleLog(`❌ CRITICAL ERROR during roll action: ${err.message}`);
       await fShowMessage(
         `❌ Critical Error during roll: ${err.message}. Please check console.`
       );
       fSetButtonOrMenuState(null);
-      // Attempt to send log even after critical error, slightly delayed
       setTimeout(() => fSendLogToGMScreenAndPS(), 0);
-      return; // Exit after critical error
+      return;
     }
-
-    // === 11. Reset Button State & Send Log to GM ===
     fSetButtonOrMenuState(null);
     fMyConsoleLog(`✅ Roll Dice Action Completed.`);
-
-    // Send the final log state to the GMScreen (with slight delay)
     setTimeout(() => fSendLogToGMScreenAndPS(), 0);
   } // End function fMain_AbilityRoll
 
-  // fIsSk1Sk2RadioCheckbox //////////////////////////////////////////////////////////////
-  // Purpose -> Validates that the provided coordinates (r, c) correspond to a valid
-  //            Sk1/Sk2 checkbox location based on gUI.range.sk1sk2CheckBoxes.
-  //            Shows a message if invalid.
-  // Inputs  -> r (Number): 0-based row index.
-  //         -> c (Number): 0-based column index.
-  // Outputs -> (Promise<Boolean>): Resolves true if coordinates are valid, false otherwise.
-  async function fIsSk1Sk2RadioCheckbox(row, col) {
-    // Check if the coordinates fall within any defined Sk checkbox range
-    const isValid = fIsSkRadioGroupMember(row, col);
-
-    // Show message if coordinates are not for a valid ability checkbox
+  /** function fIsSk1Sk2RadioCheckbox
+   * Purpose: Validates that provided coordinates correspond to a valid Sk1/Sk2 checkbox.
+   * Assumptions: The gUI.range.sk1sk2CheckBoxes array is correctly defined.
+   * @param {number} r - 0-based row index.
+   * @param {number} c - 0-based column index.
+   * @returns {Promise<boolean>} Resolves true if coordinates are valid, false otherwise.
+   */
+  async function fIsSk1Sk2RadioCheckbox(r, c) {
+    const isValid = fIsSkRadioGroupMember(r, c);
     if (!isValid) {
       await fShowMessage("⚠️ Please select a valid Ability checkbox first!");
     }
-
     return isValid;
-  } // END fIsSk1Sk2RadioCheckbox
+  } // End function fIsSk1Sk2RadioCheckbox
 
-  /**
-   * Purpose -> Resets the global gUI.roll object and populates it with base data
-   * extracted from the ability/gear row specified by the selected checkbox (r, c).
-   * Cleans and standardizes the extracted data (e.g., trims strings,
-   * parses numbers, defaults empty values). Sets initial resTyp, multiRollCount,
-   * and the isNish flag.
-   * Inputs  -> r (Number): Row index of the selected ability/gear.
-   * -> c (Number): Column index of the selected checkbox (determines Sk1 vs Sk2).
-   * Outputs -> (Promise<Boolean>): Resolves true if successful, false if an error occurs.
+  /** function fClearAndSetGUIRoll
+   * Purpose: Resets and populates the global gUI.roll object with data from a specific grid row.
+   * Assumptions: The action originates from a valid Sk1/Sk2 checkbox click.
+   * @param {number} r - Row index of the selected ability/gear.
+   * @param {number} c - Column index of the selected checkbox (determines Sk1 vs Sk2).
+   * @returns {Promise<boolean>} Resolves true if successful, false on error.
    */
   async function fClearAndSetGUIRoll(r, c) {
     try {
-      // Helper to get value from the specified row `r` and a column tag
       const getVal = (tag) => gUI.arr[r]?.[fResolveCol(tag)] ?? "";
-      // Determine if Sk1 or Sk2 checkbox was clicked
       const isSk1 = c === fResolveCol("Sk1ChkBox");
-
-      // Get permanent and temporary morph strings and clean them
       const permMorph = String(
         isSk1 ? getVal("PermMorph1") : getVal("PermMorph2") || ""
       ).trim();
       const tempMorph = String(
         isSk1 ? getVal("Morph1") : getVal("Morph2") || ""
       ).trim();
-
-      // Create a combined string for the parsing logic
       const combinedMorph = [permMorph, tempMorph]
-        .filter(Boolean) // Remove empty strings
+        .filter(Boolean)
         .join(",")
-        .replace(/,+/g, ",") // Replace multiple commas with a single one
-        .replace(/^,|,$/g, ""); // Remove leading or trailing commas
-
-      // === Initialize gUI.roll with Extracted Data ===
+        .replace(/,+/g, ",")
+        .replace(/^,|,$/g, "");
       gUI.roll = {
         ability_R: r,
         sk1CB: isSk1,
-        // Store all three versions of the morph string
-        skMorph: combinedMorph, // Combined for parsing logic
-        permMorph: permMorph, // Separate for logging
-        tempMorph: tempMorph, // Separate for logging
-        // Get values based on whether Sk1 or Sk2 column was checked
+        skMorph: combinedMorph,
+        permMorph: permMorph,
+        tempMorph: tempMorph,
         skTyp: isSk1 ? getVal("Sk1Typ") : getVal("Sk2Typ"),
         skSk: isSk1 ? getVal("Sk1") : getVal("Sk2"),
         skIsOn: getVal("On"),
         skNameID: getVal("Ability"),
-        skAct: isSk1 ? getVal("Act") : "", // Costs usually only apply to Sk1
+        skAct: isSk1 ? getVal("Act") : "",
         skDur: isSk1 ? getVal("Dur") : "",
         skMeta: isSk1 ? getVal("Meta") : "",
         skUses: isSk1 ? getVal("Uses") : "",
-        // Initialize derived/calculated fields
         skName: "",
         resTyp: "",
         resSk: "",
@@ -509,24 +446,18 @@
         resMultMult: "",
         resCombine: "",
         isUnSk: false,
-        isNish: false, // <<< Initialized isNish flag
-        multiRollCount: 1, // Default multi-roll count
+        isNish: false,
+        multiRollCount: 1,
         roll: "",
         resRoll: "",
         htmlHeader: "",
       };
-
-      // --- Set isNish Flag ---
       const nishRowResolved = fResolveRow("NishAtr_R");
       if (!isNaN(nishRowResolved) && r === nishRowResolved) {
         gUI.roll.isNish = true;
         fMyConsoleLog("   -> Setting gUI.roll.isNish = true");
       }
-      // --- End Set isNish Flag ---
-
-      const rData = gUI.roll; // Alias for convenience
-
-      // === Clean String Fields ===
+      const rData = gUI.roll;
       rData.skName = String(rData.skNameID || "")
         .replace(/\s{2,}_\w{6}$/, "")
         .trim();
@@ -535,54 +466,43 @@
       rData.skDur = String(rData.skDur || "").trim();
       rData.skMeta = String(rData.skMeta || "")
         .trim()
-        .toUpperCase(); // Store Meta tag uppercase
+        .toUpperCase();
       if (rData.skMeta && !(gUI.list?.metaColor || []).includes(rData.skMeta)) {
         rData.skMeta = "";
       }
-
-      // === Clean Numeric Fields ===
       const sk = parseInt(rData.skSk, 10);
       rData.skSk = !isNaN(sk) && sk >= 1 ? sk : "";
       const act = parseInt(String(rData.skAct || "").trim(), 10);
       rData.skAct = !isNaN(act) && act >= 1 ? act : "";
       const uses = parseInt(rData.skUses, 10);
       rData.skUses = !isNaN(uses) ? uses : "";
-
-      // === Set Initial Derived Values ===
       rData.resTyp = rData.skTyp;
-
       fMyConsoleLog(
         `⚙️ Populated & Cleaned gUI.roll for row ${r} (isSk1: ${isSk1}, isNish: ${gUI.roll.isNish})`
       );
-      return true; // Indicate success
+      return true;
     } catch (err) {
-      // --- Error Handling ---
       console.error("fClearAndSetGUIRoll: Error processing ability data:", err);
       fMyConsoleLog(`❌ Error populating/cleaning gUI.roll: ${err.message}`);
       await fShowMessage(`❌ Error processing skill data: ${err.message}`);
-      return false; // Indicate failure
+      return false;
     }
   } // End function fClearAndSetGUIRoll
 
-  // fVerifyAbilityHasSkAndType //////////////////////////////////////////////////////////////////
-  // Purpose -> Performs basic validation on the populated gUI.roll object, ensuring
-  //            the ability has a name and a valid, recognized skill type.
-  // Inputs  -> None (Uses gUI.roll and gUI.list).
-  // Outputs -> (Promise<Boolean>): Resolves true if ability data is valid, false otherwise.
+  /** function fVerifyAbilityHasSkAndType
+   * Purpose: Validates that the populated gUI.roll object has a name and a valid skill type.
+   * Assumptions: gUI.roll is populated. gUI.list.skTyp contains an array of valid types.
+   * @param {} - No parameters.
+   * @returns {Promise<boolean>} Resolves true if valid, false otherwise.
+   */
   async function fVerifyAbilityHasSkAndType() {
     const { skName, skTyp, sk1CB } = gUI.roll;
-
-    // --- Check Name ---
-    // Ability name must exist
     if (!skName) {
       await fShowMessage("⚠️ Please select an Ability with a name!");
       return false;
     }
-
-    // --- Check Type ---
-    // Skill Type must be a non-empty string
     if (!skTyp || typeof skTyp !== "string") {
-      const is2ndCol = !sk1CB; // Check if Sk2 column was used (often typeless)
+      const is2ndCol = !sk1CB;
       await fShowMessage(
         `⚠️ No skill Typ found${
           is2ndCol ? "<br><br>You may have wanted the 1st column." : ""
@@ -590,8 +510,6 @@
       );
       return false;
     }
-
-    // Skill type must match one of the known types defined in gUI.list.skTyp (case-insensitive)
     const skTypLower = skTyp.trim().toLowerCase();
     const isValidSkTyp = (gUI.list?.skTyp || []).some(
       (type) => type.toLowerCase() === skTypLower
@@ -600,30 +518,24 @@
       await fShowMessage(`⚠️ ${skTyp} is an invalid Skill Type!`);
       return false;
     }
-
-    // --- Passed All Checks ---
     return true;
-  } // END fVerifyAbilityHasSkAndType
+  } // End function fVerifyAbilityHasSkAndType
 
-  // fProcessMorph ///////////////////////////////////////////////////////////////////
-  // Purpose -> Parses the ability's morph string (gUI.roll.skMorph), extracting all
-  //            modifiers and flags (e.g., '+5', '*2', '^10', 'un', 'free', 'luck', '#3').
-  //            Calls helper functions fParseMorphComponents and fApplyMorphResults
-  //            to update the `res*` properties within gUI.roll.
-  // Inputs  -> None (Reads gUI.roll.skMorph).
-  // Outputs -> None (Modifies gUI.roll properties via helper functions).
+  /** function fProcessMorph
+   * Purpose: Parses the morph string from gUI.roll.skMorph and updates gUI.roll with modifiers.
+   * Assumptions: gUI.roll.skMorph is a comma-separated string of modifiers.
+   * @param {} - No parameters.
+   * @returns {void}
+   */
   async function fProcessMorph() {
-    const skMorph = gUI.roll.skMorph || ""; // Get morph string, default to empty
-
-    // === Initialize Accumulator (Moved outside the 'if' block) ===
-    // This object holds intermediate results during parsing
+    const skMorph = gUI.roll.skMorph || "";
     const acc = {
       foundResTyp: false,
       lastResTypMatch: "",
       lastFocusTag: "",
       foundResPlus: false,
       totalPlus: 0,
-      combineNumbers: [], // <<< combineNumbers is now always initialized
+      combineNumbers: [],
       foundResPlusPlus: false,
       totalPlusPlus: 0,
       foundResMult: false,
@@ -636,56 +548,43 @@
       foundResdctMult: false,
       totalResdctMult: 1.0,
     };
-
-    // === Parse Components (if morph string exists) ===
     if (skMorph) {
       fMyConsoleLog("   -> Processing skMorph string...");
-      // Split into components and create lowercased version for checks
       const morphComponents = skMorph
         .split(",")
         .map((x) => x.trim())
         .filter(Boolean);
       const morphLower = morphComponents.map((x) => x.toLowerCase());
-      // Parse components and update accumulator/gUI.roll flags
-      await fParseMorphComponents(morphComponents, morphLower, acc); // Pass the initialized acc
+      await fParseMorphComponents(morphComponents, morphLower, acc);
       fMyConsoleLog("   -> Finished processing skMorph string.");
     } else {
       fMyConsoleLog("ℹ️ No skMorph string to process.");
     }
+    fApplyMorphResults(acc);
+  } // End function fProcessMorph
 
-    // === Apply Results ===
-    // Apply accumulated/default results to final gUI.roll.res* fields
-    fApplyMorphResults(acc); // Always pass the initialized acc object
-  } // END fProcessMorph
-
-  // fParseMorphComponents ///////////////////////////////////////////////////////////
-  // Purpose -> Helper for fProcessMorph. Iterates through individual morph string
-  //            components, parsing them using regex and updating the accumulator object (`acc`)
-  //            or directly setting flags in `gUI.roll` (e.g., isUnSk, isFreeRoll, isLuckedRoll, multiRollCount).
-  // Inputs  -> morphComponents (Array): Array of trimmed, non-empty morph components.
-  //         -> morphLower (Array): Lowercased version of morphComponents for case-insensitive checks.
-  //         -> acc (Object): Accumulator object to store intermediate parsed values.
-  // Outputs -> None (Mutates the input `acc` object and `gUI.roll` properties).
+  /** function fParseMorphComponents
+   * Purpose: Helper that iterates through morph components, parsing them and updating state.
+   * Assumptions: Called by function fProcessMorph.
+   * @param {string[]} morphComponents - Array of trimmed, non-empty morph components.
+   * @param {string[]} morphLower - Lowercased version of morphComponents.
+   * @param {object} acc - Accumulator object to store intermediate parsed values.
+   * @returns {void}
+   */
   async function fParseMorphComponents(morphComponents, morphLower, acc) {
-    // --- Regex Definitions ---
-    const plusMinusRegex = /^([-+])(\d+)$/; // e.g., +5, -10
-    const numberOnlyRegex = /^\d+$/; // e.g., 20 (for Combine)
-    const plusPlusMinusMinusRegex = /^(?:(\+\+)|(--))(\d+)$/; // e.g., ++5, --10
-    const multDivRegex = /^([*\/])(\d+(\.\d+)?)$/; // e.g., *1.5, /2
-    const multMultDivDivRegex = /^(?:(\*\*)|(\/\/))(\d+(\.\d+)?)$/; // e.g., **1.5, //2
-    const equalsRegex = /^=(\d+)$/; // e.g., =50 (Set Base Sk)
-    const equalsEqualsRegex = /^==(\d+)$/; // e.g., ==100 (Set Final Roll)
-    const caretRegex = /^\^(\d+)$/; // e.g., ^25 (Set Difficulty)
-    const dctRegex = /^([-+])(\d+)([dct])$/i; // e.g., +1c, -2t, +3d
-    const multiRollRegex = /^#(\d+)$/; // e.g., #3 (Roll 3 times)
-
-    // === Parse Each Component ===
-    // Use for...of loop to allow await within the loop (for fShowMessage on errors)
+    const plusMinusRegex = /^([-+])(\d+)$/;
+    const numberOnlyRegex = /^\d+$/;
+    const plusPlusMinusMinusRegex = /^(?:(\+\+)|(--))(\d+)$/;
+    const multDivRegex = /^([*\/])(\d+(\.\d+)?)$/;
+    const multMultDivDivRegex = /^(?:(\*\*)|(\/\/))(\d+(\.\d+)?)$/;
+    const equalsRegex = /^=(\d+)$/;
+    const equalsEqualsRegex = /^==(\d+)$/;
+    const caretRegex = /^\^(\d+)$/;
+    const dctRegex = /^([-+])(\d+)([dct])$/i;
+    const multiRollRegex = /^#(\d+)$/;
     let index = 0;
     for (const component of morphComponents) {
-      const lower = morphLower[index]; // Get lowercased version for checks
-
-      // --- Check Flags (Case-Insensitive) ---
+      const lower = morphLower[index];
       if (lower === "free") {
         gUI.roll.isFreeRoll = true;
         fMyConsoleLog(`   -> Morph: Free Roll detected.`);
@@ -697,19 +596,14 @@
       if (lower === "un" || lower === "unsk") {
         gUI.roll.isUnSk = true;
       }
-
-      // --- Check Overrides & Modifiers (using Regex) ---
-      // Check SkTyp (LAST match wins)
       if ((gUI.list?.skTyp || []).some((t) => t.toLowerCase() === lower)) {
-        acc.lastResTypMatch = component; // Store original case
+        acc.lastResTypMatch = component;
         acc.foundResTyp = true;
       }
-      // Check Focus Meta Tag (LAST match wins)
       const focusTag = lower.toUpperCase();
       if ((gUI.list?.metaColor || []).includes(focusTag)) {
-        acc.lastFocusTag = focusTag; // Store uppercase tag
+        acc.lastFocusTag = focusTag;
       }
-      // Check Multi-Roll (#N)
       const multiRollMatch = component.match(multiRollRegex);
       if (multiRollMatch) {
         let count = parseInt(multiRollMatch[1], 10);
@@ -732,25 +626,21 @@
           );
         }
       }
-      // Check resPlus (+/-N)
       const plusMatch = component.match(plusMinusRegex);
       if (plusMatch) {
         const val = parseInt(plusMatch[2], 10);
         acc.totalPlus += plusMatch[1] === "+" ? val : -val;
         acc.foundResPlus = true;
       }
-      // Check resCombine (Number only)
       if (numberOnlyRegex.test(component)) {
         acc.combineNumbers.push(parseInt(component, 10));
       }
-      // Check resPlusPlus (++ / --N)
       const ppMatch = component.match(plusPlusMinusMinusRegex);
       if (ppMatch) {
         const val = parseInt(ppMatch[3], 10);
         acc.totalPlusPlus += ppMatch[1] === "++" ? val : -val;
         acc.foundResPlusPlus = true;
       }
-      // Check resMult (* / /N)
       const m1 = component.match(multDivRegex);
       if (m1) {
         const val = parseFloat(m1[2]);
@@ -764,7 +654,6 @@
         }
         acc.foundResMult = true;
       }
-      // Check resMultMult (** // //N)
       const m2 = component.match(multMultDivDivRegex);
       if (m2) {
         const val = parseFloat(m2[3]);
@@ -780,7 +669,6 @@
         }
         acc.foundResMultMult = true;
       }
-      // Check resdctMult (+/-Nd/c/t)
       const dctMatch = component.match(dctRegex);
       if (dctMatch) {
         const sign = dctMatch[1];
@@ -788,7 +676,6 @@
         const type = dctMatch[3].toLowerCase();
         let multiplier = 1.0;
         if (num !== 0) {
-          // Calculate multiplier based on type (c, t, d)
           const isPositive = sign === "+";
           switch (type) {
             case "c":
@@ -805,7 +692,6 @@
               break;
           }
           if (!isNaN(multiplier) && isFinite(multiplier) && multiplier > 0) {
-            // Apply if valid
             acc.totalResdctMult *= multiplier;
             acc.foundResdctMult = true;
           } else {
@@ -815,124 +701,89 @@
           }
         }
       }
-      // Check Flat Base (=N) (LAST match wins)
       const eq1 = component.match(equalsRegex);
       if (eq1) acc.lastFlatBaseMatch = eq1[1];
-      // Check Flat Result (==N) (LAST match wins)
       const eq2 = component.match(equalsEqualsRegex);
       if (eq2) acc.lastFlatResultMatch = eq2[1];
-      // Check Difficulty (^N) (LAST match wins)
       const dif = component.match(caretRegex);
       if (dif) acc.lastDifMatch = dif[1];
+      index++;
+    }
+  } // End function fParseMorphComponents
 
-      index++; // Increment index for lowercased array access
-    } // End component loop
-  } // END fParseMorphComponents
-
-  // fApplyMorphResults //////////////////////////////////////////////////////////////
-  // Purpose -> Applies the accumulated/parsed morph results from the `acc` object
-  //            (populated by fParseMorphComponents) to the final `res*` properties
-  //            of the global gUI.roll object. Calculates resCombine.
-  // Inputs  -> acc (Object): The accumulator object containing parsed morph results.
-  // Outputs -> None (Modifies gUI.roll object properties).
+  /** function fApplyMorphResults
+   * Purpose: Applies accumulated morph results to the final gUI.roll properties.
+   * Assumptions: Called by function fProcessMorph after parsing is complete.
+   * @param {object} acc - The accumulator object containing parsed morph results.
+   * @returns {void}
+   */
   function fApplyMorphResults(acc) {
-    const r = gUI.roll; // Alias for gUI.roll
-
-    // === Apply Flat Base (=N) ===
-    // MUST BE FIRST: Sets resFlatBase and potentially overrides skSk.
+    const r = gUI.roll;
     if (acc.lastFlatBaseMatch !== "") {
       const num = parseInt(acc.lastFlatBaseMatch, 10);
       if (!isNaN(num)) {
         r.resFlatBase = num;
-        r.skSk = num; // Override base skill if flat base is set
+        r.skSk = num;
       }
     }
-
-    // === Apply Resulting Type ===
-    // Use last matched type, otherwise default back to original skTyp.
     if (acc.foundResTyp) {
       r.resTyp = acc.lastResTypMatch || r.skTyp;
     }
-    // else: r.resTyp already defaulted to r.skTyp in fClearAndSetGUIRoll
-
-    // === Apply Focus Meta ===
-    // Use last matched valid meta color tag.
     if (acc.lastFocusTag && acc.lastFocusTag !== "") {
-      r.resFocus = acc.lastFocusTag; // ('R', 'O', 'Y', 'G', 'B')
+      r.resFocus = acc.lastFocusTag;
     } else {
-      r.resFocus = ""; // Ensure cleared if no valid tag found
+      r.resFocus = "";
     }
-
-    // === Apply Additive Skill Modifier (+/-N) ===
     if (acc.foundResPlus) {
       r.resPlus = acc.totalPlus;
     }
-
-    // === Calculate Combined Skill (Diminishing Returns) ===
-    // Add base skill (r.skSk, potentially overridden by resFlatBase) to numbers found in morphs.
     if (typeof r.skSk === "number" && r.skSk >= 1) {
       acc.combineNumbers.push(r.skSk);
     }
-    // Calculate combined value if any numbers were collected
     if (acc.combineNumbers.length > 0) {
-      acc.combineNumbers.sort((a, b) => b - a); // Sort descending
+      acc.combineNumbers.sort((a, b) => b - a);
       let value = 0,
         divisor = 1;
       for (const num of acc.combineNumbers) {
         value += num / divisor;
-        divisor *= 2; // Diminishing returns divisor
+        divisor *= 2;
       }
-      r.resCombine = Math.round(value); // Round final combined value
+      r.resCombine = Math.round(value);
     }
-
-    // === Apply Additive Roll Modifier (++ / --N) ===
     if (acc.foundResPlusPlus) {
       r.resPlusPlus = acc.totalPlusPlus;
     }
-
-    // === Apply Multiplicative Skill Modifier (* / /N) ===
     if (acc.foundResMult) {
-      r.resMult = Number(acc.totalMult.toFixed(6)); // Apply with precision
+      r.resMult = Number(acc.totalMult.toFixed(6));
     }
-
-    // === Apply Multiplicative Roll Modifier (** // //N) ===
     if (acc.foundResMultMult) {
-      r.resMultMult = Number(acc.totalMultMult.toFixed(6)); // Apply with precision
+      r.resMultMult = Number(acc.totalMultMult.toFixed(6));
     }
-
-    // === Apply DCT Multiplier (+/-Nd/c/t) ===
     if (acc.foundResdctMult) {
-      r.resdctMult = Number(acc.totalResdctMult.toFixed(6)); // Apply with precision
+      r.resdctMult = Number(acc.totalResdctMult.toFixed(6));
     }
-
-    // === Apply Flat Result Override (==N) ===
     if (acc.lastFlatResultMatch !== "") {
       const num = parseInt(acc.lastFlatResultMatch, 10);
       if (!isNaN(num)) r.resFlatResult = num;
     }
-
-    // === Apply Difficulty (^N) ===
     if (acc.lastDifMatch !== "") {
       const num = parseInt(acc.lastDifMatch, 10);
       if (!isNaN(num)) r.resDif = num;
     }
-  } // END fApplyMorphResults
+  } // End function fApplyMorphResults
 
   /** function fAct_VerifyAndProcessCost
-   * Purpose: Cost Verification Helper: Checks Action Points. Prompts if insufficient.
-   * Collects change to AP and sidebar log headers (HTML & text).
-   * Assumptions: fGetGridValue and fShowMessage/fShowPrompt are available.
-   * Notes: 'headers' is HTML, 'headersText' is plain text.
+   * Purpose: Verifies and processes the Action Point cost for an ability.
+   * Assumptions: gUI.roll is populated. fShowPrompt is available.
    * @param {} - No parameters.
-   * @returns {Promise<object>} { success, cancelledByUser, changes, headers, headersText }
+   * @returns {Promise<object>} An object detailing the success and changes.
    */
   async function fAct_VerifyAndProcessCost() {
     const { skAct, skName } = gUI.roll;
     const actCost = Number(skAct);
     const changes = [];
-    const headers = []; // Array for HTML headers
-    const headersText = []; // Array for plain text headers
-
+    const headers = [];
+    const headersText = [];
     if (actCost > 0) {
       let currentAct = fGetGridValue("Act", "ActTot", true);
       if (isNaN(currentAct)) {
@@ -950,7 +801,6 @@
           headersText: [],
         };
       }
-
       if (actCost > currentAct) {
         fMyConsoleLog(
           `⚠️ Insufficient Action Points (Need ${actCost}, Have ${currentAct})`
@@ -974,19 +824,21 @@
           "✅ User chose to proceed despite insufficient Action Points."
         );
         const warningText = `⚠️ NEGATIVE ACT POINTS: ${currentAct - actCost}`;
-        headers.push(`<span class="red-bold">${warningText}</span>`); // HTML version
-        headersText.push(warningText); // Plain text version
+        headers.push(`<span class="red-bold">${warningText}</span>`);
+        headersText.push(warningText);
       }
-
       const newActTotal = currentAct - actCost;
-      changes.push({ r: "Act", c: "ActTot", value: newActTotal });
+      changes.push({
+        r: "Act",
+        c: "ActTot",
+        value: newActTotal,
+      });
       fMyConsoleLog(
         `   -> Action Points: ${currentAct} -> ${newActTotal} (Pending)`
       );
     } else {
       fMyConsoleLog("   -> No Action Point cost for this ability.");
     }
-
     return {
       success: true,
       cancelledByUser: false,
@@ -997,18 +849,16 @@
   } // End function fAct_VerifyAndProcessCost
 
   /** function fUses_VerifyAndProcessCost
-   * Purpose: Cost Verification Helper: Checks Uses. Prompts if insufficient.
-   * Collects change to Uses and sidebar log headers (HTML & text).
+   * Purpose: Verifies and processes the "Uses" cost for an ability.
    * Assumptions: gUI.roll is populated. fShowPrompt is available.
    * @param {number} multiRollCount - The number of uses required for the action.
-   * @returns {Promise<object>} { success, cancelledByUser, changes, headers, headersText }
+   * @returns {Promise<object>} An object detailing the success and changes.
    */
   async function fUses_VerifyAndProcessCost(multiRollCount) {
     const { skUses, skName, ability_R } = gUI.roll;
     const changes = [];
-    const headers = []; // HTML headers
+    const headers = [];
     const headersText = [];
-
     const currentUses = Number(skUses);
     if (skUses === "" || isNaN(currentUses)) {
       fMyConsoleLog("   -> No 'Uses' cost defined for this ability.");
@@ -1020,13 +870,11 @@
         headersText: [],
       };
     }
-
     const totalUsesCost = Math.max(1, multiRollCount);
     fMyConsoleLog(
       `   -> Uses Check: Current=${currentUses}, Total Cost for ${multiRollCount} rolls=${totalUsesCost}`
     );
     const newUses = currentUses - totalUsesCost;
-
     if (currentUses < totalUsesCost) {
       fMyConsoleLog(
         `⚠️ Insufficient Uses Left (Need ${totalUsesCost}, Have ${currentUses})`
@@ -1048,11 +896,14 @@
       }
       fMyConsoleLog("✅ User chose to proceed despite insufficient Uses.");
       const warningText = `⚠️ NEGATIVE USES: ${newUses}`;
-      headers.push(`<span class="red-bold">${warningText}</span>`); // HTML version
+      headers.push(`<span class="red-bold">${warningText}</span>`);
       headersText.push(warningText);
     }
-
-    changes.push({ r: ability_R, c: "Uses", value: newUses });
+    changes.push({
+      r: ability_R,
+      c: "Uses",
+      value: newUses,
+    });
     fMyConsoleLog(
       `   -> Uses: ${currentUses} -> ${newUses} (Pending, cost: ${totalUsesCost})`
     );
@@ -1065,91 +916,83 @@
     };
   } // End function fUses_VerifyAndProcessCost
 
-  // fIsOn_VerifyAndProcessCost //////////////////////////////////////////////////////
-  // Purpose -> Cost "Verification" Helper: Prepares the change object to copy the
-  //            ability's Duration (gUI.roll.skDur) to its 'Is On' cell, but ONLY if
-  //            the roll originated from the Sk1 checkbox (gUI.roll.sk1CB is true).
-  //            This effectively sets the duration timer when an Sk1 ability is used.
-  // Inputs  -> None (Uses gUI.roll).
-  // Outputs -> (Promise<Object>): { success: true, changes: Array, headers: Array }
-  //            'changes' contains the change object {r: ability_R, c: 'On', value: skDur} if Sk1 used.
-  //            'headers' is always empty.
-  // NOTE: Made async for consistency, though not strictly required.
+  /** function fIsOn_VerifyAndProcessCost
+   * Purpose: Prepares the change to set an ability's "Is On" cell to its duration.
+   * Assumptions: Only applies if the roll was initiated from an Sk1 checkbox.
+   * @param {} - No parameters.
+   * @returns {Promise<object>} An object detailing the success and changes.
+   */
   async function fIsOn_VerifyAndProcessCost() {
-    const { skDur, ability_R, sk1CB } = gUI.roll; // Get Duration, Row Index, Sk1 Flag
+    const { skDur, ability_R, sk1CB } = gUI.roll;
     const changes = [];
-    const headers = []; // Headers not used by this function
-
-    // Only prepare change if Sk1 checkbox triggered the roll
+    const headers = [];
     if (sk1CB === true) {
-      // Prepare change to set 'On' column to the ability's duration value
-      changes.push({ r: ability_R, c: "On", value: skDur });
+      changes.push({
+        r: ability_R,
+        c: "On",
+        value: skDur,
+      });
       fMyConsoleLog(
         `   -> Is On: Set to Dur value '${skDur}' (Pending, Sk1 condition met)`
       );
     } else {
-      // If Sk2 triggered, no duration is set
       fMyConsoleLog(
         `   -> Is On: No change (Condition sk1CB === true not met)`
       );
     }
+    return {
+      success: true,
+      changes: changes,
+      headers: headers,
+    };
+  } // End function fIsOn_VerifyAndProcessCost
 
-    // This function always returns success as there's no failure condition
-    return { success: true, changes: changes, headers: headers };
-  } // END fIsOn_VerifyAndProcessCost
-
-  // fSkMeta_VerifyAndProcessCost ////////////////////////////////////////////////////
-  // Purpose -> Cost Verification Helper: Checks and prepares the change for the
-  //            ability's innate Meta cost (defined in gUI.roll.skMeta), but only if
-  //            the roll originated from the Sk1 checkbox. Uses fSpendOneMeta to find
-  //            an available Meta unit (starting from the specified color) considering
-  //            pending changes. Halts if cost cannot be paid.
-  // Inputs  -> pendingChangesMap (Object): Map of changes pending from previous cost checks.
-  // Outputs -> (Promise<Object>): { success: Boolean, changes: Array, headers: Array }
-  //            'success' is false if cost cannot be paid.
-  //            'changes' contains the change object for the Meta cell if successful.
-  //            'headers' is always empty.
+  /** function fSkMeta_VerifyAndProcessCost
+   * Purpose: Verifies and processes an ability's innate Meta cost.
+   * Assumptions: Only applies if from an Sk1 checkbox. Uses function fSpendOneMeta.
+   * @param {object} pendingChangesMap - Map of changes pending from previous cost checks.
+   * @returns {Promise<object>} An object detailing the success and changes.
+   */
   async function fSkMeta_VerifyAndProcessCost(pendingChangesMap) {
-    const { sk1CB, skMeta, skName } = gUI.roll; // Get Sk1 flag, Meta cost tag, Ability Name
+    const { sk1CB, skMeta, skName } = gUI.roll;
     const changes = [];
-    const headers = []; // Headers not used by this function
-
-    // === 1. Check Sk1 Condition ===
-    // Skill Meta cost typically only applies to Sk1 abilities
+    const headers = [];
     if (sk1CB !== true) {
       fMyConsoleLog(
         "   -> SkMeta Cost: Skipped (Condition sk1CB === true not met)"
       );
-      return { success: true, changes: [], headers: [] }; // No cost to apply
+      return {
+        success: true,
+        changes: [],
+        headers: [],
+      };
     }
-
-    // === 2. Check if Meta Cost is Defined ===
     const metaColorTag = String(skMeta || "")
       .trim()
-      .toUpperCase(); // Get tag from gUI.roll
+      .toUpperCase();
     if (!metaColorTag) {
       fMyConsoleLog(
         "   -> SkMeta Cost: Skipped (No Meta Color Tag defined in skMeta field)."
       );
-      return { success: true, changes: [], headers: [] }; // No cost to apply
+      return {
+        success: true,
+        changes: [],
+        headers: [],
+      };
     }
-
-    // === 3. Attempt to Spend Meta ===
-    // Call helper to find 1 unit of specified (or higher) meta, considering pending changes
     fMyConsoleLog(
       `   -> SkMeta Cost: Attempting to spend 1 unit of '${metaColorTag}'...`
     );
     const spendResult = await fSpendOneMeta(metaColorTag, pendingChangesMap);
-
-    // === 4. Handle Result ===
     if (spendResult.success) {
-      // Meta unit found, add the prepared change object
       fMyConsoleLog("      -> Success: Found 1 unit to spend for SkMeta cost.");
       changes.push(spendResult.change);
-      return { success: true, changes: changes, headers: headers };
+      return {
+        success: true,
+        changes: changes,
+        headers: headers,
+      };
     } else {
-      // Failed (either invalid tag or insufficient meta)
-      // fSpendOneMeta shows message for invalid tag; show "Not enough" only if tag was valid
       const metaColors = gUI.list?.metaColor || [];
       const isValidColor = metaColors.some(
         (c) => c.toUpperCase() === metaColorTag
@@ -1162,82 +1005,69 @@
           `❌ Not enough Meta.<br>${skName} needs @${metaColorTag}.`
         );
       }
-      return { success: false, changes: [], headers: [] }; // Indicate failure
+      return {
+        success: false,
+        changes: [],
+        headers: [],
+      };
     }
-  } // END fSkMeta_VerifyAndProcessCost
+  } // End function fSkMeta_VerifyAndProcessCost
 
-  // fSpendOneMeta ///////////////////////////////////////////////////////////////////
-  // Purpose -> Helper to find 1 available unit of Meta (checking Channel pool first,
-  //            then Main pool) and prepare the change object for decrementing it.
-  //            Starts checking from the specified `metaColor` and cycles upwards if needed
-  //            (R -> O -> Y -> G -> B). Considers pending changes from `pendingChangesMap`.
-  //            Sets the new value to '' (empty string) if decrementing results in < 1.
-  // Inputs  -> metaColor (String): The preferred Meta color TAG ('R'...'B') to start spending from.
-  //         -> pendingChangesMap (Object): Map holding pending changes {'rTag,cTag': newValue}.
-  // Outputs -> (Promise<Object>): Resolves to { success: true, change: { r, c, value } } if 1 unit found,
-  //                               or { success: false } if invalid color or no unit found.
+  /** function fSpendOneMeta
+   * Purpose: Finds and prepares the change for spending 1 unit of Meta.
+   * Assumptions: Checks Channel and Main pools, starting from a specified color and moving up.
+   * @param {string} metaColor - The preferred Meta color TAG ('R'...'B') to start spending from.
+   * @param {object} pendingChangesMap - Map holding pending changes.
+   * @returns {Promise<object>} An object with { success, change } or { success: false }.
+   */
   async function fSpendOneMeta(metaColor, pendingChangesMap) {
     fMyConsoleLog(
       `   -> Attempting to spend 1 Meta unit, starting check from: ${metaColor}`
     );
-
-    // === 1. Validate Input Color Tag ===
-    const metaColors = gUI.list?.metaColor; // e.g., ['R','O','Y','G','B']
-    // Validate meta color list definition
+    const metaColors = gUI.list?.metaColor;
     if (!Array.isArray(metaColors) || metaColors.length === 0) {
       console.error(
         "fSpendOneMeta: gUI.list.metaColor is not defined or empty."
       );
       await fShowMessage("❌ Internal Error: Meta color list not defined.");
-      return { success: false };
+      return {
+        success: false,
+      };
     }
-    // Find the index of the starting color (case-insensitive)
     const inputColorUpper = metaColor?.toUpperCase();
     const startIndex = metaColors.findIndex(
       (color) => color.toUpperCase() === inputColorUpper
     );
-    // Validate the input color tag exists in the list
     if (startIndex === -1) {
       fMyConsoleLog(
         `      -> ❌ Invalid input: Meta Color '${metaColor}' is not allowed.`
       );
       await fShowMessage(`❌ Meta Color '${metaColor}' is not allowed.`);
-      return { success: false };
+      return {
+        success: false,
+      };
     }
-    const validMetaColorTag = metaColors[startIndex]; // Use the correctly cased tag from list
+    const validMetaColorTag = metaColors[startIndex];
     fMyConsoleLog(
       `      -> Validated start color: ${validMetaColorTag} (Index: ${startIndex})`
     );
-
-    // === Helper to Get Current Value (Considering Pending Changes) ===
     const getCurrentValue = (rowTag, colTag) => {
       const key = `${rowTag},${colTag}`;
-      // Check if this cell has a pending change
       if (pendingChangesMap.hasOwnProperty(key)) {
         const pendingValue = Number(pendingChangesMap[key]);
-        // Use pending value if it's a number >= 1, otherwise treat as 0
-        // (Prevents double-spending from a value already pending decrement to < 1)
         return !isNaN(pendingValue) && pendingValue >= 1 ? pendingValue : 0;
       } else {
-        // No pending change, read from grid, default invalid/blank/< 1 to 0
         const gridVal = fGetGridValue(rowTag, colTag, true);
-        return gridVal >= 1 ? gridVal : 0; // Only count values >= 1
+        return gridVal >= 1 ? gridVal : 0;
       }
     };
-
-    // === 2. Cycle Through Colors (From Start Index Upwards) ===
     const numColors = metaColors.length;
-    // Loop from the starting color index up to the last color ('B')
     for (let i = startIndex; i < numColors; i++) {
       const currentColorTag = metaColors[i];
       fMyConsoleLog(`         - Checking Color: ${currentColorTag}`);
-
-      // --- Check Channel Pool ---
       const chnlVal = getCurrentValue("chnl", currentColorTag);
       if (chnlVal >= 1) {
-        // Found 1+ in Channel pool
         const newVal = chnlVal - 1;
-        // Prepare change: new value is newVal, or '' if newVal is 0
         const change = {
           r: "chnl",
           c: currentColorTag,
@@ -1248,15 +1078,14 @@
             change
           )}`
         );
-        return { success: true, change: change }; // Success!
+        return {
+          success: true,
+          change: change,
+        };
       }
-
-      // --- Check Main Pool (if not found in Channel) ---
       const metaVal = getCurrentValue("meta", currentColorTag);
       if (metaVal >= 1) {
-        // Found 1+ in Main pool
         const newVal = metaVal - 1;
-        // Prepare change: new value is newVal, or '' if newVal is 0
         const change = {
           r: "meta",
           c: currentColorTag,
@@ -1267,57 +1096,55 @@
             change
           )}`
         );
-        return { success: true, change: change }; // Success!
+        return {
+          success: true,
+          change: change,
+        };
       }
-
-      // If not found in either pool for this color, log and continue loop
       fMyConsoleLog(`           - Not found in ${currentColorTag} pools.`);
-    } // --- End Color Cycle Loop ---
-
-    // === 3. Not Found ===
-    // If loop completes without returning, no unit was found
+    }
     fMyConsoleLog(
       `      -> ❌ Failed: Could not find 1 unit of Meta to spend after checking colors ${validMetaColorTag} through ${
         metaColors[numColors - 1]
       }.`
     );
-    return { success: false }; // Indicate failure
-  } // END fSpendOneMeta
+    return {
+      success: false,
+    };
+  } // End function fSpendOneMeta
 
-  // fFocus_VerifyAndProcessCost ///////////////////////////////////////////////////
-  // Purpose -> Cost Verification Helper: Checks and prepares the change for the Focus
-  //            Meta cost, if specified by a morph setting gUI.roll.resFocus to a valid
-  //            Meta color tag ('R'...'B'). Uses fSpendOneMeta to find an available unit,
-  //            considering pending changes. Halts if cost cannot be paid.
-  // Inputs  -> pendingChangesMap (Object): Map of changes pending from previous cost checks.
-  // Outputs -> (Promise<Object>): { success: Boolean, changes: Array, headers: Array }
-  //            'success' is false if cost cannot be paid or tag is invalid.
-  //            'changes' contains the change object for the Meta cell if successful.
-  //            'headers' is always empty.
+  /** function fFocus_VerifyAndProcessCost
+   * Purpose: Verifies and processes the Focus Meta cost for a roll.
+   * Assumptions: The focus color is defined in gUI.roll.resFocus from a morph.
+   * @param {object} pendingChangesMap - Map of changes pending from previous cost checks.
+   * @returns {Promise<object>} An object detailing the success and changes.
+   */
   async function fFocus_VerifyAndProcessCost(pendingChangesMap) {
-    const focusColorTag = gUI.roll.resFocus; // Get the Focus tag ('R'..'B' or '')
+    const focusColorTag = gUI.roll.resFocus;
     const changes = [];
-    const headers = []; // Headers not used by this function
-    const metaColors = gUI.list?.metaColor; // e.g., ['R','O','Y','G','B']
-
-    // === 1. Check if Focus Cost Applies ===
+    const headers = [];
+    const metaColors = gUI.list?.metaColor;
     if (!focusColorTag || typeof focusColorTag !== "string") {
       fMyConsoleLog(
         "   -> Focus Meta Cost: Skipped (No resFocus tag defined)."
       );
-      return { success: true, changes: [], headers: [] }; // No focus cost
+      return {
+        success: true,
+        changes: [],
+        headers: [],
+      };
     }
-
-    // === 2. Validate Focus Tag ===
-    // Check against defined meta colors
     if (!Array.isArray(metaColors) || metaColors.length === 0) {
       console.error(
         "fFocus_VerifyAndProcessCost: gUI.list.metaColor is not defined or empty."
       );
       await fShowMessage("❌ Internal Error: Meta color list not defined.");
-      return { success: false, changes: [], headers: [] };
+      return {
+        success: false,
+        changes: [],
+        headers: [],
+      };
     }
-    // Ensure tag is one of the allowed colors (case-insensitive check, though stored uppercase)
     const isValidFocusTag = metaColors.includes(focusColorTag.toUpperCase());
     if (!isValidFocusTag) {
       const msg = `Invalid Focus Meta tag specified in morph: '${focusColorTag}'. Allowed: ${metaColors.join(
@@ -1326,71 +1153,68 @@
       console.warn(`fFocus_VerifyAndProcessCost: ${msg}`);
       fMyConsoleLog(`   -> ❌ Focus Meta Cost Failed: ${msg}`);
       await fShowMessage(`❌ ${msg}`);
-      return { success: false, changes: [], headers: [] }; // Fail due to invalid tag
+      return {
+        success: false,
+        changes: [],
+        headers: [],
+      };
     }
-
-    // === 3. Attempt to Spend Meta ===
     fMyConsoleLog(
       `   -> Focus Meta Cost: Attempting to spend 1 unit of '${focusColorTag}' (Focus)...`
     );
-    // Call helper, passing the specific tag and pending changes
     const spendResult = await fSpendOneMeta(focusColorTag, pendingChangesMap);
-
-    // === 4. Handle Result ===
     if (spendResult.success) {
-      // Meta unit found, add the prepared change object
       fMyConsoleLog(
         `      -> Success: Found 1 unit of Focus Meta (${focusColorTag}) to spend.`
       );
       changes.push(spendResult.change);
-      return { success: true, changes: changes, headers: headers };
+      return {
+        success: true,
+        changes: changes,
+        headers: headers,
+      };
     } else {
-      // Failed (fSpendOneMeta handles invalid tag message)
       fMyConsoleLog(
         `      -> ❌ Failed: Could not find 1 unit of ${focusColorTag} (or higher) to spend for Focus.`
       );
-      // Show specific "Not enough" message for Focus cost
       const errorMsg = `❌ Not enough Meta.<br>In addition to possible ability meta cost,<br>you are also trying to Focus @${focusColorTag}.`;
       await fShowMessage(errorMsg);
-      return { success: false, changes: [], headers: [] }; // Indicate failure
+      return {
+        success: false,
+        changes: [],
+        headers: [],
+      };
     }
-  } // END fFocus_VerifyAndProcessCost
+  } // End function fFocus_VerifyAndProcessCost
 
-  // fPerformMultiRolls ///////////////////////////////////////////////////////////
-  // Purpose -> Handles the standard multi-roll loop for abilities targeting a specific
-  //            difficulty. Calculates roll results, accumulates wounds, builds log lines
-  //            (HTML & plain text), constructs the final log entry HTML, including
-  //            wound totals and 'Apply Wounds' button for AR. Returns both HTML and plain text.
-  // Inputs  -> initialLogHtml (String): Pre-built HTML log header.
-  //         -> initialLogText (String): Pre-built Plain Text log header.
-  // Outputs -> (Object): { finalLogHtml: String, finalLogText: String }
+  /** function fPerformMultiRolls
+   * Purpose: Handles the standard multi-roll loop for abilities.
+   * Assumptions: Calculates results, accumulates wounds, and builds log entries.
+   * @param {string} initialLogHtml - Pre-built HTML log header.
+   * @param {string} initialLogText - Pre-built Plain Text log header.
+   * @returns {object} An object with { finalLogHtml, finalLogText }.
+   */
   function fPerformMultiRolls(initialLogHtml, initialLogText) {
     const multiRollCount = gUI.roll.multiRollCount;
     const resTypLower = (gUI.roll.resTyp || "").toLowerCase();
     const isArmorRoll = resTypLower === "ar";
     const isDamageRoll = resTypLower === "dmg";
-    let totalWoundsOverall = 0; // Accumulator for wounds (relevant for multi-roll AR/DMG)
-
+    let totalWoundsOverall = 0;
     fMyConsoleLog(
       `🔄 Starting Standard Roll Loop (${multiRollCount} rolls)...`
     );
-    const rollResultLinesHtml = []; // Array to hold HTML for each roll line
-    const rollResultLinesText = []; // Array to hold plain text for each roll line
-
-    // === Perform Rolls ===
+    const rollResultLinesHtml = [];
+    const rollResultLinesText = [];
     for (let rollNum = 1; rollNum <= multiRollCount; rollNum++) {
       const isFirstRoll = rollNum === 1;
       fMyConsoleLog(`   --- Roll ${rollNum} of ${multiRollCount} ---`);
-      fCalcGUIRollResSk(); // Calculate skill after modifiers
-      fCalcGUIRollRoll(); // Perform the base die roll
-      fCalcGUIRollResRoll(); // Apply roll modifiers
-
-      // === Accumulate Wounds (for multi-roll AR/DMG) ===
+      fCalcGUIRollResSk();
+      fCalcGUIRollRoll();
+      fCalcGUIRollResRoll();
       if (multiRollCount > 1) {
         const currentRollResult = gUI.roll.resRoll;
         const difficulty = gUI.roll.resDif;
         let woundsDealtThisRoll = 0;
-
         if (
           isArmorRoll &&
           typeof currentRollResult === "number" &&
@@ -1424,44 +1248,35 @@
             `      -> Skipping Wound Accumulation: Invalid input (Dif=${difficulty}, Roll=${currentRollResult})`
           );
         }
-      } // End wound accumulation block
-
-      // Build HTML and Plain Text lines for this specific roll
+      }
       const { html: rollLineHtml, plainText: rollLineText } =
         fBuildSidebarHTMLAndSimpleText(rollNum, multiRollCount, isFirstRoll);
-      rollResultLinesHtml.push(rollLineHtml); // Store HTML line
-      rollResultLinesText.push(rollLineText); // Store Plain Text line
-    } // --- End Roll Loop ---
-
-    // === Combine Header and Results ===
+      rollResultLinesHtml.push(rollLineHtml);
+      rollResultLinesText.push(rollLineText);
+    }
     let finalLogHtml = initialLogHtml;
     let finalLogText = initialLogText;
     if (rollResultLinesHtml.length > 0) {
-      if (finalLogHtml) finalLogHtml += "<br>"; // Add separator if header exists
-      finalLogHtml += rollResultLinesHtml.join("<br>"); // Join HTML lines
+      if (finalLogHtml) finalLogHtml += "<br>";
+      finalLogHtml += rollResultLinesHtml.join("<br>");
     }
     if (rollResultLinesText.length > 0) {
-      if (finalLogText) finalLogText += "\n"; // Add separator if header exists
-      finalLogText += rollResultLinesText.join("\n"); // Join Plain Text lines
+      if (finalLogText) finalLogText += "\n";
+      finalLogText += rollResultLinesText.join("\n");
     }
-
-    // === Add Total Wounds Line (if applicable) ===
     if (multiRollCount > 1) {
       if (isArmorRoll) {
-        finalLogHtml += "<br>↓"; // HTML Separator
-        finalLogText += "\n↓"; // Text Separator
+        finalLogHtml += "<br>↓";
+        finalLogText += "\n↓";
         const positiveWoundAmount = Math.abs(totalWoundsOverall);
-        // Add total wounds line with 'Apply' button to HTML
         finalLogHtml += `<br><span class="red-bold">Total Wounds to PC = ${totalWoundsOverall}</span> <button class="apply-wounds-btn" data-wound-amount="${positiveWoundAmount}">Apply</button>`;
-        // Add plain text version (without button)
         finalLogText += `\nTotal Wounds to PC = ${totalWoundsOverall}`;
         fMyConsoleLog(
           `      -> Added Total AR Wounds line: ${totalWoundsOverall} (Button amount: ${positiveWoundAmount})`
         );
       } else if (isDamageRoll) {
-        finalLogHtml += "<br>↓"; // HTML Separator
-        finalLogText += "\n↓"; // Text Separator
-        // Add total damage line (no button needed for monster damage currently)
+        finalLogHtml += "<br>↓";
+        finalLogText += "\n↓";
         finalLogHtml += `<br><span style="font-weight:bold;">Total Wounds = +${totalWoundsOverall}</span>`;
         finalLogText += `\nTotal Wounds = +${totalWoundsOverall}`;
         fMyConsoleLog(
@@ -1469,22 +1284,22 @@
         );
       }
     }
-
     fMyConsoleLog(`✅ Standard Roll Loop Completed.`);
-    // Return object with both HTML and Plain Text
-    return { finalLogHtml, finalLogText };
-  } // END fPerformMultiRolls
+    return {
+      finalLogHtml,
+      finalLogText,
+    };
+  } // End function fPerformMultiRolls
 
-  // fPerformPlayerAttackRolls ///////////////////////////////////////////////////////
-  // Purpose -> Handles 'Atk' rolls against monsters. Validates targets, performs rolls,
-  //            counts successes, builds log lines (HTML & text), stores results, adds
-  //            "Prep Dmg" button. Falls back to standard rolls if needed.
-  // Inputs  -> initialLogHtml (String): Pre-built HTML log header.
-  //         -> initialLogText (String): Pre-built Plain Text log header.
-  // Outputs -> (Promise<Object>): { logHtml: String, logText: String, success: Boolean }
+  /** function fPerformPlayerAttackRolls
+   * Purpose: Handles 'Atk' rolls against monsters.
+   * Assumptions: Validates targets, performs rolls, and builds log entries, adding a "Prep Dmg" button on success.
+   * @param {string} initialLogHtml - Pre-built HTML log header.
+   * @param {string} initialLogText - Pre-built Plain Text log header.
+   * @returns {Promise<object>} An object with { logHtml, logText, success }.
+   */
   async function fPerformPlayerAttackRolls(initialLogHtml, initialLogText) {
     fMyConsoleLog("   -> Entering Player Attack Logic...");
-    // === 1. Get Monster Range & Validate ===
     const monsterRangeDef = gUI.range?.monsters;
     if (
       !monsterRangeDef ||
@@ -1494,10 +1309,12 @@
         "Monster range definition (gUI.range.monsters) missing/invalid.";
       console.warn(`fPerformPlayerAttackRolls: ${msg}`);
       await fShowMessage(`❌ Error: ${msg}`);
-      return { logHtml: "", logText: "", success: false }; // Indicate failure
+      return {
+        logHtml: "",
+        logText: "",
+        success: false,
+      };
     }
-
-    // === 2. Resolve Indices ===
     const resolved = fConvertsR1C1R2C2TagOrNumToIndices(monsterRangeDef);
     if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
       const msg = `Could not resolve monster range tags: ${JSON.stringify(
@@ -1505,39 +1322,42 @@
       )}`;
       console.warn(`fPerformPlayerAttackRolls: ${msg}`);
       await fShowMessage(`❌ Error: ${msg}`);
-      return { logHtml: "", logText: "", success: false };
+      return {
+        logHtml: "",
+        logText: "",
+        success: false,
+      };
     }
     const rMin = Math.min(resolved.r1, resolved.r2);
     const rMax = Math.max(resolved.r1, resolved.r2);
     const cNumMon = fResolveCol("NumMon");
-    const cMonDef = fResolveCol("MonDef"); // Difficulty column for Attack
+    const cMonDef = fResolveCol("MonDef");
     const cMonName = fResolveCol("MonName");
     if ([cNumMon, cMonDef, cMonName].some(isNaN)) {
       const msg =
         "Could not resolve required monster column tags (NumMon, MonDef, MonName).";
       console.warn(`fPerformPlayerAttackRolls: ${msg}`);
       await fShowMessage(`❌ Error: ${msg}`);
-      return { logHtml: "", logText: "", success: false };
+      return {
+        logHtml: "",
+        logText: "",
+        success: false,
+      };
     }
     fMyConsoleLog(
       `      -> Monster Table Range: Rows ${rMin}-${rMax}, Cols Def:${cMonDef}, Num:${cNumMon}, Name:${cMonName}`
     );
-
-    // === 3. Identify & Validate Targets ===
     const monsterTargets = [];
     const allTargetedRows_R = [];
     const firstMonsterRowIndex = rMin;
-
     for (let mon_R = rMin; mon_R <= rMax; mon_R++) {
       const isCustomRow = mon_R === firstMonsterRowIndex;
       const numMonRaw = gUI.arr?.[mon_R]?.[cNumMon];
       const numMon = parseInt(numMonRaw, 10);
-
       if (!isNaN(numMon) && numMon >= 1 && numMon <= 30) {
         fMyConsoleLog(`      -> Row ${mon_R}: Found valid NumMon: ${numMon}`);
         const monDefRaw = gUI.arr?.[mon_R]?.[cMonDef];
         const monDef = Number(monDefRaw);
-
         if (isNaN(monDef) || String(monDefRaw).trim() === "") {
           let errMsg = `❌ Invalid Monster Defense ('${monDefRaw}') found in row ${
             mon_R + 1
@@ -1546,13 +1366,15 @@
             errMsg = `❌ Invalid Monster Defense ('${monDefRaw}') found for Custom Monster. Cannot complete attack.`;
           fMyConsoleLog(`         -> Validation Failed: ${errMsg}`);
           await fShowMessage(errMsg);
-          return { logHtml: "", logText: "", success: false }; // Halt
+          return {
+            logHtml: "",
+            logText: "",
+            success: false,
+          };
         }
-
         let originalMonName = String(gUI.arr?.[mon_R]?.[cMonName] || "").trim();
         let monName = originalMonName || `Row ${mon_R + 1}`;
         if (isCustomRow) monName = `Custom ${originalMonName}`.trim();
-
         monsterTargets.push({
           mon_R,
           numRolls: numMon,
@@ -1570,9 +1392,7 @@
             `      -> Row ${mon_R}: Skipping - Invalid NumMon value: '${numMonRaw}'`
           );
       }
-    } // End target identification loop
-
-    // === 4. Handle No Valid Targets (Fallback to Standard Roll) ===
+    }
     if (monsterTargets.length === 0) {
       fMyConsoleLog(
         "      -> No valid monster targets found. Performing standard attack roll instead."
@@ -1580,16 +1400,18 @@
       await fShowMessage(
         "ℹ️ No valid monsters found. Performing standard attack roll."
       );
-      gUI.roll.resDif = ""; // Ensure difficulty is cleared
+      gUI.roll.resDif = "";
       fMyConsoleLog("         -> Cleared resDif for standard roll.");
       const { finalLogHtml, finalLogText } = fPerformMultiRolls(
         initialLogHtml,
         initialLogText
       );
-      return { logHtml: finalLogHtml, logText: finalLogText, success: true };
+      return {
+        logHtml: finalLogHtml,
+        logText: finalLogText,
+        success: true,
+      };
     }
-
-    // === 5. Perform Rolls Against Valid Targets ===
     fMyConsoleLog(
       `      -> Found ${monsterTargets.length} valid monster target(s).`
     );
@@ -1597,21 +1419,19 @@
     const monsterLogLinesHtml = [];
     const monsterLogLinesText = [];
     const currentAttackResults = [];
-
     for (const target of monsterTargets) {
       fMyConsoleLog(
         `   --- Attacking: ${target.monName} (Def: ${target.monDef}, Rolls: ${target.numRolls}) ---`
       );
-      monsterLogLinesHtml.push("↓"); // HTML Separator
-      monsterLogLinesText.push("↓"); // <<< USE '↓' for Plain Text Separator >>>
+      monsterLogLinesHtml.push("↓");
+      monsterLogLinesText.push("↓");
       monsterLogLinesHtml.push(
         `--- <span style="color: purple; font-weight: bold;">Mon: ${target.monName}</span> (Def: ${target.monDef}) ---`
       );
       monsterLogLinesText.push(
         `--- Mon: ${target.monName} (Def: ${target.monDef}) ---`
       );
-      gUI.roll.resDif = target.monDef; // Set difficulty
-
+      gUI.roll.resDif = target.monDef;
       for (let rollNum = 1; rollNum <= target.numRolls; rollNum++) {
         fMyConsoleLog(
           `      -> Roll ${rollNum} of ${target.numRolls} against ${target.monName}...`
@@ -1619,7 +1439,6 @@
         fCalcGUIRollResSk();
         fCalcGUIRollRoll();
         fCalcGUIRollResRoll();
-
         const rollResult = gUI.roll.resRoll;
         const difficulty = gUI.roll.resDif;
         if (
@@ -1636,7 +1455,6 @@
             `         -> Attack Failed! (Roll ${rollResult} < Def ${difficulty})`
           );
         }
-
         const { html: rollLineHtml, plainText: rollLineText } =
           fBuildSidebarHTMLAndSimpleText(
             rollNum,
@@ -1646,8 +1464,7 @@
         monsterLogLinesHtml.push(rollLineHtml);
         monsterLogLinesText.push(rollLineText);
         if (isOverallFirstRoll) isOverallFirstRoll = false;
-      } // End inner roll loop
-
+      }
       fMyConsoleLog(
         `   --- Finished Attacking: ${target.monName} (${target.numSuccesses} successes) ---`
       );
@@ -1661,14 +1478,11 @@
           numSuccesses: target.numSuccesses,
         });
       }
-    } // End monster target loop
-
-    // === 6. Finalize Log, Store Results, Add Button ===
+    }
     let finalLogHtml =
       initialLogHtml + "<br>" + monsterLogLinesHtml.join("<br>");
     let finalLogText = initialLogText + "\n" + monsterLogLinesText.join("\n");
     let rollId = null;
-
     if (currentAttackResults.length > 0) {
       rollId = "prep_" + Date.now();
       gUI.monsterRollResultsHistory[rollId] = {
@@ -1687,21 +1501,23 @@
         "   -> No successes recorded, 'Prep Dmg' button not added."
       );
     }
-
     fMyConsoleLog("   -> Player Attack Logic Complete.");
-    return { logHtml: finalLogHtml, logText: finalLogText, success: true };
-  } // END fPerformPlayerAttackRolls
+    return {
+      logHtml: finalLogHtml,
+      logText: finalLogText,
+      success: true,
+    };
+  } // End function fPerformPlayerAttackRolls
 
-  // fPerformPlayerDamageRolls /////////////////////////////////////////////////////
-  // Purpose -> Handles 'DMG' rolls against monsters. Uses 'MonAR' for difficulty.
-  //            Calculates Wounds, builds log lines (HTML & text), sums wounds per monster.
-  //            Falls back to standard roll if needed.
-  // Inputs  -> initialLogHtml (String): Pre-built HTML log header.
-  //         -> initialLogText (String): Pre-built Plain Text log header.
-  // Outputs -> (Promise<Object>): Resolves with { logHtml: String, logText: String, success: Boolean }.
+  /** function fPerformPlayerDamageRolls
+   * Purpose: Handles 'Dmg' rolls against monsters.
+   * Assumptions: Uses 'MonAR' for difficulty, calculates wounds, and builds log entries.
+   * @param {string} initialLogHtml - Pre-built HTML log header.
+   * @param {string} initialLogText - Pre-built Plain Text log header.
+   * @returns {Promise<object>} An object with { logHtml, logText, success }.
+   */
   async function fPerformPlayerDamageRolls(initialLogHtml, initialLogText) {
     fMyConsoleLog("   -> Entering Player Damage Logic...");
-    // === 1. Get Monster Range & Validate ===
     const monsterRangeDef = gUI.range?.monsters;
     if (
       !monsterRangeDef ||
@@ -1711,10 +1527,12 @@
         "Monster range definition (gUI.range.monsters) missing/invalid.";
       console.warn(`fPerformPlayerDamageRolls: ${msg}`);
       await fShowMessage(`❌ Error: ${msg}`);
-      return { logHtml: "", logText: "", success: false };
+      return {
+        logHtml: "",
+        logText: "",
+        success: false,
+      };
     }
-
-    // === 2. Resolve Indices (Including MonAR) ===
     const resolved = fConvertsR1C1R2C2TagOrNumToIndices(monsterRangeDef);
     if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
       const msg = `Could not resolve monster range tags: ${JSON.stringify(
@@ -1722,32 +1540,37 @@
       )}`;
       console.warn(`fPerformPlayerDamageRolls: ${msg}`);
       await fShowMessage(`❌ Error: ${msg}`);
-      return { logHtml: "", logText: "", success: false };
+      return {
+        logHtml: "",
+        logText: "",
+        success: false,
+      };
     }
     const rMin = Math.min(resolved.r1, resolved.r2);
     const rMax = Math.max(resolved.r1, resolved.r2);
     const cNumMon = fResolveCol("NumMon");
-    const cMonAR = fResolveCol("MonAR"); // Difficulty source for Damage
+    const cMonAR = fResolveCol("MonAR");
     const cMonName = fResolveCol("MonName");
     if ([cNumMon, cMonAR, cMonName].some(isNaN)) {
       const msg =
         "Could not resolve required monster column tags (NumMon, MonAR, MonName).";
       console.warn(`fPerformPlayerDamageRolls: ${msg}`);
       await fShowMessage(`❌ Error: ${msg}`);
-      return { logHtml: "", logText: "", success: false };
+      return {
+        logHtml: "",
+        logText: "",
+        success: false,
+      };
     }
     fMyConsoleLog(
       `      -> Monster Table Range: Rows ${rMin}-${rMax}, Cols AR:${cMonAR}, Num:${cNumMon}, Name:${cMonName}`
     );
-
-    // === 3. Identify & Validate Targets (Using MonAR) ===
     const monsterTargets = [];
     const firstMonsterRowIndex = rMin;
     for (let mon_R = rMin; mon_R <= rMax; mon_R++) {
       const isCustomRow = mon_R === firstMonsterRowIndex;
       const numMonRaw = gUI.arr?.[mon_R]?.[cNumMon];
       const numMon = parseInt(numMonRaw, 10);
-
       if (!isNaN(numMon) && numMon >= 1 && numMon <= 30) {
         fMyConsoleLog(`      -> Row ${mon_R}: Found valid NumMon: ${numMon}`);
         const monARRaw = gUI.arr?.[mon_R]?.[cMonAR];
@@ -1760,9 +1583,12 @@
             errMsg = `❌ Invalid Monster Armor value ('${monARRaw}') found for Custom Monster. Cannot complete damage roll.`;
           fMyConsoleLog(`         -> Validation Failed: ${errMsg}`);
           await fShowMessage(errMsg);
-          return { logHtml: "", logText: "", success: false }; // Halt
+          return {
+            logHtml: "",
+            logText: "",
+            success: false,
+          };
         }
-
         const calculatedArmor = Math.max(1, monARBase / 10).toFixed(1);
         fMyConsoleLog(
           `         -> Calculated Armor Difficulty: ${monARBase}/10=${
@@ -1787,9 +1613,7 @@
             `      -> Row ${mon_R}: Skipping - Invalid NumMon value: '${numMonRaw}'`
           );
       }
-    } // End target identification loop
-
-    // === 4. Handle No Valid Targets (Fallback to Standard Roll) ===
+    }
     if (monsterTargets.length === 0) {
       fMyConsoleLog(
         "      -> No valid monster targets found (with MonAR). Performing standard damage roll instead."
@@ -1803,33 +1627,32 @@
         initialLogHtml,
         initialLogText
       );
-      return { logHtml: finalLogHtml, logText: finalLogText, success: true };
+      return {
+        logHtml: finalLogHtml,
+        logText: finalLogText,
+        success: true,
+      };
     }
-
-    // === 5. Perform Rolls & Build Log ===
     fMyConsoleLog(
       `      -> Found ${monsterTargets.length} valid monster target(s) with Armor values.`
     );
     let isOverallFirstRoll = true;
     const monsterLogLinesHtml = [];
     const monsterLogLinesText = [];
-
     for (const target of monsterTargets) {
       fMyConsoleLog(
         `   --- Damaging: ${target.monName} (Calc AR: ${target.calculatedArmor}, Rolls: ${target.numRolls}) ---`
       );
       let totalWoundsPerMonster = 0;
-
-      monsterLogLinesHtml.push("↓"); // HTML separator
-      monsterLogLinesText.push("↓"); // <<< USE '↓' for Plain Text Separator >>>
+      monsterLogLinesHtml.push("↓");
+      monsterLogLinesText.push("↓");
       monsterLogLinesHtml.push(
         `--- <span style="color: purple; font-weight: bold;">Mon: ${target.monName}</span> (AR: ${target.calculatedArmor}) ---`
       );
       monsterLogLinesText.push(
         `--- Mon: ${target.monName} (AR: ${target.calculatedArmor}) ---`
       );
-      gUI.roll.resDif = target.calculatedArmor; // Set difficulty
-
+      gUI.roll.resDif = target.calculatedArmor;
       for (let rollNum = 1; rollNum <= target.numRolls; rollNum++) {
         fMyConsoleLog(
           `      -> Damage Roll ${rollNum} of ${target.numRolls} against ${target.monName}...`
@@ -1837,7 +1660,6 @@
         fCalcGUIRollResSk();
         fCalcGUIRollRoll();
         fCalcGUIRollResRoll();
-
         const rollResult = gUI.roll.resRoll;
         const armorDifficulty = gUI.roll.resDif;
         let woundsDealt = 0;
@@ -1851,7 +1673,6 @@
           `         -> Wound Calc: Dmg Roll=${rollResult}, calcAR=${armorDifficulty} => Wounds = max(0, round(${rollResult}/${armorDifficulty})) = ${woundsDealt}`
         );
         totalWoundsPerMonster += woundsDealt;
-
         const { html: rollLineHtml, plainText: rollLineText } =
           fBuildSidebarHTMLAndSimpleText(
             rollNum,
@@ -1861,8 +1682,7 @@
         monsterLogLinesHtml.push(rollLineHtml);
         monsterLogLinesText.push(rollLineText);
         if (isOverallFirstRoll) isOverallFirstRoll = false;
-      } // End inner roll loop
-
+      }
       monsterLogLinesHtml.push(
         `<span style="font-weight:bold;">${target.monName} Total Wounds = +${totalWoundsPerMonster}</span>`
       );
@@ -1872,26 +1692,27 @@
       fMyConsoleLog(
         `   --- Finished Damaging: ${target.monName} (Total Wounds: ${totalWoundsPerMonster}) ---`
       );
-    } // End monster target loop
-
-    // === 6. Return Result ===
+    }
     const finalLogHtml =
       initialLogHtml + "<br>" + monsterLogLinesHtml.join("<br>");
     const finalLogText = initialLogText + "\n" + monsterLogLinesText.join("\n");
     fMyConsoleLog("   -> Player Damage Logic Complete.");
-    return { logHtml: finalLogHtml, logText: finalLogText, success: true };
-  } // END fPerformPlayerDamageRolls
+    return {
+      logHtml: finalLogHtml,
+      logText: finalLogText,
+      success: true,
+    };
+  } // End function fPerformPlayerDamageRolls
 
-  // fPerformPlayerDefenseRolls ////////////////////////////////////////////////////
-  // Purpose -> Handles 'Def' rolls against monsters. Uses 'MonAtk' for difficulty.
-  //            Counts failures, builds log lines (HTML & text), stores results, adds
-  //            "Prep AR" button. Falls back to standard roll if needed.
-  // Inputs  -> initialLogHtml (String): Pre-built HTML log header.
-  //         -> initialLogText (String): Pre-built Plain Text log header.
-  // Outputs -> (Promise<Object>): { logHtml: String, logText: String, success: Boolean }
+  /** function fPerformPlayerDefenseRolls
+   * Purpose: Handles 'Def' rolls against monsters.
+   * Assumptions: Uses 'MonAtk' for difficulty, counts failures, and adds a "Prep AR" button on failure.
+   * @param {string} initialLogHtml - Pre-built HTML log header.
+   * @param {string} initialLogText - Pre-built Plain Text log header.
+   * @returns {Promise<object>} An object with { logHtml, logText, success }.
+   */
   async function fPerformPlayerDefenseRolls(initialLogHtml, initialLogText) {
     fMyConsoleLog("   -> Entering Player Defense Logic...");
-    // === 1. Get Monster Range & Validate ===
     const monsterRangeDef = gUI.range?.monsters;
     if (
       !monsterRangeDef ||
@@ -1901,10 +1722,12 @@
         "Monster range definition (gUI.range.monsters) missing/invalid.";
       console.warn(`fPerformPlayerDefenseRolls: ${msg}`);
       await fShowMessage(`❌ Error: ${msg}`);
-      return { logHtml: "", logText: "", success: false };
+      return {
+        logHtml: "",
+        logText: "",
+        success: false,
+      };
     }
-
-    // === 2. Resolve Indices (Including MonAtk) ===
     const resolved = fConvertsR1C1R2C2TagOrNumToIndices(monsterRangeDef);
     if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
       const msg = `Could not resolve monster range tags: ${JSON.stringify(
@@ -1912,25 +1735,31 @@
       )}`;
       console.warn(`fPerformPlayerDefenseRolls: ${msg}`);
       await fShowMessage(`❌ Error: ${msg}`);
-      return { logHtml: "", logText: "", success: false };
+      return {
+        logHtml: "",
+        logText: "",
+        success: false,
+      };
     }
     const rMin = Math.min(resolved.r1, resolved.r2);
     const rMax = Math.max(resolved.r1, resolved.r2);
     const cNumMon = fResolveCol("NumMon");
-    const cMonAtk = fResolveCol("MonAtk"); // Difficulty column for Defense
+    const cMonAtk = fResolveCol("MonAtk");
     const cMonName = fResolveCol("MonName");
     if ([cNumMon, cMonAtk, cMonName].some(isNaN)) {
       const msg =
         "Could not resolve required monster column tags (NumMon, MonAtk, MonName).";
       console.warn(`fPerformPlayerDefenseRolls: ${msg}`);
       await fShowMessage(`❌ Error: ${msg}`);
-      return { logHtml: "", logText: "", success: false };
+      return {
+        logHtml: "",
+        logText: "",
+        success: false,
+      };
     }
     fMyConsoleLog(
       `      -> Monster Table Range: Rows ${rMin}-${rMax}, Cols Atk:${cMonAtk}, Num:${cNumMon}, Name:${cMonName}`
     );
-
-    // === 3. Identify & Validate Targets (Using MonAtk) ===
     const monsterTargets = [];
     const allTargetedRows_R = [];
     const firstMonsterRowIndex = rMin;
@@ -1938,12 +1767,10 @@
       const isCustomRow = mon_R === firstMonsterRowIndex;
       const numMonRaw = gUI.arr?.[mon_R]?.[cNumMon];
       const numMon = parseInt(numMonRaw, 10);
-
       if (!isNaN(numMon) && numMon >= 1 && numMon <= 30) {
         fMyConsoleLog(`      -> Row ${mon_R}: Found valid NumMon: ${numMon}`);
         const monAtkRaw = gUI.arr?.[mon_R]?.[cMonAtk];
         const monAtk = Number(monAtkRaw);
-
         if (isNaN(monAtk) || String(monAtkRaw).trim() === "") {
           let errMsg = `❌ Invalid Monster Attack value ('${monAtkRaw}') found in row ${
             mon_R + 1
@@ -1952,9 +1779,12 @@
             errMsg = `❌ Invalid Monster Attack value ('${monAtkRaw}') found for Custom Monster. Cannot complete defense roll.`;
           fMyConsoleLog(`         -> Validation Failed: ${errMsg}`);
           await fShowMessage(errMsg);
-          return { logHtml: "", logText: "", success: false }; // Halt
+          return {
+            logHtml: "",
+            logText: "",
+            success: false,
+          };
         }
-
         let originalMonName = String(gUI.arr?.[mon_R]?.[cMonName] || "").trim();
         let monName = originalMonName || `Row ${mon_R + 1}`;
         if (isCustomRow) monName = `Custom ${originalMonName}`.trim();
@@ -1975,9 +1805,7 @@
             `      -> Row ${mon_R}: Skipping - Invalid NumMon value: '${numMonRaw}'`
           );
       }
-    } // End target identification loop
-
-    // === 4. Handle No Valid Targets (Fallback to Standard Roll) ===
+    }
     if (monsterTargets.length === 0) {
       fMyConsoleLog(
         "      -> No valid monster targets found (with MonAtk). Performing standard defense roll instead."
@@ -1991,10 +1819,12 @@
         initialLogHtml,
         initialLogText
       );
-      return { logHtml: finalLogHtml, logText: finalLogText, success: true };
+      return {
+        logHtml: finalLogHtml,
+        logText: finalLogText,
+        success: true,
+      };
     }
-
-    // === 5. Perform Rolls & Build Log ===
     fMyConsoleLog(
       `      -> Found ${monsterTargets.length} valid monster target(s) with Attack values.`
     );
@@ -2002,21 +1832,19 @@
     const monsterLogLinesHtml = [];
     const monsterLogLinesText = [];
     const currentDefenseResults = [];
-
     for (const target of monsterTargets) {
       fMyConsoleLog(
         `   --- Defending Against: ${target.monName} (Atk: ${target.monAtk}, Rolls: ${target.numRolls}) ---`
       );
-      monsterLogLinesHtml.push("↓"); // HTML separator
-      monsterLogLinesText.push("↓"); // <<< USE '↓' for Plain Text Separator >>>
+      monsterLogLinesHtml.push("↓");
+      monsterLogLinesText.push("↓");
       monsterLogLinesHtml.push(
         `--- <span style="color: purple; font-weight: bold;">Mon: ${target.monName}</span> (Atk: ${target.monAtk}) ---`
       );
       monsterLogLinesText.push(
         `--- Mon: ${target.monName} (Atk: ${target.monAtk}) ---`
       );
-      gUI.roll.resDif = target.monAtk; // Set difficulty
-
+      gUI.roll.resDif = target.monAtk;
       for (let rollNum = 1; rollNum <= target.numRolls; rollNum++) {
         fMyConsoleLog(
           `      -> Defense Roll ${rollNum} of ${target.numRolls} against ${target.monName}...`
@@ -2024,10 +1852,8 @@
         fCalcGUIRollResSk();
         fCalcGUIRollRoll();
         fCalcGUIRollResRoll();
-
         const rollResult = gUI.roll.resRoll;
         const difficulty = gUI.roll.resDif;
-
         if (
           typeof rollResult === "number" &&
           typeof difficulty === "number" &&
@@ -2042,7 +1868,6 @@
             `         -> Defense Succeeded! (Roll ${rollResult} >= Atk ${difficulty})`
           );
         }
-
         const { html: rollLineHtml, plainText: rollLineText } =
           fBuildSidebarHTMLAndSimpleText(
             rollNum,
@@ -2052,8 +1877,7 @@
         monsterLogLinesHtml.push(rollLineHtml);
         monsterLogLinesText.push(rollLineText);
         if (isOverallFirstRoll) isOverallFirstRoll = false;
-      } // End inner roll loop
-
+      }
       fMyConsoleLog(
         `   --- Finished Defending Against: ${target.monName} (${target.numFailures} failures) ---`
       );
@@ -2064,14 +1888,11 @@
           numFailures: target.numFailures,
         });
       }
-    } // End monster target loop
-
-    // === 6. Finalize Log, Store Results, Add Button ===
+    }
     let finalLogHtml =
       initialLogHtml + "<br>" + monsterLogLinesHtml.join("<br>");
     let finalLogText = initialLogText + "\n" + monsterLogLinesText.join("\n");
     let rollId = null;
-
     if (currentDefenseResults.length > 0) {
       rollId = "prep_" + Date.now();
       gUI.monsterRollResultsHistory[rollId] = {
@@ -2090,21 +1911,23 @@
     } else {
       fMyConsoleLog("   -> No failures recorded, 'Prep AR' button not added.");
     }
-
     fMyConsoleLog("   -> Player Defense Logic Complete.");
-    return { logHtml: finalLogHtml, logText: finalLogText, success: true };
-  } // END fPerformPlayerDefenseRolls
+    return {
+      logHtml: finalLogHtml,
+      logText: finalLogText,
+      success: true,
+    };
+  } // End function fPerformPlayerDefenseRolls
 
-  // fPerformPlayerArmorRolls //////////////////////////////////////////////////////
-  // Purpose -> Handles 'AR' rolls against monsters. Uses 'MonDmg' for difficulty.
-  //            Calculates wounds to player, builds log lines (HTML & text), sums wounds,
-  //            adds "Apply Wounds" button. Falls back to standard roll if needed.
-  // Inputs  -> initialLogHtml (String): Pre-built HTML log header.
-  //         -> initialLogText (String): Pre-built Plain Text log header.
-  // Outputs -> (Promise<Object>): Resolves with { logHtml: String, logText: String, success: Boolean }.
+  /** function fPerformPlayerArmorRolls
+   * Purpose: Handles 'AR' rolls against monsters.
+   * Assumptions: Uses 'MonDmg' for difficulty, calculates wounds, and adds an "Apply Wounds" button.
+   * @param {string} initialLogHtml - Pre-built HTML log header.
+   * @param {string} initialLogText - Pre-built Plain Text log header.
+   * @returns {Promise<object>} An object with { logHtml, logText, success }.
+   */
   async function fPerformPlayerArmorRolls(initialLogHtml, initialLogText) {
     fMyConsoleLog("   -> Entering Player Armor Logic...");
-    // === 1. Get Monster Range & Validate ===
     const monsterRangeDef = gUI.range?.monsters;
     if (
       !monsterRangeDef ||
@@ -2114,10 +1937,12 @@
         "Monster range definition (gUI.range.monsters) missing/invalid.";
       console.warn(`fPerformPlayerArmorRolls: ${msg}`);
       await fShowMessage(`❌ Error: ${msg}`);
-      return { logHtml: "", logText: "", success: false };
+      return {
+        logHtml: "",
+        logText: "",
+        success: false,
+      };
     }
-
-    // === 2. Resolve Indices (Including MonDmg) ===
     const resolved = fConvertsR1C1R2C2TagOrNumToIndices(monsterRangeDef);
     if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
       const msg = `Could not resolve monster range tags: ${JSON.stringify(
@@ -2125,32 +1950,37 @@
       )}`;
       console.warn(`fPerformPlayerArmorRolls: ${msg}`);
       await fShowMessage(`❌ Error: ${msg}`);
-      return { logHtml: "", logText: "", success: false };
+      return {
+        logHtml: "",
+        logText: "",
+        success: false,
+      };
     }
     const rMin = Math.min(resolved.r1, resolved.r2);
     const rMax = Math.max(resolved.r1, resolved.r2);
     const cNumMon = fResolveCol("NumMon");
-    const cMonDmg = fResolveCol("MonDmg"); // Difficulty source for Armor
+    const cMonDmg = fResolveCol("MonDmg");
     const cMonName = fResolveCol("MonName");
     if ([cNumMon, cMonDmg, cMonName].some(isNaN)) {
       const msg =
         "Could not resolve required monster column tags (NumMon, MonDmg, MonName).";
       console.warn(`fPerformPlayerArmorRolls: ${msg}`);
       await fShowMessage(`❌ Error: ${msg}`);
-      return { logHtml: "", logText: "", success: false };
+      return {
+        logHtml: "",
+        logText: "",
+        success: false,
+      };
     }
     fMyConsoleLog(
       `      -> Monster Table Range: Rows ${rMin}-${rMax}, Cols Dmg:${cMonDmg}, Num:${cNumMon}, Name:${cMonName}`
     );
-
-    // === 3. Identify & Validate Targets (Using MonDmg) ===
     const monsterTargets = [];
     const firstMonsterRowIndex = rMin;
     for (let mon_R = rMin; mon_R <= rMax; mon_R++) {
       const isCustomRow = mon_R === firstMonsterRowIndex;
       const numMonRaw = gUI.arr?.[mon_R]?.[cNumMon];
       const numMon = parseInt(numMonRaw, 10);
-
       if (!isNaN(numMon) && numMon >= 1 && numMon <= 30) {
         fMyConsoleLog(`      -> Row ${mon_R}: Found valid NumMon: ${numMon}`);
         const monDmgRaw = gUI.arr?.[mon_R]?.[cMonDmg];
@@ -2163,13 +1993,21 @@
             errMsg = `❌ Invalid Monster Damage ('${monDmgRaw}') found for Custom Monster. Cannot complete armor roll.`;
           fMyConsoleLog(`         -> Validation Failed: ${errMsg}`);
           await fShowMessage(errMsg);
-          return { logHtml: "", logText: "", success: false }; // Halt
+          return {
+            logHtml: "",
+            logText: "",
+            success: false,
+          };
         }
-
         let originalMonName = String(gUI.arr?.[mon_R]?.[cMonName] || "").trim();
         let monName = originalMonName || `Row ${mon_R + 1}`;
         if (isCustomRow) monName = `Custom ${originalMonName}`.trim();
-        monsterTargets.push({ mon_R, numRolls: numMon, monName, monDmg });
+        monsterTargets.push({
+          mon_R,
+          numRolls: numMon,
+          monName,
+          monDmg,
+        });
         fMyConsoleLog(
           `         -> Valid Target Added: Name='${monName}', Dmg=${monDmg}, Rolls=${numMon}`
         );
@@ -2179,9 +2017,7 @@
             `      -> Row ${mon_R}: Skipping - Invalid NumMon value: '${numMonRaw}'`
           );
       }
-    } // End target identification loop
-
-    // === 4. Handle No Valid Targets (Fallback to Standard Roll) ===
+    }
     if (monsterTargets.length === 0) {
       fMyConsoleLog(
         "      -> No valid monster targets found (with MonDmg). Performing standard armor roll instead."
@@ -2195,10 +2031,12 @@
         initialLogHtml,
         initialLogText
       );
-      return { logHtml: finalLogHtml, logText: finalLogText, success: true };
+      return {
+        logHtml: finalLogHtml,
+        logText: finalLogText,
+        success: true,
+      };
     }
-
-    // === 5. Perform Rolls & Build Log ===
     fMyConsoleLog(
       `      -> Found ${monsterTargets.length} valid monster target(s) with Damage values.`
     );
@@ -2206,23 +2044,20 @@
     const monsterLogLinesHtml = [];
     const monsterLogLinesText = [];
     let totalWoundsOverall = 0;
-
     for (const target of monsterTargets) {
       fMyConsoleLog(
         `   --- Rolling Armor vs: ${target.monName} (Dmg: ${target.monDmg}, Rolls: ${target.numRolls}) ---`
       );
       let totalWoundsPerMonster = 0;
-
-      monsterLogLinesHtml.push("↓"); // HTML separator
-      monsterLogLinesText.push("↓"); // <<< USE '↓' for Plain Text Separator >>>
+      monsterLogLinesHtml.push("↓");
+      monsterLogLinesText.push("↓");
       monsterLogLinesHtml.push(
         `--- <span style="color: purple; font-weight: bold;">Mon: ${target.monName}</span> (Dmg: ${target.monDmg}) ---`
       );
       monsterLogLinesText.push(
         `--- Mon: ${target.monName} (Dmg: ${target.monDmg}) ---`
       );
-      gUI.roll.resDif = target.monDmg; // Set difficulty
-
+      gUI.roll.resDif = target.monDmg;
       for (let rollNum = 1; rollNum <= target.numRolls; rollNum++) {
         fMyConsoleLog(
           `      -> Armor Roll ${rollNum} of ${target.numRolls} against ${target.monName}...`
@@ -2230,7 +2065,6 @@
         fCalcGUIRollResSk();
         fCalcGUIRollRoll();
         fCalcGUIRollResRoll();
-
         const armorRollResult = gUI.roll.resRoll;
         const monsterDamage = gUI.roll.resDif;
         let woundsDealt = 0;
@@ -2253,7 +2087,6 @@
         }
         totalWoundsPerMonster += woundsDealt;
         totalWoundsOverall += woundsDealt;
-
         const { html: rollLineHtml, plainText: rollLineText } =
           fBuildSidebarHTMLAndSimpleText(
             rollNum,
@@ -2263,8 +2096,7 @@
         monsterLogLinesHtml.push(rollLineHtml);
         monsterLogLinesText.push(rollLineText);
         if (isOverallFirstRoll) isOverallFirstRoll = false;
-      } // End inner roll loop
-
+      }
       monsterLogLinesHtml.push(
         `<span style="font-weight:bold;">${target.monName} Wounds to PC = ${totalWoundsPerMonster}</span>`
       );
@@ -2274,270 +2106,215 @@
       fMyConsoleLog(
         `   --- Finished Rolling vs: ${target.monName} (Wounds This Monster: ${totalWoundsPerMonster}) ---`
       );
-    } // End monster target loop
-
-    // === 6. Add Overall Wound Summation & Button ===
-    monsterLogLinesHtml.push("↓"); // HTML separator
-    monsterLogLinesText.push("↓"); // <<< USE '↓' for Plain Text Separator >>>
+    }
+    monsterLogLinesHtml.push("↓");
+    monsterLogLinesText.push("↓");
     const positiveWoundAmount = Math.abs(totalWoundsOverall);
     monsterLogLinesHtml.push(
       `<span class="red-bold">Total Wounds to PC = ${totalWoundsOverall}</span> <button class="apply-wounds-btn" data-wound-amount="${positiveWoundAmount}">Apply</button>`
     );
-    monsterLogLinesText.push(`Total Wounds to PC = ${totalWoundsOverall}`); // Plain text version
+    monsterLogLinesText.push(`Total Wounds to PC = ${totalWoundsOverall}`);
     fMyConsoleLog(
       `      -> Overall Wounds Inflicted on PC: ${totalWoundsOverall} (Button amount: ${positiveWoundAmount})`
     );
-
-    // === 7. Return Result ===
     const finalLogHtml =
       initialLogHtml + "<br>" + monsterLogLinesHtml.join("<br>");
     const finalLogText = initialLogText + "\n" + monsterLogLinesText.join("\n");
     fMyConsoleLog("   -> Player Armor Logic Complete.");
-    return { logHtml: finalLogHtml, logText: finalLogText, success: true };
-  } // END fPerformPlayerArmorRolls
+    return {
+      logHtml: finalLogHtml,
+      logText: finalLogText,
+      success: true,
+    };
+  } // End function fPerformPlayerArmorRolls
 
-  // fCalcGUIRollResSk ///////////////////////////////////////////////////////////////
-  // Purpose -> Calculates the final resulting skill value (gUI.roll.resSk) before the
-  //            die roll, applying various morph modifiers (Combine, Mult, dctMult, Plus,
-  //            Focus bonus, UnSk penalty) to the base skill value (gUI.roll.skSk or
-  //            gUI.roll.resFlatBase). Clamps results >= 1, rounds, stores in gUI.roll.resSk.
-  // Inputs  -> None (Reads from gUI.roll properties).
-  // Outputs -> None (Writes final calculated value to gUI.roll.resSk).
+  /** function fCalcGUIRollResSk
+   * Purpose: Calculates the final resulting skill value before the die roll.
+   * Assumptions: Applies morphs to the base skill value.
+   * @param {} - No parameters.
+   * @returns {void}
+   */
   function fCalcGUIRollResSk() {
-    let currentResSk; // Variable to hold intermediate calculation
-
-    // === Determine Base Skill Value ===
-    // Prioritize resCombine (calculated from number morphs + skSk), then skSk (potentially from =N morph)
+    let currentResSk;
     if (typeof gUI.roll.resCombine === "number" && gUI.roll.resCombine !== "") {
       currentResSk = gUI.roll.resCombine;
-      // fMyConsoleLog("   -> Using resCombine as base for resSk calculation.");
     } else if (typeof gUI.roll.skSk === "number" && gUI.roll.skSk !== "") {
       currentResSk = gUI.roll.skSk;
     } else {
-      currentResSk = NaN; // No valid base skill found
+      currentResSk = NaN;
     }
-
-    // === Apply Modifiers (only if base is valid number) ===
     if (!isNaN(currentResSk)) {
-      // 1. Apply Multiplicative Modifiers first
-      // Apply resMult (* / /N morphs)
       if (typeof gUI.roll.resMult === "number" && gUI.roll.resMult !== "") {
         currentResSk *= gUI.roll.resMult;
       }
-      // Apply resdctMult (+/-Nd/c/t morphs)
       if (
         typeof gUI.roll.resdctMult === "number" &&
         gUI.roll.resdctMult !== ""
       ) {
         currentResSk *= gUI.roll.resdctMult;
       }
-
-      // 2. Apply Additive Modifiers
-      // Apply resPlus (+/-N morphs)
       if (typeof gUI.roll.resPlus === "number" && gUI.roll.resPlus !== "") {
         currentResSk += gUI.roll.resPlus;
       }
-      // Apply Focus bonus (based on resFocus tag 'R'...'B')
       const focusTag = gUI.roll.resFocus;
       if (focusTag && typeof focusTag === "string" && gUI.list?.metaColor) {
         const focusIndex = gUI.list.metaColor.indexOf(focusTag.toUpperCase());
         if (focusIndex > -1) {
-          // Check if tag was found
-          const focusBonus = 5 * (1 + focusIndex); // R=5, O=10, Y=15, G=20, B=25
+          const focusBonus = 5 * (1 + focusIndex);
           currentResSk += focusBonus;
           fMyConsoleLog(
             `      -> Applying Focus Bonus: +${focusBonus} (Tag: ${focusTag}, Index: ${focusIndex})`
           );
         }
       }
-
-      // 3. Apply Unskilled Penalty (if applicable)
-      // Halves the skill value AFTER other modifiers
       if (gUI.roll.isUnSk === true) {
         currentResSk *= 0.5;
       }
-
-      // 4. Final Clamping & Rounding
-      // Clamp tiny positive values to 1 (minimum skill value)
       if (currentResSk > 0 && currentResSk < 1) {
         currentResSk = 1;
       }
-      // Assign final value: round if >= 1, otherwise set to empty string
       if (currentResSk >= 1) {
-        // Check >= 1 (implicitly checks !isNaN too)
         gUI.roll.resSk = Math.round(currentResSk);
       } else {
-        gUI.roll.resSk = ""; // Invalid result (e.g., negative, NaN, < 1) becomes empty
+        gUI.roll.resSk = "";
       }
     } else {
-      // If base skill was invalid, resulting skill is empty
       gUI.roll.resSk = "";
     }
-
     fMyConsoleLog(`⚙️ Calculated final resSk: ${gUI.roll.resSk}`);
-  } // END fCalcGUIRollResSk
+  } // End function fCalcGUIRollResSk
 
-  // fCalcGUIRollRoll ////////////////////////////////////////////////////////////////
-  // Purpose -> Calculates the initial "raw" die roll result (stored in gUI.roll.roll)
-  //            based on the calculated resulting skill (gUI.roll.resSk) and the final
-  //            roll type (gUI.roll.resTyp). Calls the appropriate dice rolling function
-  //            (fSkRoll, fAtkRoll, fDefRoll, etc.).
-  // Inputs  -> None (Reads gUI.roll.resSk, gUI.roll.resTyp).
-  // Outputs -> None (Writes the raw roll result to gUI.roll.roll).
+  /** function fCalcGUIRollRoll
+   * Purpose: Calculates the initial "raw" die roll based on the resulting skill and type.
+   * Assumptions: Calls the appropriate dice rolling utility (e.g., fSkRoll, fAtkRoll).
+   * @param {} - No parameters.
+   * @returns {void}
+   */
   function fCalcGUIRollRoll() {
-    const resSkValue = gUI.roll.resSk; // The calculated skill value to roll against
+    const resSkValue = gUI.roll.resSk;
     const resTypValue =
       typeof gUI.roll.resTyp === "string"
         ? gUI.roll.resTyp.trim().toLowerCase()
-        : ""; // Final roll type
-
-    // === Validate Skill Value ===
-    // Must have a valid skill value (number >= 1) to perform a roll
+        : "";
     if (typeof resSkValue !== "number" || resSkValue < 1) {
-      gUI.roll.roll = ""; // Set roll to empty if no valid skill
+      gUI.roll.roll = "";
       fMyConsoleLog(
         `ℹ️ Cannot calculate roll: Invalid resSk value (${resSkValue}).`
       );
       return;
     }
-
-    // === Select Roll Function Based on Type ===
     switch (resTypValue) {
-      case "": // No type defined
+      case "":
         gUI.roll.roll = "";
         break;
-      case "tc": // tremendous/crit roll
-      case "sk": // Standard Skill
-      case "atr": // Attribute
-      case "str": // Strength (currently uses Sk roll)
+      case "tc":
+      case "sk":
+      case "atr":
+      case "str":
         gUI.roll.roll = fSkRoll(resSkValue);
         break;
-      case "atk": // Attack
+      case "atk":
         gUI.roll.roll = fAtkRoll(resSkValue);
         break;
-      case "dmg": // Damage
+      case "dmg":
         gUI.roll.roll = fDmgRoll(resSkValue);
         break;
-      case "def": // Defense
+      case "def":
         gUI.roll.roll = fDefRoll(resSkValue);
         break;
-      case "ar": // Armor (can return decimal)
+      case "ar":
         gUI.roll.roll = fARRoll(resSkValue);
         break;
-      case "un": // Unskilled (should ideally be handled by resSk calc)
+      case "un":
       case "unsk":
         console.warn(
           `fCalcGUIRollRoll: Roll type '${resTypValue}' used directly. Check morph logic.`
         );
-        gUI.roll.roll = fSkRoll(resSkValue); // Fallback to Sk roll
+        gUI.roll.roll = fSkRoll(resSkValue);
         break;
-      default: // Unknown type
+      default:
         console.warn(
           `fCalcGUIRollRoll: Unknown resTyp '${resTypValue}'. Cannot calculate roll.`
         );
         gUI.roll.roll = "";
         break;
     }
-
     fMyConsoleLog(`⚙️ Calculated roll (${resTypValue}): ${gUI.roll.roll}`);
-  } // END fCalcGUIRollRoll
+  } // End function fCalcGUIRollRoll
 
-  // fCalcGUIRollResRoll /////////////////////////////////////////////////////////////
-  // Purpose -> Calculates the *final* roll result (gUI.roll.resRoll) after applying
-  //            any applicable roll modifiers (resMultMult, resPlusPlus, resdctMult)
-  //            or overrides (resFlatResult) to the initial raw roll (gUI.roll.roll).
-  //            Handles rounding appropriately (AR allows decimals). Clamps result >= 0.
-  // Inputs  -> None (Reads gUI.roll properties).
-  // Outputs -> None (Writes final calculated value to gUI.roll.resRoll).
+  /** function fCalcGUIRollResRoll
+   * Purpose: Calculates the final roll result after applying all roll modifiers and overrides.
+   * Assumptions: gUI.roll is populated with the initial roll and any modifiers.
+   * @param {} - No parameters.
+   * @returns {void}
+   */
   function fCalcGUIRollResRoll() {
-    // === 1. Check for Flat Result Override (==N) ===
-    // This takes precedence over all other modifiers.
     const flatResult = gUI.roll.resFlatResult;
     if (typeof flatResult === "number" && flatResult !== "") {
       const isArType = (gUI.roll.resTyp || "").toLowerCase() === "ar";
-      // Round override appropriately (AR keeps 2 decimals)
       const roundedFlatResult = isArType
         ? Number(flatResult.toFixed(2))
         : Math.round(flatResult);
-      // Apply override, ensuring minimum of 0
       gUI.roll.resRoll = Math.max(0, roundedFlatResult);
       fMyConsoleLog(
         `⚙️ Calculated resRoll (OVERRIDE ==${flatResult}, ${
           isArType ? "AR-rounded" : "INT-rounded"
         }): ${gUI.roll.resRoll}`
       );
-      return; // Exit early
+      return;
     }
-
-    // === 2. Validate Base Roll Value ===
-    const initialRoll = gUI.roll.roll; // Get the raw roll calculated by fCalcGUIRollRoll
-    // Check if the raw roll is a valid number
+    const initialRoll = gUI.roll.roll;
     if (
       typeof initialRoll !== "number" ||
       initialRoll === "" ||
       isNaN(initialRoll)
     ) {
-      gUI.roll.resRoll = ""; // Cannot calculate final roll without valid base roll
+      gUI.roll.resRoll = "";
       fMyConsoleLog(
         `ℹ️ Cannot calculate resRoll: Invalid initial roll value (${initialRoll}).`
       );
       return;
     }
-
-    // === 3. Apply Roll Modifiers ===
-    let currentResRoll = initialRoll; // Start with the raw roll
-
-    // Apply resMultMult (** // //N morphs)
+    let currentResRoll = initialRoll;
     if (
       typeof gUI.roll.resMultMult === "number" &&
       gUI.roll.resMultMult !== ""
     ) {
       currentResRoll *= gUI.roll.resMultMult;
     }
-    // Apply resdctMult (+/-Nd/c/t morphs)
     if (typeof gUI.roll.resdctMult === "number" && gUI.roll.resdctMult !== "") {
       currentResRoll *= gUI.roll.resdctMult;
     }
-    // Apply resPlusPlus (++ / --N morphs)
     if (
       typeof gUI.roll.resPlusPlus === "number" &&
       gUI.roll.resPlusPlus !== ""
     ) {
       currentResRoll += gUI.roll.resPlusPlus;
     }
-
-    // === 4. Final Rounding, Clamping, and Assignment ===
     if (!isNaN(currentResRoll)) {
-      // Check if result is still a valid number
       const isArType = (gUI.roll.resTyp || "").toLowerCase() === "ar";
-      // Round AR to 2 decimal places, others to integer
       const roundedResRoll = isArType
         ? Number(currentResRoll.toFixed(2))
         : Math.round(currentResRoll);
-      // Assign final result, clamped at minimum 0
       gUI.roll.resRoll = Math.max(0, roundedResRoll);
     } else {
-      // If calculation resulted in NaN, set final result to empty
       gUI.roll.resRoll = "";
       console.warn(
         "fCalcGUIRollResRoll: Roll modifier calculation resulted in NaN."
       );
     }
-
     fMyConsoleLog(`⚙️ Calculated final resRoll: ${gUI.roll.resRoll}`);
-  } // END fCalcGUIRollResRoll
+  } // End function fCalcGUIRollResRoll
 
-  // fBuildSidebarHTMLAndSimpleText ///////////////////////////////////////////////////////////////
-  // Purpose -> Constructs formatted HTML and plain text log lines for a *single roll*
-  //            result based on the current state of gUI.roll. Handles different roll
-  //            types, multi-roll prefixes, T/C results, skill/roll values, difficulty,
-  //            and success/failure/wound results. Calls fNishTorCText if appropriate.
-  // Inputs  -> rollNum (Number): Current roll number in a multi-roll sequence (e.g., 1).
-  //         -> totalRolls (Number): Total number of rolls in the sequence (e.g., 3).
-  //         -> isFirstRoll (Boolean): True if this is the first roll (for T/C).
-  // Outputs -> (Object): { html: String, plainText: String } containing the formatted lines.
+  /** function fBuildSidebarHTMLAndSimpleText
+   * Purpose: Constructs the formatted HTML and plain text log lines for a single roll result.
+   * Assumptions: gUI.roll contains the data for the current roll.
+   * @param {number} rollNum - Current roll number in a multi-roll sequence.
+   * @param {number} totalRolls - Total number of rolls in the sequence.
+   * @param {boolean} isFirstRoll - True if this is the first roll (for T/C calculation).
+   * @returns {object} An object with { html: string, plainText: string }.
+   */
   function fBuildSidebarHTMLAndSimpleText(rollNum, totalRolls, isFirstRoll) {
-    // === Get Data from gUI.roll ===
     const resTyp = (gUI.roll.resTyp || "").trim();
     const resTypLower = resTyp.toLowerCase();
     const skSk = gUI.roll.skSk;
@@ -2548,12 +2325,8 @@
     const hasDifficulty =
       (typeof dif === "number" || (typeof dif === "string" && dif !== "")) &&
       dif != null;
-
-    // === Build Log Components (HTML and Plain Text simultaneously) ===
     let htmlLine = "";
     let textLine = "";
-
-    // 1. Base String: Type(Sk->ResSk)
     let htmlBase = resTyp;
     let textBase = resTyp;
     if (typeof skSk === "number" && skSk !== "") {
@@ -2565,8 +2338,6 @@
       htmlBase += `(${resSk})`;
       textBase += `(${resSk})`;
     }
-
-    // 2. Roll Result String: ~Roll->ResRoll (unless AR vs Dmg)
     let htmlRollResult = "";
     let textRollResult = "";
     if (!(resTypLower === "ar" && hasDifficulty)) {
@@ -2591,8 +2362,6 @@
         textRollResult += ` ~${resRollStr}`;
       }
     }
-
-    // 3. Difficulty Indicator
     let htmlDifIndicator = "";
     let textDifIndicator = "";
     if (hasDifficulty) {
@@ -2609,24 +2378,19 @@
         textDifIndicator = ` ^${difStr}`;
       }
     }
-
-    // 4. Success/Failure/Wound Delta
     let htmlSuccessDelta = "";
     let textSuccessDelta = "";
     if (hasDifficulty && typeof resRoll === "number") {
       let wounds;
       if (resTypLower === "ar") {
-        // Calculate AR Wounds
         wounds = resRoll !== 0 ? Math.min(0, Math.round(-(dif / resRoll))) : 0;
         htmlSuccessDelta = ` = ${wounds} Wnds`;
         textSuccessDelta = ` = ${wounds} Wnds`;
       } else if (resTypLower === "dmg") {
-        // Calculate DMG Wounds
         wounds = dif !== 0 ? Math.max(0, Math.round(resRoll / dif)) : 0;
         htmlSuccessDelta = ` = +${wounds} Wounds`;
         textSuccessDelta = ` = +${wounds} Wounds`;
       } else {
-        // Standard Success/Failure Check
         const delta = resRoll - dif;
         if (delta >= 0) {
           htmlSuccessDelta = ` =+${delta} ✅`;
@@ -2637,76 +2401,52 @@
         }
       }
     }
-
-    // === Combine Components ===
     htmlLine =
       `${htmlBase}${htmlRollResult}${htmlDifIndicator}${htmlSuccessDelta}`.trim();
     textLine =
       `${textBase}${textRollResult}${textDifIndicator}${textSuccessDelta}`.trim();
-
-    // === Add T/C Result (First Roll Only) ===
-    const tc = isFirstRoll ? fTC() : ""; // Determine T/C result
-    const tcText = tc ? (tc.includes("red-bold") ? " C" : " T") : ""; // Plain text version
+    const tc = isFirstRoll ? fTC() : "";
+    const tcText = tc ? (tc.includes("red-bold") ? " C" : " T") : "";
     if (tc) {
       htmlLine += `   ${tc}`;
-      textLine += ` ${tcText}`; // Append plain text T/C
+      textLine += ` ${tcText}`;
     }
-
-    // === ADDED: Call Nish T/C Text Function ===
     if (gUI.roll.isNish && tc !== "") {
-      // Only call if it's a Nish roll AND T/C occurred
-      const tOrCParam = tc.includes("red-bold") ? "c" : "t"; // Determine parameter
+      const tOrCParam = tc.includes("red-bold") ? "c" : "t";
       fMyConsoleLog(
         `   -> Nish roll T/C detected. Calling fNishTorCText('${tOrCParam}')...`
       );
-      fNishTorCText(tOrCParam); // Call the function (async, but don't await)
+      fNishTorCText(tOrCParam);
     }
-    // === END ADDED ===
-
-    // === Add Multi-Roll Prefix ===
     let htmlPrefix = "";
     let textPrefix = "";
     if (totalRolls > 1) {
       htmlPrefix = `<span class="roll-prefix">${rollNum}></span> `;
       textPrefix = `${rollNum}> `;
     }
-
-    // Return object with both versions
     return {
       html: `${htmlPrefix}${htmlLine}`,
       plainText: `${textPrefix}${textLine}`,
     };
-  } // END fBuildSidebarHTMLAndSimpleText
+  } // End function fBuildSidebarHTMLAndSimpleText
 
-  // ==========================================================================
-  // === Post-Combat Preparation Handlers ===
-  // ==========================================================================
-
-  // fHandlePrepARClick ////////////////////////////////////////////////////////////
-  // Purpose -> Handles clicks on the "Prep AR" button in the sidebar. Reads defense
-  //            failure data from gUI.monsterRollResultsHistory using the button's
-  //            rollId. Updates 'NumMon' for ALL originally targeted monsters (setting
-  //            to failure count or '' if 0). Switches the active checkbox from Sk1 (Def)
-  //            to Sk2 (AR) on the original ability row. Disables button and cleans up history.
-  // Inputs  -> event (MouseEvent): The click event object.
-  // Outputs -> None (Modifies grid data/DOM, gUI state, button state).
+  /** function fHandlePrepARClick
+   * Purpose: Handles clicks on the "Prep AR" button in the sidebar.
+   * Assumptions: Sets up the monster grid for an Armor (AR) roll based on defense failures.
+   * @param {MouseEvent} event - The click event object.
+   * @returns {void}
+   */
   async function fHandlePrepARClick(event) {
     const button = event.target;
-
-    // === 1. Validate Button & State ===
     if (!button || !button.classList.contains("prep-ar-btn")) {
-      return; // Exit if not the correct button
+      return;
     }
     fMyConsoleLog(`🖱️ Sidebar 'Prep AR' Button Clicked...`);
-
-    // Prevent double-clicks
     if (button.disabled) {
       fMyConsoleLog("   -> Button already disabled. Ignoring click.");
       return;
     }
-    button.disabled = true; // Disable immediately
-
-    // === 2. Get Roll ID & Associated Data ===
+    button.disabled = true;
     const rollId = button.dataset.rollId;
     if (!rollId) {
       console.error(
@@ -2717,9 +2457,7 @@
       button.textContent = "Error (No ID)";
       return;
     }
-
     const rollData = gUI.monsterRollResultsHistory?.[rollId];
-    // Validate required data structure
     if (
       !rollData ||
       !Array.isArray(rollData.results) ||
@@ -2739,17 +2477,12 @@
       button.textContent = "Error (No Data)";
       return;
     }
-
-    const failureResults = rollData.results; // Array of { mon_R, monName, numFailures } (only includes failures > 0)
-    const originalAbilityRow = rollData.originalAbilityRow; // Row index of the Def ability used
-    const allTargetedRows_R = rollData.allTargetedRows_R; // Array of all monster rows involved
-
-    // === 3. Update NumMon for All Targeted Monsters ===
+    const failureResults = rollData.results;
+    const originalAbilityRow = rollData.originalAbilityRow;
+    const allTargetedRows_R = rollData.allTargetedRows_R;
     const cNumMon = fResolveCol("NumMon");
     let updateErrors = false;
-
     if (isNaN(cNumMon)) {
-      // Ensure 'NumMon' column resolved
       console.error(
         "fHandlePrepARClick: Could not resolve 'NumMon' column tag."
       );
@@ -2757,53 +2490,37 @@
       await fShowMessage(
         "Error: Could not find the 'NumMon' column in the grid."
       );
-      button.textContent = "Error"; // Keep button disabled but indicate error
-      // Note: History entry remains here on error
+      button.textContent = "Error";
       return;
     }
-
-    // Create a map for quick lookup of failure counts
     const failureMap = new Map();
     failureResults.forEach((res) => failureMap.set(res.mon_R, res.numFailures));
-
     fMyConsoleLog(
       `   -> Processing ${allTargetedRows_R.length} targeted monster rows for Row ${originalAbilityRow}...`
     );
-    // Iterate through ALL originally targeted rows
     allTargetedRows_R.forEach((target_mon_R) => {
-      // Get failure count from map (undefined if 0 failures)
       const numFailures = failureMap.get(target_mon_R);
-      // Set NumMon to the failure count, or empty string if undefined/zero
       const valueToSet =
         numFailures !== undefined && numFailures > 0 ? numFailures : "";
-
       fMyConsoleLog(
         `      -> Setting NumMon for row ${target_mon_R} to '${valueToSet}'`
       );
-      // Update the grid cell
       if (!fSetGridValue(target_mon_R, cNumMon, valueToSet)) {
         fMyConsoleLog(
           `         -> ⚠️ Failed to set NumMon for row ${target_mon_R}`
         );
-        updateErrors = true; // Track if any update fails
+        updateErrors = true;
       }
     });
-
     if (updateErrors) {
-      // Notify user if any grid updates failed
       await fShowMessage(
         "Warning: Some 'NumMon' values may not have updated correctly."
       );
     }
-
-    // === 4. Switch Active Checkbox from Sk1 (Def) to Sk2 (AR) ===
-    const originalSk1ColTag = "Sk1ChkBox"; // Assume Defense is Sk1
-    const targetSk2ColTag = "Sk2ChkBox"; // Assume Armor is Sk2
-
+    const originalSk1ColTag = "Sk1ChkBox";
+    const targetSk2ColTag = "Sk2ChkBox";
     const originalSk1Col = fResolveCol(originalSk1ColTag);
     const targetSk2Col = fResolveCol(targetSk2ColTag);
-
-    // Validate column resolution
     if (isNaN(originalSk1Col) || isNaN(targetSk2Col)) {
       const missingTag = isNaN(originalSk1Col)
         ? originalSk1ColTag
@@ -2816,44 +2533,38 @@
           isNaN(originalSk1Col) ? "Defense (Sk1)" : "Armor (Sk2)"
         } column.`
       );
-      button.textContent = "Done (CB Fail)"; // Update button text to indicate partial failure
-      // Note: History entry remains here on error
+      button.textContent = "Done (CB Fail)";
       return;
     }
-
-    // --- Perform the Switch ---
-    // a) Uncheck old Sk1 box (if needed)
     const oldCellDiv = gUI.grid2D?.[originalAbilityRow]?.[originalSk1Col];
     const oldCheckbox = oldCellDiv?.querySelector('input[type="checkbox"]');
     if (oldCheckbox && oldCheckbox.checked) {
       oldCheckbox.checked = false;
-      gUI.arr[originalAbilityRow][originalSk1Col] = false; // Update data model
+      gUI.arr[originalAbilityRow][originalSk1Col] = false;
       fMyConsoleLog(
         `   -> Unchecked original Sk1 checkbox [${originalAbilityRow}, ${originalSk1Col}]`
       );
-      // Clear tracker if it pointed to the old box
       if (
         gUI.currentSkRadioChecked.r === originalAbilityRow &&
         gUI.currentSkRadioChecked.c === originalSk1Col
       ) {
-        gUI.currentSkRadioChecked = { r: null, c: null };
+        gUI.currentSkRadioChecked = {
+          r: null,
+          c: null,
+        };
       }
     } else {
       fMyConsoleLog(
         `   -> Original Sk1 checkbox [${originalAbilityRow}, ${originalSk1Col}] not found or already unchecked.`
       );
     }
-
-    // b) Check new Sk2 box
     const targetCellDiv = gUI.grid2D?.[originalAbilityRow]?.[targetSk2Col];
     const targetCheckbox = targetCellDiv?.querySelector(
       'input[type="checkbox"]'
     );
     if (targetCheckbox) {
       targetCheckbox.checked = true;
-      gUI.arr[originalAbilityRow][targetSk2Col] = true; // Update data model
-      // c) Update tracker to point to the new Sk2 box
-      // (Includes unchecking any *other* box that might have been checked)
+      gUI.arr[originalAbilityRow][targetSk2Col] = true;
       const { r: currentlyCheckedR, c: currentlyCheckedC } =
         gUI.currentSkRadioChecked;
       if (
@@ -2864,13 +2575,15 @@
       ) {
         fUncheckOldSkGroupBox(currentlyCheckedR, currentlyCheckedC);
       }
-      gUI.currentSkRadioChecked = { r: originalAbilityRow, c: targetSk2Col };
+      gUI.currentSkRadioChecked = {
+        r: originalAbilityRow,
+        c: targetSk2Col,
+      };
       fMyConsoleLog(
         `   -> Switched active checkbox to Sk2 at [${originalAbilityRow}, ${targetSk2Col}].`
       );
-      button.textContent = "AR Prep Done"; // Update button text on success
+      button.textContent = "AR Prep Done";
     } else {
-      // Handle error finding the target Sk2 checkbox
       console.error(
         `fHandlePrepARClick: Could not find Sk2 checkbox element at [${originalAbilityRow}, ${targetSk2Col}].`
       );
@@ -2880,17 +2593,14 @@
       await fShowMessage(
         `Error: Could not find the target Armor checkbox element.`
       );
-      gUI.currentSkRadioChecked = { r: null, c: null }; // Clear tracker
+      gUI.currentSkRadioChecked = {
+        r: null,
+        c: null,
+      };
       button.textContent = "Done (CB Fail)";
-      // Note: History entry remains here on error
       return;
     }
-
-    // Post text to Firestore
     fHandleAutoSaveTextToFirestore();
-
-    // === 5. Clean up History ===
-    // Remove the processed entry from the history map
     try {
       delete gUI.monsterRollResultsHistory[rollId];
       fMyConsoleLog(`   -> Removed entry for rollId '${rollId}' from history.`);
@@ -2900,35 +2610,26 @@
         e
       );
     }
-
     fMyConsoleLog("✅ Prep AR action completed.");
-  } // END fHandlePrepARClick
+  } // End function fHandlePrepARClick
 
-  // fHandlePrepDmgClick ///////////////////////////////////////////////////////////
-  // Purpose -> Handles clicks on the "Prep Dmg" button in the sidebar. Reads attack
-  //            success data from gUI.monsterRollResultsHistory using the button's
-  //            rollId. Updates 'NumMon' for ALL originally targeted monsters (setting
-  //            to success count or '' if 0). Switches the active checkbox from Sk1 (Atk)
-  //            to Sk2 (Dmg) on the original ability row. Disables button and cleans up history.
-  // Inputs  -> event (MouseEvent): The click event object.
-  // Outputs -> None (Modifies grid data/DOM, gUI state, button state).
+  /** function fHandlePrepDmgClick
+   * Purpose: Handles clicks on the "Prep Dmg" button in the sidebar.
+   * Assumptions: Sets up the monster grid for a Damage (Dmg) roll based on attack successes.
+   * @param {MouseEvent} event - The click event object.
+   * @returns {void}
+   */
   async function fHandlePrepDmgClick(event) {
     const button = event.target;
-
-    // === 1. Validate Button & State ===
     if (!button || !button.classList.contains("prep-dmg-btn")) {
-      return; // Exit if not the correct button
+      return;
     }
     fMyConsoleLog(`🖱️ Sidebar 'Prep Dmg' Button Clicked...`);
-
-    // Prevent double-clicks
     if (button.disabled) {
       fMyConsoleLog("   -> Button already disabled. Ignoring click.");
       return;
     }
-    button.disabled = true; // Disable immediately
-
-    // === 2. Get Roll ID & Associated Data ===
+    button.disabled = true;
     const rollId = button.dataset.rollId;
     if (!rollId) {
       console.error(
@@ -2939,7 +2640,6 @@
       button.textContent = "Error (No ID)";
       return;
     }
-
     fMyConsoleLog(
       `   -> Handling click for rollId '${rollId}'. Available history keys: ${Object.keys(
         gUI.monsterRollResultsHistory || {}
@@ -2949,8 +2649,6 @@
     fMyConsoleLog(
       `   -> Retrieved rollData for ID '${rollId}': ${JSON.stringify(rollData)}`
     );
-
-    // Validate required data structure
     if (
       !rollData ||
       !Array.isArray(rollData.results) ||
@@ -2970,17 +2668,12 @@
       button.textContent = "Error (No Data)";
       return;
     }
-
-    const successResults = rollData.results; // Array of { mon_R, monName, numSuccesses } (only successes > 0)
-    const originalAbilityRow = rollData.originalAbilityRow; // Row index of the Atk ability used
-    const allTargetedRows_R = rollData.allTargetedRows_R; // Array of all monster rows involved
-
-    // === 3. Update NumMon for All Targeted Monsters ===
+    const successResults = rollData.results;
+    const originalAbilityRow = rollData.originalAbilityRow;
+    const allTargetedRows_R = rollData.allTargetedRows_R;
     const cNumMon = fResolveCol("NumMon");
     let updateErrors = false;
-
     if (isNaN(cNumMon)) {
-      // Ensure 'NumMon' column resolved
       console.error(
         "fHandlePrepDmgClick: Could not resolve 'NumMon' column tag."
       );
@@ -2988,55 +2681,39 @@
       await fShowMessage(
         "Error: Could not find the 'NumMon' column in the grid."
       );
-      button.textContent = "Error"; // Keep button disabled but indicate error
-      // Note: History entry remains here on error
+      button.textContent = "Error";
       return;
     }
-
-    // Create a map for quick lookup of success counts
     const successMap = new Map();
     successResults.forEach((res) =>
       successMap.set(res.mon_R, res.numSuccesses)
     );
-
     fMyConsoleLog(
       `   -> Processing ${allTargetedRows_R.length} targeted monster rows for Row ${originalAbilityRow}...`
     );
-    // Iterate through ALL originally targeted rows
     allTargetedRows_R.forEach((target_mon_R) => {
-      // Get success count from map (undefined if 0 successes)
       const numSuccesses = successMap.get(target_mon_R);
-      // Set NumMon to the success count, or empty string if undefined/zero
       const valueToSet =
         numSuccesses !== undefined && numSuccesses > 0 ? numSuccesses : "";
-
       fMyConsoleLog(
         `       -> Processing target row ${target_mon_R}. Successes from map: ${numSuccesses}. Value to set: '${valueToSet}'`
       );
-      // Update the grid cell
       if (!fSetGridValue(target_mon_R, cNumMon, valueToSet)) {
         fMyConsoleLog(
           `         -> ⚠️ Failed to set NumMon for row ${target_mon_R}`
         );
-        updateErrors = true; // Track if any update fails
+        updateErrors = true;
       }
     });
-
     if (updateErrors) {
-      // Notify user if any grid updates failed
       await fShowMessage(
         "Warning: Some 'NumMon' values may not have updated correctly."
       );
     }
-
-    // === 4. Switch Active Checkbox from Sk1 (Atk) to Sk2 (Dmg) ===
-    const originalSk1ColTag = "Sk1ChkBox"; // Assume Attack is Sk1
-    const targetSk2ColTag = "Sk2ChkBox"; // Assume Damage is Sk2
-
+    const originalSk1ColTag = "Sk1ChkBox";
+    const targetSk2ColTag = "Sk2ChkBox";
     const originalSk1Col = fResolveCol(originalSk1ColTag);
     const targetSk2Col = fResolveCol(targetSk2ColTag);
-
-    // Validate column resolution
     if (isNaN(originalSk1Col) || isNaN(targetSk2Col)) {
       const missingTag = isNaN(originalSk1Col)
         ? originalSk1ColTag
@@ -3049,43 +2726,38 @@
           isNaN(originalSk1Col) ? "Attack (Sk1)" : "Damage (Sk2)"
         } column.`
       );
-      button.textContent = "Done (CB Fail)"; // Update button text to indicate partial failure
-      // Note: History entry remains here on error
+      button.textContent = "Done (CB Fail)";
       return;
     }
-
-    // --- Perform the Switch ---
-    // a) Uncheck old Sk1 box (if needed)
     const oldCellDiv = gUI.grid2D?.[originalAbilityRow]?.[originalSk1Col];
     const oldCheckbox = oldCellDiv?.querySelector('input[type="checkbox"]');
     if (oldCheckbox && oldCheckbox.checked) {
       oldCheckbox.checked = false;
-      gUI.arr[originalAbilityRow][originalSk1Col] = false; // Update data model
+      gUI.arr[originalAbilityRow][originalSk1Col] = false;
       fMyConsoleLog(
         `   -> Unchecked original Sk1 checkbox [${originalAbilityRow}, ${originalSk1Col}]`
       );
-      // Clear tracker if it pointed to the old box
       if (
         gUI.currentSkRadioChecked.r === originalAbilityRow &&
         gUI.currentSkRadioChecked.c === originalSk1Col
       ) {
-        gUI.currentSkRadioChecked = { r: null, c: null };
+        gUI.currentSkRadioChecked = {
+          r: null,
+          c: null,
+        };
       }
     } else {
       fMyConsoleLog(
         `   -> Original Sk1 checkbox [${originalAbilityRow}, ${originalSk1Col}] not found or already unchecked.`
       );
     }
-
-    // b) Check new Sk2 box
     const targetCellDiv = gUI.grid2D?.[originalAbilityRow]?.[targetSk2Col];
     const targetCheckbox = targetCellDiv?.querySelector(
       'input[type="checkbox"]'
     );
     if (targetCheckbox) {
       targetCheckbox.checked = true;
-      gUI.arr[originalAbilityRow][targetSk2Col] = true; // Update data model
-      // c) Update tracker to point to the new Sk2 box
+      gUI.arr[originalAbilityRow][targetSk2Col] = true;
       const { r: currentlyCheckedR, c: currentlyCheckedC } =
         gUI.currentSkRadioChecked;
       if (
@@ -3096,13 +2768,15 @@
       ) {
         fUncheckOldSkGroupBox(currentlyCheckedR, currentlyCheckedC);
       }
-      gUI.currentSkRadioChecked = { r: originalAbilityRow, c: targetSk2Col };
+      gUI.currentSkRadioChecked = {
+        r: originalAbilityRow,
+        c: targetSk2Col,
+      };
       fMyConsoleLog(
         `   -> Switched active checkbox to Sk2 at [${originalAbilityRow}, ${targetSk2Col}].`
       );
-      button.textContent = "Dmg Prep Done"; // Update button text on success
+      button.textContent = "Dmg Prep Done";
     } else {
-      // Handle error finding the target Sk2 checkbox
       console.error(
         `fHandlePrepDmgClick: Could not find Sk2 checkbox element at [${originalAbilityRow}, ${targetSk2Col}].`
       );
@@ -3112,17 +2786,14 @@
       await fShowMessage(
         `Error: Could not find the target Damage checkbox element.`
       );
-      gUI.currentSkRadioChecked = { r: null, c: null }; // Clear tracker
+      gUI.currentSkRadioChecked = {
+        r: null,
+        c: null,
+      };
       button.textContent = "Done (CB Fail)";
-      // Note: History entry remains here on error
       return;
     }
-
-    // Post text to Firestore
     fHandleAutoSaveTextToFirestore();
-
-    // === 5. Clean up History ===
-    // Remove the processed entry from the history map
     try {
       delete gUI.monsterRollResultsHistory[rollId];
       fMyConsoleLog(`   -> Removed entry for rollId '${rollId}' from history.`);
@@ -3132,48 +2803,32 @@
         e
       );
     }
-
     fMyConsoleLog("✅ Prep Dmg action completed.");
-  } // END fHandlePrepDmgClick
+  } // End function fHandlePrepDmgClick
 
-  // ==========================================================================
-  // === Nish Turn Logic ===
-  // ==========================================================================
-
-  // fHandleNishButtonClick //////////////////////////////////////////////////////////
-  // Purpose -> Handles the click event specifically for the main 'Nish' button.
-  //            Sets the Nish button state, programmatically checks the Nish ability's
-  //            Sk1 checkbox, executes the core Nish sequence (sidebar divider, meta
-  //            channeling, max AP, duration updates), and then triggers the main
-  //            roll action handler (fMain_AbilityRoll) for the Nish ability itself.
-  // Inputs  -> None.
-  // Outputs -> None (Modifies state, DOM, triggers other async functions).
+  /** function fHandleNishButtonClick
+   * Purpose: Handles the click event for the main 'Nish' button.
+   * Assumptions: Sets state, checks the Nish checkbox, executes the Nish sequence, and triggers a roll.
+   * @param {MouseEvent} event - The click event object.
+   * @returns {void}
+   */
   async function fHandleNishButtonClick(event) {
-    // Added event parameter to use stopPropagation
     fMyConsoleLog("🖱️ Nish Button Clicked...");
-    if (event) event.stopPropagation(); // Prevent potential bubbling if called from event
-    fCloseAllDropdowns(); // Close any open menus
-
-    // === 1. Set Button State ===
-    fSetButtonOrMenuState("Nish"); // Set gUI.buttonOrMenu.isNish = true
-
-    // === 2. Programmatically Check Nish Checkbox ===
+    if (event) event.stopPropagation();
+    fCloseAllDropdowns();
+    fSetButtonOrMenuState("Nish");
     const nishRowTag = "NishAtr_R";
     const nishColTag = "Sk1ChkBox";
     const r = fResolveRow(nishRowTag);
     const c = fResolveCol(nishColTag);
-
-    // Validate Nish checkbox coordinates
     if (isNaN(r) || isNaN(c)) {
       console.error(
         `fHandleNishButtonClick: Could not resolve Nish checkbox coordinates (${nishRowTag}, ${nishColTag}).`
       );
       await fShowMessage(`❌ Error: Cannot find Nish checkbox definition.`);
-      fSetButtonOrMenuState(null); // Reset state on error
+      fSetButtonOrMenuState(null);
       return;
     }
-
-    // Uncheck any previously checked radio button
     const currentChecked = gUI.currentSkRadioChecked;
     if (
       currentChecked.r !== null &&
@@ -3182,95 +2837,74 @@
     ) {
       fUncheckOldSkGroupBox(currentChecked.r, currentChecked.c);
     }
-
-    // Check the Nish box DOM element and update state/tracker
     const nishCellDiv = gUI.grid2D?.[r]?.[c];
     const nishCheckbox = nishCellDiv?.querySelector(
       'input[data-sk-group="true"]'
     );
     if (nishCheckbox) {
       nishCheckbox.checked = true;
-      gUI.arr[r][c] = true; // Update data model
-      gUI.currentSkRadioChecked = { r, c }; // Update tracker
+      gUI.arr[r][c] = true;
+      gUI.currentSkRadioChecked = {
+        r,
+        c,
+      };
       fMyConsoleLog(
         `   -> Programmatically checked Nish checkbox [${r}, ${c}].`
       );
     } else {
-      // Handle error if checkbox element isn't found
       console.error(
         `fHandleNishButtonClick: Could not find Nish checkbox DOM element at [${r}, ${c}].`
       );
       await fShowMessage(`❌ Error: Cannot find Nish checkbox element.`);
-      fSetButtonOrMenuState(null); // Reset state on error
+      fSetButtonOrMenuState(null);
       return;
     }
-
-    // === 3. Execute Core Nish Sequence ===
-    // (Adds sidebar divider, handles Meta Channeling, sets Max AP, updates Durations)
     await fExecuteNishSequence();
-
-    // === 4. Trigger Main Roll Handler ===
-    // fMain_AbilityRoll will now use the Nish row/column and the isNish state
     fMyConsoleLog("   -> Triggering fMain_AbilityRoll for Nish ability...");
     await fMain_AbilityRoll();
+  } // End function fHandleNishButtonClick
 
-    // Note: Button state (isNish) is reset at the end of fMain_AbilityRoll
-  } // END fHandleNishButtonClick
-
-  // fExecuteNishSequence ////////////////////////////////////////////////////////////
-  // Purpose -> Executes the common sequence of actions required at the start of a Nish
-  //            turn. Adds sidebar divider, runs Meta Channeling, sets Max AP, and
-  //            processes IsOn durations. Skips Meta/Duration if Luck was used.
-  // Inputs  -> None (Uses gUI.buttonOrMenu state).
-  // Outputs -> None (Modifies sidebar, calls other async functions).
+  /** function fExecuteNishSequence
+   * Purpose: Executes the common sequence of actions required at the start of a Nish turn.
+   * Assumptions: Skips Meta/Duration updates if Luck was used to trigger the Nish turn.
+   * @param {} - No parameters.
+   * @returns {void}
+   */
   async function fExecuteNishSequence() {
     fMyConsoleLog("🎬 Executing Nish Sequence...");
-    // 1. Add Sidebar Divider (HTML and Plain Text)
-    // Use '======================' for the plain text version
     fPostToSidebar(
       '<hr class="nish-divider"><br>',
       "\n======================\n"
     );
     fMyConsoleLog("   -> Sidebar divider added.");
-
-    // 2. Run Meta Channeling (Skip if Luck button initiated the action)
     if (!gUI.buttonOrMenu.isLuck) {
-      await fMetaChannel(); // This function logs its own message
+      await fMetaChannel();
       fMyConsoleLog("   -> fMetaChannel executed.");
     } else {
       fMyConsoleLog("   -> Skipping fMetaChannel (Luck trigger).");
     }
-
-    // 3. Set Action Points to Max (Always runs as part of Nish turn start)
-    await fAct_SetToMax(); // Doesn't log to sidebar currently
+    await fAct_SetToMax();
     fMyConsoleLog("   -> fAct_SetToMax executed.");
-
-    // 4. Process 'Is On' / Duration Decrements (Skip if Luck button initiated the action)
     if (!gUI.buttonOrMenu.isLuck) {
-      await fIsOn_NewNishSet(); // Doesn't log to sidebar currently
+      await fIsOn_NewNishSet();
       fMyConsoleLog("   -> fIsOn_NewNishSet executed.");
     } else {
       fMyConsoleLog("   -> Skipping fIsOn_NewNishSet (Luck trigger).");
     }
-
     fMyConsoleLog("✅ Nish Sequence Execution Complete.");
-    // Note: No fSendLogToGMScreenAndPS here, as it's often called by another function (fHandleNishButtonClick or fMain_AbilityRoll)
-    // which will handle the final send.
-  } // END fExecuteNishSequence
+  } // End function fExecuteNishSequence
 
-  // fNishTorCText ///////////////////////////////////////////////////////////////
-  // Purpose -> Selects and displays a random Tremendous ('t') or Critical ('c') Nish
-  //            result from the dbCritFSData cache to the sidebar.
-  // Inputs  -> tOrC (String): 't' for Tremendous, 'c' for Critical (case-insensitive).
-  // Outputs -> None (Posts result to sidebar via fPostToSidebar if successful).
-  // Notes   -> Logic is similar to fHandleGMAward.
+  /** function fNishTorCText
+   * Purpose: Selects and displays a random Tremendous or Critical Nish result to the sidebar.
+   * Assumptions: The dbCritFSData cache is populated.
+   * @param {string} tOrC - 't' for Tremendous, 'c' for Critical.
+   * @returns {void}
+   */
   async function fNishTorCText(tOrC) {
     const funcName = "fNishTorCText";
     fMyConsoleLog(
       `⚙️ ${funcName}: Processing Nish T/C result for input '${tOrC}'...`
     );
-
-    // --- 1. Validate Input ---
     const inputLower = String(tOrC ?? "").toLowerCase();
     if (inputLower !== "t" && inputLower !== "c") {
       fMyConsoleLog(
@@ -3278,8 +2912,6 @@
       );
       return;
     }
-
-    // --- 2. Validate Cache ---
     const cacheKey = "dbCritFSData";
     const cache = gUI[cacheKey];
     if (
@@ -3292,21 +2924,15 @@
       const errorMsg = `Cannot get Nish T/C text: Required cache gUI['${cacheKey}'] is missing or invalid.`;
       console.error(`${funcName}: ${errorMsg}`);
       fMyConsoleLog(`   -> ❌ ${funcName} Error: ${errorMsg}`);
-      // No user message needed here as this is usually part of another roll sequence.
       return;
     }
-
-    // --- 3. Determine Column Tag and Title ---
     const columnTag = inputLower === "t" ? "NishTrem" : "NishCrit";
     const titleText =
       inputLower === "t" ? "Tremendous Nish:" : "Critical Nish:";
-    const titleHtml = `<span class="red-bold">${titleText}</span>`; // Use red-bold for both per request
-
-    // --- 4. Resolve Tags & Indices ---
+    const titleHtml = `<span class="red-bold">${titleText}</span>`;
     const startRowTag = "RowBeforeFirstDataRow";
     const resultColIndex = fResolveFSDataCol(cacheKey, columnTag);
     const startRowIndex = fResolveFSDataRow(cacheKey, startRowTag) + 1;
-
     if (isNaN(resultColIndex)) {
       fMyConsoleLog(
         `   -> ❌ ${funcName} Error: Column tag '${columnTag}' not found in ${cacheKey}.`
@@ -3322,8 +2948,6 @@
     fMyConsoleLog(
       `   -> Resolved '${columnTag}' to index ${resultColIndex}, '${startRowTag}' to index ${startRowIndex}.`
     );
-
-    // --- 5. Extract, Filter, and Select Award ---
     const resultsList = [];
     const numRows = cache.text.length;
     for (let r = startRowIndex; r < numRows; r++) {
@@ -3333,44 +2957,32 @@
         resultsList.push(trimmedValue);
       }
     }
-
     if (resultsList.length === 0) {
       fMyConsoleLog(
         `   -> ${funcName}: No valid results found in '${columnTag}' column starting from row '${startRowTag}'. Skipping display.`
       );
       return;
     }
-
     const randomIndex = Math.floor(Math.random() * resultsList.length);
     const selectedResult = resultsList[randomIndex];
     fMyConsoleLog(`   -> Randomly selected result: "${selectedResult}"`);
-
-    // --- 6. Format and Post to Sidebar ---
     const sidebarMsgHtml = `${titleHtml}<br>${selectedResult}`;
-    const sidebarMsgText = `${titleText}\n${selectedResult}`; // Plain text version
+    const sidebarMsgText = `${titleText}\n${selectedResult}`;
     fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
-    fShowSidebar(); // Ensure sidebar is visible
-
+    fShowSidebar();
     fMyConsoleLog(`✅ ${funcName}: Completed.`);
-  } // END fNishTorCText
+  } // End function fNishTorCText
 
-  // ==========================================================================
-  // === Grid Interaction & Ad-Hoc Rolls ===
-  // ==========================================================================
-
-  // fUpdateMonsterTable ////////////////////////////////////////////////////////
-  // Purpose -> Processes monster data received from the GM Screen DB and populates
-  //            the client-side Turbo monster table (gUI.range.monsters), *skipping the
-  //            first row (CustMon)*. Handles active monster filtering, custom monster
-  //            naming/skipping (trims "Mon: " prefix, removes trailing ' _'/'   '),
-  //            data mapping, SIZE parsing, and overflow warnings.
-  // Inputs  -> gmDataArray (Array[][]): 2D array of monster data from the GM Screen.
-  //         -> gmColTags (Object): Map of GM Screen column tags to indices { tagName: index }.
-  //         -> gmRowTags (Object): Map of GM Screen row tags to indices { tagName: index }.
-  // Outputs -> None (Modifies Turbo grid data/DOM via fSetGridValue, potentially calls fShowMessage).
+  /** function fUpdateMonsterTable
+   * Purpose: Processes monster data from the GM Screen DB and populates the Turbo monster table.
+   * Assumptions: Skips the first row (CustMon) of the Turbo table. Handles various data transformations.
+   * @param {any[][]} gmDataArray - 2D array of monster data from the GM Screen.
+   * @param {object} gmColTags - Map of GM Screen column tags to indices.
+   * @param {object} gmRowTags - Map of GM Screen row tags to indices.
+   * @returns {void}
+   */
   async function fUpdateMonsterTable(gmDataArray, gmColTags, gmRowTags) {
     fMyConsoleLog("🧬 Processing GM Monster Data for Turbo Table...");
-    // === 1. Validate Inputs ===
     if (!Array.isArray(gmDataArray)) {
       fMyConsoleLog(
         "❌ fUpdateMonsterTable Error: gmDataArray is not an array."
@@ -3398,8 +3010,6 @@
       );
       return;
     }
-
-    // === 2. Resolve Turbo Table Boundaries ===
     const turboRangeDef = gUI.range?.monsters;
     if (!turboRangeDef || !fDoesObjectHaveR1C1R2C2Properties(turboRangeDef)) {
       fMyConsoleLog(
@@ -3410,8 +3020,8 @@
       );
       return;
     }
-    const turboMon_R_start = fResolveRow(turboRangeDef.r1); // The 'CustMon' row index
-    const turboMon_R_end = fResolveRow(turboRangeDef.r2); // The 'LastMon_R' row index
+    const turboMon_R_start = fResolveRow(turboRangeDef.r1);
+    const turboMon_R_end = fResolveRow(turboRangeDef.r2);
     const turbo_c1 = fResolveCol(turboRangeDef.c1);
     const turbo_c2 = fResolveCol(turboRangeDef.c2);
     if ([turboMon_R_start, turboMon_R_end, turbo_c1, turbo_c2].some(isNaN)) {
@@ -3431,9 +3041,6 @@
     fMyConsoleLog(
       `   -> Filling starts at row ${turboFill_R_start}. Available Rows for DB monsters: ${turboTableAvailableRows}.`
     );
-
-    // === 3. Resolve Necessary GM Screen Tags (Columns & Rows) ===
-    // --- Column Tags ---
     const requiredGmColTags = [
       "ActiveMonTF",
       "MonCustName",
@@ -3476,8 +3083,6 @@
         resolvedGmColIndices
       )}`
     );
-
-    // --- Row Tags (for custom monster boundaries) ---
     const custMonFirst_R_idx_raw = gmRowTags["CustMonFirst_R"];
     const monTblLast_R_idx_raw = gmRowTags["MonTblLast_R"];
     const hasCustomBounds =
@@ -3492,41 +3097,23 @@
         `   -> Warning: Could not resolve GM custom monster row boundary tags ('CustMonFirst_R', 'MonTblLast_R'). Custom monster logic may be inaccurate.`
       );
     }
-
-    // === 4. Iterate and Populate Turbo Table ===
     let turboMon_R = turboFill_R_start;
     let isOverflowing = false;
     let monstersAdded = 0;
     let errorsSettingValue = 0;
     const activeColIdx = resolvedGmColIndices["ActiveMonTF"];
-
     for (let db_idx = 0; db_idx < gmDataArray.length; db_idx++) {
       const dbMon_R = gmDataArray[db_idx];
-
-      // --- Log the value being checked for isActive ---
       const isActiveVal = dbMon_R?.[activeColIdx];
-      // if (db_idx < 5) { // Keep logging limited if needed
-      //      fMyConsoleLog(`      -> Checking GM row ${db_idx}: ActiveMonTF col (${activeColIdx}) raw value = '${isActiveVal}' (Type: ${typeof isActiveVal})`);
-      // }
-
-      // --- Check if Active (More Robust Check) ---
       const isActive =
         isActiveVal === true || String(isActiveVal).toUpperCase() === "TRUE";
       if (!isActive) {
         continue;
       }
-      // fMyConsoleLog(`      -> GM row ${db_idx} IS Active. Processing...`); // Can be verbose
-
-      // --- Determine if Custom Monster Row ---
       const isCustomMonsterRow =
         hasCustomBounds &&
         db_idx >= custMonFirst_R_idx_raw &&
         db_idx <= monTblLast_R_idx_raw;
-      // if(isCustomMonsterRow && db_idx < 5){ // Log if it thinks one of the first few is custom
-      //     fMyConsoleLog(`         -> Identified GM row ${db_idx} as Custom Monster Row.`);
-      // }
-
-      // --- Get Names & Apply Custom Skip Logic ---
       const monCustName = String(
         dbMon_R[resolvedGmColIndices["MonCustName"]] ?? ""
       ).trim();
@@ -3534,49 +3121,34 @@
         dbMon_R[resolvedGmColIndices["MonName"]] ?? ""
       ).trim();
       if (isCustomMonsterRow && !monCustName) {
-        // fMyConsoleLog(`      -> Skipping GM row ${db_idx}: Is custom monster row but has no 'MonCustName'.`); // Verbose
         continue;
       }
       let finalMonsterName =
-        monCustName || monName || `Unnamed Monster ${db_idx + 1}`; // Use custom, fallback to standard, then generic
-
-      // Trim "Mon: " prefix
+        monCustName || monName || `Unnamed Monster ${db_idx + 1}`;
       const prefix = "Mon: ";
       if (finalMonsterName.startsWith(prefix)) {
         finalMonsterName = finalMonsterName.substring(prefix.length);
       }
-
-      // Find the index of the first occurrence of " _" or "   "and delete from there to end of finalMonsterName
       const indexOfUnderscore = finalMonsterName.indexOf(" _");
       const indexOfSpaces = finalMonsterName.indexOf("   ");
       let trimIndex = -1;
-      // Determine which pattern occurs first, if any
       if (indexOfUnderscore !== -1 && indexOfSpaces !== -1) {
-        // Both patterns found, find the one that appears earlier
         trimIndex = Math.min(indexOfUnderscore, indexOfSpaces);
       } else if (indexOfUnderscore !== -1) {
-        // Only underscore pattern found
         trimIndex = indexOfUnderscore;
       } else if (indexOfSpaces !== -1) {
-        // Only spaces pattern found
         trimIndex = indexOfSpaces;
       }
-      // If one of the patterns was found, trim the string from that index onwards
       if (trimIndex !== -1) {
         finalMonsterName = finalMonsterName.substring(0, trimIndex);
       }
-
-      // --- Check Turbo Table Capacity ---
       if (turboMon_R > turboMon_R_end) {
         isOverflowing = true;
         fMyConsoleLog(
           `   -> Turbo table overflow detected at GM row index ${db_idx}. Attempting to write to row ${turboMon_R}, but last available is ${turboMon_R_end}.`
         );
-        break; // Stop processing rows
+        break;
       }
-      // fMyConsoleLog(`         -> Mapping to Turbo Row ${turboMon_R} (Name: ${finalMonsterName})`); // Verbose
-
-      // --- Extract & Map Data ---
       const vit = dbMon_R[resolvedGmColIndices["Vit"]];
       const atk = dbMon_R[resolvedGmColIndices["Atk"]];
       const dmg = dbMon_R[resolvedGmColIndices["Dmg"]];
@@ -3586,8 +3158,6 @@
         ? ""
         : dbMon_R[resolvedGmColIndices["Pic"]];
       const notes = String(dbMon_R[resolvedGmColIndices["Notes"]] ?? "");
-
-      // --- Parse Size ---
       let size = "";
       const sizePrefix = "SIZE: ";
       const sizeIndex = notes.toUpperCase().indexOf(sizePrefix);
@@ -3600,8 +3170,6 @@
         size = sizeText.trim();
       }
       if (isCustomMonsterRow) size = "";
-
-      // --- Set Values in Turbo Grid ---
       let rowUpdateSuccess = true;
       rowUpdateSuccess &&= fSetGridValue(
         turboMon_R,
@@ -3615,8 +3183,7 @@
       rowUpdateSuccess &&= fSetGridValue(turboMon_R, "MonAR", ar);
       rowUpdateSuccess &&= fSetGridValue(turboMon_R, "MonPic", pic);
       rowUpdateSuccess &&= fSetGridValue(turboMon_R, "MonSize", size);
-      rowUpdateSuccess &&= fSetGridValue(turboMon_R, "NumMon", ""); // Clear NumMon
-
+      rowUpdateSuccess &&= fSetGridValue(turboMon_R, "NumMon", "");
       if (rowUpdateSuccess) {
         monstersAdded++;
       } else {
@@ -3625,19 +3192,14 @@
           `      -> ⚠️ Error setting some values for Turbo row ${turboMon_R}.`
         );
       }
-
-      // Increment Turbo row pointer
       turboMon_R++;
-    } // End loop through gmDataArray
-
-    // === 5. Show Overflow Message if Needed ===
+    }
     if (isOverflowing) {
       const message = `⚠️ Too many active monsters on GM Screen!
  <br>Only the first ${turboTableAvailableRows} could be loaded. Please ask the GM to reduce active monsters.`;
       fMyConsoleLog(`   -> ${message.replace("<br>", " ")}`);
       await fShowMessage(message);
     }
-
     fMyConsoleLog(
       `✅ Monster Table Update Complete. Added: ${monstersAdded} monsters.${
         errorsSettingValue > 0
@@ -3645,23 +3207,23 @@
           : ""
       }${isOverflowing ? " (Overflow occurred)" : ""}`
     );
-  } // END fUpdateMonsterTable
+  } // End function fUpdateMonsterTable
 
-  // fHandleChaosGemClick ////////////////////////////////////////////////////////////
-  // Purpose -> Handles Chaos Gem clicks. Decrements uses, logs ability text (with icon) to sidebar.
-  // Inputs  -> r (Number), c (Number).
-  // Outputs -> (Promise<Boolean>): True if Chaos Gem processed, false otherwise.
+  /** function fHandleChaosGemClick
+   * Purpose: Handles Chaos Gem clicks, decrementing uses and logging the ability text.
+   * Assumptions: The user has clicked within the Chaos Gem range defined in gUI.range.
+   * @param {number} r - The 0-based row index of the clicked cell.
+   * @param {number} c - The 0-based column index of the clicked cell.
+   * @returns {Promise<boolean>} True if a Chaos Gem was processed, false otherwise.
+   */
   async function fHandleChaosGemClick(r, c) {
     fMyConsoleLog("💎 Checking for Chaos Gem click...");
-    // === 1. Validate Input Coordinates ===
     if (r === null || c === null || isNaN(r) || isNaN(c)) {
       fMyConsoleLog(
         "   -> Cannot check Chaos Gem: Invalid coordinates passed."
       );
       return false;
     }
-
-    // === 2. Get Chaos Gem Range & Validate ===
     const chaosRangeDef = gUI.range?.chaosGems;
     if (!chaosRangeDef || !fDoesObjectHaveR1C1R2C2Properties(chaosRangeDef)) {
       fMyConsoleLog(
@@ -3669,8 +3231,6 @@
       );
       return false;
     }
-
-    // === 3. Resolve Range & Check if Click Was Inside ===
     const resolved = fConvertsR1C1R2C2TagOrNumToIndices(chaosRangeDef);
     if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
       fMyConsoleLog(
@@ -3689,8 +3249,6 @@
       return false;
     }
     fMyConsoleLog(`   -> Click [${r}, ${c}] is inside Chaos Gem range.`);
-
-    // === 4. Check Gem Conditions (Uses & Ability Text) ===
     const usesCol = fResolveCol("ChaosUses");
     const abilityCol = fResolveCol("ChaosAbility");
     if (isNaN(usesCol) || isNaN(abilityCol)) {
@@ -3702,7 +3260,6 @@
       );
       return false;
     }
-
     const currentUses = fGetGridValue(r, usesCol, true);
     if (isNaN(currentUses) || currentUses < 1) {
       fMyConsoleLog(
@@ -3711,23 +3268,18 @@
       await fShowMessage("Chaos Crystal has no uses left!");
       return true;
     }
-
     const abilityText = fGetGridValue(r, abilityCol);
     if (!abilityText || String(abilityText).trim() === "") {
       fMyConsoleLog(`   -> Chaos Gem condition unmet: Ability text is empty.`);
       await fShowMessage("Chaos Crystal has no ability text defined!");
       return true;
     }
-
-    // === 5. Conditions Met - Perform Actions ===
     fMyConsoleLog(
       `   -> Chaos Gem conditions met: Uses=${currentUses}, Ability="${String(
         abilityText
       ).substring(0, 30)}..."`
     );
     const newUses = currentUses - 1;
-
-    // Update Grid (decrement uses)
     if (!fSetGridValue(r, usesCol, newUses)) {
       fMyConsoleLog(
         `   -> ❌ Failed to update ChaosUses cell [${r}, ${usesCol}].`
@@ -3735,29 +3287,22 @@
       await fShowMessage("Error: Failed to update Chaos Crystal uses.");
       return true;
     }
-
-    // Build Sidebar Message (HTML and Plain Text)
     const trimmedAbilityText = String(abilityText).trim();
     const sidebarMsgHtml = `💎 <span class="blue-bold">Chaos Crystal</span> (${newUses} Uses Left):<br>${trimmedAbilityText}`;
     const sidebarMsgText = `💎 Chaos Crystal (${newUses} Uses Left):\n${trimmedAbilityText}`;
-
-    // Update Sidebar
     fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
     fShowSidebar();
-
     fMyConsoleLog("✅ Chaos Gem Used Successfully.");
-
-    // Send log update to GMScreen (with slight delay)
     setTimeout(() => fSendLogToGMScreenAndPS(), 0);
+    return true;
+  } // End function fHandleChaosGemClick
 
-    return true; // Signal that the gem click was fully processed
-  } // END fHandleChaosGemClick
-
-  // fHandleAdHocRoll ////////////////////////////////////////////////////////////////
-  // Purpose -> Parses and rolls dice based on cell text content (sk#, XdY+/-Z, #).
-  //            Logs result (HTML & plain text) to sidebar, including die icon.
-  // Inputs  -> cellText (String): The text content of the clicked cell.
-  // Outputs -> (Promise<Boolean>): True if roll was parsed and logged, false otherwise.
+  /** function fHandleAdHocRoll
+   * Purpose: Parses and rolls dice based on cell text content (e.g., sk#, XdY+/-Z, #).
+   * Assumptions: The text contains a recognizable dice pattern.
+   * @param {string} cellText - The text content of the clicked cell.
+   * @returns {Promise<boolean>} True if a roll was parsed and logged, false otherwise.
+   */
   async function fHandleAdHocRoll(cellText) {
     fMyConsoleLog(`🎲 Attempting Ad-Hoc Roll for text: "${cellText}"`);
     if (typeof cellText !== "string" || !cellText.trim()) {
@@ -3765,7 +3310,6 @@
       return false;
     }
     const text = cellText.trim();
-
     let rollResult = null;
     let logHeaderHtml = "";
     let logHeaderText = "";
@@ -3773,14 +3317,11 @@
     let logDetailsText = "";
     let patternMatched = false;
     let matchedString = "";
-
     const skExactPattern = /^sk(\d+)$/i;
     const dieStringExactPattern = /^((\d+)?d(\d+)\s*(?:([-+])\s*(\d+))?)$/i;
     const numberExactPattern = /^\d+$/;
     const parsePattern = /(sk(\d+))|((\d+)?d(\d+)\s*(?:([-+])\s*(\d+))?)/i;
-
     let match;
-    // === 1. Check for Exact Matches ===
     if ((match = text.match(skExactPattern))) {
       const num = parseInt(match[1], 10);
       if (!isNaN(num) && num > 0) {
@@ -3825,14 +3366,11 @@
         }
       }
     }
-
-    // === 2. Parse for First Match (if no exact match) ===
     if (!patternMatched) {
       fMyConsoleLog(`   -> No exact match. Parsing text for first pattern...`);
       match = text.match(parsePattern);
       if (match) {
         if (match[1]) {
-          // Matched sk#
           matchedString = match[1];
           const num = parseInt(match[2], 10);
           if (!isNaN(num) && num > 0) {
@@ -3847,7 +3385,6 @@
             );
           }
         } else if (match[3]) {
-          // Matched die string
           matchedString = match[3].trim();
           rollResult = fRollRPGDieString(matchedString);
           if (rollResult !== null) {
@@ -3865,27 +3402,22 @@
         fMyConsoleLog(`   -> No parsable pattern found within text.`);
       }
     }
-
-    // === 3. Log to Sidebar if Successful ===
     if (patternMatched && rollResult !== null) {
       const headerSuffixHtml =
         text === matchedString ? ":" : ` (from "${text}"):`;
       const headerSuffixText =
         text === matchedString ? ":" : ` (from "${text}"):`;
       const formattedHeaderHtml = `${logHeaderHtml}${headerSuffixHtml}`;
-      const formattedHeaderText = `${logHeaderText}${headerSuffixText}`; // Icon is already in logHeaderText
-
+      const formattedHeaderText = `${logHeaderText}${headerSuffixText}`;
       let tcSuffixHtml = "";
       let tcSuffixText = "";
       if (logHeaderText.startsWith("🎲 Custom Roll Sk")) {
-        // Check text version for Sk roll
         const tcResult = fTC();
         if (tcResult) {
           tcSuffixHtml = `   ${tcResult}`;
           tcSuffixText = tcResult.includes("red-bold") ? " C" : " T";
         }
       }
-
       const finalLogHtml = `${formattedHeaderHtml}<br>${logDetailsHtml}${tcSuffixHtml}`;
       const finalLogText = `${formattedHeaderText}\n${logDetailsText}${
         tcSuffixText ? " " + tcSuffixText : ""
@@ -3893,37 +3425,29 @@
       fPostToSidebar(finalLogHtml, finalLogText);
       fShowSidebar();
       fMyConsoleLog(`   -> Ad-Hoc Roll logged to sidebar.`);
-
-      // Send log update to GMScreen (with slight delay)
       setTimeout(() => fSendLogToGMScreenAndPS(), 0);
-
-      return true; // Indicate roll was handled
+      return true;
     }
-
-    // === 4. No Match Found ===
     if (!patternMatched) {
       fMyConsoleLog("   -> No ad-hoc roll pattern matched (exact or parsed).");
     }
-    return false; // Indicate no valid roll was handled
-  } // END fHandleAdHocRoll
+    return false;
+  } // End function fHandleAdHocRoll
 
   /** function fCalcGearLine
-   * Purpose: Handles edits to gear-related input cells, validates input, updates
-   * the grid, and triggers recalculations for derived values and overall totals.
-   * Assumptions: Relies on several helper functions and gUI state.
+   * Purpose: Handles edits to gear-related cells, validates input, and triggers recalculations.
+   * Assumptions: Relies on various helper functions and gUI state.
    * @param {number} r - The 0-based row index of the edited cell.
    * @param {number} c - The 0-based column index of the edited cell.
    * @param {any} newValue - The proposed new value for the edited cell.
-   * @param {any} oldValue - The previous value of the edited cell (for reverting).
-   * @returns {Promise<any | null>} Resolves with the validated `newValue` or `null` on failure.
+   * @param {any} oldValue - The previous value for reverting on failure.
+   * @returns {Promise<any | null>} Resolves with the validated value or null on failure.
    */
   async function fCalcGearLine(r, c, newValue, oldValue) {
     const funcName = "fCalcGearLine";
     fMyConsoleLog(
       `⚖️ ${funcName}: Handling edit for cell [${r}, ${c}] with new value: "${newValue}" (Old: "${oldValue}")`
     );
-
-    // --- Column Tags for Input Validation & Derived Values ---
     const possNumColTag = "PossNum";
     const possWornColTag = "PossWorn";
     const possPerOffColTag = "PossPerOff";
@@ -3934,13 +3458,10 @@
       possNumColTag,
       possWornColTag,
       possPerOffColTag,
-    ]; // Input columns
-
-    // === 1. Basic Pre-checks ===
-    const possNameVal = fGetGridValue(r, "Ability"); // Check if an item is selected
+    ];
+    const possNameVal = fGetGridValue(r, "Ability");
     const gearID = fGetIDFromNameID(possNameVal);
     const gearCache = gUI.dbGearFSData;
-
     if (!gearID) {
       fMyConsoleLog(
         `   -> Skipping ${funcName}: PossName invalid or missing ID for row ${r}.`
@@ -3948,8 +3469,8 @@
       await fShowMessage(
         "ℹ️ Cannot modify gear numbers/status until a valid item with an ID is selected in the 'Ability' column."
       );
-      fRevertCellDOM(r, c, oldValue); // Revert the change in the DOM
-      return null; // Signal failure to caller
+      fRevertCellDOM(r, c, oldValue);
+      return null;
     }
     if (!gearCache || !gearCache.text || !gearCache.colTagsMap) {
       fMyConsoleLog(
@@ -3961,14 +3482,11 @@
       fRevertCellDOM(r, c, oldValue);
       return null;
     }
-
-    // === 2. Determine Edited Column & Validate Input ===
     const editedColTag = Object.keys(gUI.colTag).find(
       (tag) => gUI.colTag[tag] === c
     );
-    let validatedValue = newValue; // Assume valid initially
+    let validatedValue = newValue;
     let validationError = "";
-
     if (!gearColumnsToCalculate.includes(editedColTag)) {
       fMyConsoleLog(
         `   -> ❌ Error: ${funcName} called unexpectedly for non-gear-input column: ${editedColTag}`
@@ -3976,16 +3494,14 @@
       fRevertCellDOM(r, c, oldValue);
       return null;
     }
-
-    // --- Perform Input Validation based on Column ---
     switch (editedColTag) {
       case possNumColTag:
         const numInput = Number(newValue);
         if (isNaN(numInput) || !Number.isInteger(numInput) || numInput < 0) {
           validationError = `❌ Invalid number ("${newValue}"). '${possNumColTag}' must be a whole number >= 0.`;
-          validatedValue = null; // Mark as invalid
+          validatedValue = null;
         } else {
-          validatedValue = numInput; // Store the valid number
+          validatedValue = numInput;
         }
         break;
       case possWornColTag:
@@ -4008,21 +3524,15 @@
         }
         break;
     }
-
-    // --- Handle Input Validation Failure ---
     if (validatedValue === null) {
       fMyConsoleLog(`   -> ❌ Input Validation Failed: ${validationError}`);
       await fShowMessage(validationError);
-      fRevertCellDOM(r, c, oldValue); // Revert the change in the DOM
-      return null; // Signal failure to the caller
+      fRevertCellDOM(r, c, oldValue);
+      return null;
     }
-
-    // === 3. Get Current Derived Values (BEFORE applying changes) ===
     const previousEnc = fGetGridValue(r, possEncColTag);
     const previousCr = fGetGridValue(r, possCrTotColTag);
     const previousAp = fGetGridValue(r, possAPTotColTag);
-
-    // === 4. Update the Edited Cell's Value (Input Validation Passed) ===
     if (!fSetGridValue(r, c, validatedValue)) {
       fMyConsoleLog(
         `   -> ❌ Error setting validated value for edited cell [${r}, ${c}].`
@@ -4035,16 +3545,12 @@
     fMyConsoleLog(
       `   -> Successfully updated edited cell [${r}, ${c}] with validated value: "${validatedValue}"`
     );
-
-    // === 5. Refresh Derived Calculations via Helper ===
     const refreshSuccess = fRefreshGearLineCalcs(
       r,
       previousEnc,
       previousCr,
       previousAp
     );
-
-    // === 6. Recalculate Overall Totals OR Revert Edited Cell on Failure ===
     if (refreshSuccess) {
       fMyConsoleLog(
         `   -> Triggering function fCalculatesEnc_MR_AP after successful refresh for row ${r}...`
@@ -4064,24 +3570,20 @@
     }
   } // End function fCalcGearLine
 
-  // fRefreshGearLineCalcs ///////////////////////////////////////////////////////
-  // Purpose -> Helper to calculate and update derived gear values (Enc, CR Total, AP Total)
-  //            for a specific row `r`. Reverts derived values to provided 'old' values
-  //            if calculation prerequisites are missing or invalid.
-  // Inputs  -> r (Number): The 0-based row index of the gear line to refresh.
-  //         -> oldEnc (Any): The value of 'PossEnc' before the initiating change.
-  //         -> oldCr (Any): The value of 'PossCrTot' before the initiating change.
-  //         -> oldAp (Any): The value of 'PossAPTot' before the initiating change.
-  // Outputs -> (Boolean): True if calculations and updates succeeded, false otherwise.
-  // Note    -> Called by fCalcGearLine after an input change and potentially by other functions
-  //            like fTotalRereshOfAllAbilitiesAndAllGear in the future.
+  /** function fRefreshGearLineCalcs
+   * Purpose: Helper to calculate and update derived gear values for a specific row.
+   * Assumptions: Reverts to old values on failure.
+   * @param {number} r - The 0-based row index of the gear line to refresh.
+   * @param {any} oldEnc - The value of 'PossEnc' before the change.
+   * @param {any} oldCr - The value of 'PossCrTot' before the change.
+   * @param {any} oldAp - The value of 'PossAPTot' before the change.
+   * @returns {boolean} True if calculations and updates succeeded, false otherwise.
+   */
   function fRefreshGearLineCalcs(r, oldEnc, oldCr, oldAp) {
     const funcName = "fRefreshGearLineCalcs";
     fMyConsoleLog(
       `   -> ${funcName}: Refreshing derived calculations for row ${r}...`
     );
-
-    // === Column Tags ===
     const possNameColTag = "Ability";
     const possNumColTag = "PossNum";
     const possWornColTag = "PossWorn";
@@ -4089,18 +3591,13 @@
     const possEncColTag = "PossEnc";
     const possCrTotColTag = "PossCrTot";
     const possAPTotColTag = "PossAPTot";
-
-    // === 1. Get Current Input Values from Grid ===
     const possNameVal = fGetGridValue(r, possNameColTag);
-    const calc_possNumVal = fGetGridValue(r, possNumColTag, true) || 0; // Default to 0 if invalid
-    const calc_isWornVal = fGetGridValue(r, possWornColTag) || false; // Default to false
-    const calc_perOffVal = fGetGridValue(r, possPerOffColTag) || ""; // Default to empty string
-
-    // === 2. Validate Prerequisites (Gear ID & Cache) ===
+    const calc_possNumVal = fGetGridValue(r, possNumColTag, true) || 0;
+    const calc_isWornVal = fGetGridValue(r, possWornColTag) || false;
+    const calc_perOffVal = fGetGridValue(r, possPerOffColTag) || "";
     const gearID = fGetIDFromNameID(possNameVal);
     const gearCache = gUI.dbGearFSData;
     let validationFailed = false;
-
     if (!gearID) {
       fMyConsoleLog(
         `      -> ${funcName} Validation Failed: Cannot extract Gear ID from "${possNameVal}" for row ${r}.`
@@ -4112,7 +3609,6 @@
       );
       validationFailed = true;
     }
-
     if (validationFailed) {
       fMyConsoleLog(
         `      -> Reverting derived cells for row ${r} to old values.`
@@ -4120,12 +3616,8 @@
       fSetGridValue(r, possEncColTag, oldEnc);
       fSetGridValue(r, possCrTotColTag, oldCr);
       fSetGridValue(r, possAPTotColTag, oldAp);
-      // Optional: Show a message to the user? Depends on how critical this is.
-      // await fShowMessage("Error: Cannot calculate gear values due to missing ID or cache.");
-      return false; // Indicate failure
+      return false;
     }
-
-    // === 3. Get Constants from Gear Cache ===
     fMyConsoleLog(`      -> ${funcName}: Using Gear ID: ${gearID}`);
     const wornEnc = Number(fGetVal_GUICache(gearID, "WornEnc", gearCache) || 0);
     const itemEnc = Number(fGetVal_GUICache(gearID, "ItemEnc", gearCache) || 0);
@@ -4134,14 +3626,11 @@
     fMyConsoleLog(
       `      -> DB Constants: WornEnc=${wornEnc}, ItemEnc=${itemEnc}, CrEach=${crEach}, APEach=${apEach}`
     );
-
-    // === 4. Perform Calculations ===
     const encEachVal = calc_isWornVal && wornEnc !== 0 ? wornEnc : itemEnc;
     const gearEncTot = calc_possNumVal * encEachVal;
     fMyConsoleLog(
       `         -> Enc Calc: EncEach=${encEachVal}, Total=${gearEncTot}`
     );
-
     let parsedPercent = 1.0;
     if (typeof calc_perOffVal === "string" && calc_perOffVal.endsWith("%")) {
       const numPart = parseFloat(calc_perOffVal);
@@ -4156,34 +3645,27 @@
         2
       )} => Raw=${rawCrTotal} => Final=${gearTotCr}`
     );
-
     const gearAPTot = calc_possNumVal * apEach;
     fMyConsoleLog(
       `         -> AP Calc: APEach=${apEach}, Num=${calc_possNumVal} => Total=${gearAPTot}`
     );
-
-    // === 5. Update Grid Cells for Derived Values ===
     let updateSuccess = true;
     fMyConsoleLog(`      -> Updating calculated cells for row ${r}...`);
-    // Use &&= to short-circuit if any update fails
     updateSuccess &&= fSetGridValue(r, possEncColTag, gearEncTot);
     updateSuccess &&= fSetGridValue(r, possCrTotColTag, gearTotCr);
     updateSuccess &&= fSetGridValue(r, possAPTotColTag, gearAPTot);
-
     if (!updateSuccess) {
       fMyConsoleLog(
         `      -> ❌ ${funcName}: Error occurred during fSetGridValue updates for derived cells on row ${r}.`
       );
-      // Revert derived cells on update failure
       fSetGridValue(r, possEncColTag, oldEnc);
       fSetGridValue(r, possCrTotColTag, oldCr);
       fSetGridValue(r, possAPTotColTag, oldAp);
-      return false; // Indicate failure
+      return false;
     }
-
     fMyConsoleLog(
       `   -> ${funcName}: Refresh finished successfully for row ${r}.`
     );
-    return true; // Indicate success
-  } // END fRefreshGearLineCalcs
+    return true;
+  } // End function fRefreshGearLineCalcs
 </script>
