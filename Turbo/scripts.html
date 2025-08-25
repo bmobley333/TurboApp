@@ -2955,10 +2955,10 @@
   } // End function fCloseAllDropdowns
 
   /** function fPostToSidebar
-   * Purpose: Prepends a new message to the sidebar content and the plain text log array.
+   * Purpose: Prepends a message to the sidebar and the plain text log array.
    * Assumptions: The sidebar DOM element exists.
-   * @param {string} htmlMessage - The HTML content to prepend to the sidebar display.
-   * @param {string} [plainTextMessage=null] - The plain text version to add to the log array.
+   * @param {string} htmlMessage - The HTML content to display in the sidebar.
+   * @param {string | null} plainTextMessage - The plain text version for the log array. Defaults to a stripped version of htmlMessage.
    * @returns {void}
    */
   function fPostToSidebar(htmlMessage, plainTextMessage = null) {
@@ -2969,6 +2969,7 @@
       );
       return;
     }
+
     const placeholder = sidebarContent.querySelector("p");
     if (
       placeholder &&
@@ -2976,10 +2977,12 @@
     ) {
       placeholder.remove();
     }
+
     const newEntry = document.createElement("p");
     newEntry.innerHTML = htmlMessage;
     sidebarContent.prepend(newEntry);
     sidebarContent.scrollTop = 0;
+
     const textToLog =
       plainTextMessage !== null
         ? plainTextMessage
@@ -2987,7 +2990,10 @@
             .replace(/<br\s*\/?>/gi, "\n")
             .replace(/<[^>]+>/g, "")
             .trim();
-    gUI.plainTextLogEntries.push(textToLog);
+
+    // Prepend the new entry to the start of the array to maintain correct order
+    gUI.plainTextLogEntries.unshift(textToLog);
+
     fHandleAutoSaveTextToFirestore();
   } // End function fPostToSidebar
 
@@ -3562,104 +3568,117 @@
   } // End function fSetupMenuActionClickListener
 
   /** function fSendLogToGMScreenAndPS
-   * Purpose: Bundles character info and the log to send to the server for GMScreen/PartyLog updates.
-   * Assumptions: `gUI.characterInfo` and `gUI.plainTextLogEntries` are populated.
-   * Notes: Uses a lock (`gUI.isSendingLog`) to prevent concurrent updates. This is the primary mechanism for real-time updates to the GM.
-   * @param {} - No parameters.
-   * @returns {Promise<void>} Resolves after the server call is initiated.
+   * Purpose: Sends bundled log and header data sequentially to the GMScreen and PartyLog sheets via the server.
+   * Assumptions: gUI state is populated. A lock (gUI.isSendingLog) prevents concurrent sends.
+   * @returns {Promise<boolean>} Resolves true on success, false on failure or if skipped. Rejects on critical prep errors.
    */
   async function fSendLogToGMScreenAndPS() {
-    const funcName = "fSendLogToGMScreenAndPS";
-    fMyConsoleLog(`   -> ${funcName}: Preparing to send log to GM/PS...`);
-
     if (gUI.isSendingLog) {
-      fMyConsoleLog("   -> Lock is active. Aborting duplicate log send.");
-      return;
+      fMyConsoleLog("📤 Log & Header send already in progress, skipping.");
+      return false;
     }
+
+    const slotNum = gUI.characterInfo?.slotNum;
+    if (
+      !slotNum ||
+      typeof slotNum !== "string" ||
+      !slotNum.startsWith("Slot")
+    ) {
+      const msg = `Cannot send Log & Headers: Invalid or missing slotNum ('${slotNum}').`;
+      fMyConsoleLog(`📤 ${msg}`);
+      return false;
+    }
+
     gUI.isSendingLog = true;
-    fMyConsoleLog("   -> Lock Acquired.");
+    fMyConsoleLog(
+      `📤 Preparing to send Log & Header data for ${slotNum} (Lock Acquired)...`
+    );
 
-    try {
-      const { slotNum, raceClass, level, playerName, charName } =
-        gUI.characterInfo;
+    return new Promise((resolve, reject) => {
+      try {
+        // The gUI.plainTextLogEntries array is now pre-sorted (newest first).
+        // No reversal is needed. Join with a separator that forces Google Sheets to render blank lines.
+        const combinedLog = gUI.plainTextLogEntries.join("\n \n \n");
 
-      if (!slotNum || !raceClass || !level || !playerName || !charName) {
-        const missing = [
-          !slotNum && "slotNum",
-          !raceClass && "raceClass",
-          !level && "level",
-          !playerName && "playerName",
-          !charName && "charName",
-        ].filter(Boolean);
-        throw new Error(
-          `Cannot send log: Missing character info fields: ${missing.join(
-            ", "
-          )}`
+        const truncatedLog = combinedLog.substring(
+          0,
+          gUI.GMSCREEN_LOG_MAX_CHARS
         );
-      }
-
-      const logAsSingleString = gUI.plainTextLogEntries.join("\n");
-      const truncatedLog = logAsSingleString.substring(
-        0,
-        gUI.GMSCREEN_LOG_MAX_CHARS
-      );
-      if (logAsSingleString.length > gUI.GMSCREEN_LOG_MAX_CHARS) {
         fMyConsoleLog(
-          `   -> Log truncated to ${gUI.GMSCREEN_LOG_MAX_CHARS} characters for sheet cell limit.`
+          `   -> Log Content Prepared (Entries: ${gUI.plainTextLogEntries.length}, Length: ${truncatedLog.length})`
         );
-      }
 
-      const nishValue = fGetGridValue("Nish", "Nish");
-      const vitNowPercent = fGetGridValue("VitTbl", "VitNowPercent");
+        const vitMax = fGetGridValue("VitTbl", "vitMax") ?? "?";
+        const vitNow = fGetGridValue("VitTbl", "vitNow") ?? "?";
+        const vitPercent = fGetGridValue("VitTbl", "VitNowPercent") ?? "?%";
+        const vitString = `${vitNow} of ${vitMax} (${vitPercent})`;
+        const nishValue = fGetGridValue("Nish", "Nish") ?? "";
+        const { raceClass, level, playerName, charName } =
+          gUI.characterInfo || {};
+        const playerCharString = `${playerName || "?"} (${charName || "?"})`;
+        const characterUrl =
+          "https://docs.google.com/spreadsheets/d/" + gIndex.CSID + "/";
 
-      // --- THIS LINE HAS BEEN CHANGED TO USE STANDARD STRING CONCATENATION ---
-      const webAppUrl =
-        "https://script.google.com/a/macros/metascapegame.com/s/AKfycbx_.../dev?csID=" +
-        gIndex.CSID +
-        "&userEmail=" +
-        gIndex.Email +
-        "&gameVer=" +
-        gIndex.GameVer;
-      // --- END OF CHANGE ---
+        const dataBundle = {
+          log: truncatedLog,
+          vit: vitString,
+          nish: nishValue,
+          url: characterUrl,
+          raceClass: raceClass || "",
+          level: level || "",
+          playerChar: playerCharString,
+          slotNum: slotNum,
+        };
 
-      const dataBundle = {
-        log: truncatedLog,
-        vit: vitNowPercent || "?%",
-        nish: nishValue || "",
-        url: webAppUrl,
-        raceClass: raceClass,
-        level: level,
-        playerChar: `${playerName} / ${charName}`,
-        slotNum: slotNum,
-      };
-
-      fMyConsoleLog(
-        `   -> Calling fSrvSaveURLtoNamesAndLogToDBandPS with bundled data...`
-      );
-      const serverResponse = await new Promise((resolve, reject) => {
+        fMyConsoleLog(
+          `   -> Calling fSrvSaveURLtoNamesAndLogToDBandPS with bundled data...`
+        );
         google.script.run
-          .withSuccessHandler(resolve)
-          .withFailureHandler(reject)
+          .withSuccessHandler((success) => {
+            if (success) {
+              fMyConsoleLog(
+                "   -> ✅ Log & Headers updated successfully on server targets."
+              );
+            } else {
+              fMyConsoleLog(
+                "   -> ⚠️ Log & Headers update partially failed on server. Check server logs."
+              );
+              fShowMessage(
+                "⚠️ Warning: Update failed for one or more target sheets."
+              ).catch((e) => console.error("Error showing message:", e));
+            }
+            gUI.isSendingLog = false;
+            fMyConsoleLog("   -> Lock Released.");
+            resolve(success);
+          })
+          .withFailureHandler((error) => {
+            const errorMsg = error?.message || "Unknown server error";
+            console.error(
+              `fSendLogToGMScreenAndPS Failure: ${errorMsg}`,
+              error
+            );
+            fMyConsoleLog(`   -> ❌ Error sending Log & Headers: ${errorMsg}`);
+            gUI.isSendingLog = false;
+            fMyConsoleLog("   -> Lock Released due to error.");
+            fShowMessage(`❌ Error: Could not send updates: ${errorMsg}`).catch(
+              (e) => console.error("Error showing message:", e)
+            );
+            resolve(false);
+          })
           .fSrvSaveURLtoNamesAndLogToDBandPS(dataBundle);
-      });
-
-      if (serverResponse) {
-        fMyConsoleLog(
-          "   -> ✅ Log & Headers updated successfully on server targets."
+      } catch (err) {
+        console.error(
+          "Synchronous error in fSendLogToGMScreenAndPS preparation:",
+          err
         );
-      } else {
         fMyConsoleLog(
-          "   -> ⚠️ Server call for log update returned false. See server logs."
+          `   -> ❌ Synchronous error preparing log send: ${err.message}`
         );
+        gUI.isSendingLog = false;
+        fMyConsoleLog("   -> Lock Released due to synchronous error.");
+        reject(err);
       }
-    } catch (error) {
-      const errorMsg = `Error in ${funcName}: ${error.message || error}`;
-      console.error(errorMsg, error);
-      fMyConsoleLog(`   -> ❌ ${errorMsg}`);
-    } finally {
-      gUI.isSendingLog = false;
-      fMyConsoleLog("   -> Lock Released.");
-    }
+    });
   } // End function fSendLogToGMScreenAndPS
 
   /** function fHandleNishStartOrEnd
