@@ -7978,7 +7978,7 @@
       .fSrvGetSheetRangeDataNTags("db", "GMScreen", gmMonsterRangeDef);
   } // End function fRefreshMonsterData
 
-  /**
+  /** function fTotalRereshOfAllAbilitiesAndAllGear
    * Purpose: Performs a full refresh of all Ability and Gear rows. Skips any
    * custom rows (prefixed with ⚡). For standard rows, it validates the
    * 'Ability' cell against the myCSListFSData cache, clearing invalid rows.
@@ -7991,7 +7991,7 @@
     fMyConsoleLog(`🔄 ${funcName}: Starting Full Ability/Gear Refresh...`);
 
     // --- 1. Get Target Ranges & Validate Caches ---
-    const abilityGearRanges = gUI.range?.entireAbiliyNGearTables;
+    const abilityGearRanges = gUI.range?.entireAbilityNGearTables;
     const listCache = gUI.myCSListFSData;
     if (
       !Array.isArray(abilityGearRanges) ||
