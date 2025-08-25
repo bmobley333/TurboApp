@@ -39,13 +39,16 @@ const gSrv = {
 // === Global Constants & Simple Utilities ===
 // ==========================================================================
 
-// fSrvConvertIndicesToA1 //////////////////////////////////////////////////////////
-// Purpose -> Converts 0-based row/column indices to standard A1 or 'A1:B2' or 'A1' (if r1=r2 and c1=c2) notation string
-//            on the server-side.
-// Inputs  -> r1, c1, r2, c2 (Number): 0-based start/end row and column indices.
-// Outputs -> (String | null): A1 notation string (e.g., "C5:F10"), or null on invalid input.
+/** function fSrvConvertIndicesToA1
+ * Purpose: Converts 0-based row/column indices to a standard A1 notation string.
+ * Assumptions: Inputs are valid, non-negative numbers.
+ * @param {number} r1 - 0-based starting row index.
+ * @param {number} c1 - 0-based starting column index.
+ * @param {number} r2 - 0-based ending row index.
+ * @param {number} c2 - 0-based ending column index.
+ * @returns {string | null} A1 notation string (e.g., "C5:F10" or "A1"), or null on invalid input.
+ */
 function fSrvConvertIndicesToA1(r1, c1, r2, c2) {
-  // Validate inputs are non-negative numbers
   if (
     [r1, c1, r2, c2].some(
       (idx) => typeof idx !== "number" || idx < 0 || isNaN(idx)
@@ -54,82 +57,52 @@ function fSrvConvertIndicesToA1(r1, c1, r2, c2) {
     console.error(
       `fSrvConvertIndicesToA1: Invalid indices provided (${r1},${c1},${r2},${c2})`
     );
-    return null; // Return null for invalid indices
+    return null;
   }
-
-  // Convert column indices to A1 letters using the existing helper
   const startColA1 = fSrvColToA1(c1);
   const endColA1 = fSrvColToA1(c2);
-
-  // Add 1 to row indices for 1-based A1 notation
   const startRowA1 = r1 + 1;
   const endRowA1 = r2 + 1;
-
-  // Determine if it's a single cell or a range
   if (r1 === r2 && c1 === c2) {
-    // Single cell notation
     return `${startColA1}${startRowA1}`;
   } else {
-    // Range notation: Top-left cell : Bottom-right cell
     return `${startColA1}${startRowA1}:${endColA1}${endRowA1}`;
   }
-} // END fSrvConvertIndicesToA1
+} // End function fSrvConvertIndicesToA1
 
-// fSrvColToA1 ///////////////////////////////////////////////////////////////////
-// Purpose -> Helper function to convert 0-based column index to A1 notation.
-// Inputs  -> col (Number): The 0-based column index.
-// Outputs -> (String): The A1 notation label (e.g., A, Z, AA).
+/** function fSrvColToA1
+ * Purpose: Helper function to convert a 0-based column index to A1 notation letter(s).
+ * Assumptions: Input is a non-negative integer.
+ * @param {number} col - The 0-based column index.
+ * @returns {string} The A1 notation label (e.g., A, Z, AA).
+ */
 function fSrvColToA1(col) {
   let label = "";
-  let c = col; // Use local variable
-
-  // Loop through column value
+  let c = col;
   while (c >= 0) {
     label = String.fromCharCode((c % 26) + 65) + label;
     c = Math.floor(c / 26) - 1;
   }
   return label;
-} // END fSrvColToA1
+} // End function fSrvColToA1
 
-// ==========================================================================
-// === Initialization / Bootstrapping ===
-// ==========================================================================
-
-// doGet ///////////////////////////////////////////////////////////////////////////
-// Purpose -> Standard Apps Script function triggered when the web app URL is accessed.
-//            Serves as the main server-side entry point.
-// Process -> 1. Receives the request event object 'e', containing URL parameters.
-//            2. Extracts and validates 'csID' (e.parameter.csID), 'userEmail' (e.parameter.userEmail), and 'gameVer' (e.parameter.gameVer).
-//            3. Stores 'csID' in the server-side global gSrv.ids.sheets.cs. (Others not stored server-side).
-//            4. Calls fSrvGetMyKlId(csID) to retrieve the associated KL ID ('klId') and store it in gSrv.ids.sheets.kl.
-//            5. Creates an HTML template object from the 'index.html' file.
-//            6. **Injects Data**: Assigns 'csID' to template.csID, 'userEmail' to template.userEmail,and 'gameVer' to template.gameVer.
-//            7. Evaluates the 'index.html' template. During this evaluation:
-//               - The scriptlet '<?= csID ?>' assigns the csID value to the client-side global variable 'gIndexCSID'.
-//               - The scriptlet '<?= userEmail ?>' assigns the userEmail value to the client-side global variable 'gIndexEmail'.
-//               - The scriptlet '<?= gameVer ?>' assigns the gameVer value to the client-side global variable 'gIndexGameVer'.
-//               - All globals are then available to all .html files BUT NOT to turbo.gs.
-//            8. Sets the browser window title to "MetaScape".
-//            9. Returns the fully rendered HTML page to the client's browser.
-// Inputs  -> e (Event Object): Contains request details, including URL parameters (e.g., e.parameter.csID, e.parameter.userEmail, e.parameter.gameVer).
-// Outputs -> (HtmlOutput): The fully rendered HTML page to be displayed in the user's browser.
-// Side Effects -> Populates gSrv.ids.sheets.cs and gSrv.ids.sheets.kl on the server-side.
-//            -> Causes creation of gIndexCSID, gIndexEmail, and gIndexGameVer client-side globals.
-// Availability -> 'gIndexCSID', 'gIndexEmail', 'gIndexGameVer' become available to *all* client-side JavaScript code
-//                 (e.g. within index.html, scripts.html, gamelogic.html).
-//            -> They are *not* directly accessible by server-side .gs code (like this function) but can be passed
-//               from .html to .gs via parameters of google.script.run.
+/** function doGet
+ * Purpose: Serves the web app and injects initial, essential parameters to the client.
+ * Assumptions: URL parameters 'csID', 'userEmail', and 'gameVer' are provided.
+ * Notes: This is the main server-side entry point for the web app. It populates server-side globals and injects data into the HTML template for client-side use in the `gIndex` object.
+ * @param {object} e - The Apps Script event object containing URL parameters.
+ * @returns {HtmlOutput} The fully rendered HTML page.
+ */
 function doGet(e) {
-  let csId = null; // Use let to allow modification in error handling
-  let klId = null; // Use let for KL ID
-  let userEmail = null; // Variable for user email
-  let gameVer = null; // Variable for game version
+  let csId = null;
+  let klId = null;
+  let userEmail = null;
+  let gameVer = null;
 
   try {
-    // --- 1. Get and Validate Parameters ---
-    csId = e?.parameter?.csID; // Use optional chaining
-    userEmail = e?.parameter?.userEmail; // Get userEmail parameter
-    gameVer = e?.parameter?.gameVer; // Get gameVer parameter
+    csId = e?.parameter?.csID;
+    userEmail = e?.parameter?.userEmail;
+    gameVer = e?.parameter?.gameVer;
 
     if (!csId || typeof csId !== "string") {
       console.error(
@@ -139,58 +112,48 @@ function doGet(e) {
         "❌ csID parameter missing or invalid in URL."
       );
     }
-    // Optional: Validate userEmail format if necessary, but allow it to be potentially empty/null if not critical
     if (!userEmail || typeof userEmail !== "string") {
       console.warn(
         "doGet Warning: userEmail parameter not provided or invalid in URL."
       );
-      userEmail = ""; // Default to empty string if missing or invalid
+      userEmail = "";
     }
-    // Allow gameVer to be empty/null
     if (gameVer === null || gameVer === undefined) {
       console.warn("doGet Warning: gameVer parameter not provided in URL.");
-      gameVer = ""; // Default to empty string if missing
+      gameVer = "";
     } else if (typeof gameVer !== "string") {
-      gameVer = String(gameVer); // Ensure it's a string
+      gameVer = String(gameVer);
     }
     Logger.log(
       `doGet: Received CS ID: ${csId}, User Email: ${userEmail}, Game Ver: ${gameVer}`
     );
-
-    // --- 2. Populate gSrv with CS ID ---
     gSrv.ids.sheets.cs = csId;
     Logger.log(`doGet: Assigned gSrv.ids.sheets.cs = ${gSrv.ids.sheets.cs}`);
-
-    // --- 3. Get and Populate KL ID ---
-    klId = fSrvGetMyKlId(csId); // This function handles its own internal errors/throws
+    klId = fSrvGetMyKlId(csId);
     gSrv.ids.sheets.kl = klId;
     Logger.log(`doGet: Assigned gSrv.ids.sheets.kl = ${gSrv.ids.sheets.kl}`);
-
-    // --- 4. Serve HTML ---
     const template = HtmlService.createTemplateFromFile("index");
-    template.csID = csId; // Pass csId to the template client-side (becomes gIndexCSID)
-    template.userEmail = userEmail; // Pass userEmail to the template client-side (becomes gIndexEmail)
-    template.gameVer = gameVer; // Pass gameVer to the template client-side (becomes gIndexGameVer)
+    template.csID = csId;
+    template.userEmail = userEmail;
+    template.gameVer = gameVer;
 
-    // Evaluate and return the HTML
     return template
       .evaluate()
-      .setTitle("MetaScape Turbo") // Updated Title
+      .setTitle("MetaScape Turbo")
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   } catch (error) {
-    // Log detailed error and return user-friendly error message
-    const errorContext = `CS ID: ${csId || "Unknown"}, Email: ${
+    const errorContext = `CS ID: ${csId ||
+      "Unknown"}, Email: ${
       userEmail || "Unknown"
-    }, GameVer: ${gameVer || "Unknown"}, KL ID Fetch Attempted: ${
+    }, GameVer: ${gameVer ||
+      "Unknown"}, KL ID Fetch Attempted: ${
       klId !== null || "No (failed before KL fetch)"
-    }`; // Added GameVer to context
+    }`;
     console.error(
       `doGet Error (${errorContext}): ${error.message}${
         error.stack ? "\n" + error.stack : ""
       }`
     );
-
-    // Provide specific feedback based on error type
     let userErrorMessage = `❌ Error loading app: ${error.message}.`;
     if (error.message.includes("getMyKlId")) {
       userErrorMessage += ` Could not retrieve KL ID from CS ID '${csId}'. Check Data tab setup.`;
@@ -200,16 +163,17 @@ function doGet(e) {
       userErrorMessage += ` Ensure required tabs exist in sheet '${csId}'.`;
     }
     return HtmlService.createHtmlOutput(userErrorMessage);
-  }
-} // END doGet
+  } 
+} // End function doGet
 
-// fSrvGetMyKlId //////////////////////////////////////////////////////////////////
-// Purpose -> Retrieves the MyKL ID from the player's Character Sheet's <Data> tab.
-// Inputs  -> myCsId (String): The Sheet ID of the player's Character Sheet (mycs).
-// Outputs -> (String): The player's MyKL Sheet ID.
-// Throws  -> (Error): If IDs cannot be retrieved or sheets/tabs not found.
+/** function fSrvGetMyKlId
+ * Purpose: Retrieves the MyKL ID from the player's Character Sheet Data tab.
+ * Assumptions: The CS has a tab named 'Data' with the KL ID in cell F8.
+ * @param {string} myCsId - The Sheet ID of the player's Character Sheet.
+ * @returns {string} The player's MyKL Sheet ID.
+ * @throws {Error} If IDs cannot be retrieved or sheets/tabs are not found.
+ */
 function fSrvGetMyKlId(myCsId) {
-  // Validate input
   if (!myCsId || typeof myCsId !== "string") {
     console.error(
       "fSrvGetMyKlId Error: Character Sheet ID (myCsId) was not provided or invalid."
@@ -217,58 +181,44 @@ function fSrvGetMyKlId(myCsId) {
     throw new Error("getMyKlId: Character Sheet ID (myCsId) was not provided.");
   }
   Logger.log(`fSrvGetMyKlId: Attempting to get MyKL ID from CS ID: ${myCsId}`);
-
   try {
-    // Open the Character Sheet using the provided ID
     const csSpreadsheet = SpreadsheetApp.openById(myCsId);
     if (!csSpreadsheet) {
       throw new Error(
         `Could not open Character Sheet with ID: ${myCsId}. Check permissions and ID validity.`
       );
     }
-
-    // Get the specific sheet named in gSrv.DATA_TAB_NAME
     const dataSheet = csSpreadsheet.getSheetByName(gSrv.DATA_TAB_NAME);
     if (!dataSheet) {
       throw new Error(
         `Sheet named "${gSrv.DATA_TAB_NAME}" not found in Character Sheet ID: ${myCsId}.`
       );
     }
-
-    // Get the MyKL ID from the specified cell
     const myKlId = dataSheet.getRange(gSrv.MYKL_ID_CELL_A1).getValue();
-
-    // Validate the retrieved MyKL ID
     if (!myKlId || typeof myKlId !== "string" || myKlId.trim() === "") {
       throw new Error(
         `Could not retrieve a valid MyKL ID from cell ${gSrv.MYKL_ID_CELL_A1} in sheet "${gSrv.DATA_TAB_NAME}". Value was: "${myKlId}"`
       );
     }
-
     Logger.log(`fSrvGetMyKlId: Successfully retrieved MyKL ID: ${myKlId}`);
-    return myKlId.trim(); // Return the trimmed ID
+    return myKlId.trim();
   } catch (e) {
-    // Log detailed error and re-throw a user-friendly error
     console.error(
       `Error in fSrvGetMyKlId for CS ID ${myCsId}: ${e.message}\nStack: ${e.stack}`
     );
-    // Include specific error message if available, otherwise generic
     throw new Error(`Server error getting MyKL ID: ${e.message || e}`);
   }
-} // END fSrvGetMyKlId
+} // End function fSrvGetMyKlId
 
-// ==========================================================================
-// === Designer Access ===
-// ==========================================================================
-
-// fSrvValidateDesignerPassword /////////////////////////////////////////////////
-// Purpose -> Validates a password attempt against the stored designer password.
-// Inputs  -> passwordAttempt (String): The password entered by the user.
-// Outputs -> (Boolean): True if the password matches, false otherwise.
+/** function fSrvValidateDesignerPassword
+ * Purpose: Validates a password attempt against the stored designer password.
+ * Assumptions: The designer password is set in the `gSrv` global object.
+ * @param {string} passwordAttempt - The password entered by the user.
+ * @returns {boolean} True if the password matches, false otherwise.
+ */
 function fSrvValidateDesignerPassword(passwordAttempt) {
   const funcName = "fSrvValidateDesignerPassword";
-  const storedPassword = gSrv.designerPassword; // Assuming password is in gSrv
-
+  const storedPassword = gSrv.designerPassword;
   if (!storedPassword) {
     console.error(
       `${funcName}: Designer password is not set in server globals (gSrv.designerPassword).`
@@ -276,139 +226,125 @@ function fSrvValidateDesignerPassword(passwordAttempt) {
     Logger.log(
       `${funcName}: ERROR - Designer password not configured on server.`
     );
-    // Return false if the server doesn't have a password configured
     return false;
   }
-
-  // Basic check to ensure we have a string attempt
   if (typeof passwordAttempt !== "string") {
     Logger.log(
       `${funcName}: Invalid password attempt type received: ${typeof passwordAttempt}`
     );
     return false;
   }
-
-  // Perform case-sensitive comparison
   const isValid = passwordAttempt === storedPassword;
-
-  // Optional: Log the attempt result (avoid logging passwords themselves in production)
   Logger.log(
     `${funcName}: Password validation attempt. Result: ${
       isValid ? "Success" : "Failure"
     }`
   );
-
   return isValid;
-} // END fSrvValidateDesignerPassword
+} // End function fSrvValidateDesignerPassword
 
-
-/**
- * Purpose: Reads the 'Game' tab from the Master CS, packages the UI data, and saves it
- * as a chunked document set to the 'vXX Game UI' Firestore collection.
- * Assumptions: This is an administrator-only function triggered from the client's Designer menu.
+/** function fSrvRefreshUITemplateCache
+ * Purpose: Re-reads the Master CS 'Game' tab and saves it to the Firestore UI cache.
+ * Assumptions: This is an administrator-only function. The gIndex object is passed from the client.
  * @param {object} gIndex - The client-side gIndex object, containing at least GameVer.
  * @returns {object} A success/failure object like { success: boolean, message?: string }.
  */
 function fSrvRefreshUITemplateCache(gIndex) {
   const funcName = "fSrvRefreshUITemplateCache";
-  Logger.log(`${funcName}: Starting UI Template Cache Refresh for v${gIndex.GameVer}...`);
-
+  Logger.log(
+    `${funcName}: Starting UI Template Cache Refresh for v${gIndex.GameVer}...`
+  );
   if (!gIndex || !gIndex.GameVer) {
     const msg = "Game Version is required to create a versioned UI template.";
     Logger.log(`${funcName} Error: ${msg}`);
-    return { success: false, message: msg };
+    return {
+      success: false,
+      message: msg
+    };
   }
-
   try {
     const firestore = fSrvGetFirestoreInstance();
     if (!firestore) {
       throw new Error("Failed to get Firestore instance.");
     }
-
     const masterCsId = gSrv.ids.sheets.mastercs;
     if (!masterCsId) {
       throw new Error("MasterCS ID is not defined in server configuration.");
     }
     Logger.log(`   -> Reading from MasterCS ID: ${masterCsId}`);
-    const uiTemplateData = fSrvReadCSGameSheet({ CSID: masterCsId });
+    const uiTemplateData = fSrvReadCSGameSheet({
+      CSID: masterCsId
+    });
     if (!uiTemplateData || !uiTemplateData.arr || !uiTemplateData.format) {
-      throw new Error("Failed to read or process data from the Master Character Sheet.");
+      throw new Error(
+        "Failed to read or process data from the Master Character Sheet."
+      );
     }
     Logger.log(`   -> Successfully read and packaged MasterCS 'Game' tab data.`);
-
-    const gameVerMajor = String(gIndex.GameVer).trim().split('.')[0];
+    const gameVerMajor = String(gIndex.GameVer).trim().split(".")[0];
     const collectionName = `v${gameVerMajor} Game UI`;
     const baseDocumentId = `UITemplate`;
-
-    fSrvSaveObjectAsChunkedDocs(firestore, uiTemplateData, collectionName, baseDocumentId);
-
-    Logger.log(`✅ ${funcName}: Successfully triggered refresh and save for UI Template Cache.`);
-    return { success: true, message: `UI Template Cache saved to collection '${collectionName}'.` };
-
+    fSrvSaveObjectAsChunkedDocs(
+      firestore,
+      uiTemplateData,
+      collectionName,
+      baseDocumentId
+    );
+    Logger.log(
+      `✅ ${funcName}: Successfully triggered refresh and save for UI Template Cache.`
+    );
+    return {
+      success: true,
+      message: `UI Template Cache saved to collection '${collectionName}'.`,
+    };
   } catch (e) {
     const errorMsg = `Error in ${funcName}: ${e.message}`;
     console.error(errorMsg, e.stack);
     Logger.log(`❌ ${funcName} Error: ${e.message}`);
-    return { success: false, message: e.message };
+    return {
+      success: false,
+      message: e.message
+    };
   }
 } // End function fSrvRefreshUITemplateCache
 
-
-// ==========================================================================
-// === Low-Level Tag & Range Helpers ===
-// ==========================================================================
-
-// fSrvBuildTagMaps /////////////////////////////////////////////////////////
-// Purpose -> Builds rowTag and colTag maps from a 2D array (Row 0 for colTags, Col 0 for rowTags).
-// Inputs  -> fullData (Array[][]): The 2D array of data
-// Outputs -> (Object): An object { rowTag: {}, colTag: {} } containing the maps.
+/** function fSrvBuildTagMaps
+ * Purpose: Builds rowTag and colTag maps from a 2D array.
+ * Assumptions: Row tags are in column 0, column tags are in row 0.
+ * @param {any[][]} fullData - The 2D array of data.
+ * @returns {object} An object { rowTag: {}, colTag: {} } containing the maps.
+ */
 function fSrvBuildTagMaps(fullData) {
   const rowTagMap = {};
   const colTagMap = {};
-
-  // Validate data array structure
   if (!Array.isArray(fullData) || fullData.length === 0) {
     console.warn("fSrvBuildTagMaps: Input data array is empty or invalid.");
-    return { rowTag: rowTagMap, colTag: colTagMap }; // Return empty maps
+    return {
+      rowTag: rowTagMap,
+      colTag: colTagMap
+    };
   }
-
   const numRows = fullData.length;
-  const numCols = fullData[0]?.length || 0; // Handle potentially empty first row
-
-  // Process Row Tags (from Column 0)
+  const numCols = fullData[0]?.length || 0;
   for (let r = 0; r < numRows; r++) {
-    const rowHeaderCell = fullData[r]?.[0]; // Value in the first column of this row
+    const rowHeaderCell = fullData[r]?.[0];
     if (typeof rowHeaderCell === "string" && rowHeaderCell.trim()) {
-      // Split potentially comma-separated tags
       rowHeaderCell.split(",").forEach((tag) => {
         const trimmedTag = tag.trim();
         if (trimmedTag) {
-          // Map the trimmed tag to the current 0-based row index (r)
-          // Warn if tag is being overwritten (optional)
-          // if (rowTagMap.hasOwnProperty(trimmedTag)) {
-          //   console.warn(`fSrvBuildTagMaps: Overwriting row tag "${trimmedTag}" (Old: ${rowTagMap[trimmedTag]}, New: ${r})`);
-          // }
           rowTagMap[trimmedTag] = r;
         }
       });
     }
   }
-
-  // Process Column Tags (from Row 0)
   const colHeaderRow = fullData[0];
   if (Array.isArray(colHeaderRow)) {
     for (let c = 0; c < numCols; c++) {
-      const colHeaderCell = colHeaderRow[c]; // Value in the first row of this column
+      const colHeaderCell = colHeaderRow[c];
       if (typeof colHeaderCell === "string" && colHeaderCell.trim()) {
-        // Split potentially comma-separated tags
         colHeaderCell.split(",").forEach((tag) => {
           const trimmedTag = tag.trim();
           if (trimmedTag) {
-            // Map the trimmed tag to the current 0-based column index (c)
-            // Warn if tag is being overwritten (optional)
-            // if (colTagMap.hasOwnProperty(trimmedTag)) {
-            //   console.warn(`fSrvBuildTagMaps: Overwriting col tag "${trimmedTag}" (Old: ${colTagMap[trimmedTag]}, New: ${c})`);
-            // }
             colTagMap[trimmedTag] = c;
           }
         });
@@ -419,54 +355,47 @@ function fSrvBuildTagMaps(fullData) {
       "fSrvBuildTagMaps: Header row (row 0) is missing or invalid. Cannot build column tags."
     );
   }
+  return {
+    rowTag: rowTagMap,
+    colTag: colTagMap
+  };
+} // End function fSrvBuildTagMaps
 
-  return { rowTag: rowTagMap, colTag: colTagMap };
-} // END fSrvBuildTagMaps
-
-// fSrvResolveTag ///////////////////////////////////////////////////////////
-// Purpose -> Resolves a single row or column tag/index using the provided tag maps.
-// Inputs  -> tagOrIndex (String | Number): The tag string or 0-based index.
-//         -> tagMap (Object): The corresponding tag map (rowTag or colTag).
-//         -> type (String): 'row' or 'col' for logging purposes.
-// Outputs -> (Number): The resolved 0-based index, or NaN if resolution fails.
+/** function fSrvResolveTag
+ * Purpose: Resolves a single row or column tag/index using the provided tag maps.
+ * Assumptions: The tagMap is a valid object.
+ * @param {string | number} tagOrIndex - The tag string or 0-based index.
+ * @param {object} tagMap - The corresponding tag map (rowTag or colTag).
+ * @param {string} [type="unknown"] - 'row' or 'col' for logging purposes.
+ * @returns {number} The resolved 0-based index, or NaN if resolution fails.
+ */
 function fSrvResolveTag(tagOrIndex, tagMap, type = "unknown") {
   if (typeof tagOrIndex === "number" && !isNaN(tagOrIndex) && tagOrIndex >= 0) {
-    // Input is already a valid numeric index
     return tagOrIndex;
   } else if (typeof tagOrIndex === "string" && tagOrIndex.trim()) {
-    // Input is a string tag
     const trimmedTag = tagOrIndex.trim();
     if (tagMap.hasOwnProperty(trimmedTag)) {
-      // Tag found in the map
       return tagMap[trimmedTag];
     } else {
-      // Tag not found
       console.warn(
         `fSrvResolveTag: Could not resolve ${type} tag "${trimmedTag}"`
       );
       return NaN;
     }
   } else {
-    // Input is invalid type or empty
     console.warn(
       `fSrvResolveTag: Invalid input provided for ${type} resolution:`,
       tagOrIndex
     );
     return NaN;
   }
-} // END fSrvResolveTag
+} // End function fSrvResolveTag
 
-// ==========================================================================
-// === Core Sheet Loader – “Game” Tab ===
-// ==========================================================================
-
-
-/**
- * Purpose: Acts as the main data loader. Tries the "fast path" by loading from the Firestore UI cache.
- * If that fails, it falls back to the "slow path": reading from the Google Sheet AND automatically
- * creating the Firestore cache for subsequent loads ("self-healing").
- * @param {object} gIndex - The client-side gIndex object, containing at least GameVer and CSID.
- * @returns {object} A wrapper object { data: { arr, format, notesArr }, source: 'Firestore' | 'Google Sheets' }.
+/** function fSrvGetInitialGridData
+ * Purpose: Acts as the main data loader, trying a fast path (Firestore cache) before a slow path (Google Sheet).
+ * Assumptions: The "slow path" automatically creates the cache for subsequent loads (self-healing).
+ * @param {object} gIndex - The client-side gIndex object, containing GameVer and CSID.
+ * @returns {object} A wrapper object { data: { arr, format, notesArr }, source: string }.
  */
 function fSrvGetInitialGridData(gIndex) {
   const funcName = "fSrvGetInitialGridData";
@@ -474,57 +403,64 @@ function fSrvGetInitialGridData(gIndex) {
     Logger.log("--> Attempting Fast Path: Load UI from Firestore Cache...");
     const cachedData = fSrvGetUITemplateFromCache(gIndex);
     Logger.log("--> ✅ Fast Path SUCCESS: UI loaded from Firestore Cache.");
-    return { data: cachedData, source: 'Firestore' };
+    return {
+      data: cachedData,
+      source: "Firestore"
+    };
   } catch (e) {
     Logger.log(`--> ℹ️ Fast Path FAILED: ${e.message}. Falling back to Slow Path.`);
     Logger.log("--> Attempting Slow Path: Load UI from Google Sheet...");
     const sheetData = fSrvReadCSGameSheet(gIndex);
     Logger.log("--> ✅ Slow Path SUCCESS: UI loaded from Google Sheet.");
-
     try {
-      Logger.log("   -> Self-Healing: Attempting to save the loaded Sheet data to create the cache for the next load...");
-      const gameVerMajor = String(gIndex.GameVer).trim().split('.')[0];
+      Logger.log(
+        "   -> Self-Healing: Attempting to save the loaded Sheet data to create the cache for the next load..."
+      );
+      const gameVerMajor = String(gIndex.GameVer).trim().split(".")[0];
       const collectionName = `v${gameVerMajor} Game UI`;
       const baseDocumentId = `UITemplate`;
       const firestore = fSrvGetFirestoreInstance();
-      fSrvSaveObjectAsChunkedDocs(firestore, sheetData, collectionName, baseDocumentId);
+      fSrvSaveObjectAsChunkedDocs(
+        firestore,
+        sheetData,
+        collectionName,
+        baseDocumentId
+      );
       Logger.log("   -> ✅ Self-Healing: Cache created successfully.");
     } catch (saveError) {
-      Logger.log(`   -> ⚠️ Self-Healing WARNING: Could not save UI Template to cache after slow load. Error: ${saveError.message}`);
+      Logger.log(
+        `   -> ⚠️ Self-Healing WARNING: Could not save UI Template to cache after slow load. Error: ${saveError.message}`
+      );
     }
-
-    return { data: sheetData, source: 'Google Sheets' };
+    return {
+      data: sheetData,
+      source: "Google Sheets"
+    };
   }
 } // End function fSrvGetInitialGridData
 
-
-// fSrvReadCSGameSheet /////////////////////////////////////////////////////////////////////////////////
-// Purpose -> Loads full data, format, and notes from the 'Game' sheet of a given spreadsheet ID.
-// Inputs  -> gIndex.CSID (String): The ID of the spreadsheet to read from.
-// Outputs -> (Object): Structured object { arr, format, notesArr } containing sheet data.
-// Throws  -> (Error): If sheet ID is invalid, spreadsheet/sheet cannot be opened, or data extraction fails.
+/** function fSrvReadCSGameSheet
+ * Purpose: Loads full data, format, and notes from the 'Game' sheet of a given spreadsheet ID.
+ * Assumptions: The gIndex object contains a valid CSID.
+ * @param {object} gIndex - The client-side gIndex object.
+ * @returns {object} A structured object { arr, format, notesArr } containing sheet data.
+ * @throws {Error} If sheet ID is invalid or the sheet cannot be opened/processed.
+ */
 function fSrvReadCSGameSheet(gIndex) {
-  const funcName = "fSrvReadCSGameSheet"; // Added funcName for better logging/errors
+  const funcName = "fSrvReadCSGameSheet";
   try {
-    // Validate gIndex.CSID
     if (!gIndex.CSID || typeof gIndex.CSID !== "string") {
       throw new Error("Invalid or missing Sheet ID provided.");
     }
-    Logger.log(`${funcName}: Opening Spreadsheet ID: ${gIndex.CSID}`); // Log opening attempt
-
-    // Open Spreadsheet
+    Logger.log(`${funcName}: Opening Spreadsheet ID: ${gIndex.CSID}`);
     const ss = SpreadsheetApp.openById(gIndex.CSID);
     if (!ss) {
-      // Check if spreadsheet opened successfully
       throw new Error(
         `Could not open Spreadsheet with ID: ${gIndex.CSID}. Check permissions and ID validity.`
       );
     }
-
-    // Get "Game" Sheet
     const sh = ss.getSheetByName("Game");
     if (!sh) {
-      // Check if sheet was found
       throw new Error(
         `Sheet named "Game" not found in Spreadsheet ID: ${gIndex.CSID}.`
       );
@@ -532,63 +468,78 @@ function fSrvReadCSGameSheet(gIndex) {
     Logger.log(
       `${funcName}: Successfully opened sheet "Game" in ID: ${gIndex.CSID}`
     );
-
-    // Call fSrvExtractSheetData with the obtained sheet object
     Logger.log(`${funcName}: Extracting data from sheet "Game"...`);
     return fSrvExtractSheetData(sh);
   } catch (e) {
-    // Determine context based on error message content for better reporting
     const context =
       e.message.includes("openById") ||
-      e.message.includes("Spreadsheet with ID")
-        ? "opening spreadsheet"
-        : e.message.includes("getSheetByName") ||
-          e.message.includes("not found")
-        ? "getting 'Game' sheet"
-        : e.stack?.includes("fSrvExtractSheetData")
-        ? "processing sheet data" // Check stack for fSrvExtractSheetData context
-        : "during operation"; // Generic fallback context
-
+      e.message.includes("Spreadsheet with ID") ?
+      "opening spreadsheet" :
+      e.message.includes("getSheetByName") || e.message.includes("not found") ?
+      "getting 'Game' sheet" :
+      e.stack?.includes("fSrvExtractSheetData") ?
+      "processing sheet data" :
+      "during operation";
     const msg = `${funcName}: Error ${context}: ${e.message}`;
-    console.error(msg + "\nStack:\n" + e.stack); // Log detailed error
-    throw new Error(msg); // Re-throw a consolidated error message
+    console.error(msg + "\nStack:\n" + e.stack);
+    throw new Error(msg);
   }
-} // END fSrvReadCSGameSheet
+} // End function fSrvReadCSGameSheet
 
-// fSrvExtractSheetData ////////////////////////////////////////////////////////////////////////////////
-// Reads data, formats, and notes from the sheet and returns structured result.
+/** function fSrvExtractSheetData
+ * Purpose: Reads all data, formats, and notes from a given sheet object.
+ * Assumptions: The sheet object `sh` is a valid Apps Script Sheet object.
+ * @param {Sheet} sh - The Google Sheet object to extract data from.
+ * @returns {object} A structured object { arr, format, notesArr }.
+ */
 function fSrvExtractSheetData(sh) {
   const rngData = sh.getDataRange();
   const arr = rngData.getValues();
-
   if (fSrvIsSheetTrulyEmpty(sh, arr)) {
-    return fSrvBuildReturnObject(
-      [[]],
-      {
-        bg: [[]],
-        fontColorHex: [[]],
-        weight: [[]],
-        fontSize: [[]],
-        fontStyle: [[]],
-        fontFamily: [[]],
-        wrap: [[]],
-        merges: [],
-        colWidths: [],
-        borders: [],
-      },
-      [[]]
-    );
+    return fSrvBuildReturnObject([
+      []
+    ], {
+      bg: [
+        []
+      ],
+      fontColorHex: [
+        []
+      ],
+      weight: [
+        []
+      ],
+      fontSize: [
+        []
+      ],
+      fontStyle: [
+        []
+      ],
+      fontFamily: [
+        []
+      ],
+      wrap: [
+        []
+      ],
+      merges: [],
+      colWidths: [],
+      borders: [],
+    }, [
+      []
+    ]);
   }
-
   const numCols = arr[0]?.length || 0;
   const format = fSrvBuildFormatObject(sh, rngData, numCols);
   const notesArr = rngData.getNotes();
-
   return fSrvBuildReturnObject(arr, format, notesArr);
-} // END fSrvExtractSheetData
+} // End function fSrvExtractSheetData
 
-// fSrvIsSheetTrulyEmpty ////////////////////////////////////////////////////////////////////////////////
-// Determines if the sheet has zero real content, returns true if it's blank.
+/** function fSrvIsSheetTrulyEmpty
+ * Purpose: Determines if a sheet has zero real content.
+ * Assumptions: Checks for minimal cell content and last row/column data.
+ * @param {Sheet} sh - The Google Sheet object.
+ * @param {any[][]} arr - The 2D array of values from the sheet.
+ * @returns {boolean} True if the sheet is considered empty, false otherwise.
+ */
 function fSrvIsSheetTrulyEmpty(sh, arr) {
   const numRows = arr.length;
   const numCols = arr[0]?.length || 0;
@@ -598,23 +549,29 @@ function fSrvIsSheetTrulyEmpty(sh, arr) {
     sh.getLastRow() === 0 &&
     sh.getLastColumn() === 0
   );
-} // END fSrvIsSheetTrulyEmpty
+} // End function fSrvIsSheetTrulyEmpty
 
-// fSrvBuildFormatObject ////////////////////////////////////////////////////////////////////////////////
-// Constructs formatting object from raw arrays and merge info.
+/** function fSrvBuildFormatObject
+ * Purpose: Constructs the complete formatting object from a sheet.
+ * Assumptions: The sheet and data range objects are valid.
+ * @param {Sheet} sh - The Google Sheet object.
+ * @param {Range} rngData - The DataRange object from the sheet.
+ * @param {number} numCols - The number of columns in the data range.
+ * @returns {object} The complete format object.
+ */
 function fSrvBuildFormatObject(sh, rngData, numCols) {
   const fontColorObjects = rngData.getFontColorObjects();
   const fontColorHex = fontColorObjects.map((row) =>
     row.map(
       (obj) =>
-        obj?.asRgbColor?.()?.asHexString?.()?.replace(/^#ff/, "#") ?? null
+      obj?.asRgbColor?.()?.asHexString?.()?.replace(/^#ff/, "#") ?? null
     )
   );
-
-  const colWidths = Array.from({ length: numCols }, (_, c) =>
+  const colWidths = Array.from({
+    length: numCols
+  }, (_, c) =>
     sh.getColumnWidth(c + 1)
   );
-
   const mergedRanges = rngData.getMergedRanges();
   const merges = mergedRanges
     .map((r) => ({
@@ -625,11 +582,10 @@ function fSrvBuildFormatObject(sh, rngData, numCols) {
     }))
     .filter(
       (m) =>
-        Number.isInteger(m.row) &&
-        Number.isInteger(m.col) &&
-        (m.rowspan > 1 || m.colspan > 1)
+      Number.isInteger(m.row) &&
+      Number.isInteger(m.col) &&
+      (m.rowspan > 1 || m.colspan > 1)
     );
-
   return {
     bg: rngData.getBackgrounds(),
     fontColorHex: fontColorHex,
@@ -640,41 +596,40 @@ function fSrvBuildFormatObject(sh, rngData, numCols) {
     wrap: rngData.getWraps(),
     merges: merges,
     colWidths: colWidths,
-    borders: [], // client-side handles borders
+    borders: [],
   };
-} // END fSrvBuildFormatObject
+} // End function fSrvBuildFormatObject
 
-// fSrvBuildReturnObject ////////////////////////////////////////////////////////////////////////////////
-// Combines the final return structure.
+/** function fSrvBuildReturnObject
+ * Purpose: Combines arrays into the final return structure for sheet data.
+ * Assumptions: The input arrays are correctly structured.
+ * @param {any[][]} arr - The 2D array of cell values.
+ * @param {object} format - The format object.
+ * @param {string[][]} notesArr - The 2D array of cell notes.
+ * @returns {object} The combined object { arr, format, notesArr }.
+ */
 function fSrvBuildReturnObject(arr, format, notesArr) {
   return {
     arr: arr,
     format: format,
     notesArr: notesArr,
   };
-} // END fSrvBuildReturnObject
+} // End function fSrvBuildReturnObject
 
-// ==========================================================================
-// === Generic Sheet Operations ===
-// ==========================================================================
-
-// fSrvLoadFullGoogleSheetAndTags /////////////////////////////////////////////////////
-// Purpose -> Loads column tags (Row 0), row tags (Col 0), and all cell text values
-//            from a specified sheet within a specified Google Workbook (DB, MasterCS, etc.).
-//            Validates tag uniqueness (case-insensitive).
-// Inputs  -> workbookAbr (String): Abbreviation ('db', 'mastercs', 'masterkl', 'mycs', 'mykl').
-//         -> sheetName (String): The name of the specific sheet (tab) to read from.
-//         -> csId (String): The Character Sheet ID (used for 'mycs', and to find 'mykl').
-// Outputs -> (Object): { ColTags: Object, RowTags: Object, sheetText2D: Array[][] } on success.
-// Throws  -> (Error): If inputs are invalid, workbook ID not found/derived, sheet not found,
-//                     sheet is empty, or duplicate tags are found (case-insensitive).
+/** function fSrvLoadFullGoogleSheetAndTags
+ * Purpose: Loads all data and tags from a specified sheet in a specified workbook.
+ * Assumptions: The workbook and sheet exist and are accessible.
+ * @param {string} workbookAbr - Abbreviation ('db', 'mastercs', 'mycs', etc.).
+ * @param {string} sheetName - The name of the sheet to read.
+ * @param {string} csId - The Character Sheet ID, required for 'mycs' and 'mykl'.
+ * @returns {object} An object { ColTags, RowTags, sheetText2D }.
+ * @throws {Error} If inputs are invalid, sheets are not found, or duplicate tags exist.
+ */
 function fSrvLoadFullGoogleSheetAndTags(workbookAbr, sheetName, csId) {
   const funcName = "fSrvLoadFullGoogleSheetAndTags";
   Logger.log(
     `${funcName}: Loading Tags & Data for Workbook: "${workbookAbr}", Sheet: "${sheetName}", CSID: "${csId}".`
   );
-
-  // --- 1. Validate Inputs ---
   if (!workbookAbr || typeof workbookAbr !== "string") {
     throw new Error(`${funcName}: Invalid or missing workbookAbr provided.`);
   }
@@ -683,8 +638,6 @@ function fSrvLoadFullGoogleSheetAndTags(workbookAbr, sheetName, csId) {
   }
   const trimmedSheetName = sheetName.trim();
   const lowerWorkbookAbr = workbookAbr.toLowerCase();
-
-  // --- 2. Determine Workbook ID ---
   let workbookID = null;
   try {
     switch (lowerWorkbookAbr) {
@@ -701,13 +654,13 @@ function fSrvLoadFullGoogleSheetAndTags(workbookAbr, sheetName, csId) {
         if (!csId) {
           throw new Error("CSID is required to identify 'MyCS' workbook.");
         }
-        workbookID = csId; // MyCS ID is the CSID itself
+        workbookID = csId;
         break;
       case "mykl":
         if (!csId) {
           throw new Error("CSID is required to look up 'MyKL' workbook ID.");
         }
-        workbookID = fSrvGetMyKlId(csId); // Get MyKL ID using helper
+        workbookID = fSrvGetMyKlId(csId);
         if (!workbookID) {
           throw new Error(
             `Could not find linked 'MyKL' workbook ID for CSID: ${csId}`
@@ -729,10 +682,8 @@ function fSrvLoadFullGoogleSheetAndTags(workbookAbr, sheetName, csId) {
     console.error(`${funcName} Error resolving Workbook ID: ${e.message}`);
     throw new Error(
       `Failed to resolve Workbook ID for "${workbookAbr}": ${e.message}`
-    ); // Re-throw
+    );
   }
-
-  // --- 3. Open Target Workbook & Get Target Tab ---
   let ss, sh;
   try {
     ss = SpreadsheetApp.openById(workbookID);
@@ -753,13 +704,10 @@ function fSrvLoadFullGoogleSheetAndTags(workbookAbr, sheetName, csId) {
       `Failed to access sheet "${trimmedSheetName}" in Workbook "${workbookAbr}": ${e.message}`
     );
   }
-
-  // --- 4. Get Full Data Range & Check if Empty ---
   const dataRange = sh.getDataRange();
   const sheetText2D = dataRange.getValues();
   const numRows = sheetText2D.length;
   const numCols = numRows > 0 ? sheetText2D[0]?.length || 0 : 0;
-
   if (
     numRows === 0 ||
     numCols === 0 ||
@@ -772,12 +720,9 @@ function fSrvLoadFullGoogleSheetAndTags(workbookAbr, sheetName, csId) {
   Logger.log(
     `   -> Read ${numRows}x${numCols} cells from "${trimmedSheetName}".`
   );
-
-  // --- 5. Process Column Tags (Row 0) ---
   const colTagsMap = {};
   const colTagsSeen = new Set();
   const headerRow = sheetText2D[0];
-
   for (let c = 0; c < numCols; c++) {
     const cellValue = headerRow[c];
     if (typeof cellValue === "string" && cellValue.trim() !== "") {
@@ -807,16 +752,13 @@ function fSrvLoadFullGoogleSheetAndTags(workbookAbr, sheetName, csId) {
   Logger.log(
     `   -> Processed ${Object.keys(colTagsMap).length} unique column tags.`
   );
-
-  // --- 6. Process Row Tags (Col 0) ---
   const rowTagsMap = {};
   const rowTagsSeen = new Set();
-
   for (let r = 0; r < numRows; r++) {
     const cellValue =
-      sheetText2D[r] && sheetText2D[r].length > 0
-        ? sheetText2D[r][0]
-        : undefined;
+      sheetText2D[r] && sheetText2D[r].length > 0 ?
+      sheetText2D[r][0] :
+      undefined;
     if (typeof cellValue === "string" && cellValue.trim() !== "") {
       const tags = cellValue
         .split(",")
@@ -844,8 +786,6 @@ function fSrvLoadFullGoogleSheetAndTags(workbookAbr, sheetName, csId) {
   Logger.log(
     `   -> Processed ${Object.keys(rowTagsMap).length} unique row tags.`
   );
-
-  // --- 7. Return Result ---
   Logger.log(
     `${funcName}: Successfully loaded tags and data for Workbook "${workbookAbr}", Sheet "${trimmedSheetName}".`
   );
@@ -854,44 +794,34 @@ function fSrvLoadFullGoogleSheetAndTags(workbookAbr, sheetName, csId) {
     RowTags: rowTagsMap,
     sheetText2D: sheetText2D,
   };
-} // END fSrvLoadFullGoogleSheetAndTags
+} // End function fSrvLoadFullGoogleSheetAndTags
 
-// fSrvGetSheetRangeDataNTags /////////////////////////////////////////////////////////
-// Purpose -> Reads data from a specified sheet, accepting a sheet key OR fileId.
-//            Optionally accepts a rangeObject to extract a slice; otherwise returns full sheet.
-//            Reads the full sheet once for tag mapping. Handles 'Calc_LastRow'.
-//            Builds relative tags for slices, absolute tags for full sheet returns.
-// Inputs  -> sheetKeyOrId (String): Key from gSrv.ids.sheets OR a direct Sheet fileId.
-//         -> sheetName (String): The name of the specific sheet (tab) to read from.
-//         -> rangeObject (Object | null | undefined): Optional. {r1, c1, r2, c2} using tags,
-//                                                      0-based indices, or 'Calc_LastRow' for r2.
-//                                                      If omitted/null/undefined, returns full sheet data.
-// Outputs -> (Object): { data: Array[][]|Array[]|Any|null, colTags: Object, rowTags: Object }
-//            'data' contains values, formatted correctly (single, 1D, or 2D).
-//            colTags/rowTags contain mappings relative to 'data' (absolute if full sheet returned).
-//            Returns null for 'data' on critical errors (though usually throws).
-// Throws  -> (Error): If inputs are invalid (except optional rangeObject), sheet/range access fails, etc.
+/** function fSrvGetSheetRangeDataNTags
+ * Purpose: Reads data and tags from a specified range within a sheet.
+ * Assumptions: Can handle full sheet reads or specific range slices. 'Calc_LastRow' is a special tag.
+ * @param {string} sheetKeyOrId - Key from gSrv.ids.sheets OR a direct Sheet fileId.
+ * @param {string} sheetName - The name of the sheet to read.
+ * @param {object} [rangeObject=null] - Optional. {r1, c1, r2, c2} using tags or indices.
+ * @returns {object} An object with { data, colTags, rowTags }.
+ * @throws {Error} If inputs are invalid or sheet/range access fails.
+ */
 function fSrvGetSheetRangeDataNTags(
   sheetKeyOrId,
   sheetName,
   rangeObject = null
 ) {
-  // Log received parameters, handling optional rangeObject
-  const rangeLog = rangeObject
-    ? JSON.stringify(rangeObject)
-    : "Not Provided (Full Sheet)";
+  const rangeLog = rangeObject ?
+    JSON.stringify(rangeObject) :
+    "Not Provided (Full Sheet)";
   Logger.log(
     `fSrvGetSheetRangeDataNTags: Request received. Key/ID: "${sheetKeyOrId}", Sheet: "${sheetName}", Range: ${rangeLog}`
   );
-
   let fileId = null;
   let identifiedBy = "";
   let absoluteRowTagMap = {};
   let absoluteColTagMap = {};
-  let relativeRowTagMap = {}; // Only used if rangeObject is provided
-  let relativeColTagMap = {}; // Only used if rangeObject is provided
-
-  // --- 1. Resolve File ID ---
+  let relativeRowTagMap = {};
+  let relativeColTagMap = {};
   if (!sheetKeyOrId || typeof sheetKeyOrId !== "string") {
     const errorMsg = `Invalid or missing sheetKeyOrId parameter.`;
     console.error(`fSrvGetSheetRangeDataNTags Error: ${errorMsg}`);
@@ -916,16 +846,12 @@ function fSrvGetSheetRangeDataNTags(
       `   -> Interpreted first argument as Key: "${sheetKeyOrId}", resolved to ID: ${fileId}`
     );
   }
-
-  // --- 2. Validate Required Inputs (Sheet ID, Sheet Name) ---
   if (!fileId) {
     throw new Error(`getServerSheetData: Could not determine File ID.`);
   }
   if (!sheetName || typeof sheetName !== "string") {
     throw new Error(`getServerSheetData: Invalid or missing sheetName.`);
   }
-
-  // --- Validate Optional rangeObject Structure (only if provided) ---
   let isRangeProvidedAndValid = false;
   if (rangeObject && typeof rangeObject === "object") {
     if (
@@ -937,27 +863,22 @@ function fSrvGetSheetRangeDataNTags(
       isRangeProvidedAndValid = true;
       Logger.log(`   -> Valid rangeObject structure provided.`);
     } else {
-      // Provided object is incomplete - treat as invalid range, will default to full sheet
       Logger.log(
         `   -> rangeObject provided but incomplete: ${JSON.stringify(
           rangeObject
         )}. Defaulting to full sheet.`
       );
-      rangeObject = null; // Nullify to trigger full sheet logic
+      rangeObject = null;
     }
   } else if (rangeObject) {
-    // Provided but not an object - treat as invalid range
     Logger.log(
       `   -> rangeObject provided but not an object: ${typeof rangeObject}. Defaulting to full sheet.`
     );
-    rangeObject = null; // Nullify to trigger full sheet logic
+    rangeObject = null;
   } else {
-    // rangeObject is null or undefined - default to full sheet (intended)
     Logger.log(`   -> rangeObject not provided. Defaulting to full sheet.`);
   }
-
   try {
-    // --- 3. Open Sheet & Read Full Data ---
     const ss = SpreadsheetApp.openById(fileId);
     const sh = ss.getSheetByName(sheetName);
     if (!sh) {
@@ -971,34 +892,27 @@ function fSrvGetSheetRangeDataNTags(
     Logger.log(
       `fSrvGetSheetRangeDataNTags: Read ${numRows}x${numCols} cells from "${sheetName}".`
     );
-
-    // --- 4. Build *Absolute* Tag Maps ---
     const absoluteTagMaps = fSrvBuildTagMaps(fullData);
     absoluteRowTagMap = absoluteTagMaps.rowTag;
     absoluteColTagMap = absoluteTagMaps.colTag;
-    // Logger.log(`fSrvGetSheetRangeDataNTags: Built absolute tag maps. Rows: ${Object.keys(absoluteRowTagMap).length}, Cols: ${Object.keys(absoluteColTagMap).length}`);
-
-    // --- Handle Empty Sheet Case ---
     if (numRows === 0 || numCols === 0) {
       console.warn(
         `fSrvGetSheetRangeDataNTags: Sheet "${sheetName}" (${identifiedBy}) appears empty.`
       );
-      return { data: [[]], colTags: {}, rowTags: {} }; // Return empty structure
+      return {
+        data: [
+          []
+        ],
+        colTags: {},
+        rowTags: {}
+      };
     }
-
-    // === Branch Logic: Full Sheet vs. Range Slice ===
-
     if (isRangeProvidedAndValid) {
-      // --- BRANCH A: Process Specific Range ---
       Logger.log(`   -> Processing provided range...`);
-
-      // --- 5. Resolve Input Range Object Tags to *Absolute* Indices ---
       const r1_abs = fSrvResolveTag(rangeObject.r1, absoluteRowTagMap, "row");
       const c1_abs = fSrvResolveTag(rangeObject.c1, absoluteColTagMap, "col");
       const c2_abs = fSrvResolveTag(rangeObject.c2, absoluteColTagMap, "col");
-      let r2_abs; // Declare r2_abs here
-
-      // --- Handle 'Calc_LastRow' for r2 ---
+      let r2_abs;
       if (
         typeof rangeObject.r2 === "string" &&
         rangeObject.r2.toLowerCase() === "calc_lastrow"
@@ -1009,8 +923,8 @@ function fSrvGetSheetRangeDataNTags(
           );
         }
         Logger.log(`   -> Calculating last row for column index ${c1_abs}...`);
-        const lastSheetRow = sh.getLastRow(); // 1-based index
-        r2_abs = -1; // Initialize as not found
+        const lastSheetRow = sh.getLastRow();
+        r2_abs = -1;
         for (let r = lastSheetRow - 1; r >= 0; r--) {
           const cellValue = fullData[r]?.[c1_abs];
           if (
@@ -1018,7 +932,7 @@ function fSrvGetSheetRangeDataNTags(
             cellValue !== null &&
             String(cellValue).trim() !== ""
           ) {
-            r2_abs = r; // Found the last non-empty row (0-based index)
+            r2_abs = r;
             Logger.log(
               `   -> Found last non-empty cell at row index ${r2_abs}.`
             );
@@ -1027,7 +941,7 @@ function fSrvGetSheetRangeDataNTags(
         }
         if (r2_abs === -1) {
           if (!isNaN(r1_abs)) {
-            r2_abs = r1_abs; // Fallback to r1 if calc fails but r1 is valid
+            r2_abs = r1_abs;
             Logger.log(
               `   -> Warning: Could not find last non-empty row in column ${c1_abs}. Using r1 index ${r1_abs} as fallback.`
             );
@@ -1038,12 +952,8 @@ function fSrvGetSheetRangeDataNTags(
           }
         }
       } else {
-        // Standard tag/index resolution for r2
         r2_abs = fSrvResolveTag(rangeObject.r2, absoluteRowTagMap, "row");
       }
-      // --- End 'Calc_LastRow' Handling ---
-
-      // --- Validate All Resolved Indices ---
       if ([r1_abs, c1_abs, r2_abs, c2_abs].some(isNaN)) {
         let failedTags = [];
         if (isNaN(r1_abs)) failedTags.push(`r1: ${rangeObject.r1}`);
@@ -1060,28 +970,27 @@ function fSrvGetSheetRangeDataNTags(
       Logger.log(
         `fSrvGetSheetRangeDataNTags: Resolved range to absolute indices: r1=${r1_abs}, c1=${c1_abs}, r2=${r2_abs}, c2=${c2_abs}`
       );
-
-      // --- 6. Define Extraction Boundaries ---
       const rStart = Math.min(r1_abs, r2_abs);
       const rEnd = Math.max(r1_abs, r2_abs);
       const cStart = Math.min(c1_abs, c2_abs);
       const cEnd = Math.max(c1_abs, c2_abs);
-
-      // --- 7. Extract Data Slice ---
       if (rStart >= numRows || cStart >= numCols) {
         console.warn(
           `fSrvGetSheetRangeDataNTags: Resolved range start [${rStart}, ${cStart}] is outside the bounds of the sheet data [${numRows}, ${numCols}]. Returning empty data.`
         );
-        return { data: [[]], colTags: {}, rowTags: {} };
+        return {
+          data: [
+            []
+          ],
+          colTags: {},
+          rowTags: {}
+        };
       }
       const extractedData = fullData
         .slice(rStart, rEnd + 1)
         .map((row) => row.slice(cStart, cEnd + 1));
       const extractedRows = extractedData.length;
       const extractedCols = extractedData[0]?.length || 0;
-
-      // --- 8. Build *Relative* Tag Maps ---
-      // Adjust Column Tags
       for (const tag in absoluteColTagMap) {
         const absoluteIndex = absoluteColTagMap[tag];
         if (absoluteIndex >= cStart && absoluteIndex <= cEnd) {
@@ -1089,7 +998,6 @@ function fSrvGetSheetRangeDataNTags(
           relativeColTagMap[tag] = relativeIndex;
         }
       }
-      // Adjust Row Tags
       for (const tag in absoluteRowTagMap) {
         const absoluteIndex = absoluteRowTagMap[tag];
         if (absoluteIndex >= rStart && absoluteIndex <= rEnd) {
@@ -1102,8 +1010,6 @@ function fSrvGetSheetRangeDataNTags(
           Object.keys(relativeRowTagMap).length
         }, Rel Cols: ${Object.keys(relativeColTagMap).length}`
       );
-
-      // --- 9. Format Return Data (for Slice) ---
       let returnData;
       if (extractedRows === 1 && extractedCols === 1) {
         Logger.log(
@@ -1129,20 +1035,15 @@ function fSrvGetSheetRangeDataNTags(
         );
         returnData = extractedData;
       }
-
-      // --- 10. Return Final Object (for Slice) ---
       return {
         data: returnData,
         colTags: relativeColTagMap,
         rowTags: relativeRowTagMap,
       };
     } else {
-      // --- BRANCH B: Return Full Sheet ---
       Logger.log(
         `   -> No range provided or range invalid. Returning full sheet data...`
       );
-
-      // --- 9. Format Return Data (for Full Sheet) ---
       let returnData;
       if (numRows === 1 && numCols === 1) {
         Logger.log(
@@ -1165,9 +1066,6 @@ function fSrvGetSheetRangeDataNTags(
         );
         returnData = fullData;
       }
-
-      // --- 10. Return Final Object (for Full Sheet) ---
-      // Use the absolute tag maps when returning the full sheet
       return {
         data: returnData,
         colTags: absoluteColTagMap,
@@ -1180,38 +1078,23 @@ function fSrvGetSheetRangeDataNTags(
     );
     throw new Error(`Server error processing sheet data: ${e.message || e}`);
   }
-} // END fSrvGetSheetRangeDataNTags
+} // End function fSrvGetSheetRangeDataNTags
 
-
-// ==========================================================================
-// === Player / GM Screen Logic ===
-// ==========================================================================
-
-
-// fSrvSaveURLtoNamesAndLogToDBandPS ////////////////////////////////////////////////////////
-// Purpose -> Writes bundled log and header data to target sheets (DB/GMScreen
-//            and PS/PartyLog) using relative offsets from a base cell identified by
-//            'Log' row tag and a dynamic slot column tag (e.g., 'Slot3') passed in the bundle.
-// Inputs  -> dataBundle (Object): { log, vit, nish, url, raceClass, level, playerChar, slotNum }
-// Outputs -> (Boolean): True if both writes succeeded, false otherwise.
-// Throws  -> (Error): If critical errors occur (e.g., opening sheets, invalid bundle).
+/** function fSrvSaveURLtoNamesAndLogToDBandPS
+ * Purpose: Writes bundled log and header data to the GMScreen and PartyLog sheets.
+ * Assumptions: The dataBundle contains all necessary keys.
+ * @param {object} dataBundle - An object containing { log, vit, nish, url, raceClass, level, playerChar, slotNum }.
+ * @returns {boolean} True if both writes succeeded, false otherwise.
+ * @throws {Error} If critical errors occur.
+ */
 function fSrvSaveURLtoNamesAndLogToDBandPS(dataBundle) {
   const funcName = "fSrvSaveURLtoNamesAndLogToDBandPS";
   Logger.log(
     `${funcName}: Received data bundle. Preparing to write to DB and PS.`
   );
-
-  // --- 1. Validate Input Bundle ---
   const requiredKeys = [
-    "log",
-    "vit",
-    "nish",
-    "url",
-    "raceClass",
-    "level",
-    "playerChar",
-    "slotNum",
-  ]; // Added slotNum
+    "log", "vit", "nish", "url", "raceClass", "level", "playerChar", "slotNum",
+  ];
   if (
     !dataBundle ||
     typeof dataBundle !== "object" ||
@@ -1226,8 +1109,6 @@ function fSrvSaveURLtoNamesAndLogToDBandPS(dataBundle) {
     console.error(`${funcName} Error: ${errorMsg}`);
     throw new Error(`${funcName}: ${errorMsg}`);
   }
-
-  // === 1a. Validate Slot Number <<< NEW SECTION ===
   const slotNumTag = dataBundle.slotNum;
   if (
     !slotNumTag ||
@@ -1236,23 +1117,19 @@ function fSrvSaveURLtoNamesAndLogToDBandPS(dataBundle) {
   ) {
     const errorMsg = `Invalid slotNum ("${slotNumTag}") received in dataBundle. Must be a valid Slot tag (e.g., 'Slot3').`;
     console.error(`${funcName} Error: ${errorMsg}`);
-    // Return false here instead of throwing, as the client call might succeed otherwise
-    // Let the client handle the 'false' return value.
     return false;
   }
   Logger.log(`${funcName}: Using Slot Tag: ${slotNumTag}`);
-  // === END NEW SECTION ===
-
-  // --- 2. Define Targets and Base Row ---
-  const targets = [
-    { key: "db", sheetName: "GMScreen" },
-    { key: "ps", sheetName: "PartyLog" },
-  ];
-  const baseCellTagR = "Log"; // Keep base row tag fixed
-  const baseCellTagC = slotNumTag; // Use dynamic slot tag
+  const targets = [{
+    key: "db",
+    sheetName: "GMScreen"
+  }, {
+    key: "ps",
+    sheetName: "PartyLog"
+  }, ];
+  const baseCellTagR = "Log";
+  const baseCellTagC = slotNumTag;
   const numHeaderRows = 6;
-
-  // --- 3. Prepare Data Array (in correct vertical order) ---
   const dataToWrite = [
     [dataBundle.url],
     [dataBundle.raceClass],
@@ -1262,10 +1139,7 @@ function fSrvSaveURLtoNamesAndLogToDBandPS(dataBundle) {
     [dataBundle.playerChar],
     [dataBundle.log],
   ];
-
   let overallSuccess = true;
-
-  // --- 4. Loop Through Targets and Write Data ---
   for (const target of targets) {
     Logger.log(
       `${funcName}: Processing target: Key='${target.key}', Sheet='${target.sheetName}'`
@@ -1276,7 +1150,6 @@ function fSrvSaveURLtoNamesAndLogToDBandPS(dataBundle) {
       if (!fileId) {
         throw new Error(`Could not find File ID for key '${target.key}'`);
       }
-
       const ss = SpreadsheetApp.openById(fileId);
       const sh = ss.getSheetByName(target.sheetName);
       if (!sh) {
@@ -1284,8 +1157,6 @@ function fSrvSaveURLtoNamesAndLogToDBandPS(dataBundle) {
           `Sheet named "${target.sheetName}" not found in Sheet ID: ${fileId} (Key: ${target.key}).`
         );
       }
-
-      // Read full data *for this sheet* to build tag maps
       const fullData = sh.getDataRange().getValues();
       if (fullData.length === 0 || fullData[0]?.length === 0) {
         console.warn(
@@ -1293,12 +1164,12 @@ function fSrvSaveURLtoNamesAndLogToDBandPS(dataBundle) {
         );
         throw new Error(`Target sheet "${target.sheetName}" is empty.`);
       }
-      const { rowTag, colTag } = fSrvBuildTagMaps(fullData);
-
-      // Resolve the *base cell* using fixed Row ('Log') and dynamic Column (baseCellTagC)
+      const {
+        rowTag,
+        colTag
+      } = fSrvBuildTagMaps(fullData);
       const baseRowIndex = fSrvResolveTag(baseCellTagR, rowTag, "row");
-      const baseColIndex = fSrvResolveTag(baseCellTagC, colTag, "col"); // Use dynamic tag
-
+      const baseColIndex = fSrvResolveTag(baseCellTagC, colTag, "col");
       if (isNaN(baseRowIndex) || isNaN(baseColIndex)) {
         throw new Error(
           `Could not resolve base cell tags ('${baseCellTagR}', '${baseCellTagC}') in sheet "${target.sheetName}".`
@@ -1307,21 +1178,15 @@ function fSrvSaveURLtoNamesAndLogToDBandPS(dataBundle) {
       Logger.log(
         `   -> Resolved Base Cell ('${baseCellTagR}', '${baseCellTagC}') to [${baseRowIndex}, ${baseColIndex}] in "${target.sheetName}".`
       );
-
-      // Calculate the top-left cell of the 7-row range
       const startRowIndex = baseRowIndex - numHeaderRows;
-      const startColIndex = baseColIndex; // Only writing to one column
-      const numRowsToWrite = dataToWrite.length; // Should be 7
+      const startColIndex = baseColIndex;
+      const numRowsToWrite = dataToWrite.length;
       const numColsToWrite = 1;
-
-      // Validate start row index
       if (startRowIndex < 0) {
         throw new Error(
           `Calculated start row index (${startRowIndex}) is invalid (must be >= 0). Base cell ('${baseCellTagR}') might be too high.`
         );
       }
-
-      // Get the target range using row/column indices (1-based for getRange)
       const targetRange = sh.getRange(
         startRowIndex + 1,
         startColIndex + 1,
@@ -1332,41 +1197,30 @@ function fSrvSaveURLtoNamesAndLogToDBandPS(dataBundle) {
       Logger.log(
         `   -> Target range calculated: ${targetA1} (${numRowsToWrite}x${numColsToWrite})`
       );
-
-      // Write the prepared 2D array
       targetRange.setValues(dataToWrite);
       Logger.log(
         `   -> Successfully wrote data to ${targetA1} in sheet "${target.sheetName}".`
       );
       success = true;
     } catch (e) {
-      // Log error for this specific target but continue to the next target
       console.error(
         `Error writing to target ${target.key}/${target.sheetName}: ${e.message}\nStack: ${e.stack}`
       );
-      overallSuccess = false; // Mark that at least one target failed
+      overallSuccess = false;
     }
-  } // End loop through targets
-
-  // --- 5. Return Overall Success Status ---
+  }
   Logger.log(
     `${funcName}: Finished processing all targets. Overall Success: ${overallSuccess}`
   );
   if (!overallSuccess) {
     Logger.log(`${funcName}: Write failed for at least one target.`);
   }
+  return overallSuccess;
+} // End function fSrvSaveURLtoNamesAndLogToDBandPS
 
-  return overallSuccess; // Return true only if BOTH writes succeeded
-} // END fSrvSaveURLtoNamesAndLogToDBandPS
-
-// ==========================================================================
-// === Firestore Integration ===
-// ==========================================================================
-
-
-/**
- * Purpose: Reads and reassembles a chunked UI Template from the 'vXX Game UI' Firestore collection.
- * This is the "fast path" for loading the initial UI.
+/** function fSrvGetUITemplateFromCache
+ * Purpose: Reads and reassembles a chunked UI Template from the Firestore cache.
+ * Assumptions: This is the "fast path" for loading the initial UI.
  * @param {object} gIndex - The client-side gIndex object, containing at least GameVer.
  * @returns {object} The reassembled UI data object parsed from JSON.
  * @throws {Error} If the cache is not found, is malformed, or cannot be parsed.
@@ -1377,88 +1231,91 @@ function fSrvGetUITemplateFromCache(gIndex) {
   if (!firestore) {
     throw new Error("Could not get Firestore instance.");
   }
-
-  const gameVerMajor = String(gIndex.GameVer).trim().split('.')[0];
+  const gameVerMajor = String(gIndex.GameVer).trim().split(".")[0];
   const collectionName = `v${gameVerMajor} Game UI`;
   const baseDocumentId = `UITemplate`;
   const metadataPath = `${collectionName}/${baseDocumentId}_metadata`;
   Logger.log(`   -> ${funcName}: Attempting to load from ${metadataPath}`);
-
   const metadataDoc = firestore.getDocument(metadataPath);
   if (metadataDoc && metadataDoc.fields) {
-    // Manually convert the fields object into a clean JS object.
     const metadataFields = metadataDoc.fields;
     const metadata = {};
     for (const key in metadataFields) {
       metadata[key] = fSrvConvertFirestoreTypesToJS(metadataFields[key]);
     }
-
-    if (typeof metadata.totalChunks === 'number') {
+    if (typeof metadata.totalChunks === "number") {
       const totalChunks = metadata.totalChunks;
-      Logger.log(`   -> ${funcName}: Metadata found. Total chunks to load: ${totalChunks}.`);
-
+      Logger.log(
+        `   -> ${funcName}: Metadata found. Total chunks to load: ${totalChunks}.`
+      );
       if (totalChunks === 0) {
-        return { arr: [[]], format: {}, notesArr: [[]] };
+        return {
+          arr: [
+            []
+          ],
+          format: {},
+          notesArr: [
+            []
+          ]
+        };
       }
-
       let jsonStringChunks = new Array(totalChunks);
       for (let i = 1; i <= totalChunks; i++) {
         const chunkDocId = `${baseDocumentId}_chunk_${i}of${totalChunks}`;
         const chunkPath = `${collectionName}/${chunkDocId}`;
         const chunkDoc = firestore.getDocument(chunkPath);
-
-        // Manually convert the chunk's fields object.
         const chunkFields = chunkDoc.fields;
         const chunkData = {};
         for (const key in chunkFields) {
           chunkData[key] = fSrvConvertFirestoreTypesToJS(chunkFields[key]);
         }
-
-        if (typeof chunkData.chunkData !== 'string') {
+        if (typeof chunkData.chunkData !== "string") {
           throw new Error(`Data in chunk ${i} is not a string.`);
         }
         jsonStringChunks[chunkData._chunkIndex] = chunkData.chunkData;
       }
-
-      const fullJsonString = jsonStringChunks.join('');
-      Logger.log(`   -> ${funcName}: All ${totalChunks} chunks loaded and reassembled. Parsing...`);
+      const fullJsonString = jsonStringChunks.join("");
+      Logger.log(
+        `   -> ${funcName}: All ${totalChunks} chunks loaded and reassembled. Parsing...`
+      );
       return JSON.parse(fullJsonString);
     }
-    throw new Error("Metadata document is malformed (missing or invalid totalChunks).");
+    throw new Error(
+      "Metadata document is malformed (missing or invalid totalChunks)."
+    );
   }
   throw new Error("Metadata document not found or is empty.");
 } // End function fSrvGetUITemplateFromCache
 
-
-/**
- * Purpose: Takes a large JavaScript object, converts it to a JSON string, splits it into
- * manageable chunks, and saves it to Firestore as a metadata document plus multiple data chunk documents.
+/** function fSrvSaveObjectAsChunkedDocs
+ * Purpose: Saves a large JavaScript object to Firestore as a series of chunked documents.
  * Assumptions: The Firestore instance is valid.
  * @param {object} firestore - The authenticated Firestore instance.
  * @param {object} objectToSave - The large JavaScript object to be saved.
  * @param {string} collectionName - The name of the Firestore collection.
- * @param {string} baseDocumentId - The base name for the documents (e.g., 'UITemplate').
+ * @param {string} baseDocumentId - The base name for the documents.
  * @returns {void}
  * @throws {Error} If saving fails.
  */
-function fSrvSaveObjectAsChunkedDocs(firestore, objectToSave, collectionName, baseDocumentId) {
+function fSrvSaveObjectAsChunkedDocs(
+  firestore,
+  objectToSave,
+  collectionName,
+  baseDocumentId
+) {
   const funcName = "fSrvSaveObjectAsChunkedDocs";
-  const MAX_CHUNK_SIZE = 800000; // Keep chunks well under the 1 MiB limit
-
-  // 1. Convert the entire object to a single JSON string.
+  const MAX_CHUNK_SIZE = 800000;
   const jsonString = JSON.stringify(objectToSave);
   const totalSize = jsonString.length;
-  Logger.log(`   -> ${funcName}: Serialized object to JSON string of size ${totalSize} chars.`);
-
-  // 2. Split the string into chunks.
+  Logger.log(
+    `   -> ${funcName}: Serialized object to JSON string of size ${totalSize} chars.`
+  );
   const chunks = [];
   for (let i = 0; i < totalSize; i += MAX_CHUNK_SIZE) {
     chunks.push(jsonString.substring(i, i + MAX_CHUNK_SIZE));
   }
   const totalChunks = chunks.length;
   Logger.log(`   -> ${funcName}: Split JSON string into ${totalChunks} chunk(s).`);
-
-  // 3. Save the metadata document.
   const metadataDocId = `${baseDocumentId}_metadata`;
   const metadataPath = `${collectionName}/${metadataDocId}`;
   const metadataObject = {
@@ -1468,171 +1325,167 @@ function fSrvSaveObjectAsChunkedDocs(firestore, objectToSave, collectionName, ba
   };
   Logger.log(`   -> ${funcName}: Saving metadata to ${metadataPath}`);
   firestore.updateDocument(metadataPath, metadataObject, false);
-
-  // 4. Save each chunk document.
   for (let i = 0; i < totalChunks; i++) {
-    const chunkIndex = i + 1; // 1-based index for naming
+    const chunkIndex = i + 1;
     const chunkDocId = `${baseDocumentId}_chunk_${chunkIndex}of${totalChunks}`;
     const chunkPath = `${collectionName}/${chunkDocId}`;
     const chunkData = {
       chunkData: chunks[i],
-      _chunkIndex: i
+      _chunkIndex: i,
     };
-    Logger.log(`   -> ${funcName}: Saving data chunk ${chunkIndex}/${totalChunks} to ${chunkPath}`);
+    Logger.log(
+      `   -> ${funcName}: Saving data chunk ${chunkIndex}/${totalChunks} to ${chunkPath}`
+    );
     firestore.updateDocument(chunkPath, chunkData, false);
   }
   Logger.log(`   -> ${funcName}: All chunks saved successfully.`);
 } // End function fSrvSaveObjectAsChunkedDocs
 
-// fSrvGetFirestoreInstance ///////////////////////////////////////////////////////
-// Purpose -> Initializes and returns an authenticated Firestore instance using
-//            credentials stored in PropertiesService. [Processes Key String]
-// Inputs  -> None.
-// Outputs -> (Object | null): Authenticated Firestore instance or null on error.
+/** function fSrvGetFirestoreInstance
+ * Purpose: Initializes and returns an authenticated Firestore instance.
+ * Assumptions: Credentials are stored in PropertiesService.
+ * @param {}
+ * @returns {object | null} Authenticated Firestore instance or null on error.
+ */
 function fSrvGetFirestoreInstance() {
   const funcName = "fSrvGetFirestoreInstance";
-  Logger.log(`${funcName}: Attempting to initialize Firestore...`); // <<< KEPT: Entry point log
-  let clientEmail, privateKeyRaw, projectId, processedKey; // Declare vars
+  Logger.log(`${funcName}: Attempting to initialize Firestore...`);
+  let clientEmail, privateKeyRaw, projectId, processedKey;
   try {
-    // Retrieve credentials from Script Properties
     const scriptProperties = PropertiesService.getScriptProperties();
     clientEmail = scriptProperties.getProperty("FIRESTORE_CLIENT_EMAIL");
-    privateKeyRaw = scriptProperties.getProperty("FIRESTORE_PRIVATE_KEY"); // Get the raw string
+    privateKeyRaw = scriptProperties.getProperty("FIRESTORE_PRIVATE_KEY");
     projectId = scriptProperties.getProperty("FIRESTORE_PROJECT_ID");
-
-    // Validate credentials & Log Status
     let missingCred = false;
     if (!clientEmail) {
       Logger.log(
         `   -> ${funcName} Error: FIRESTORE_CLIENT_EMAIL not found or empty.`
       );
       missingCred = true;
-    } // <<< KEPT: Critical error
+    }
     if (!privateKeyRaw) {
       Logger.log(
         `   -> ${funcName} Error: FIRESTORE_PRIVATE_KEY not found or empty.`
       );
       missingCred = true;
-    } // <<< KEPT: Critical error
+    }
     if (!projectId) {
       Logger.log(
         `   -> ${funcName} Error: FIRESTORE_PROJECT_ID not found or empty.`
       );
       missingCred = true;
-    } // <<< KEPT: Critical error
-
+    }
     if (missingCred) {
       console.error(
         `${funcName} Error: Missing Firestore credentials in Script Properties.`
       );
-      return null; // Exit if any credential is fundamentally missing
+      return null;
     }
-
-    // --- Process the Private Key String ---
     processedKey = privateKeyRaw;
-    // 1. Remove surrounding quotes if present (handle copy-paste variations)
     if (processedKey.startsWith('"') && processedKey.endsWith('"')) {
       processedKey = processedKey.substring(1, processedKey.length - 1);
     }
-    // 2. Replace literal "\\n" sequences with actual newline characters "\n"
     processedKey = processedKey.replaceAll("\\n", "\n");
-    // --- End Key Processing ---
-
-    // Initialize Firestore using the library and *processed* key
     Logger.log(
       `   -> Calling FirestoreApp.getFirestore for project ${projectId}...`
-    ); // <<< KEPT: Status log
+    );
     const firestore = FirestoreApp.getFirestore(
       clientEmail,
       processedKey,
       projectId
-    ); // Use processedKey here
-
-    // Check if firestore object was created
+    );
     if (!firestore) {
       Logger.log(
         `   -> ${funcName} Error: FirestoreApp.getFirestore returned null/undefined.`
-      ); // <<< KEPT: Critical error
+      );
       console.error(
         `${funcName} Error: FirestoreApp.getFirestore failed to return an instance.`
       );
       return null;
     }
-
     Logger.log(
       `${funcName}: Firestore instance initialized successfully for project ${projectId}.`
-    ); // <<< KEPT: Success log
+    );
     return firestore;
   } catch (e) {
-    // Catch errors during property retrieval or initialization
     console.error(
       `Error caught in ${funcName}: ${e.message}\nStack: ${e.stack}`
     );
     Logger.log(
       `   -> ❌ Exception during Firestore initialization: ${e.message}`
-    ); // <<< KEPT: Exception log
-    // Log potentially relevant details if available before the error (AVOID logging key)
+    );
     Logger.log(
       `   -> Details at time of error: ProjectID=${projectId || "N/A"}, Email=${
         clientEmail || "N/A"
       }`
-    ); // <<< MODIFIED: Removed key snippet
+    );
     return null;
   }
-} // END fSrvGetFirestoreInstance
+} // End function fSrvGetFirestoreInstance
 
-/**
- * Purpose: Saves grid text data (gUI.arr) and custom notes to a Firestore document
- * within a versioned, user-specific collection.
- * Assumptions: The document structure is a collection named 'v<Version> <userEmail>'
- * containing a document 'Turbo_Game_<csId>'. The function uses updateDocument, which
- * creates the document if it doesn't exist.
- * Notes: The gUI.arr and gUI.customNotes are processed into an Array of Row Objects for Firestore compatibility.
+/** function fSrvSaveTurboDataToFirestore
+ * Purpose: Saves grid and custom notes data to a user-specific Firestore document.
+ * Assumptions: Data is processed into an Array of Row Objects for Firestore compatibility.
  * @param {object} gIndex - Object from the client containing Email, CSID, and GameVer.
- * @param {Array<Array<any>>} fullArrData - The complete gUI.arr from the client.
- * @param {Array<Array<string>>} customNotesData - The complete gUI.customNotes array.
+ * @param {any[][]} fullArrData - The complete gUI.arr from the client.
+ * @param {string[][]} customNotesData - The complete gUI.customNotes array.
  * @param {object} charInfo - DEPRECATED/UNUSED.
- * @returns {object} An object like { success: Boolean, message?: String }
- * reflecting the success or failure of the save operation.
+ * @returns {object} An object { success: boolean, message?: string }.
  */
-function fSrvSaveTurboDataToFirestore(gIndex, fullArrData, customNotesData, charInfo) {
+function fSrvSaveTurboDataToFirestore(
+  gIndex,
+  fullArrData,
+  customNotesData,
+  charInfo
+) {
   const funcName = "fSrvSaveTurboDataToFirestore";
   Logger.log(
     `${funcName}: Saving Grid & Notes for User: ${gIndex.Email}, CS ID: ${gIndex.CSID}...`
   );
-  // === 1. Validate Inputs ===
   if (!gIndex.GameVer || typeof gIndex.GameVer !== "string" || gIndex.GameVer.trim() === "") {
-    return { success: false, message: "Invalid or missing Game Version provided." };
+    return {
+      success: false,
+      message: "Invalid or missing Game Version provided."
+    };
   }
   if (!gIndex.Email || typeof gIndex.Email !== "string" || gIndex.Email.indexOf("@") === -1) {
-    return { success: false, message: "Invalid User Email provided." };
+    return {
+      success: false,
+      message: "Invalid User Email provided."
+    };
   }
   if (!gIndex.CSID || typeof gIndex.CSID !== "string") {
-    return { success: false, message: "Invalid Character Sheet ID provided." };
+    return {
+      success: false,
+      message: "Invalid Character Sheet ID provided."
+    };
   }
   if (!Array.isArray(fullArrData) || (fullArrData.length > 0 && !Array.isArray(fullArrData[0]))) {
-    return { success: false, message: "Invalid fullArrData provided (must be 2D array)." };
+    return {
+      success: false,
+      message: "Invalid fullArrData provided (must be 2D array).",
+    };
   }
-  if (!Array.isArray(customNotesData)) { // Basic check for custom notes
-    return { success: false, message: "Invalid customNotesData provided." };
+  if (!Array.isArray(customNotesData)) {
+    return {
+      success: false,
+      message: "Invalid customNotesData provided."
+    };
   }
-
-  // === 2. Get Firestore Instance ===
   const firestore = fSrvGetFirestoreInstance();
   if (!firestore) {
     const msg = "Failed to initialize Firestore instance.";
     Logger.log(`${funcName} Error: ${msg}`);
-    return { success: false, message: "Server configuration error (Firestore)." };
+    return {
+      success: false,
+      message: "Server configuration error (Firestore).",
+    };
   }
-
-  // === 3. Define Path ===
-  const gameVerMajor = String(gIndex.GameVer).trim().split('.')[0];
+  const gameVerMajor = String(gIndex.GameVer).trim().split(".")[0];
   const collectionPath = `v${gameVerMajor} ${gIndex.Email}`;
   const gameDocId = `Turbo_Game_${gIndex.CSID}`;
   const gameDocPath = `${collectionPath}/${gameDocId}`;
   Logger.log(`   -> Target Firestore Path: ${gameDocPath}`);
-
-  // === 4. Process Arrays into Array of Row Objects ===
   const processArray = (arr) => {
     const arrayOfObjects = [];
     const numRows = arr.length;
@@ -1645,66 +1498,59 @@ function fSrvSaveTurboDataToFirestore(gIndex, fullArrData, customNotesData, char
     }
     return arrayOfObjects;
   };
-
   const gUIarrForFirestore = processArray(fullArrData);
   const customNotesForFirestore = processArray(customNotesData);
-
-  // === 5. Prepare Data Payload ===
   const dataToSave = {
     gUIarr: gUIarrForFirestore,
-    customNotes: customNotesForFirestore, // Add custom notes to the payload
+    customNotes: customNotesForFirestore,
     _lastUpdated: new Date(),
   };
-
-  // === 6. Save to Firestore ===
   try {
-    Logger.log(`   -> Calling firestore.updateDocument for path: ${gameDocPath}...`);
-    firestore.updateDocument(gameDocPath, dataToSave, false); // update/create
+    Logger.log(
+      `   -> Calling firestore.updateDocument for path: ${gameDocPath}...`
+    );
+    firestore.updateDocument(gameDocPath, dataToSave, false);
     Logger.log(`      -> ✅ Successfully saved data.`);
-    return { success: true };
+    return {
+      success: true
+    };
   } catch (e) {
-    console.error(`Exception saving data to ${gameDocPath}: ${e.message}\nStack: ${e.stack}`);
+    console.error(
+      `Exception saving data to ${gameDocPath}: ${e.message}\nStack: ${e.stack}`
+    );
     Logger.log(`   -> ❌ Exception during data save: ${e.message}`);
-    return { success: false, message: `Firestore save failed: ${e.message}` };
+    return {
+      success: false,
+      message: `Firestore save failed: ${e.message}`
+    };
   }
-} // End fSrvSaveTurboDataToFirestore
+} // End function fSrvSaveTurboDataToFirestore
 
-// fSrvConvertFirestoreTypesToJS //////////////////////////////////////////////////
-// Purpose -> Recursively converts Firestore's typed value objects (mapValue,
-//            arrayValue, stringValue, etc.) into standard JavaScript types
-//            (objects, arrays, strings, numbers, booleans).
-// Inputs  -> firestoreValue (Object): A value object from Firestore (e.g.,
-//            doc.fields.someProperty or an element within an arrayValue/mapValue).
-// Outputs -> (Any): The corresponding standard JavaScript value or type.
+/** function fSrvConvertFirestoreTypesToJS
+ * Purpose: Recursively converts Firestore's typed value objects into standard JavaScript types.
+ * Assumptions: Input is a value object from a Firestore document response.
+ * @param {object} firestoreValue - A value object from Firestore.
+ * @returns {any} The corresponding standard JavaScript value or type.
+ */
 function fSrvConvertFirestoreTypesToJS(firestoreValue) {
-  if (!firestoreValue) return firestoreValue; // Handle null/undefined cases safely
-
-  // Check for primitive types
+  if (!firestoreValue) return firestoreValue;
   if (firestoreValue.stringValue !== undefined)
     return firestoreValue.stringValue;
   if (firestoreValue.integerValue !== undefined)
-    return parseInt(firestoreValue.integerValue, 10); // Parse as integer
+    return parseInt(firestoreValue.integerValue, 10);
   if (firestoreValue.doubleValue !== undefined)
-    return parseFloat(firestoreValue.doubleValue); // Parse as float
+    return parseFloat(firestoreValue.doubleValue);
   if (firestoreValue.booleanValue !== undefined)
     return firestoreValue.booleanValue;
   if (firestoreValue.nullValue !== undefined) return null;
   if (firestoreValue.timestampValue !== undefined)
-    return new Date(firestoreValue.timestampValue); // Convert to JS Date
-
-  // Check for bytesValue, geoPointValue if you use them, otherwise ignore or return placeholder
-
-  // Check for array type
+    return new Date(firestoreValue.timestampValue);
   if (firestoreValue.arrayValue && firestoreValue.arrayValue.values) {
-    // It's an array, recursively convert its elements
     return firestoreValue.arrayValue.values.map((element) =>
       fSrvConvertFirestoreTypesToJS(element)
     );
   }
-
-  // Check for map/object type
   if (firestoreValue.mapValue && firestoreValue.mapValue.fields) {
-    // It's an object/map, recursively convert its properties
     const jsObject = {};
     for (const key in firestoreValue.mapValue.fields) {
       jsObject[key] = fSrvConvertFirestoreTypesToJS(
@@ -1713,147 +1559,136 @@ function fSrvConvertFirestoreTypesToJS(firestoreValue) {
     }
     return jsObject;
   }
-
-  // If it's none of the known Firestore types (e.g., already a JS primitive passed in), return as is.
-  // Or potentially log a warning if an unexpected structure is encountered.
   Logger.log(
     `fSrvConvertFirestoreTypesToJS: Encountered unexpected value structure: ${JSON.stringify(
       firestoreValue
     ).substring(0, 100)}... Returning as is.`
   );
   return firestoreValue;
-} // END fSrvConvertFirestoreTypesToJS
+} // End function fSrvConvertFirestoreTypesToJS
 
-// fSrvUnpackFirestoreArrayTo2D //////////////////////////////////////////////
-// Purpose -> Converts the Firestore array-of-row-objects format into a standard
-//            2D JavaScript array server-side. Handles potential sparse arrays.
-// Inputs  -> firestoreArr (Array): Array from Firestore after type conversion,
-//            e.g., [ {"row0":[...]}, {"row1":[...]}, ... ]
-// Outputs -> (Array[][]): A standard 2D JavaScript array. Returns empty array on error.
+/** function fSrvUnpackFirestoreArrayTo2D
+ * Purpose: Converts the Firestore array-of-row-objects format into a standard 2D JavaScript array.
+ * Assumptions: Input is an array of objects like `[{ "row0": [...] }, { "row1": [...] }]`.
+ * @param {object[]} firestoreArr - Array from Firestore after type conversion.
+ * @returns {any[][]} A standard 2D JavaScript array.
+ */
 function fSrvUnpackFirestoreArrayTo2D(firestoreArr) {
   const funcName = "fSrvUnpackFirestoreArrayTo2D";
   if (!Array.isArray(firestoreArr)) {
     Logger.log(`${funcName}: Input is not an array. Returning empty array.`);
     return [];
   }
-
   const new2DArray = [];
   let maxRow = -1;
   let maxCols = 0;
-
-  // First pass: Populate based on keys, find max row/col
   for (const rowObject of firestoreArr) {
-    if (typeof rowObject !== "object" || rowObject === null) continue; // Skip non-objects
-
+    if (typeof rowObject !== "object" || rowObject === null) continue;
     const key = Object.keys(rowObject)[0];
-    if (!key || !key.startsWith("row")) continue; // Skip invalid keys
-
+    if (!key || !key.startsWith("row")) continue;
     const rowNum = parseInt(key.substring(3), 10);
-    if (isNaN(rowNum)) continue; // Skip if key is not like "rowX"
-
+    if (isNaN(rowNum)) continue;
     const rowData = rowObject[key];
     if (!Array.isArray(rowData)) {
       Logger.log(
         `${funcName}: Value for key ${key} is not an array. Skipping.`
       );
-      continue; // Ensure the value is actually an array
+      continue;
     }
-
     new2DArray[rowNum] = rowData;
     if (rowNum > maxRow) maxRow = rowNum;
-    if (rowData.length > maxCols) maxCols = rowData.length; // Track max column length
+    if (rowData.length > maxCols) maxCols = rowData.length;
   }
-
-  // Second pass: Fill potential sparse gaps and ensure consistent column length
   for (let r = 0; r <= maxRow; r++) {
     if (typeof new2DArray[r] === "undefined") {
-      new2DArray[r] = Array(maxCols).fill(""); // Initialize sparse rows with empty strings
+      new2DArray[r] = Array(maxCols).fill("");
     } else {
-      // Ensure existing rows have the correct length
       while (new2DArray[r].length < maxCols) {
-        new2DArray[r].push(""); // Pad with empty strings
+        new2DArray[r].push("");
       }
     }
   }
-  // Ensure the final array itself isn't sparse (if maxRow was > initial length)
   while (new2DArray.length <= maxRow) {
     new2DArray.push(Array(maxCols).fill(""));
   }
-
-  // Handle case where firestoreArr was empty
   if (maxRow === -1) {
-    return [[]]; // Return array with one empty row if input was empty
+    return [
+      []
+    ];
   }
-
   return new2DArray;
-} // END fSrvUnpackFirestoreArrayTo2D
+} // End function fSrvUnpackFirestoreArrayTo2D
 
-/**
- * Purpose: Checks Firestore for a document containing saved gUI.arr and customNotes data
- * within a versioned, user-specific collection.
- * Assumptions: If found, it extracts, converts, and unpacks the data into
- * standard 2D arrays. It handles document-not-found and other errors gracefully.
+/** function fSrvCheckAndLoadFirestoreGUIarrAs2D
+ * Purpose: Checks Firestore for saved grid and notes data and returns it as 2D arrays.
+ * Assumptions: The data is stored in a versioned, user-specific collection.
  * @param {object} gIndex - Object from the client with Email, CSID, and GameVer.
- * @returns {object} An object { success: Boolean, firestoreArr?: Array<Array<any>>, customNotes?: Array<Array<string>>, message?: String }.
+ * @returns {object} An object { success, firestoreArr?, customNotes?, message? }.
  */
 function fSrvCheckAndLoadFirestoreGUIarrAs2D(gIndex) {
   const funcName = "fSrvCheckAndLoadFirestoreGUIarrAs2D";
   Logger.log(
     `${funcName}: Checking Firestore for data for User: ${gIndex.Email}, CS ID: ${gIndex.CSID}...`
   );
-  // === 1. Validate Inputs ===
   if (!gIndex.GameVer || typeof gIndex.GameVer !== "string" || gIndex.GameVer.trim() === "") {
     const msg = "Invalid or missing Game Version provided.";
     Logger.log(`${funcName} Error: ${msg}`);
-    return { success: false, message: msg };
+    return {
+      success: false,
+      message: msg
+    };
   }
   if (!gIndex.Email || typeof gIndex.Email !== "string" || gIndex.Email.indexOf("@") === -1) {
     const msg = "Invalid User Email provided.";
     Logger.log(`${funcName} Error: ${msg}`);
-    return { success: false, message: msg };
+    return {
+      success: false,
+      message: msg
+    };
   }
   if (!gIndex.CSID || typeof gIndex.CSID !== "string") {
     const msg = "Invalid Character Sheet ID provided.";
     Logger.log(`${funcName} Error: ${msg}`);
-    return { success: false, message: msg };
+    return {
+      success: false,
+      message: msg
+    };
   }
-
-  // === 2. Get Firestore Instance ===
   const firestore = fSrvGetFirestoreInstance();
   if (!firestore) {
     const msg = "Failed to initialize Firestore instance.";
     Logger.log(`${funcName} Error: ${msg}`);
-    return { success: false, message: "Server configuration error (Firestore)." };
+    return {
+      success: false,
+      message: "Server configuration error (Firestore).",
+    };
   }
-
-  // === 3. Define Path and Fetch Data ===
-  const gameVerMajor = String(gIndex.GameVer).trim().split('.')[0];
+  const gameVerMajor = String(gIndex.GameVer).trim().split(".")[0];
   const collectionPath = `v${gameVerMajor} ${gIndex.Email}`;
   const documentId = `Turbo_Game_${gIndex.CSID}`;
   const documentPath = `${collectionPath}/${documentId}`;
   Logger.log(`   -> Target Firestore Path: ${documentPath}`);
   try {
     const doc = firestore.getDocument(documentPath);
-
-    // === 4. Check if Document Exists & Has Data ===
     if (!doc || !doc.fields || !doc.fields.gUIarr) {
       const msg = `Document not found or missing 'gUIarr' field at path: ${documentPath}.`;
       Logger.log(`   -> ${funcName}: ${msg}`);
-      return { success: false, message: "No saved grid data found in Firestore for this character." };
+      return {
+        success: false,
+        message: "No saved grid data found in Firestore for this character.",
+      };
     }
     Logger.log(`   -> Document found. Processing fields...`);
-
-    // === 5. Process gUIarr ===
     const arrDataRaw = doc.fields.gUIarr;
     const arrDataConverted = fSrvConvertFirestoreTypesToJS(arrDataRaw);
     if (!Array.isArray(arrDataConverted)) {
-      throw new Error("Invalid data type for gUIarr after conversion. Expected array.");
+      throw new Error(
+        "Invalid data type for gUIarr after conversion. Expected array."
+      );
     }
     const unpackedArr = fSrvUnpackFirestoreArrayTo2D(arrDataConverted);
     Logger.log(`   -> ✅ Successfully fetched and unpacked gUI.arr data.`);
-
-    // === 6. Process customNotes (Optional) ===
-    let unpackedNotes = null; // Default to null if not found
+    let unpackedNotes = null;
     if (doc.fields.customNotes) {
       const notesDataRaw = doc.fields.customNotes;
       const notesDataConverted = fSrvConvertFirestoreTypesToJS(notesDataRaw);
@@ -1861,40 +1696,48 @@ function fSrvCheckAndLoadFirestoreGUIarrAs2D(gIndex) {
         unpackedNotes = fSrvUnpackFirestoreArrayTo2D(notesDataConverted);
         Logger.log(`   -> ✅ Successfully fetched and unpacked customNotes data.`);
       } else {
-        Logger.log(`   -> ⚠️ Warning: 'customNotes' field found but is not a valid array. Ignoring.`);
+        Logger.log(
+          `   -> ⚠️ Warning: 'customNotes' field found but is not a valid array. Ignoring.`
+        );
       }
     } else {
-      Logger.log(`   -> ℹ️ No 'customNotes' field found in document. This is normal for older saves.`);
+      Logger.log(
+        `   -> ℹ️ No 'customNotes' field found in document. This is normal for older saves.`
+      );
     }
-
-    // === 7. Return Success with Data ===
     return {
       success: true,
       firestoreArr: unpackedArr,
-      customNotes: unpackedNotes, // Will be null if not found or invalid
+      customNotes: unpackedNotes,
     };
   } catch (e) {
-    const safeErrorMessage = e.message?.includes("permission")
-      ? "Permission denied accessing Firestore."
-      : e.message?.includes("NOT_FOUND")
-      ? "No saved data found in Firestore for this character."
-      : `Server error during Firestore read: ${e.message || e}`;
-    console.error(`Exception in ${funcName} for path ${documentPath}: ${e.message}\nStack: ${e.stack}`);
-    Logger.log(`   -> ❌ Exception during Firestore read for ${gIndex.CSID}: ${safeErrorMessage}`);
-    return { success: false, message: safeErrorMessage };
+    const safeErrorMessage = e.message?.includes("permission") ?
+      "Permission denied accessing Firestore." :
+      e.message?.includes("NOT_FOUND") ?
+      "No saved data found in Firestore for this character." :
+      `Server error during Firestore read: ${e.message || e}`;
+    console.error(
+      `Exception in ${funcName} for path ${documentPath}: ${e.message}\nStack: ${e.stack}`
+    );
+    Logger.log(
+      `   -> ❌ Exception during Firestore read for ${gIndex.CSID}: ${safeErrorMessage}`
+    );
+    return {
+      success: false,
+      message: safeErrorMessage
+    };
   }
-} // End fSrvCheckAndLoadFirestoreGUIarrAs2D
+} // End function fSrvCheckAndLoadFirestoreGUIarrAs2D
 
-// fSrvSaveFullSheetTextAndTagsToFirestore //////////////////////////////////////
-// Purpose -> Saves loaded sheet tags (ColTags, RowTags) and the full sheet text data
-//            (sheetText2D, converted to array-of-row-objects) to Firestore, potentially
-//            slicing the data into multiple documents if it exceeds size estimates.
-// Inputs  -> gIndex (Object): Contains Email, CSID, GameVer.
-//         -> workbookAbr (String): Abbreviation ('db', 'mastercs', 'masterkl', 'mycs', 'mykl').
-//         -> sheetName (String): The name of the sheet that was loaded.
-//         -> data (Object): The object returned by fSrvLoadFullGoogleSheetAndTags, containing
-//                             { ColTags, RowTags, sheetText2D }.
-// Outputs -> (Object): { success: Boolean, message?: String }
+/** function fSrvSaveFullSheetTextAndTagsToFirestore
+ * Purpose: Saves loaded sheet data and tags to Firestore, chunking if necessary.
+ * Assumptions: The data object from fSrvLoadFullGoogleSheetAndTags is valid.
+ * @param {object} gIndex - Contains Email, CSID, GameVer.
+ * @param {string} workbookAbr - Abbreviation ('db', 'mycs', etc.).
+ * @param {string} sheetName - The name of the sheet.
+ * @param {object} data - Object containing { ColTags, RowTags, sheetText2D }.
+ * @returns {object} An object { success: boolean, message?: string }.
+ */
 function fSrvSaveFullSheetTextAndTagsToFirestore(
   gIndex,
   workbookAbr,
@@ -1902,12 +1745,10 @@ function fSrvSaveFullSheetTextAndTagsToFirestore(
   data
 ) {
   const funcName = "fSrvSaveFullSheetTextAndTagsToFirestore";
-  const MAX_CHUNK_SIZE_ESTIMATE = 500000; // Target ~500KB per data chunk
+  const MAX_CHUNK_SIZE_ESTIMATE = 500000;
   Logger.log(
     `${funcName}: Saving data for Workbook: "${workbookAbr}", Sheet: "${sheetName}", Version: ${gIndex?.GameVer}, Email: ${gIndex?.Email}, CSID: ${gIndex?.CSID}...`
   );
-
-  // --- 1. Validate Inputs ---
   const lowerWorkbookAbr = workbookAbr?.toLowerCase() || "";
   const trimmedSheetName = sheetName?.trim() || "";
   if (
@@ -1920,15 +1761,15 @@ function fSrvSaveFullSheetTextAndTagsToFirestore(
   ) {
     return {
       success: false,
-      message:
-        "Invalid data object provided (missing ColTags, RowTags, or sheetText2D array).",
+      message: "Invalid data object provided (missing ColTags, RowTags, or sheetText2D array).",
     };
   }
   if (!trimmedSheetName) {
-    return { success: false, message: "Invalid or empty sheetName provided." };
+    return {
+      success: false,
+      message: "Invalid or empty sheetName provided."
+    };
   }
-
-  // --- 2. Get Firestore Instance ---
   const firestore = fSrvGetFirestoreInstance();
   if (!firestore) {
     const msg = "Failed to initialize Firestore instance.";
@@ -1938,13 +1779,10 @@ function fSrvSaveFullSheetTextAndTagsToFirestore(
       message: "Server configuration error (Firestore).",
     };
   }
-
-  // --- 3. Determine Firestore Path using Helper ---
   let baseCollectionName;
   let baseDocumentId;
-  let documentPathBase; // For logging clarity
+  let documentPathBase;
   try {
-    // Path calculation requires valid gIndex properties, will throw if invalid
     const pathInfo = fSrvCalcFirestorePath(
       workbookAbr,
       trimmedSheetName,
@@ -1952,16 +1790,17 @@ function fSrvSaveFullSheetTextAndTagsToFirestore(
     );
     baseCollectionName = pathInfo.collectionName;
     baseDocumentId = pathInfo.documentId;
-    documentPathBase = `${baseCollectionName}/${baseDocumentId}`; // For logging
+    documentPathBase = `${baseCollectionName}/${baseDocumentId}`;
     Logger.log(`   -> Base Firestore Path Calculated: ${documentPathBase}`);
   } catch (pathError) {
     Logger.log(
       `   -> ❌ Error determining Firestore path: ${pathError.message}`
     );
-    return { success: false, message: pathError.message }; // Return error from helper
+    return {
+      success: false,
+      message: pathError.message
+    };
   }
-
-  // --- 4. Convert sheetText2D to Array of Row Objects ---
   const sheetTextArray = data.sheetText2D;
   const arrayOfRowObjects = [];
   const numRows = sheetTextArray.length;
@@ -1973,12 +1812,9 @@ function fSrvSaveFullSheetTextAndTagsToFirestore(
     arrayOfRowObjects.push(rowObject);
   }
   Logger.log(`   -> Converted ${numRows} rows to array-of-row-objects format.`);
-
-  // --- 5. Slicing Logic ---
   const chunks = [];
   let currentChunk = [];
   let currentChunkSizeEstimate = 0;
-
   Logger.log(
     `   -> Slicing data based on estimated size (Target: ${MAX_CHUNK_SIZE_ESTIMATE} bytes)...`
   );
@@ -1986,61 +1822,48 @@ function fSrvSaveFullSheetTextAndTagsToFirestore(
     const rowObject = arrayOfRowObjects[i];
     let rowObjectSizeEstimate = 0;
     try {
-      // Estimate size of the single row object
       rowObjectSizeEstimate = JSON.stringify(rowObject).length;
     } catch (e) {
       Logger.log(
         `   -> Warning: Could not estimate size for row object at index ${i}. Assuming small size (0). Error: ${e.message}`
       );
-      // Proceed cautiously if stringify fails for a single row
     }
-
-    // Check if adding this row would exceed the limit for the current chunk
     if (
       currentChunk.length > 0 &&
       currentChunkSizeEstimate + rowObjectSizeEstimate > MAX_CHUNK_SIZE_ESTIMATE
     ) {
-      // Current chunk is full (or adding next row exceeds limit), push it and start new
       chunks.push(currentChunk);
       Logger.log(
         `      -> Chunk ${chunks.length} finalized with ${currentChunk.length} rows (Estimated size: ${currentChunkSizeEstimate} bytes).`
       );
-      currentChunk = [rowObject]; // Start new chunk with current row object
-      currentChunkSizeEstimate = rowObjectSizeEstimate; // Reset size estimate
+      currentChunk = [rowObject];
+      currentChunkSizeEstimate = rowObjectSizeEstimate;
     } else {
-      // Add to current chunk
       currentChunk.push(rowObject);
       currentChunkSizeEstimate += rowObjectSizeEstimate;
     }
   }
-  // Add the last remaining chunk if it has data
   if (currentChunk.length > 0) {
     chunks.push(currentChunk);
     Logger.log(
       `      -> Chunk ${chunks.length} finalized with ${currentChunk.length} rows (Estimated size: ${currentChunkSizeEstimate} bytes).`
     );
   }
-
-  // Determine total chunks (must be at least 1 if there was data)
   const totalChunks =
     arrayOfRowObjects.length > 0 ? Math.max(1, chunks.length) : 0;
-  // If input array was empty, chunks will be empty, totalChunks=0.
-  // If input array had data but was small, chunks.length will be 1, totalChunks=1.
   Logger.log(`   -> Total data chunks determined: ${totalChunks}`);
-
-  // --- 6. Prepare and Save Metadata Document ---
   const metadataDocId = `${baseDocumentId}_metadata`;
   const metadataPath = `${baseCollectionName}/${metadataDocId}`;
   const metadataObject = {
     ColTags: data.ColTags,
     RowTags: data.RowTags,
-    totalChunks: totalChunks, // Save the calculated number of chunks
+    totalChunks: totalChunks,
     _lastUpdated: new Date(),
   };
   let metadataSaveSuccess = false;
   try {
     Logger.log(`   -> Saving Metadata Document to: ${metadataPath}`);
-    firestore.updateDocument(metadataPath, metadataObject, false); // update/create
+    firestore.updateDocument(metadataPath, metadataObject, false);
     metadataSaveSuccess = true;
     Logger.log(`      -> ✅ Successfully saved Metadata Document.`);
   } catch (e) {
@@ -2049,26 +1872,26 @@ function fSrvSaveFullSheetTextAndTagsToFirestore(
     }`;
     console.error(`${funcName} Error: ${errorMsg}\nStack: ${e.stack}`);
     Logger.log(`   -> ❌ ${errorMsg}`);
-    return { success: false, message: errorMsg }; // Critical failure if metadata can't save
+    return {
+      success: false,
+      message: errorMsg
+    };
   }
-
-  // --- 7. Save Data Chunk Documents ---
-  let allChunksSaved = true; // Assume success until a chunk fails
+  let allChunksSaved = true;
   if (totalChunks > 0) {
     for (let i = 0; i < totalChunks; i++) {
-      const chunkIndex = i + 1; // 1-based index for naming
+      const chunkIndex = i + 1;
       const chunkDocId = `${baseDocumentId}_${chunkIndex}of${totalChunks}`;
       const chunkPath = `${baseCollectionName}/${chunkDocId}`;
       const chunkData = {
-        rowDataChunk: chunks[i], // The actual slice of arrayOfRowObjects
+        rowDataChunk: chunks[i],
         _lastUpdated: new Date(),
       };
-
       try {
         Logger.log(
           `   -> Saving Data Chunk ${chunkIndex}/${totalChunks} to: ${chunkPath}`
         );
-        firestore.updateDocument(chunkPath, chunkData, false); // update/create
+        firestore.updateDocument(chunkPath, chunkData, false);
         Logger.log(
           `      -> ✅ Successfully saved Data Chunk ${chunkIndex}/${totalChunks}.`
         );
@@ -2078,42 +1901,40 @@ function fSrvSaveFullSheetTextAndTagsToFirestore(
         }`;
         console.error(`${funcName} Error: ${errorMsg}\nStack: ${e.stack}`);
         Logger.log(`   -> ❌ ${errorMsg}`);
-        allChunksSaved = false; // Mark failure but continue trying others
-        // Optional: Collect individual error messages if needed
+        allChunksSaved = false;
       }
     }
   } else {
     Logger.log(`   -> No data chunks to save (source data likely empty).`);
-    // If there were no rows, metadata still saved, consider this overall success.
   }
-
-  // --- 8. Return Overall Result ---
   if (metadataSaveSuccess && allChunksSaved) {
     Logger.log(
       `   -> ✅ Successfully saved Metadata and all ${totalChunks} Data Chunk(s).`
     );
-    return { success: true };
+    return {
+      success: true
+    };
   } else {
     const finalMessage = `Firestore save partially failed. Metadata saved: ${metadataSaveSuccess}. All data chunks saved: ${allChunksSaved}. Check logs for details.`;
     Logger.log(`   -> ❌ ${finalMessage}`);
-    return { success: false, message: finalMessage };
+    return {
+      success: false,
+      message: finalMessage
+    };
   }
-} // END fSrvSaveFullSheetTextAndTagsToFirestore
+} // End function fSrvSaveFullSheetTextAndTagsToFirestore
 
-/**
- * Purpose: Determines the Firestore collection and document ID based on the workbook
- * type and other parameters.
- * Assumptions: This is the central logic for path calculation. DB and user-specific paths
- * ('mycs', 'mykl') are now versioned.
+/** function fSrvCalcFirestorePath
+ * Purpose: Determines the Firestore collection and document ID for a given resource.
+ * Assumptions: Handles versioning for DB and user-specific paths.
  * @param {string} workbookAbr - Abbreviation ('db', 'mastercs', 'mycs', etc.).
  * @param {string} sheetName - The name of the sheet.
  * @param {object} gIndex - Object with GameVer, Email, and CSID.
- * @returns {object} An object { collectionName: String, documentId: String }.
+ * @returns {object} An object { collectionName: string, documentId: string }.
  * @throws {Error} If inputs are invalid or workbook abbreviation is unsupported.
  */
 function fSrvCalcFirestorePath(workbookAbr, sheetName, gIndex) {
   const funcName = "fSrvCalcFirestorePath";
-  // --- 1. Validate Inputs ---
   if (!workbookAbr || typeof workbookAbr !== "string") {
     throw new Error(`${funcName}: Invalid or missing workbookAbr provided.`);
   }
@@ -2128,11 +1949,8 @@ function fSrvCalcFirestorePath(workbookAbr, sheetName, gIndex) {
       `${funcName}: Unsupported workbook abbreviation: "${workbookAbr}"`
     );
   }
-
-  // --- 2. Initialize Variables ---
   let collectionName = "";
   let documentId = "";
-  // --- 3. Determine Collection and Document ID ---
   switch (lowerWorkbookAbr) {
     case "db":
     case "mastercs":
@@ -2146,16 +1964,14 @@ function fSrvCalcFirestorePath(workbookAbr, sheetName, gIndex) {
           `${funcName}: Game Version is required for workbook type '${workbookAbr}'.`
         );
       }
-      
-      const gameVerMajorForDB = String(gIndex.GameVer).trim().split('.')[0];
-
+      const gameVerMajorForDB = String(gIndex.GameVer).trim().split(".")[0];
       if (lowerWorkbookAbr === "db") {
         collectionName = `v${gameVerMajorForDB} DB`;
-        documentId = trimmedSheetName; // Document is now just the sheet name
+        documentId = trimmedSheetName;
       } else if (lowerWorkbookAbr === "mastercs") {
         collectionName = "MasterCS";
         documentId = `v${gIndex.GameVer.trim()} ${trimmedSheetName}`;
-      } else { // masterkl
+      } else {
         collectionName = "MasterKL";
         documentId = `v${gIndex.GameVer.trim()} ${trimmedSheetName}`;
       }
@@ -2185,58 +2001,61 @@ function fSrvCalcFirestorePath(workbookAbr, sheetName, gIndex) {
           `${funcName}: Character Sheet ID is required for workbook type '${workbookAbr}'.`
         );
       }
-      const gameVerMajor = String(gIndex.GameVer).trim().split('.')[0];
+      const gameVerMajor = String(gIndex.GameVer).trim().split(".")[0];
       collectionName = `v${gameVerMajor} ${gIndex.Email}`;
       if (lowerWorkbookAbr === "mycs") {
         documentId = `MyCS_${trimmedSheetName}_${gIndex.CSID}`;
       } else {
-        // Must be 'mykl'
         documentId = `MyKL_${trimmedSheetName}_OfMyCS_${gIndex.CSID}`;
       }
       break;
   }
-
-  // --- 4. Final Validation and Return ---
   if (!collectionName || !documentId) {
     throw new Error(
       `${funcName}: Failed to determine collectionName or documentId for workbook '${workbookAbr}'.`
     );
   }
-
-  return { collectionName, documentId };
+  return {
+    collectionName,
+    documentId
+  };
 } // End function fSrvCalcFirestorePath
 
-
-/**
- * Purpose: Receives a list of required cache definitions, loads each one from Firestore
- * (or creates it via self-healing if missing), and returns them all in a single object.
- * This consolidates multiple client-server round trips into one.
- * @param {Array<object>} requiredCaches - An array of cache definitions, e.g., [{ key: 'dbAbilitiesFSData', label: 'DB/Abilities' }].
+/** function fSrvGetRequiredCaches
+ * Purpose: Loads a list of required caches from Firestore in a single bulk operation.
+ * Assumptions: Self-heals by reading from Sheets if a cache is missing from Firestore.
+ * @param {object[]} requiredCaches - An array of cache definitions, e.g., [{ key: 'dbAbilitiesFSData', label: 'DB/Abilities' }].
  * @param {object} gIndex - The standard gIndex object from the client.
- * @returns {object} A result object like { success: boolean, caches: { dbAbilitiesFSData: {...}, ... }, message?: string }.
+ * @returns {object} A result object { success, caches, message? }.
  */
 function fSrvGetRequiredCaches(requiredCaches, gIndex) {
   const funcName = "fSrvGetRequiredCaches";
-  Logger.log(`${funcName}: Received request to bulk-load ${requiredCaches.length} caches.`);
-
+  Logger.log(
+    `${funcName}: Received request to bulk-load ${requiredCaches.length} caches.`
+  );
   if (!Array.isArray(requiredCaches) || requiredCaches.length === 0) {
-    return { success: false, caches: {}, message: "Invalid or empty cache list provided." };
+    return {
+      success: false,
+      caches: {},
+      message: "Invalid or empty cache list provided.",
+    };
   }
-
   const loadedCaches = {};
   let overallSuccess = true;
-
   for (const cacheInfo of requiredCaches) {
-    const { key, label } = cacheInfo;
-    const [workbookAbr, sheetName] = label.split('/');
-
+    const {
+      key,
+      label
+    } = cacheInfo;
+    const [workbookAbr, sheetName] = label.split("/");
     try {
       Logger.log(`   -> ${funcName}: Processing cache '${key}' (${label})...`);
-      // Check if the cache exists
-      const cacheExists = fSrvVerifyFirestorePathExists(workbookAbr, sheetName, gIndex);
-
+      const cacheExists = fSrvVerifyFirestorePathExists(
+        workbookAbr,
+        sheetName,
+        gIndex
+      );
       if (cacheExists) {
-        // FAST PATH: Load from Firestore
         Logger.log(`      -> Cache exists. Reading from Firestore.`);
         const response = fSrvGetFirestoreFSData(workbookAbr, sheetName, gIndex);
         if (response.success) {
@@ -2245,58 +2064,69 @@ function fSrvGetRequiredCaches(requiredCaches, gIndex) {
           throw new Error(response.message || "Failed to read existing cache.");
         }
       } else {
-        // SLOW PATH / SELF-HEAL: Load from Sheet and save to Firestore
-        Logger.log(`      -> Cache NOT found. Self-healing: Reading from Sheet...`);
-        const sheetData = fSrvLoadFullGoogleSheetAndTags(workbookAbr, sheetName, gIndex.CSID);
-
+        Logger.log(
+          `      -> Cache NOT found. Self-healing: Reading from Sheet...`
+        );
+        const sheetData = fSrvLoadFullGoogleSheetAndTags(
+          workbookAbr,
+          sheetName,
+          gIndex.CSID
+        );
         Logger.log(`      -> Self-healing: Saving '${key}' to Firestore...`);
-        fSrvSaveFullSheetTextAndTagsToFirestore(gIndex, workbookAbr, sheetName, sheetData);
-
-        // Read it back to ensure consistency (optional but good practice)
+        fSrvSaveFullSheetTextAndTagsToFirestore(
+          gIndex,
+          workbookAbr,
+          sheetName,
+          sheetData
+        );
         const response = fSrvGetFirestoreFSData(workbookAbr, sheetName, gIndex);
         if (response.success) {
           loadedCaches[key] = response.FSData;
         } else {
-          throw new Error(response.message || "Failed to read cache after self-healing.");
+          throw new Error(
+            response.message || "Failed to read cache after self-healing."
+          );
         }
       }
     } catch (e) {
-      Logger.log(`   -> ❌ ${funcName}: CRITICAL FAILURE processing cache '${key}'. Error: ${e.message}`);
+      Logger.log(
+        `   -> ❌ ${funcName}: CRITICAL FAILURE processing cache '${key}'. Error: ${e.message}`
+      );
       console.error(`Error in ${funcName} for ${key}: ${e.stack}`);
       overallSuccess = false;
-      // We stop processing this specific cache but continue with others.
-      // The client will see this cache as missing from the final returned object.
     }
   }
-
-  Logger.log(`${funcName}: Finished bulk load. Returning ${Object.keys(loadedCaches).length} of ${requiredCaches.length} requested caches.`);
-  return { success: overallSuccess, caches: loadedCaches };
+  Logger.log(
+    `${funcName}: Finished bulk load. Returning ${
+      Object.keys(loadedCaches).length
+    } of ${requiredCaches.length} requested caches.`
+  );
+  return {
+    success: overallSuccess,
+    caches: loadedCaches
+  };
 } // End function fSrvGetRequiredCaches
 
-// fSrvGetFirestoreFSData ///////////////////////////////////////////////////////////
-// Purpose -> Reads data from a Firestore document (potentially sliced across multiple
-//            documents) previously saved by fSrvSaveFullSheetTextAndTagsToFirestore.
-//            Reassembles sliced data and returns the full sheet content and absolute tag maps.
-// Inputs  -> workbookAbr (String): Workbook abbreviation ('db', 'mycs', etc.).
-//         -> sheetName (String): The sheet name associated with the data.
-//         -> gIndex (Object): Object containing CSID, GameVer, Email.
-// Outputs -> (Object): On success: { success: true, FSData: { colTagsMap, rowTagsMap, text } }
-//                     On failure: { success: false, message: String }
+/** function fSrvGetFirestoreFSData
+ * Purpose: Reads and reassembles data from potentially chunked Firestore documents.
+ * Assumptions: Data was saved using fSrvSaveFullSheetTextAndTagsToFirestore.
+ * @param {string} workbookAbr - Workbook abbreviation ('db', 'mycs', etc.).
+ * @param {string} sheetName - The sheet name associated with the data.
+ * @param {object} gIndex - Object containing CSID, GameVer, Email.
+ * @returns {object} On success: { success, FSData }, on failure: { success, message }.
+ */
 function fSrvGetFirestoreFSData(workbookAbr, sheetName, gIndex) {
   const funcName = "fSrvGetFirestoreFSData";
   Logger.log(
     `${funcName}: Reading document(s) for Workbook: "${workbookAbr}", Sheet: "${sheetName}", Ver: ${gIndex?.GameVer}, Email: ${gIndex?.Email}, CSID: ${gIndex?.CSID}...`
   );
-
   let firestore;
   let baseCollectionName;
   let baseDocumentId;
   let metadataPath;
-  let absoluteColTagMap = {}; // Initialize in case of zero chunks
-  let absoluteRowTagMap = {}; // Initialize in case of zero chunks
-
+  let absoluteColTagMap = {};
+  let absoluteRowTagMap = {};
   try {
-    // --- 1. Get Firestore Instance ---
     firestore = fSrvGetFirestoreInstance();
     if (!firestore) {
       return {
@@ -2304,8 +2134,6 @@ function fSrvGetFirestoreFSData(workbookAbr, sheetName, gIndex) {
         message: "Server configuration error (Firestore).",
       };
     }
-
-    // --- 2. Calculate Firestore Path ---
     try {
       const pathInfo = fSrvCalcFirestorePath(workbookAbr, sheetName, gIndex);
       baseCollectionName = pathInfo.collectionName;
@@ -2314,38 +2142,40 @@ function fSrvGetFirestoreFSData(workbookAbr, sheetName, gIndex) {
       Logger.log(
         `   -> ❌ Error determining Firestore path: ${pathError.message}`
       );
-      return { success: false, message: pathError.message };
+      return {
+        success: false,
+        message: pathError.message
+      };
     }
     metadataPath = `${baseCollectionName}/${baseDocumentId}_metadata`;
     Logger.log(`   -> Target Metadata Path: ${metadataPath}`);
-
-    // --- 3. Fetch Metadata Document ---
     let metadataDoc;
     try {
       metadataDoc = firestore.getDocument(metadataPath);
     } catch (e) {
-      // Catch potential "NOT_FOUND" or permission errors specifically from getDocument
       const isNotFoundError = e.message?.toUpperCase().includes("NOT_FOUND");
-      const errorMsg = isNotFoundError
-        ? `Metadata document not found at path: ${metadataPath}. Data may be missing or not yet saved.`
-        : `Error fetching metadata document (${metadataPath}): ${
-            e.message || e
-          }`;
+      const errorMsg = isNotFoundError ?
+        `Metadata document not found at path: ${metadataPath}. Data may be missing or not yet saved.` :
+        `Error fetching metadata document (${metadataPath}): ${
+          e.message || e
+        }`;
       Logger.log(`   -> ${funcName}: ${errorMsg}`);
-      return { success: false, message: errorMsg };
+      return {
+        success: false,
+        message: errorMsg
+      };
     }
-
-    // --- 4. Validate Metadata & Extract Info ---
     if (!metadataDoc || !metadataDoc.fields) {
       const msg = `Metadata document not found or empty at path: ${metadataPath}.`;
       Logger.log(`   -> ${funcName}: ${msg}`);
-      return { success: false, message: msg };
+      return {
+        success: false,
+        message: msg
+      };
     }
-
     const colTagsRaw = metadataDoc.fields.ColTags;
     const rowTagsRaw = metadataDoc.fields.RowTags;
     const totalChunksRaw = metadataDoc.fields.totalChunks;
-
     if (
       !colTagsRaw ||
       typeof colTagsRaw.mapValue === "undefined" ||
@@ -2357,13 +2187,14 @@ function fSrvGetFirestoreFSData(workbookAbr, sheetName, gIndex) {
       const msg =
         "Invalid metadata document structure found (missing/invalid ColTags, RowTags, or totalChunks).";
       Logger.log(`   -> ${funcName} Error: ${msg}`);
-      return { success: false, message: msg };
+      return {
+        success: false,
+        message: msg
+      };
     }
-
     absoluteColTagMap = fSrvConvertFirestoreTypesToJS(colTagsRaw);
     absoluteRowTagMap = fSrvConvertFirestoreTypesToJS(rowTagsRaw);
     const totalChunks = parseInt(totalChunksRaw.integerValue, 10);
-
     if (
       typeof absoluteColTagMap !== "object" ||
       absoluteColTagMap === null ||
@@ -2377,15 +2208,16 @@ function fSrvGetFirestoreFSData(workbookAbr, sheetName, gIndex) {
       const msg =
         "Invalid data types found in metadata after conversion (ColTags/RowTags not objects, or totalChunks not integer >= 0).";
       Logger.log(`   -> ${funcName} Error: ${msg}`);
-      return { success: false, message: msg };
+      return {
+        success: false,
+        message: msg
+      };
     }
     Logger.log(
       `   -> Metadata validated. Total Chunks: ${totalChunks}. ColTags: ${
         Object.keys(absoluteColTagMap).length
       }, RowTags: ${Object.keys(absoluteRowTagMap).length}`
     );
-
-    // --- 5. Handle Zero Chunks ---
     if (totalChunks === 0) {
       Logger.log(`   -> Total chunks is 0. Returning empty data structure.`);
       return {
@@ -2393,12 +2225,12 @@ function fSrvGetFirestoreFSData(workbookAbr, sheetName, gIndex) {
         FSData: {
           colTagsMap: absoluteColTagMap,
           rowTagsMap: absoluteRowTagMap,
-          text: [[]],
+          text: [
+            []
+          ],
         },
-      }; // Return empty 2D array
+      };
     }
-
-    // --- 6. Fetch Data Chunks ---
     const fetchedChunkDocs = [];
     const missingChunks = [];
     Logger.log(`   -> Attempting to fetch ${totalChunks} data chunk(s)...`);
@@ -2408,8 +2240,7 @@ function fSrvGetFirestoreFSData(workbookAbr, sheetName, gIndex) {
       try {
         const chunkDoc = firestore.getDocument(chunkPath);
         if (chunkDoc && chunkDoc.fields && chunkDoc.fields.rowDataChunk) {
-          fetchedChunkDocs.push(chunkDoc); // Store the whole doc for now
-          // Logger.log(`      -> Successfully fetched chunk ${i}/${totalChunks}.`); // Can be noisy
+          fetchedChunkDocs.push(chunkDoc);
         } else {
           missingChunks.push(i);
           Logger.log(
@@ -2423,56 +2254,52 @@ function fSrvGetFirestoreFSData(workbookAbr, sheetName, gIndex) {
             e.message || e
           }${isNotFoundError ? " (NOT_FOUND)" : ""}`
         );
-        missingChunks.push(i); // Mark as missing on error too
+        missingChunks.push(i);
       }
     }
-
-    // --- 7. Error Check: Ensure All Chunks Were Fetched ---
     if (missingChunks.length > 0) {
       const errorMsg = `Failed to load all required data chunks. Missing chunk(s): ${missingChunks.join(
         ", "
       )} of ${totalChunks}. Data is incomplete.`;
       Logger.log(`   -> ${funcName} Error: ${errorMsg}`);
-      return { success: false, message: errorMsg };
+      return {
+        success: false,
+        message: errorMsg
+      };
     }
     Logger.log(`   -> Successfully fetched all ${totalChunks} data chunk(s).`);
-
-    // --- 8. Reassemble Data ---
     const combinedRowObjects = [];
     Logger.log(`   -> Reassembling data from chunks...`);
     for (let i = 0; i < fetchedChunkDocs.length; i++) {
       const chunkDoc = fetchedChunkDocs[i];
-      const chunkIndex = i + 1; // 1-based for logging
+      const chunkIndex = i + 1;
       const rowDataChunkRaw = chunkDoc.fields.rowDataChunk;
       const rowDataChunkConverted =
         fSrvConvertFirestoreTypesToJS(rowDataChunkRaw);
-
       if (!Array.isArray(rowDataChunkConverted)) {
         const errorMsg = `Invalid rowDataChunk format found in chunk ${chunkIndex} after conversion (expected array).`;
         Logger.log(`   -> ${funcName} Error: ${errorMsg}`);
-        return { success: false, message: errorMsg };
+        return {
+          success: false,
+          message: errorMsg
+        };
       }
-      combinedRowObjects.push(...rowDataChunkConverted); // Concatenate arrays
+      combinedRowObjects.push(...rowDataChunkConverted);
     }
     Logger.log(
       `   -> Reassembled ${combinedRowObjects.length} total row objects.`
     );
-
-    // --- 9. Unpack and Format Final FSData ---
     const fullData2D = fSrvUnpackFirestoreArrayTo2D(combinedRowObjects);
     const numRowsFinal = fullData2D.length;
     const numColsFinal = fullData2D[0]?.length || 0;
     Logger.log(
       `   -> Unpacked reassembled data into final 2D array (${numRowsFinal}x${numColsFinal}).`
     );
-
     const assembledFSDataObject = {
-      colTagsMap: absoluteColTagMap, // Use the absolute tags from metadata
-      rowTagsMap: absoluteRowTagMap, // Use the absolute tags from metadata
-      text: fullData2D, // The fully reassembled 2D data array
+      colTagsMap: absoluteColTagMap,
+      rowTagsMap: absoluteRowTagMap,
+      text: fullData2D,
     };
-
-    // --- 10. Return Success ---
     Logger.log(
       `   -> ✅ Successfully read and formatted sliced Firestore data.`
     );
@@ -2481,11 +2308,9 @@ function fSrvGetFirestoreFSData(workbookAbr, sheetName, gIndex) {
       FSData: assembledFSDataObject,
     };
   } catch (e) {
-    // Catch errors from Firestore calls, path calculation, tag resolution, etc.
-    const safeErrorMessage = e.message?.includes("permission")
-      ? "Permission denied accessing Firestore."
-      : `Server error during Firestore read/process: ${e.message || e}`;
-
+    const safeErrorMessage = e.message?.includes("permission") ?
+      "Permission denied accessing Firestore." :
+      `Server error during Firestore read/process: ${e.message || e}`;
     console.error(
       `Exception caught in ${funcName} accessing path ${
         metadataPath || "Unknown"
@@ -2496,74 +2321,62 @@ function fSrvGetFirestoreFSData(workbookAbr, sheetName, gIndex) {
         metadataPath || "Unknown"
       }: ${safeErrorMessage}`
     );
-    return { success: false, message: safeErrorMessage };
+    return {
+      success: false,
+      message: safeErrorMessage
+    };
   }
-} // END fSrvGetFirestoreFSData
+} // End function fSrvGetFirestoreFSData
 
-
-// fSrvVerifyFirestorePathExists ////////////////////////////////////////////////////
-// Purpose -> Checks if the *metadata* Firestore document exists for a given
-//            workbook/sheet combination, based on the calculated path.
-// Inputs  -> workbookAbr (String): Workbook abbreviation ('db', 'mycs', etc.).
-//         -> sheetName (String): The sheet name associated with the data.
-//         -> gIndex.GameVer (String): Game version (required for 'db'/'master*').
-//         -> gIndex.Email (String): User Email (required for 'mycs'/'mykl').
-//         -> gIndex.CSID (String): Character Sheet ID (required for 'mycs'/'mykl').
-// Outputs -> (Boolean): True if the metadata document exists, false otherwise (or on error).
+/** function fSrvVerifyFirestorePathExists
+ * Purpose: Checks if the metadata Firestore document exists for a given resource.
+ * Assumptions: A document existing means its `updateTime` property is present.
+ * @param {string} workbookAbr - Workbook abbreviation ('db', 'mycs', etc.).
+ * @param {string} sheetName - The sheet name associated with the data.
+ * @param {object} gIndex - Object with GameVer, Email, and CSID.
+ * @returns {boolean} True if the metadata document exists, false otherwise.
+ */
 function fSrvVerifyFirestorePathExists(workbookAbr, sheetName, gIndex) {
   const funcName = "fSrvVerifyFirestorePathExists";
-  // Logger.log(`${funcName}: Verifying path for Workbook: "${workbookAbr}", Sheet: "${sheetName}", Version: ${gIndex.GameVer}, gIndex.Email: ${gIndex.Email}, gIndex.CSID: ${gIndex.CSID}...`); // Reduced logging
-
   let firestore;
-  let metadataPath; // Changed variable name for clarity
+  let metadataPath;
   try {
-    // --- 1. Get Firestore Instance ---
     firestore = fSrvGetFirestoreInstance();
     if (!firestore) {
       Logger.log(
         `   -> ${funcName}: Firestore initialization failed. Cannot verify path.`
       );
-      return false; // Cannot verify if Firestore isn't available
+      return false;
     }
-
-    // --- 2. Calculate Firestore Path for METADATA ---
     let baseCollectionName;
     let baseDocumentId;
-    // Use try-catch here as fSrvCalcFirestorePath throws errors on invalid inputs
     try {
       const pathInfo = fSrvCalcFirestorePath(workbookAbr, sheetName, gIndex);
       baseCollectionName = pathInfo.collectionName;
-      baseDocumentId = pathInfo.documentId; // Get the base ID
+      baseDocumentId = pathInfo.documentId;
     } catch (pathError) {
       Logger.log(
         `   -> ${funcName}: Error calculating base path: ${pathError.message}. Assuming path does not exist.`
       );
-      return false; // Cannot exist if path is invalid
+      return false;
     }
-
-    // --- Construct path to the METADATA document ---
-    metadataPath = `${baseCollectionName}/${baseDocumentId}_metadata`; // Append _metadata
+    metadataPath = `${baseCollectionName}/${baseDocumentId}_metadata`;
     Logger.log(
       `   -> Calculated Firestore Metadata Path to check: ${metadataPath}`
     );
-
-    // --- 3. Check Metadata Document Existence ---
     const doc = firestore.getDocument(metadataPath);
-
-    // Check if the document object has an updateTime property (indicates existence)
     if (doc && doc.updateTime) {
       Logger.log(
         `   -> Metadata document found at path: ${metadataPath}. Exists: true.`
       );
-      return true; // Document exists
+      return true;
     } else {
       Logger.log(
         `   -> Metadata document NOT found at path: ${metadataPath}. Exists: false.`
       );
-      return false; // Document does not exist (or has no fields/metadata)
+      return false;
     }
   } catch (e) {
-    // Catch other potential errors during Firestore getDocument call (e.g., permissions)
     const isNotFoundError =
       e.message && e.message.toUpperCase().includes("NOT_FOUND");
     if (isNotFoundError) {
@@ -2572,7 +2385,6 @@ function fSrvVerifyFirestorePathExists(workbookAbr, sheetName, gIndex) {
       );
       return false;
     } else {
-      // Log other errors but return false as existence couldn't be confirmed
       console.error(
         `Exception caught in ${funcName} accessing metadata path ${
           metadataPath || "Unknown"
@@ -2586,4 +2398,4 @@ function fSrvVerifyFirestorePathExists(workbookAbr, sheetName, gIndex) {
       return false;
     }
   }
-} // END fSrvVerifyFirestorePathExists
+} // End function fSrvVerifyFirestorePathExists
