@@ -320,6 +320,41 @@
     return false;
   } // End function fIsSkRadioGroupMember
 
+  /** function fDoesObjectHaveR1C1R2C2Properties
+   * Purpose: Checks if an object has the required properties for a valid range definition.
+   * Assumptions: A valid range object must have r1, c1, r2, and c2 properties.
+   * @param {object} range - The object to check.
+   * @returns {boolean} True if the object is a valid range definition, false otherwise.
+   */
+  function fDoesObjectHaveR1C1R2C2Properties(range) {
+    return (
+      range &&
+      typeof range.r1 !== "undefined" &&
+      typeof range.c1 !== "undefined" &&
+      typeof range.r2 !== "undefined" &&
+      typeof range.c2 !== "undefined"
+    );
+  } // End function fDoesObjectHaveR1C1R2C2Properties
+
+  /** function fConvertsR1C1R2C2TagOrNumToIndices
+   * Purpose: Converts tags or numbers within a range definition object into resolved 0-based indices.
+   * Assumptions: The range object has r1, c1, r2, c2 properties.
+   * @param {object} range - The range definition object {r1, c1, r2, c2}.
+   * @returns {object} An object {r1, c1, r2, c2} with resolved numeric indices (or NaN).
+   */
+  function fConvertsR1C1R2C2TagOrNumToIndices(range) {
+    const r1 = fResolveRow(range.r1);
+    const c1 = fResolveCol(range.c1);
+    const r2 = fResolveRow(range.r2);
+    const c2 = fResolveCol(range.c2);
+    return {
+      r1,
+      c1,
+      r2,
+      c2,
+    };
+  } // End function fConvertsR1C1R2C2TagOrNumToIndices
+
   /** function fGetVal_GUICache
    * Purpose: Retrieves a value from a cached FSData object using sheet tags or absolute indices.
    * Assumptions: The dataCacheObject is a valid FSData object structure.
@@ -398,50 +433,6 @@
     }
     return null;
   } // End function fGetIDFromNameID
-
-  /** function fSetGridTagsFromHeaders
-   * Purpose: Populates gUI.rowTag and gUI.colTag maps by reading from gUI.arr.
-   * Assumptions: gUI.arr is populated with sheet data, with tags in row 0 and column 0.
-   * @param {}
-   * @returns {void}
-   */
-  function fSetGridTagsFromHeaders() {
-    fMyConsoleLog("⚙️ Parsing Grid Tags...");
-    gUI.rowTag = {};
-    gUI.colTag = {};
-    const gameArr = gUI.arr;
-    if (!gameArr || gameArr.length === 0 || !gameArr[0]) {
-      console.warn(
-        "fSetGridTagsFromHeaders: Cannot parse tags, gUI.arr is empty or malformed."
-      );
-      fMyConsoleLog("⚠️ Grid Tags: Data empty.");
-      return;
-    }
-    const rows = gameArr.length;
-    const cols = gameArr[0].length;
-    for (let r = 0; r < rows; r++) {
-      const rowCell = gameArr[r]?.[0];
-      if (typeof rowCell === "string" && rowCell) {
-        rowCell.split(",").forEach((tag) => {
-          const trimmedTag = tag.trim();
-          if (trimmedTag) gUI.rowTag[trimmedTag] = r;
-        });
-      }
-    }
-    const colHeaderRow = gameArr[0];
-    if (colHeaderRow) {
-      for (let c = 0; c < cols; c++) {
-        const colCell = colHeaderRow[c];
-        if (typeof colCell === "string" && colCell) {
-          colCell.split(",").forEach((tag) => {
-            const trimmedTag = tag.trim();
-            if (trimmedTag) gUI.colTag[trimmedTag] = c;
-          });
-        }
-      }
-    }
-    fMyConsoleLog("✅ Grid Tags Parsed");
-  } // End function fSetGridTagsFromHeaders
 
   /** function fGetGridValue
    * Purpose: Retrieves a value from gUI.arr using tags or indices.
@@ -687,172 +678,6 @@
     }
     return true;
   } // End function fSetGridValue
-
-  /** function fdRoll
-   * Purpose: Rolls a standard linear distribution die (e.g., 1d6).
-   * Assumptions: Input is a positive integer.
-   * @param {number} die - The number of sides on the die.
-   * @returns {number} The result of the roll (integer from 1 to die).
-   */
-  function fdRoll(die) {
-    const numDie = Number(die);
-    if (isNaN(numDie) || numDie < 1) {
-      console.error(`fdRoll received invalid die size: ${die}`);
-      return 1;
-    }
-    return Math.floor(Math.random() * numDie) + 1;
-  } // End function fdRoll
-
-  /** function fMetaDieRoll
-   * Purpose: Performs a non-linear "exploding" dice roll common in MetaScape.
-   * Assumptions: Input is a positive integer.
-   * @param {number} die - The base value (skill/attribute) for the roll.
-   * @returns {number} The integer result of the roll (minimum 1).
-   */
-  function fMetaDieRoll(die) {
-    const numDie = Number(die);
-    if (isNaN(numDie) || numDie < 1) {
-      console.error(`fMetaDieRoll received invalid die value: ${die}`);
-      return 1;
-    }
-    const rand1 = Math.random();
-    let rand2 = Math.random();
-    if (rand2 < 0.0001) rand2 = 0.0001;
-    return Math.floor((numDie * rand1) / rand2) + 1;
-  } // End function fMetaDieRoll
-
-  /** function fTC
-   * Purpose: Rolls 1d16 to determine a Tremendous or Critical result suffix.
-   * Assumptions: None.
-   * @param {}
-   * @returns {string} Formatted "T", "C", or an empty string.
-   */
-  function fTC() {
-    const roll = fdRoll(16);
-    return roll === 1
-      ? `<span class="tremendous">T</span>`
-      : roll === 2
-      ? `<span class="red-bold">C</span>`
-      : "";
-  } // End function fTC
-
-  /** function fSkRoll
-   * Purpose: Performs a standard MetaScape Skill roll.
-   * Assumptions: Averages a linear d(die*2) and a non-linear fMetaDieRoll(die).
-   * @param {number} die - The base skill value.
-   * @returns {number} The rounded integer result of the skill roll.
-   */
-  function fSkRoll(die) {
-    const numDie = Number(die);
-    if (isNaN(numDie) || numDie < 1) {
-      console.error(`fSkRoll received invalid die value: ${die}`);
-      return 1;
-    }
-    return Math.round((fdRoll(numDie * 2) + fMetaDieRoll(numDie)) / 2);
-  } // End function fSkRoll
-
-  /** function fAtkRoll
-   * Purpose: Performs a MetaScape Attack roll.
-   * Assumptions: Currently identical to fSkRoll.
-   * @param {number} die - The base attack skill value.
-   * @returns {number} The rounded integer result of the attack roll.
-   */
-  function fAtkRoll(die) {
-    const numDie = Number(die);
-    if (isNaN(numDie) || numDie < 1) {
-      console.error(`fAtkRoll received invalid die value: ${die}`);
-      return 1;
-    }
-    return Math.round((fdRoll(numDie * 2) + fMetaDieRoll(numDie)) / 2);
-  } // End function fAtkRoll
-
-  /** function fDefRoll
-   * Purpose: Performs a MetaScape Defense roll.
-   * Assumptions: Based on fMetaDieRoll(die) * 0.75.
-   * @param {number} die - The base defense value.
-   * @returns {number} The rounded integer result of the defense roll.
-   */
-  function fDefRoll(die) {
-    const numDie = Number(die);
-    if (isNaN(numDie) || numDie < 1) {
-      console.error(`fDefRoll received invalid die value: ${die}`);
-      return 1;
-    }
-    return Math.round(fMetaDieRoll(numDie) * 0.75);
-  } // End function fDefRoll
-
-  /** function fDmgRoll
-   * Purpose: Rolls standard PC Damage.
-   * Assumptions: Currently identical to fSkRoll.
-   * @param {number} pcDmg - The base damage value.
-   * @returns {number} The result of the damage roll.
-   */
-  function fDmgRoll(pcDmg) {
-    return fSkRoll(pcDmg);
-  } // End function fDmgRoll
-
-  /** function fARRoll
-   * Purpose: Rolls standard PC Armor.
-   * Assumptions: Uses fSkRoll result divided by 15.
-   * @param {number} pcAR - The base armor value.
-   * @returns {number} The result of the armor roll (min 1.0, two decimals).
-   */
-  function fARRoll(pcAR) {
-    const skillRoll = fSkRoll(pcAR);
-    const result = Math.trunc((skillRoll / 15) * 100) / 100;
-    return Math.max(1, result);
-  } // End function fARRoll
-
-  /** function fRollRPGDieString
-   * Purpose: Parses and rolls a standard RPG die string (e.g., "2d8+5").
-   * Assumptions: The die string is in a standard format.
-   * @param {string} dieString - The dice notation string.
-   * @returns {number | null} The numerical result of the roll, or null if parsing fails.
-   */
-  function fRollRPGDieString(dieString) {
-    if (typeof dieString !== "string" || !dieString.trim()) {
-      console.warn(
-        "fRollRPGDieString: Invalid input - requires a non-empty string."
-      );
-      return null;
-    }
-    const dieStringRegex = /^\s*(\d+)?\s*d\s*(\d+)\s*(?:([-+])\s*(\d+))?\s*$/i;
-    const match = dieString.trim().match(dieStringRegex);
-    if (!match) {
-      return null;
-    }
-    const numDice = match[1] ? parseInt(match[1], 10) : 1;
-    const numSides = parseInt(match[2], 10);
-    const modifierSign = match[3];
-    const modifierValue = match[4] ? parseInt(match[4], 10) : 0;
-    if (
-      isNaN(numDice) ||
-      numDice < 1 ||
-      isNaN(numSides) ||
-      numSides < 1 ||
-      isNaN(modifierValue)
-    ) {
-      console.warn(
-        `fRollRPGDieString: Invalid numeric components in parsed string "${dieString}"`
-      );
-      return null;
-    }
-    let total = 0;
-    fMyConsoleLog(`   -> Rolling Die String: ${numDice}d${numSides}`);
-    for (let i = 0; i < numDice; i++) {
-      const roll = fdRoll(numSides);
-      total += roll;
-    }
-    fMyConsoleLog(`   -> Base Roll Total: ${total}`);
-    if (modifierSign === "+") {
-      total += modifierValue;
-      fMyConsoleLog(`   -> Applying Modifier: +${modifierValue} => ${total}`);
-    } else if (modifierSign === "-") {
-      total -= modifierValue;
-      fMyConsoleLog(`   -> Applying Modifier: -${modifierValue} => ${total}`);
-    }
-    return total;
-  } // End function fRollRPGDieString
 
   /** function fShowMessage
    * Purpose: Displays the message modal and returns a Promise that resolves on close.
