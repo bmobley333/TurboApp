@@ -5,59 +5,6 @@
   // === Core Cell Creation Helpers       (End of Low-Level Utilities) ===
   // ==========================================================================
 
-  /** function fIsSkRadioGroupMember
-   * Purpose: Checks if a cell's coordinates are part of the Sk1/Sk2 checkbox 'radio group'.
-   * Assumptions: gUI.range.sk1sk2CheckBoxes is a valid array of range definitions.
-   * @param {number} r - 0-based row index.
-   * @param {number} c - 0-based column index.
-   * @returns {boolean} True if the cell is within a defined Sk checkbox range, false otherwise.
-   */
-  function fIsSkRadioGroupMember(r, c) {
-    const ranges = gUI.range.sk1sk2CheckBoxes;
-    if (!Array.isArray(ranges)) {
-      console.warn(
-        "fIsSkRadioGroupMember: gUI.range.sk1sk2CheckBoxes is not a valid array."
-      );
-      return false;
-    }
-    if (
-      typeof r !== "number" ||
-      typeof c !== "number" ||
-      isNaN(r) ||
-      isNaN(c)
-    ) {
-      console.warn(
-        `fIsSkRadioGroupMember: Invalid input coordinates (${r}, ${c})`
-      );
-      return false;
-    }
-    for (const range of ranges) {
-      if (!fDoesObjectHaveR1C1R2C2Properties(range)) {
-        console.warn(
-          "fIsSkRadioGroupMember: Skipping invalid range object",
-          range
-        );
-        continue;
-      }
-      const resolved = fConvertsR1C1R2C2TagOrNumToIndices(range);
-      if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
-        console.warn(
-          "fIsSkRadioGroupMember: Skipping range due to unresolved indices",
-          range
-        );
-        continue;
-      }
-      const rMin = Math.min(resolved.r1, resolved.r2);
-      const rMax = Math.max(resolved.r1, resolved.r2);
-      const cMin = Math.min(resolved.c1, resolved.c2);
-      const cMax = Math.max(resolved.c1, resolved.c2);
-      if (r >= rMin && r <= rMax && c >= cMin && c <= cMax) {
-        return true;
-      }
-    }
-    return false;
-  } // End function fIsSkRadioGroupMember
-
   /** function fMakeCorrectCheckBoxType
    * Purpose: Creates a checkbox element with appropriate state and attributes for a grid cell.
    * Assumptions: Disables the checkbox if the cell background is not white.
