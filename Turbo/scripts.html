@@ -3122,15 +3122,15 @@
   } // End function fSetupSidebarActionListeners
 
   /** function fSetupMenuButtonListeners
-   * Purpose: Adds click event listeners to the main menu bar buttons.
-   * Assumptions: All button and dropdown elements are passed in as arguments.
-   * @param {HTMLElement} btnNish - The Nish button element.
-   * @param {HTMLElement} btnRoll - The Roll button element.
-   * @param {HTMLElement} btnFree - The Free button element.
-   * @param {HTMLElement} btnLuck - The Luck button element.
-   * @param {HTMLElement} btnGame - The Game menu button element.
+   * Purpose -> Adds click event listeners to the main menu bar buttons, defining the logic for each click.
+   * Assumptions: The button and dropdown elements exist in the DOM.
+   * @param {HTMLElement} btnNish - The Nish button.
+   * @param {HTMLElement} btnRoll - The Roll button.
+   * @param {HTMLElement} btnFree - The Free button.
+   * @param {HTMLElement} btnLuck - The Luck button.
+   * @param {HTMLElement} btnGame - The Game menu button.
    * @param {HTMLElement} dropdownGame - The Game dropdown panel.
-   * @param {HTMLElement} btnGear - The Gear menu button element.
+   * @param {HTMLElement} btnGear - The Gear menu button.
    * @param {HTMLElement} dropdownGear - The Gear dropdown panel.
    * @returns {void}
    */
@@ -3145,131 +3145,128 @@
     dropdownGear
   ) {
     btnNish.addEventListener("click", fHandleNishButtonClick);
+
     btnRoll.addEventListener("click", async (event) => {
       event.stopPropagation();
       fCloseAllDropdowns();
       fSetButtonOrMenuState("Roll");
+
       const { r: lastClickR, c: lastClickC } = gUI.cellClickInfo;
       const { r: checked_r, c: checked_c } = gUI.currentSkRadioChecked;
       let handled = false;
-      let currentCellTextForAdHoc = null;
-      if (lastClickR !== null && lastClickC !== null) {
-        fMyConsoleLog(
-          `   -> <Roll> Click: Checking Chaos Gem for last clicked cell [${lastClickR}, ${lastClickC}]...`
-        );
-        handled = await fHandleChaosGemClick(lastClickR, lastClickC);
-        if (handled) {
-          fMyConsoleLog("   -> <Roll> Click: Chaos Gem action completed.");
+
+      // Combine the specific ability and gear table ranges for a precise context check.
+      const abilityContextRanges = [
+        ...(gUI.range?.abilityTable || []),
+        ...(gUI.range?.gearTable || []),
+      ];
+
+      if (lastClickR === null || lastClickC === null) {
+        if (checked_r !== null) {
+          fMyConsoleLog(
+            "   -> <Roll> Click: No cell focus, but an ability is checked. Running ability roll..."
+          );
+          await fMain_AbilityRoll();
+          handled = true;
         }
       } else {
-        fMyConsoleLog(
-          "   -> <Roll> Click: No previous cell click info for Chaos Gem check."
-        );
-      }
-      if (!handled && lastClickR !== null && lastClickC !== null) {
-        fMyConsoleLog(
-          "   -> <Roll> Click: No Chaos Gem used. Checking for Ad-Hoc roll eligibility..."
-        );
-        const chaosRangeArray = gUI.range?.chaosGems
-          ? [gUI.range.chaosGems]
-          : [];
-        const abilityRangeArray = gUI.range?.entireAbiliyNGearTables || [];
-        const isChaosCell = fIsCellInRangeArray(
+        const isAbilityOrGearTableClick = fIsCellInRangeArray(
           lastClickR,
           lastClickC,
-          chaosRangeArray
+          abilityContextRanges
         );
-        const isAbilityCell = fIsCellInRangeArray(
+        const isChaosTableClick = fIsCellInRangeArray(
           lastClickR,
           lastClickC,
-          abilityRangeArray
+          gUI.range.chaosGems
         );
-        if (!isChaosCell && !isAbilityCell) {
+
+        // --- Precedence 1: Ability/Gear Table Context ---
+        if (isAbilityOrGearTableClick) {
           fMyConsoleLog(
-            `   -> Click [${lastClickR}, ${lastClickC}] is outside Chaos/Ability tables. Attempting ad-hoc parse...`
+            `   -> <Roll> Click: Context is Ability/Gear Table [${lastClickR}, ${lastClickC}]. Ad-hoc roll is disabled.`
+          );
+          if (checked_r !== null) {
+            fMyConsoleLog(
+              `   -> Active Sk checkbox found [${checked_r}, ${checked_c}]. Running ability roll...`
+            );
+            await fMain_AbilityRoll();
+            handled = true;
+          } else {
+            await fShowMessage(
+              "ℹ️ Please select an ability checkbox (Sk1 or Sk2) to roll."
+            );
+            handled = true;
+            fSetButtonOrMenuState(null);
+          }
+        }
+        // --- Precedence 2: Chaos Gem Context ---
+        else if (isChaosTableClick) {
+          fMyConsoleLog(
+            `   -> <Roll> Click: Context is Chaos Gem Table [${lastClickR}, ${lastClickC}].`
+          );
+          handled = await fHandleChaosGemClick(lastClickR, lastClickC);
+          if (handled) fSetButtonOrMenuState(null);
+        }
+        // --- Precedence 3: Ad-Hoc Context (with fallback) ---
+        else {
+          fMyConsoleLog(
+            `   -> <Roll> Click: Context is Ad-Hoc [${lastClickR}, ${lastClickC}]. Attempting ad-hoc roll...`
           );
           const cellElement = gUI.grid2D?.[lastClickR]?.[lastClickC];
           if (cellElement) {
-            currentCellTextForAdHoc = cellElement.textContent?.trim() ?? "";
+            const currentCellTextForAdHoc =
+              cellElement.textContent?.trim() ?? "";
             gUI.cellClickInfo.focusText = currentCellTextForAdHoc;
-            fMyConsoleLog(
-              `      -> Read current text: "${currentCellTextForAdHoc}", stored in focusText.`
-            );
             handled = await fHandleAdHocRoll(currentCellTextForAdHoc);
-          } else {
-            fMyConsoleLog(
-              `      -> Could not find cell element [${lastClickR}, ${lastClickC}] to read current text.`
-            );
-            gUI.cellClickInfo.focusText = null;
+
+            if (!handled && checked_r !== null) {
+              fMyConsoleLog(
+                `   -> Ad-Hoc roll failed for "${currentCellTextForAdHoc}". Falling back to checked ability [${checked_r}, ${checked_c}].`
+              );
+              await fMain_AbilityRoll();
+              handled = true;
+            } else if (handled) {
+              fSetButtonOrMenuState(null);
+            }
           }
-          if (handled) {
-            fMyConsoleLog("    -> <Roll> Click: Ad-Hoc roll completed.");
-          } else {
-            fMyConsoleLog(
-              "   -> <Roll> Click: Ad-Hoc roll pattern not found in cell text."
-            );
-          }
-        } else {
-          fMyConsoleLog(
-            `   -> Click [${lastClickR}, ${lastClickC}] is inside restricted Chaos/Ability table. Skipping ad-hoc roll.`
-          );
-          gUI.cellClickInfo.focusText = null;
         }
-      } else if (!handled) {
-        fMyConsoleLog(
-          "   -> <Roll> Click: No last cell click info for ad-hoc roll check."
-        );
-        gUI.cellClickInfo.focusText = null;
-      } else {
-        gUI.cellClickInfo.focusText = null;
       }
-      if (!handled && checked_r !== null) {
-        fMyConsoleLog(
-          `   -> <Roll> Click: No Chaos/Ad-Hoc handled. Active Sk checkbox [${checked_r}, ${checked_c}] found. Triggering standard roll action...`
-        );
-        await fMain_AbilityRoll();
-        handled = true;
-      } else if (!handled && checked_r === null) {
-        fMyConsoleLog(
-          "   -> <Roll> Click: No Chaos/Ad-Hoc handled and no Ability checkbox checked."
-        );
-      }
+
       if (!handled) {
         fMyConsoleLog(
-          "   -> <Roll> Click: No Chaos Gem, Ad-Hoc Roll, or Ability Checkbox action taken."
+          "   -> <Roll> Click: No valid action could be determined."
         );
-        let adHocAttemptedButFailed = gUI.cellClickInfo.focusText !== null;
+        const adHocAttemptedButFailed = gUI.cellClickInfo.focusText !== null;
         if (adHocAttemptedButFailed) {
           await fShowMessage(
-            `Nothing rollable found in cell "${
+            `ℹ️ Nothing rollable found in cell "${
               gUI.cellClickInfo.focusText || ""
             }"`
           );
         } else {
           await fShowMessage(
-            "Click an Ability checkbox, a usable Chaos Crystal, or a cell with dice notation (e.g., d6, sk20) first!"
+            "ℹ️ Please click a cell to establish context for the roll, or check an ability box."
           );
         }
         fSetButtonOrMenuState(null);
-      } else {
-        const wasAbilityRoll = checked_r !== null;
-        if (!wasAbilityRoll) {
-          fSetButtonOrMenuState(null);
-        }
       }
     });
+
     btnFree.addEventListener("click", (event) => {
       event.stopPropagation();
       fCloseAllDropdowns();
       fSetButtonOrMenuState("Free");
       fMain_AbilityRoll();
     });
+
     btnLuck.addEventListener("click", (event) => {
       event.stopPropagation();
       fCloseAllDropdowns();
       fSetButtonOrMenuState("Luck");
       fMain_AbilityRoll();
     });
+
     btnGame.addEventListener("click", (event) => {
       event.stopPropagation();
       const currentlyShown = dropdownGame.classList.contains("show");
@@ -3278,6 +3275,7 @@
         dropdownGame.classList.add("show");
       }
     });
+
     btnGear.addEventListener("click", (event) => {
       event.stopPropagation();
       const currentlyShown = dropdownGear.classList.contains("show");
