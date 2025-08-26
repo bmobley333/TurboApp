@@ -1,6 +1,11 @@
 <script>
   // utilities.html //
 
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  // End - n/a
+  // Start - Core Utilities
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
   /** function fMyConsoleLog
    * Purpose: Logs messages to the console with timestamps, only if gUI.isDebugMode is true.
    * Assumptions: gUI.isDebugMode is a boolean. gUI.startTime and gUI.lastLogTime are numbers.
@@ -180,36 +185,40 @@
     }
   } // End function fResolveFSDataCol
 
-  /** function fGetContrastColor
-   * Purpose: Determines if black or white text has better contrast against a given background hex color.
-   * Assumptions: Input is a valid hex color string (e.g., '#FF0000', '03F').
-   * @param {string} hexColor - The background color.
-   * @returns {string} '#000000' or '#ffffff' for the best contrast.
+  /** function fDoesObjectHaveR1C1R2C2Properties
+   * Purpose: Checks if an object has the required properties for a valid range definition.
+   * Assumptions: A valid range object must have r1, c1, r2, and c2 properties.
+   * @param {object} range - The object to check.
+   * @returns {boolean} True if the object is a valid range definition, false otherwise.
    */
-  function fGetContrastColor(hexColor) {
-    const defaultColor = "#000000";
-    if (!hexColor || typeof hexColor !== "string") return defaultColor;
-    try {
-      let hex = hexColor.startsWith("#") ? hexColor.substring(1) : hexColor;
-      if (hex.length === 3) {
-        hex = hex
-          .split("")
-          .map((char) => char + char)
-          .join("");
-      } else if (hex.length !== 6) {
-        return defaultColor;
-      }
-      const r = parseInt(hex.substring(0, 2), 16);
-      const g = parseInt(hex.substring(2, 4), 16);
-      const b = parseInt(hex.substring(4, 6), 16);
-      if (isNaN(r) || isNaN(g) || isNaN(b)) return defaultColor;
-      const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-      return luminance > 0.5 ? "#000000" : "#ffffff";
-    } catch (e) {
-      console.error("Error calculating contrast color for:", hexColor, e);
-      return defaultColor;
-    }
-  } // End function fGetContrastColor
+  function fDoesObjectHaveR1C1R2C2Properties(range) {
+    return (
+      range &&
+      typeof range.r1 !== "undefined" &&
+      typeof range.c1 !== "undefined" &&
+      typeof range.r2 !== "undefined" &&
+      typeof range.c2 !== "undefined"
+    );
+  } // End function fDoesObjectHaveR1C1R2C2Properties
+
+  /** function fConvertsR1C1R2C2TagOrNumToIndices
+   * Purpose: Converts tags or numbers within a range definition object into resolved 0-based indices.
+   * Assumptions: The range object has r1, c1, r2, c2 properties.
+   * @param {object} range - The range definition object {r1, c1, r2, c2}.
+   * @returns {object} An object {r1, c1, r2, c2} with resolved numeric indices (or NaN).
+   */
+  function fConvertsR1C1R2C2TagOrNumToIndices(range) {
+    const r1 = fResolveRow(range.r1);
+    const c1 = fResolveCol(range.c1);
+    const r2 = fResolveRow(range.r2);
+    const c2 = fResolveCol(range.c2);
+    return {
+      r1,
+      c1,
+      r2,
+      c2,
+    };
+  } // End function fConvertsR1C1R2C2TagOrNumToIndices
 
   /** function fIsCellInRangeArray
    * Purpose: Checks if given coordinates (r, c) fall within ANY of the range objects in a given array.
@@ -260,96 +269,36 @@
     return false;
   } // End function fIsCellInRangeArray
 
-  /** function fDoesObjectHaveR1C1R2C2Properties
-   * Purpose: Checks if an object has the required properties for a valid range definition.
-   * Assumptions: A valid range object must have r1, c1, r2, and c2 properties.
-   * @param {object} range - The object to check.
-   * @returns {boolean} True if the object is a valid range definition, false otherwise.
+  /** function fGetContrastColor
+   * Purpose: Determines if black or white text has better contrast against a given background hex color.
+   * Assumptions: Input is a valid hex color string (e.g., '#FF0000', '03F').
+   * @param {string} hexColor - The background color.
+   * @returns {string} '#000000' or '#ffffff' for the best contrast.
    */
-  function fDoesObjectHaveR1C1R2C2Properties(range) {
-    return (
-      range &&
-      typeof range.r1 !== "undefined" &&
-      typeof range.c1 !== "undefined" &&
-      typeof range.r2 !== "undefined" &&
-      typeof range.c2 !== "undefined"
-    );
-  } // End function fDoesObjectHaveR1C1R2C2Properties
-
-  /** function fConvertsR1C1R2C2TagOrNumToIndices
-   * Purpose: Converts tags or numbers within a range definition object into resolved 0-based indices.
-   * Assumptions: The range object has r1, c1, r2, c2 properties.
-   * @param {object} range - The range definition object {r1, c1, r2, c2}.
-   * @returns {object} An object {r1, c1, r2, c2} with resolved numeric indices (or NaN).
-   */
-  function fConvertsR1C1R2C2TagOrNumToIndices(range) {
-    const r1 = fResolveRow(range.r1);
-    const c1 = fResolveCol(range.c1);
-    const r2 = fResolveRow(range.r2);
-    const c2 = fResolveCol(range.c2);
-    return {
-      r1,
-      c1,
-      r2,
-      c2,
-    };
-  } // End function fConvertsR1C1R2C2TagOrNumToIndices
-
-  /** function fGetVal_GUICache
-   * Purpose: Retrieves a value from a cached FSData object using sheet tags or absolute indices.
-   * Assumptions: The dataCacheObject is a valid FSData object structure.
-   * @param {string | number} rRef - Row tag or 0-based absolute index from original sheet.
-   * @param {string | number} cRef - Column tag or 0-based absolute index from original sheet.
-   * @param {object} dataCacheObject - The cached FSData object.
-   * @returns {any | undefined} The value found, or undefined if not found or on error.
-   */
-  function fGetVal_GUICache(rRef, cRef, dataCacheObject) {
-    const funcName = "fGetVal_GUICache";
-    if (
-      !dataCacheObject ||
-      typeof dataCacheObject !== "object" ||
-      !dataCacheObject.text ||
-      !Array.isArray(dataCacheObject.text) ||
-      !dataCacheObject.rowTagsMap ||
-      typeof dataCacheObject.rowTagsMap !== "object" ||
-      !dataCacheObject.colTagsMap ||
-      typeof dataCacheObject.colTagsMap !== "object"
-    ) {
-      console.warn(
-        `${funcName}: Invalid or incomplete dataCacheObject provided.`
-      );
-      fMyConsoleLog(`⚠️ ${funcName}: Invalid dataCacheObject input.`);
-      return undefined;
-    }
-    const { text, rowTagsMap, colTagsMap } = dataCacheObject;
-    let absolute_r = NaN;
-    let absolute_c = NaN;
-    if (typeof rRef === "string") {
-      absolute_r = rowTagsMap[rRef];
-      if (absolute_r === undefined) {
-        return undefined;
+  function fGetContrastColor(hexColor) {
+    const defaultColor = "#000000";
+    if (!hexColor || typeof hexColor !== "string") return defaultColor;
+    try {
+      let hex = hexColor.startsWith("#") ? hexColor.substring(1) : hexColor;
+      if (hex.length === 3) {
+        hex = hex
+          .split("")
+          .map((char) => char + char)
+          .join("");
+      } else if (hex.length !== 6) {
+        return defaultColor;
       }
-    } else if (typeof rRef === "number" && !isNaN(rRef) && rRef >= 0) {
-      absolute_r = rRef;
-    } else {
-      return undefined;
+      const r = parseInt(hex.substring(0, 2), 16);
+      const g = parseInt(hex.substring(2, 4), 16);
+      const b = parseInt(hex.substring(4, 6), 16);
+      if (isNaN(r) || isNaN(g) || isNaN(b)) return defaultColor;
+      const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+      return luminance > 0.5 ? "#000000" : "#ffffff";
+    } catch (e) {
+      console.error("Error calculating contrast color for:", hexColor, e);
+      return defaultColor;
     }
-    if (typeof cRef === "string") {
-      absolute_c = colTagsMap[cRef];
-      if (absolute_c === undefined) {
-        return undefined;
-      }
-    } else if (typeof cRef === "number" && !isNaN(cRef) && cRef >= 0) {
-      absolute_c = cRef;
-    } else {
-      return undefined;
-    }
-    if (isNaN(absolute_r) || isNaN(absolute_c)) {
-      return undefined;
-    }
-    const value = text?.[absolute_r]?.[absolute_c];
-    return value;
-  } // End function fGetVal_GUICache
+  } // End function fGetContrastColor
 
   /** function fGetIDFromNameID
    * Purpose: Extracts the 6-character ID from the end of a Name_ID string.
@@ -373,6 +322,11 @@
     }
     return null;
   } // End function fGetIDFromNameID
+
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  // End - Core Utilities
+  // Start - Grid Data Access
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
   /** function fGetGridValue
    * Purpose: Retrieves a value from gUI.arr using tags or indices.
@@ -407,6 +361,86 @@
     }
     return value;
   } // End function fGetGridValue
+
+  /** function fSetGridValue
+   * Purpose -> Updates a value in the data model (gUI.arr) and the corresponding DOM cell.
+   * Assumptions: The grid is rendered. gUI.headerButtonCoords is populated.
+   * @param {string|number} rowRef - Row tag or 0-based index.
+   * @param {string|number} colRef - Column tag or 0-based index.
+   * @param {any} newValue - The new value to set.
+   * @returns {boolean} True if the update was successful, false if resolution failed.
+   */
+  function fSetGridValue(rowRef, colRef, newValue) {
+    const r = fResolveRow(rowRef);
+    const c = fResolveCol(colRef);
+    if (isNaN(r) || isNaN(c)) {
+      console.warn(
+        `fSetGridValue: Could not resolve (${rowRef}, ${colRef}) to valid indices [${r}, ${c}].`
+      );
+      return false;
+    }
+    if (gUI.headerButtonCoords.has(`${r},${c}`)) {
+      return true;
+    }
+    if (!gUI.arr?.[r]) {
+      console.warn(`fSetGridValue: Row ${r} does not exist in gUI.arr.`);
+      return false;
+    }
+    gUI.arr[r][c] = newValue;
+    const cell = gUI.grid2D?.[r]?.[c];
+    if (!cell) {
+      console.warn(
+        `fSetGridValue: Cell element not found at [${r}, ${c}]. Data model updated, DOM not.`
+      );
+      return true;
+    }
+    const valueStr = String(newValue ?? "").trim();
+    const isUrl =
+      valueStr.startsWith("http://") || valueStr.startsWith("https://");
+    if (isUrl) {
+      cell.classList.add("url-link");
+      cell.dataset.url = valueStr;
+      const driveMatch = valueStr.match(
+        /drive\.google\.com\/file\/d\/([-\w]+)/
+      );
+      const imgExts = /\.(png|jpg|jpeg|gif|webp|svg)$/i;
+      if (driveMatch && driveMatch[1]) {
+        const fileId = driveMatch[1];
+        const imageUrl = "https://drive.google.com/uc?export=view&id=" + fileId;
+        cell.classList.add("image-link");
+        cell.dataset.imageSrc = imageUrl;
+      } else if (imgExts.test(valueStr)) {
+        cell.classList.add("image-link");
+        cell.dataset.imageSrc = valueStr;
+      } else {
+        cell.classList.remove("image-link");
+        delete cell.dataset.imageSrc;
+      }
+    } else {
+      cell.classList.remove("url-link", "image-link");
+      delete cell.dataset.url;
+      delete cell.dataset.imageSrc;
+    }
+    const checkbox = cell.querySelector('input[type="checkbox"]');
+    const dropdown = cell.querySelector("select.grid-dropdown");
+    if (checkbox) {
+      const valUpper = String(newValue).toUpperCase();
+      checkbox.checked = newValue === true || valUpper === "TRUE";
+    } else if (dropdown) {
+      dropdown.value = String(newValue ?? "");
+    } else {
+      const idPattern = /\s{2,}_\w{6}$/;
+      const text =
+        typeof newValue === "string" && idPattern.test(newValue)
+          ? newValue.replace(idPattern, "")
+          : newValue;
+      cell.innerHTML = "";
+      const textSpan = document.createElement("span");
+      textSpan.textContent = text ?? "";
+      cell.appendChild(textSpan);
+    }
+    return true;
+  } // End function fSetGridValue
 
   /** function fSetRangeOfGridValues
    * Purpose: Updates values in a specified grid range (data and DOM).
@@ -539,85 +573,66 @@
     return updateErrors === 0;
   } // End function fSetRangeOfGridValues
 
-  /** function fSetGridValue
-   * Purpose -> Updates a value in the data model (gUI.arr) and the corresponding DOM cell.
-   * Assumptions: The grid is rendered. gUI.headerButtonCoords is populated.
-   * @param {string|number} rowRef - Row tag or 0-based index.
-   * @param {string|number} colRef - Column tag or 0-based index.
-   * @param {any} newValue - The new value to set.
-   * @returns {boolean} True if the update was successful, false if resolution failed.
+  /** function fGetVal_GUICache
+   * Purpose: Retrieves a value from a cached FSData object using sheet tags or absolute indices.
+   * Assumptions: The dataCacheObject is a valid FSData object structure.
+   * @param {string | number} rRef - Row tag or 0-based absolute index from original sheet.
+   * @param {string | number} cRef - Column tag or 0-based absolute index from original sheet.
+   * @param {object} dataCacheObject - The cached FSData object.
+   * @returns {any | undefined} The value found, or undefined if not found or on error.
    */
-  function fSetGridValue(rowRef, colRef, newValue) {
-    const r = fResolveRow(rowRef);
-    const c = fResolveCol(colRef);
-    if (isNaN(r) || isNaN(c)) {
+  function fGetVal_GUICache(rRef, cRef, dataCacheObject) {
+    const funcName = "fGetVal_GUICache";
+    if (
+      !dataCacheObject ||
+      typeof dataCacheObject !== "object" ||
+      !dataCacheObject.text ||
+      !Array.isArray(dataCacheObject.text) ||
+      !dataCacheObject.rowTagsMap ||
+      typeof dataCacheObject.rowTagsMap !== "object" ||
+      !dataCacheObject.colTagsMap ||
+      typeof dataCacheObject.colTagsMap !== "object"
+    ) {
       console.warn(
-        `fSetGridValue: Could not resolve (${rowRef}, ${colRef}) to valid indices [${r}, ${c}].`
+        `${funcName}: Invalid or incomplete dataCacheObject provided.`
       );
-      return false;
+      fMyConsoleLog(`⚠️ ${funcName}: Invalid dataCacheObject input.`);
+      return undefined;
     }
-    if (gUI.headerButtonCoords.has(`${r},${c}`)) {
-      return true;
-    }
-    if (!gUI.arr?.[r]) {
-      console.warn(`fSetGridValue: Row ${r} does not exist in gUI.arr.`);
-      return false;
-    }
-    gUI.arr[r][c] = newValue;
-    const cell = gUI.grid2D?.[r]?.[c];
-    if (!cell) {
-      console.warn(
-        `fSetGridValue: Cell element not found at [${r}, ${c}]. Data model updated, DOM not.`
-      );
-      return true;
-    }
-    const valueStr = String(newValue ?? "").trim();
-    const isUrl =
-      valueStr.startsWith("http://") || valueStr.startsWith("https://");
-    if (isUrl) {
-      cell.classList.add("url-link");
-      cell.dataset.url = valueStr;
-      const driveMatch = valueStr.match(
-        /drive\.google\.com\/file\/d\/([-\w]+)/
-      );
-      const imgExts = /\.(png|jpg|jpeg|gif|webp|svg)$/i;
-      if (driveMatch && driveMatch[1]) {
-        const fileId = driveMatch[1];
-        const imageUrl = "https://drive.google.com/uc?export=view&id=" + fileId;
-        cell.classList.add("image-link");
-        cell.dataset.imageSrc = imageUrl;
-      } else if (imgExts.test(valueStr)) {
-        cell.classList.add("image-link");
-        cell.dataset.imageSrc = valueStr;
-      } else {
-        cell.classList.remove("image-link");
-        delete cell.dataset.imageSrc;
+    const { text, rowTagsMap, colTagsMap } = dataCacheObject;
+    let absolute_r = NaN;
+    let absolute_c = NaN;
+    if (typeof rRef === "string") {
+      absolute_r = rowTagsMap[rRef];
+      if (absolute_r === undefined) {
+        return undefined;
       }
+    } else if (typeof rRef === "number" && !isNaN(rRef) && rRef >= 0) {
+      absolute_r = rRef;
     } else {
-      cell.classList.remove("url-link", "image-link");
-      delete cell.dataset.url;
-      delete cell.dataset.imageSrc;
+      return undefined;
     }
-    const checkbox = cell.querySelector('input[type="checkbox"]');
-    const dropdown = cell.querySelector("select.grid-dropdown");
-    if (checkbox) {
-      const valUpper = String(newValue).toUpperCase();
-      checkbox.checked = newValue === true || valUpper === "TRUE";
-    } else if (dropdown) {
-      dropdown.value = String(newValue ?? "");
+    if (typeof cRef === "string") {
+      absolute_c = colTagsMap[cRef];
+      if (absolute_c === undefined) {
+        return undefined;
+      }
+    } else if (typeof cRef === "number" && !isNaN(cRef) && cRef >= 0) {
+      absolute_c = cRef;
     } else {
-      const idPattern = /\s{2,}_\w{6}$/;
-      const text =
-        typeof newValue === "string" && idPattern.test(newValue)
-          ? newValue.replace(idPattern, "")
-          : newValue;
-      cell.innerHTML = "";
-      const textSpan = document.createElement("span");
-      textSpan.textContent = text ?? "";
-      cell.appendChild(textSpan);
+      return undefined;
     }
-    return true;
-  } // End function fSetGridValue
+    if (isNaN(absolute_r) || isNaN(absolute_c)) {
+      return undefined;
+    }
+    const value = text?.[absolute_r]?.[absolute_c];
+    return value;
+  } // End function fGetVal_GUICache
+
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  // End - Grid Data Access
+  // Start - UI Components (Modals)
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
   /** function fShowMessage
    * Purpose: Displays the message modal and returns a Promise that resolves on close.
@@ -808,33 +823,6 @@
     gUI.promptPromiseReject = null;
   } // End function fHandlePromptResponse
 
-  /** function fHandleInputPromptResponse
-   * Purpose: Hides the input prompt modal and resolves the pending Promise.
-   * Assumptions: Called by event listeners in fSetupInputPromptModalListeners.
-   * @param {string | object | null} response - The user's response (text, clear object, or null).
-   * @returns {void}
-   */
-  function fHandleInputPromptResponse(response) {
-    const overlay = document.getElementById("inputPromptModal");
-    if (overlay) {
-      overlay.style.display = "none";
-    } else {
-      console.error(
-        "Input prompt modal overlay element (#inputPromptModal) not found when trying to hide."
-      );
-    }
-    if (typeof gUI.promptPromiseResolve === "function") {
-      gUI.promptPromiseResolve(response);
-      fMyConsoleLog(`Input Prompt Promise Resolved.`);
-    } else {
-      console.error(
-        "Input prompt promise resolve function not found when trying to resolve."
-      );
-    }
-    gUI.promptPromiseResolve = null;
-    gUI.promptPromiseReject = null;
-  } // End function fHandleInputPromptResponse
-
   /** function fSetupPromptModalListeners
    * Purpose: Sets up event listeners for the prompt modal 'Yes' and 'No' buttons.
    * Assumptions: The modal HTML exists in the DOM.
@@ -874,6 +862,63 @@
     fMyConsoleLog("✅ Prompt Modal Listeners Attached.");
   } // End function fSetupPromptModalListeners
 
+  /** function fShowInputPrompt
+   * Purpose: Displays a custom modal with a text input and returns a Promise.
+   * Assumptions: The modal HTML exists in the DOM.
+   * Notes: It focuses the 'Save' button by default to fix a browser rendering bug.
+   * @param {string} title - The title to display in the modal.
+   * @param {string} [prefillText=""] - The initial text for the input field.
+   * @returns {Promise<string | object | null>} A Promise resolving with the result.
+   */
+  async function fShowInputPrompt(title, prefillText = "") {
+    const overlay = document.getElementById("inputPromptModal");
+    const titleEl = document.getElementById("inputPromptTitle");
+    const inputEl = document.getElementById("inputPromptText");
+    const saveBtn = document.getElementById("inputPromptSaveButton");
+    if (!overlay || !titleEl || !inputEl || !saveBtn) {
+      console.error("Input prompt modal elements not found in DOM!");
+      return Promise.reject(
+        new Error("Input prompt modal elements not found.")
+      );
+    }
+    titleEl.textContent = title;
+    inputEl.value = prefillText;
+    overlay.style.display = "flex";
+    setTimeout(() => {
+      saveBtn.focus();
+    }, 0);
+    return new Promise((resolve) => {
+      gUI.promptPromiseResolve = resolve;
+    });
+  } // End function fShowInputPrompt
+
+  /** function fHandleInputPromptResponse
+   * Purpose: Hides the input prompt modal and resolves the pending Promise.
+   * Assumptions: Called by event listeners in fSetupInputPromptModalListeners.
+   * @param {string | object | null} response - The user's response (text, clear object, or null).
+   * @returns {void}
+   */
+  function fHandleInputPromptResponse(response) {
+    const overlay = document.getElementById("inputPromptModal");
+    if (overlay) {
+      overlay.style.display = "none";
+    } else {
+      console.error(
+        "Input prompt modal overlay element (#inputPromptModal) not found when trying to hide."
+      );
+    }
+    if (typeof gUI.promptPromiseResolve === "function") {
+      gUI.promptPromiseResolve(response);
+      fMyConsoleLog(`Input Prompt Promise Resolved.`);
+    } else {
+      console.error(
+        "Input prompt promise resolve function not found when trying to resolve."
+      );
+    }
+    gUI.promptPromiseResolve = null;
+    gUI.promptPromiseReject = null;
+  } // End function fHandleInputPromptResponse
+
   /** function fSetupInputPromptModalListeners
    * Purpose: Sets up event listeners for the custom input prompt modal buttons.
    * Assumptions: Modal HTML and fHandleInputPromptResponse exist.
@@ -908,34 +953,4 @@
     });
     fMyConsoleLog("✅ Input Prompt Modal Listeners Attached.");
   } // End function fSetupInputPromptModalListeners
-
-  /** function fShowInputPrompt
-   * Purpose: Displays a custom modal with a text input and returns a Promise.
-   * Assumptions: The modal HTML exists in the DOM.
-   * Notes: It focuses the 'Save' button by default to fix a browser rendering bug.
-   * @param {string} title - The title to display in the modal.
-   * @param {string} [prefillText=""] - The initial text for the input field.
-   * @returns {Promise<string | object | null>} A Promise resolving with the result.
-   */
-  async function fShowInputPrompt(title, prefillText = "") {
-    const overlay = document.getElementById("inputPromptModal");
-    const titleEl = document.getElementById("inputPromptTitle");
-    const inputEl = document.getElementById("inputPromptText");
-    const saveBtn = document.getElementById("inputPromptSaveButton");
-    if (!overlay || !titleEl || !inputEl || !saveBtn) {
-      console.error("Input prompt modal elements not found in DOM!");
-      return Promise.reject(
-        new Error("Input prompt modal elements not found.")
-      );
-    }
-    titleEl.textContent = title;
-    inputEl.value = prefillText;
-    overlay.style.display = "flex";
-    setTimeout(() => {
-      saveBtn.focus();
-    }, 0);
-    return new Promise((resolve) => {
-      gUI.promptPromiseResolve = resolve;
-    });
-  } // End function fShowInputPrompt
 </script>
