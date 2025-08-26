@@ -4061,6 +4061,101 @@
     fMyConsoleLog("✅ Sidebar Action Listeners Attached.");
   } // End function fSetupSidebarActionListeners
 
+  /** function fPrep_GetAndValidateRollData
+   * Purpose: Retrieves and validates the roll data from history for a 'Prep' button click.
+   * Assumptions: This is a helper for fHandlePrepARClick and fHandlePrepDmgClick.
+   * @param {HTMLElement} button - The button element that was clicked.
+   * @param {string} rollId - The unique ID of the roll data to retrieve.
+   * @returns {Promise<object|null>} The validated rollData object, or null on failure.
+   */
+  async function fPrep_GetAndValidateRollData(button, rollId) {
+    const funcName = "fPrep_GetAndValidateRollData";
+    if (!rollId) {
+      console.error(`${funcName}: Button is missing 'data-roll-id' attribute.`);
+      await fShowMessage(
+        "❌ Error: Cannot identify which roll results to use."
+      );
+      button.textContent = "Error (No ID)";
+      return null;
+    }
+
+    const rollData = gUI.monsterRollResultsHistory?.[rollId];
+    if (
+      !rollData ||
+      !Array.isArray(rollData.results) ||
+      typeof rollData.originalAbilityRow !== "number" ||
+      !Array.isArray(rollData.allTargetedRows_R)
+    ) {
+      console.error(
+        `${funcName}: No valid data found for rollId '${rollId}'.`,
+        rollData
+      );
+      await fShowMessage(
+        "❌ Error: Could not find the data associated with this roll."
+      );
+      button.textContent = "Error (No Data)";
+      return null;
+    }
+    return rollData;
+  } // End function fPrep_GetAndValidateRollData
+
+  /** function fPrep_SwitchActiveCheckbox
+   * Purpose: Switches the active checkbox for an ability from Sk1 to Sk2.
+   * Assumptions: This is a helper for fHandlePrepARClick and fHandlePrepDmgClick.
+   * @param {number} abilityRowIndex - The 0-based row index of the ability.
+   * @returns {Promise<boolean>} True if the switch was successful, false otherwise.
+   */
+  async function fPrep_SwitchActiveCheckbox(abilityRowIndex) {
+    const funcName = "fPrep_SwitchActiveCheckbox";
+    const originalSk1Col = fResolveCol("Sk1ChkBox");
+    const targetSk2Col = fResolveCol("Sk2ChkBox");
+
+    if (isNaN(originalSk1Col) || isNaN(targetSk2Col)) {
+      const missingTag = isNaN(originalSk1Col) ? "Sk1ChkBox" : "Sk2ChkBox";
+      await fShowMessage(
+        `❌ Error: Could not resolve column tag '${missingTag}'.`
+      );
+      return false;
+    }
+
+    // Uncheck the original Sk1 box
+    const oldCellDiv = gUI.grid2D?.[abilityRowIndex]?.[originalSk1Col];
+    const oldCheckbox = oldCellDiv?.querySelector('input[type="checkbox"]');
+    if (oldCheckbox && oldCheckbox.checked) {
+      oldCheckbox.checked = false;
+      gUI.arr[abilityRowIndex][originalSk1Col] = false;
+    }
+
+    // Check the new Sk2 box and update the global tracker
+    const targetCellDiv = gUI.grid2D?.[abilityRowIndex]?.[targetSk2Col];
+    const targetCheckbox = targetCellDiv?.querySelector(
+      'input[type="checkbox"]'
+    );
+    if (targetCheckbox) {
+      targetCheckbox.checked = true;
+      gUI.arr[abilityRowIndex][targetSk2Col] = true;
+      const { r: currentlyCheckedR, c: currentlyCheckedC } =
+        gUI.currentSkRadioChecked;
+      if (
+        currentlyCheckedR !== null &&
+        (currentlyCheckedR !== abilityRowIndex ||
+          currentlyCheckedC !== targetSk2Col)
+      ) {
+        fUncheckOldSkGroupBox(currentlyCheckedR, currentlyCheckedC);
+      }
+      gUI.currentSkRadioChecked = { r: abilityRowIndex, c: targetSk2Col };
+      fMyConsoleLog(
+        `   -> Switched active checkbox to Sk2 at [${abilityRowIndex}, ${targetSk2Col}].`
+      );
+      return true;
+    } else {
+      await fShowMessage(
+        "❌ Error: Could not find the target (Sk2) checkbox element."
+      );
+      return false;
+    }
+  } // End function fPrep_SwitchActiveCheckbox
+
   /** function fHandleApplyWoundsClick
    * Purpose: Handles clicks on the "Apply" wounds button in the sidebar.
    * Assumptions: Reads wound amount from the button's data attribute and applies it to 1st Degree Wounds.
@@ -4126,177 +4221,46 @@
    */
   async function fHandlePrepARClick(event) {
     const button = event.target;
-    if (!button || !button.classList.contains("prep-ar-btn")) {
+    if (!button || !button.classList.contains("prep-ar-btn") || button.disabled)
       return;
-    }
     fMyConsoleLog(`🖱️ Sidebar 'Prep AR' Button Clicked...`);
-    if (button.disabled) {
-      fMyConsoleLog("   -> Button already disabled. Ignoring click.");
-      return;
-    }
     button.disabled = true;
+
     const rollId = button.dataset.rollId;
-    if (!rollId) {
-      console.error(
-        "fHandlePrepARClick: Button is missing 'data-roll-id' attribute."
-      );
-      fMyConsoleLog("❌ Error preparing AR: Button lacks roll ID.");
-      await fShowMessage("Error: Cannot identify which roll results to use.");
-      button.textContent = "Error (No ID)";
-      return;
-    }
-    const rollData = gUI.monsterRollResultsHistory?.[rollId];
-    if (
-      !rollData ||
-      !Array.isArray(rollData.results) ||
-      typeof rollData.originalAbilityRow !== "number" ||
-      !Array.isArray(rollData.allTargetedRows_R)
-    ) {
-      console.error(
-        `fHandlePrepARClick: No valid data found in gUI.monsterRollResultsHistory for rollId '${rollId}'.`,
-        rollData
-      );
-      fMyConsoleLog(
-        `❌ Error preparing AR: Data for roll ID '${rollId}' not found or invalid.`
-      );
-      await fShowMessage(
-        "Error: Could not find the data associated with this defense roll."
-      );
-      button.textContent = "Error (No Data)";
-      return;
-    }
-    const failureResults = rollData.results;
-    const originalAbilityRow = rollData.originalAbilityRow;
-    const allTargetedRows_R = rollData.allTargetedRows_R;
+    const rollData = await fPrep_GetAndValidateRollData(button, rollId);
+    if (!rollData) return;
+
+    const {
+      results: failureResults,
+      originalAbilityRow,
+      allTargetedRows_R,
+    } = rollData;
     const cNumMon = fResolveCol("NumMon");
-    let updateErrors = false;
     if (isNaN(cNumMon)) {
-      console.error(
-        "fHandlePrepARClick: Could not resolve 'NumMon' column tag."
-      );
-      fMyConsoleLog("❌ Error preparing AR: Could not find 'NumMon' column.");
       await fShowMessage(
-        "Error: Could not find the 'NumMon' column in the grid."
+        "❌ Error: Could not find the 'NumMon' column in the grid."
       );
       button.textContent = "Error";
       return;
     }
+
     const failureMap = new Map();
     failureResults.forEach((res) => failureMap.set(res.mon_R, res.numFailures));
-    fMyConsoleLog(
-      `   -> Processing ${allTargetedRows_R.length} targeted monster rows for Row ${originalAbilityRow}...`
-    );
     allTargetedRows_R.forEach((target_mon_R) => {
       const numFailures = failureMap.get(target_mon_R);
-      const valueToSet =
-        numFailures !== undefined && numFailures > 0 ? numFailures : "";
-      fMyConsoleLog(
-        `      -> Setting NumMon for row ${target_mon_R} to '${valueToSet}'`
-      );
-      if (!fSetGridValue(target_mon_R, cNumMon, valueToSet)) {
-        fMyConsoleLog(
-          `         -> ⚠️ Failed to set NumMon for row ${target_mon_R}`
-        );
-        updateErrors = true;
-      }
+      const valueToSet = numFailures > 0 ? numFailures : "";
+      fSetGridValue(target_mon_R, cNumMon, valueToSet);
     });
-    if (updateErrors) {
-      await fShowMessage(
-        "Warning: Some 'NumMon' values may not have updated correctly."
-      );
-    }
-    const originalSk1ColTag = "Sk1ChkBox";
-    const targetSk2ColTag = "Sk2ChkBox";
-    const originalSk1Col = fResolveCol(originalSk1ColTag);
-    const targetSk2Col = fResolveCol(targetSk2ColTag);
-    if (isNaN(originalSk1Col) || isNaN(targetSk2Col)) {
-      const missingTag = isNaN(originalSk1Col)
-        ? originalSk1ColTag
-        : targetSk2ColTag;
-      fMyConsoleLog(
-        `   -> Cannot switch checkbox: Could not resolve column tag '${missingTag}'.`
-      );
-      await fShowMessage(
-        `Error: Could not find the ${
-          isNaN(originalSk1Col) ? "Defense (Sk1)" : "Armor (Sk2)"
-        } column.`
-      );
-      button.textContent = "Done (CB Fail)";
-      return;
-    }
-    const oldCellDiv = gUI.grid2D?.[originalAbilityRow]?.[originalSk1Col];
-    const oldCheckbox = oldCellDiv?.querySelector('input[type="checkbox"]');
-    if (oldCheckbox && oldCheckbox.checked) {
-      oldCheckbox.checked = false;
-      gUI.arr[originalAbilityRow][originalSk1Col] = false;
-      fMyConsoleLog(
-        `   -> Unchecked original Sk1 checkbox [${originalAbilityRow}, ${originalSk1Col}]`
-      );
-      if (
-        gUI.currentSkRadioChecked.r === originalAbilityRow &&
-        gUI.currentSkRadioChecked.c === originalSk1Col
-      ) {
-        gUI.currentSkRadioChecked = {
-          r: null,
-          c: null,
-        };
-      }
-    } else {
-      fMyConsoleLog(
-        `   -> Original Sk1 checkbox [${originalAbilityRow}, ${originalSk1Col}] not found or already unchecked.`
-      );
-    }
-    const targetCellDiv = gUI.grid2D?.[originalAbilityRow]?.[targetSk2Col];
-    const targetCheckbox = targetCellDiv?.querySelector(
-      'input[type="checkbox"]'
-    );
-    if (targetCheckbox) {
-      targetCheckbox.checked = true;
-      gUI.arr[originalAbilityRow][targetSk2Col] = true;
-      const { r: currentlyCheckedR, c: currentlyCheckedC } =
-        gUI.currentSkRadioChecked;
-      if (
-        currentlyCheckedR !== null &&
-        currentlyCheckedC !== null &&
-        (currentlyCheckedR !== originalAbilityRow ||
-          currentlyCheckedC !== targetSk2Col)
-      ) {
-        fUncheckOldSkGroupBox(currentlyCheckedR, currentlyCheckedC);
-      }
-      gUI.currentSkRadioChecked = {
-        r: originalAbilityRow,
-        c: targetSk2Col,
-      };
-      fMyConsoleLog(
-        `   -> Switched active checkbox to Sk2 at [${originalAbilityRow}, ${targetSk2Col}].`
-      );
+
+    const switchSuccess = await fPrep_SwitchActiveCheckbox(originalAbilityRow);
+    if (switchSuccess) {
       button.textContent = "AR Prep Done";
+      fHandleAutoSaveTextToFirestore();
+      try {
+        delete gUI.monsterRollResultsHistory[rollId];
+      } catch (e) {}
     } else {
-      console.error(
-        `fHandlePrepARClick: Could not find Sk2 checkbox element at [${originalAbilityRow}, ${targetSk2Col}].`
-      );
-      fMyConsoleLog(
-        `   -> ❌ Failed to find Sk2 checkbox element at [${originalAbilityRow}, ${targetSk2Col}].`
-      );
-      await fShowMessage(
-        `Error: Could not find the target Armor checkbox element.`
-      );
-      gUI.currentSkRadioChecked = {
-        r: null,
-        c: null,
-      };
       button.textContent = "Done (CB Fail)";
-      return;
-    }
-    fHandleAutoSaveTextToFirestore();
-    try {
-      delete gUI.monsterRollResultsHistory[rollId];
-      fMyConsoleLog(`   -> Removed entry for rollId '${rollId}' from history.`);
-    } catch (e) {
-      console.warn(
-        `fHandlePrepARClick: Failed to remove entry for rollId '${rollId}' from history:`,
-        e
-      );
     }
     fMyConsoleLog("✅ Prep AR action completed.");
   } // End function fHandlePrepARClick
@@ -4309,187 +4273,52 @@
    */
   async function fHandlePrepDmgClick(event) {
     const button = event.target;
-    if (!button || !button.classList.contains("prep-dmg-btn")) {
-      return;
-    }
-    fMyConsoleLog(`🖱️ Sidebar 'Prep Dmg' Button Clicked...`);
-    if (button.disabled) {
-      fMyConsoleLog("   -> Button already disabled. Ignoring click.");
-      return;
-    }
-    button.disabled = true;
-    const rollId = button.dataset.rollId;
-    if (!rollId) {
-      console.error(
-        "fHandlePrepDmgClick: Button is missing 'data-roll-id' attribute."
-      );
-      fMyConsoleLog("❌ Error preparing Dmg: Button lacks roll ID.");
-      await fShowMessage("Error: Cannot identify which roll results to use.");
-      button.textContent = "Error (No ID)";
-      return;
-    }
-    fMyConsoleLog(
-      `   -> Handling click for rollId '${rollId}'. Available history keys: ${Object.keys(
-        gUI.monsterRollResultsHistory || {}
-      ).join(", ")}`
-    );
-    const rollData = gUI.monsterRollResultsHistory?.[rollId];
-    fMyConsoleLog(
-      `   -> Retrieved rollData for ID '${rollId}': ${JSON.stringify(rollData)}`
-    );
     if (
-      !rollData ||
-      !Array.isArray(rollData.results) ||
-      typeof rollData.originalAbilityRow !== "number" ||
-      !Array.isArray(rollData.allTargetedRows_R)
-    ) {
-      console.error(
-        `fHandlePrepDmgClick: No valid data found in gUI.monsterRollResultsHistory for rollId '${rollId}'.`,
-        rollData
-      );
-      fMyConsoleLog(
-        `❌ Error preparing Dmg: Data for roll ID '${rollId}' not found or invalid.`
-      );
-      await fShowMessage(
-        "Error: Could not find the data associated with this attack roll."
-      );
-      button.textContent = "Error (No Data)";
+      !button ||
+      !button.classList.contains("prep-dmg-btn") ||
+      button.disabled
+    )
       return;
-    }
-    const successResults = rollData.results;
-    const originalAbilityRow = rollData.originalAbilityRow;
-    const allTargetedRows_R = rollData.allTargetedRows_R;
+    fMyConsoleLog(`🖱️ Sidebar 'Prep Dmg' Button Clicked...`);
+    button.disabled = true;
+
+    const rollId = button.dataset.rollId;
+    const rollData = await fPrep_GetAndValidateRollData(button, rollId);
+    if (!rollData) return;
+
+    const {
+      results: successResults,
+      originalAbilityRow,
+      allTargetedRows_R,
+    } = rollData;
     const cNumMon = fResolveCol("NumMon");
-    let updateErrors = false;
     if (isNaN(cNumMon)) {
-      console.error(
-        "fHandlePrepDmgClick: Could not resolve 'NumMon' column tag."
-      );
-      fMyConsoleLog("❌ Error preparing Dmg: Could not find 'NumMon' column.");
       await fShowMessage(
-        "Error: Could not find the 'NumMon' column in the grid."
+        "❌ Error: Could not find the 'NumMon' column in the grid."
       );
       button.textContent = "Error";
       return;
     }
+
     const successMap = new Map();
     successResults.forEach((res) =>
       successMap.set(res.mon_R, res.numSuccesses)
     );
-    fMyConsoleLog(
-      `   -> Processing ${allTargetedRows_R.length} targeted monster rows for Row ${originalAbilityRow}...`
-    );
     allTargetedRows_R.forEach((target_mon_R) => {
       const numSuccesses = successMap.get(target_mon_R);
-      const valueToSet =
-        numSuccesses !== undefined && numSuccesses > 0 ? numSuccesses : "";
-      fMyConsoleLog(
-        `       -> Processing target row ${target_mon_R}. Successes from map: ${numSuccesses}. Value to set: '${valueToSet}'`
-      );
-      if (!fSetGridValue(target_mon_R, cNumMon, valueToSet)) {
-        fMyConsoleLog(
-          `         -> ⚠️ Failed to set NumMon for row ${target_mon_R}`
-        );
-        updateErrors = true;
-      }
+      const valueToSet = numSuccesses > 0 ? numSuccesses : "";
+      fSetGridValue(target_mon_R, cNumMon, valueToSet);
     });
-    if (updateErrors) {
-      await fShowMessage(
-        "Warning: Some 'NumMon' values may not have updated correctly."
-      );
-    }
-    const originalSk1ColTag = "Sk1ChkBox";
-    const targetSk2ColTag = "Sk2ChkBox";
-    const originalSk1Col = fResolveCol(originalSk1ColTag);
-    const targetSk2Col = fResolveCol(targetSk2ColTag);
-    if (isNaN(originalSk1Col) || isNaN(targetSk2Col)) {
-      const missingTag = isNaN(originalSk1Col)
-        ? originalSk1ColTag
-        : targetSk2ColTag;
-      fMyConsoleLog(
-        `   -> Cannot switch checkbox: Could not resolve column tag '${missingTag}'.`
-      );
-      await fShowMessage(
-        `Error: Could not find the ${
-          isNaN(originalSk1Col) ? "Attack (Sk1)" : "Damage (Sk2)"
-        } column.`
-      );
-      button.textContent = "Done (CB Fail)";
-      return;
-    }
-    const oldCellDiv = gUI.grid2D?.[originalAbilityRow]?.[originalSk1Col];
-    const oldCheckbox = oldCellDiv?.querySelector('input[type="checkbox"]');
-    if (oldCheckbox && oldCheckbox.checked) {
-      oldCheckbox.checked = false;
-      gUI.arr[originalAbilityRow][originalSk1Col] = false;
-      fMyConsoleLog(
-        `   -> Unchecked original Sk1 checkbox [${originalAbilityRow}, ${originalSk1Col}]`
-      );
-      if (
-        gUI.currentSkRadioChecked.r === originalAbilityRow &&
-        gUI.currentSkRadioChecked.c === originalSk1Col
-      ) {
-        gUI.currentSkRadioChecked = {
-          r: null,
-          c: null,
-        };
-      }
-    } else {
-      fMyConsoleLog(
-        `   -> Original Sk1 checkbox [${originalAbilityRow}, ${originalSk1Col}] not found or already unchecked.`
-      );
-    }
-    const targetCellDiv = gUI.grid2D?.[originalAbilityRow]?.[targetSk2Col];
-    const targetCheckbox = targetCellDiv?.querySelector(
-      'input[type="checkbox"]'
-    );
-    if (targetCheckbox) {
-      targetCheckbox.checked = true;
-      gUI.arr[originalAbilityRow][targetSk2Col] = true;
-      const { r: currentlyCheckedR, c: currentlyCheckedC } =
-        gUI.currentSkRadioChecked;
-      if (
-        currentlyCheckedR !== null &&
-        currentlyCheckedC !== null &&
-        (currentlyCheckedR !== originalAbilityRow ||
-          currentlyCheckedC !== targetSk2Col)
-      ) {
-        fUncheckOldSkGroupBox(currentlyCheckedR, currentlyCheckedC);
-      }
-      gUI.currentSkRadioChecked = {
-        r: originalAbilityRow,
-        c: targetSk2Col,
-      };
-      fMyConsoleLog(
-        `   -> Switched active checkbox to Sk2 at [${originalAbilityRow}, ${targetSk2Col}].`
-      );
+
+    const switchSuccess = await fPrep_SwitchActiveCheckbox(originalAbilityRow);
+    if (switchSuccess) {
       button.textContent = "Dmg Prep Done";
+      fHandleAutoSaveTextToFirestore();
+      try {
+        delete gUI.monsterRollResultsHistory[rollId];
+      } catch (e) {}
     } else {
-      console.error(
-        `fHandlePrepDmgClick: Could not find Sk2 checkbox element at [${originalAbilityRow}, ${targetSk2Col}].`
-      );
-      fMyConsoleLog(
-        `   -> ❌ Failed to find Sk2 checkbox element at [${originalAbilityRow}, ${targetSk2Col}].`
-      );
-      await fShowMessage(
-        `Error: Could not find the target Damage checkbox element.`
-      );
-      gUI.currentSkRadioChecked = {
-        r: null,
-        c: null,
-      };
       button.textContent = "Done (CB Fail)";
-      return;
-    }
-    fHandleAutoSaveTextToFirestore();
-    try {
-      delete gUI.monsterRollResultsHistory[rollId];
-      fMyConsoleLog(`   -> Removed entry for rollId '${rollId}' from history.`);
-    } catch (e) {
-      console.warn(
-        `fHandlePrepDmgClick: Failed to remove entry for rollId '${rollId}' from history:`,
-        e
-      );
     }
     fMyConsoleLog("✅ Prep Dmg action completed.");
   } // End function fHandlePrepDmgClick
