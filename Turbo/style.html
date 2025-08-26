@@ -1,42 +1,7 @@
-/* === style.html === */
-/* ========================================================================== */
-/* === Common inline styles === */
-/* ========================================================================== */
-
-/* Example: <span class="green-bold">${text}</span> */
-.green-bold {
-  color: green;
-  font-weight: bold;
-}
-
-/* Example: <span class="red-italic">${text}</span> */
-.red-italic {
-  color: red;
-  font-style: italic;
-}
-
-/* Example: <span class="red-bold">${text}</span> */
-.red-bold {
-  color: red;
-  font-weight: bold;
-}
-
-/* Example: <span class="blue-bold">${text}</span> */
-.blue-bold {
-  color: blue;
-  font-weight: bold;
-}
-
-/* Example: <span class="tremendous">${text}</span> */
-.tremendous {
-  background-color: yellow;
-  color: green;
-  font-weight: bold;
-}
-
-/* ========================================================================== */
-/* === Base Page Styling === */
-/* ========================================================================== */
+/* ====================================================================================================================================
+ * End - n/a
+ * Start - Base Page Styling
+ * ==================================================================================================================================== */
 
 body {
   font-family: monospace;
@@ -53,292 +18,10 @@ body {
   box-sizing: inherit;
 }
 
-/* ========================================================================== */
-/* === Grid Container === */
-/* ========================================================================== */
-
-#grid {
-  display: grid;
-  grid-auto-rows: 20px;
-  gap: 0;
-  border: 1px solid #ccc;
-  margin: 0;
-  padding: 0;
-  overflow: auto;
-  max-height: calc(100vh - 40px);
-  position: relative;
-}
-
-/* ========================================================================== */
-/* === Grid Cells === */
-/* ========================================================================== */
-
-.cell {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  font-size: 0.8em;
-  overflow: hidden;
-  padding: 0 4px;
-  background: white;
-  color: #000;
-  border: 1px solid transparent;
-  white-space: nowrap; /* Changed from pre-wrap to prevent wrapping */
-  text-overflow: ellipsis;
-}
-
-.cell.overflow-left {
-  justify-content: flex-start;
-  text-align: left;
-}
-
-.cell.wrap {
-  white-space: normal;
-  word-wrap: break-word;
-  /* overflow is now handled by the child span */
-  align-items: flex-start; /* Align text to the top */
-}
-
-.cell > span {
-  /* This span will contain the text inside every cell */
-  width: 100%;
-  overflow: hidden; /* Hide overflow for non-wrapping cells */
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.cell.wrap > span {
-  /* This applies ONLY to the span inside a wrapped cell */
-  height: 100%; /* Allow the span to fill the cell's height */
-  white-space: normal;
-  word-wrap: break-word;
-  overflow-y: auto; /* Make ONLY the span scrollable */
-  text-overflow: clip;
-
-  /* --- Hide the scrollbar --- */
-  -ms-overflow-style: none; /* IE and Edge */
-  scrollbar-width: none; /* Firefox */
-}
-
-/* Hide scrollbar for Chrome, Safari and Opera */
-.cell.wrap > span::-webkit-scrollbar {
-  display: none;
-}
-
-.cell-header {
-  background-color: #f2f2f2;
-  font-weight: bold;
-  color: #333;
-}
-
-.cell input[type="checkbox"]:not(:disabled) {
-  cursor: pointer;
-}
-
-.cell input[type="checkbox"]:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-}
-
-.cell input[type="checkbox"]:checked {
-  accent-color: #000;
-  transform: scale(1.2);
-  filter: brightness(0.5);
-}
-
-.cell[contenteditable="true"] {
-  cursor: text;
-  justify-content: flex-start;
-  text-align: left;
-}
-
-.cell[contenteditable="true"]:hover {
-  background-color: #f0f8ff;
-}
-
-.cell[contenteditable="true"]:focus {
-  background-color: #e6f3ff;
-  outline: 1px solid #7cccff;
-  box-shadow: inset 0 0 0 1px #7cccff;
-}
-
-.cell.url-link {
-  cursor: pointer;
-  color: #0000ee;
-  text-decoration: underline;
-}
-
-.cell.url-link:hover {
-  color: #dd00dd;
-}
-
-.cell.custom-ability-cell {
-  cursor: pointer;
-}
-
-.cell.custom-data-cell {
-  box-shadow: inset 0 0 0 1px rgba(173, 216, 230, 0.9); /* Faint light blue 'border' */
-}
-
-.cell.has-custom-note {
-  position: relative; /* Anchor for the pseudo-element */
-}
-
-.cell.has-custom-note::after {
-  content: "";
-  position: absolute; /* Anchor to the .cell parent */
-  top: 0;
-  right: 0;
-  width: 0;
-  height: 0;
-  border-style: solid;
-  border-width: 0 6px 6px 0; /* Adjust size of triangle here */
-  border-color: transparent #ff0000 transparent transparent; /* Red triangle */
-  z-index: 1; /* Ensure it's above the text content */
-}
-
-.cell.has-note {
-  position: relative; /* Anchor for the pseudo-element */
-}
-
-.cell.has-note::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 0;
-  height: 0;
-  border-style: solid;
-  border-width: 0 6px 6px 0; /* Adjust size of triangle here */
-  border-color: transparent #000000 transparent transparent;
-}
-
-
-.cell select.grid-dropdown {
-  width: 100%;
-  height: 100%;
-  border: none;
-  background-color: transparent;
-  
-  /* Add a custom arrow using an SVG background image */
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23000000'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 1px center; /* Position arrow near the far right */
-  background-size: 1.6em; /* Keep the large arrow size */
-
-  /* Remove default browser appearance */
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  appearance: none;
-
-  /* Inherit text styles and add cursor */
-  font-family: inherit;
-  font-size: inherit;
-  text-align: left; /* Align text left to prevent clipping */
-  cursor: pointer;
-
-  /* Adjust padding to prevent text from overlapping the new arrow */
-  padding-left: 0.5em;
-  padding-right: 1.8em; /* Reduce right padding to just cover the arrow */
-}
-
-
-.dropdown-placeholder {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  padding-left: 0.5em;
-  padding-right: 1.8em;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23000000'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 1px center;
-  background-size: 1.6em;
-  cursor: pointer;
-}
-
-
-.left-align-text {
-  justify-content: flex-start;
-  text-align: left;
-}
-
-.header-button-img {
-  cursor: pointer;
-  transition: transform 0.5s ease-in-out, filter 0.5s ease-in-out;
-}
-
-.header-button-img:hover {
-  transform: scale(0.95);
-  filter: brightness(0.8);
-}
-
-.cell.header-button-cell:focus,
-.cell.header-button-cell:focus-visible,
-.cell.header-button-cell:active {
-  outline: none;
-  box-shadow: none;
-}
-
-/* ========================================================================== */
-/* === Modals (Message & Prompt) === */
-/* ========================================================================== */
-
-.modal-overlay {
-  display: none; /* Hidden by default */
-  position: fixed; /* Stay in place even when scrolling */
-  z-index: 1000; /* Sit on top of other content */
-  left: 0;
-  top: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(0, 0, 0, 0.5); /* Semi-transparent black background */
-  justify-content: center; /* Center content horizontally */
-  align-items: center; /* Center content vertically */
-}
-
-.modal-content {
-  background-color: #fefefe;
-  padding: 20px 30px;
-  border: 1px solid #888;
-  border-radius: 5px;
-  width: auto;
-  max-width: 500px;
-  box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.2);
-  text-align: center;
-  font-size: 1.1em;
-}
-
-.modal-content p {
-  margin: 0 0 15px 0; /* Space between message and button */
-}
-
-.modal-content button {
-  padding: 8px 16px;
-  cursor: pointer;
-}
-
-.prompt-buttons {
-  display: flex;
-  justify-content: center;
-  gap: 15px; /* Space between Yes/No buttons */
-}
-
-#inputPromptModal .modal-content #inputPromptText {
-  width: 95%;
-  font-family: monospace;
-  font-size: 0.9em;
-  padding: 5px;
-  margin-bottom: 15px;
-  text-align: left !important; /* Force left alignment */
-  border: 1px solid #ccc;
-  border-radius: 3px;
-}
-
-/* ========================================================================== */
-/* === Menu Bar === */
-/* ========================================================================== */
+/* ====================================================================================================================================
+ * End - Base Page Styling
+ * Start - Main Layout Containers
+ * ==================================================================================================================================== */
 
 #menu-bar {
   --menu-indent: 30px;
@@ -359,6 +42,46 @@ body {
   min-height: 35px;
   flex-wrap: wrap;
 }
+
+#grid {
+  display: grid;
+  grid-auto-rows: 20px;
+  gap: 0;
+  border: 1px solid #ccc;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  max-height: calc(100vh - 40px);
+  position: relative;
+}
+
+#roll-log-sidebar {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100vh;
+  width: 18vw;
+  max-width: 300px;
+  min-width: 200px;
+  background-color: #f8f9fa;
+  border-left: 1px solid #ccc;
+  box-shadow: -3px 0 6px rgba(0, 0, 0, 0.1);
+  z-index: 200;
+  box-sizing: border-box;
+  display: none;
+  flex-direction: column;
+  padding: 10px;
+  font-family: monospace;
+}
+
+#roll-log-sidebar.show {
+  display: flex;
+}
+
+/* ====================================================================================================================================
+ * End - Main Layout Containers
+ * Start - Menu Bar Components
+ * ==================================================================================================================================== */
 
 #menu-bar button {
   cursor: pointer;
@@ -434,14 +157,6 @@ body {
   overflow-x: visible;
 }
 
-.dropdown-content.sub-menu {
-  position: absolute;
-  top: 0;
-  left: 100%;
-  min-width: 180px;
-  z-index: 101;
-}
-
 .dropdown-content.show {
   display: flex;
   flex-direction: column;
@@ -473,32 +188,203 @@ body {
   color: #555;
 }
 
-/* ========================================================================== */
-/* === Sidebar for Roll Log === */
-/* ========================================================================== */
+.dropdown-content.sub-menu {
+  position: absolute;
+  top: 0;
+  left: 100%;
+  min-width: 180px;
+  z-index: 101;
+}
 
-#roll-log-sidebar {
-  position: fixed;
+/* ====================================================================================================================================
+ * End - Menu Bar Components
+ * Start - Grid Cell Components
+ * ==================================================================================================================================== */
+
+.cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 0.8em;
+  overflow: hidden;
+  padding: 0 4px;
+  background: white;
+  color: #000;
+  border: 1px solid transparent;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.cell > span {
+  width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.cell.wrap {
+  white-space: normal;
+  word-wrap: break-word;
+  align-items: flex-start;
+}
+
+.cell.wrap > span {
+  height: 100%;
+  white-space: normal;
+  word-wrap: break-word;
+  overflow-y: auto;
+  text-overflow: clip;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.cell.wrap > span::-webkit-scrollbar {
+  display: none;
+}
+
+.cell[contenteditable="true"] {
+  cursor: text;
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.cell[contenteditable="true"]:hover {
+  background-color: #f0f8ff;
+}
+
+.cell[contenteditable="true"]:focus {
+  background-color: #e6f3ff;
+  outline: 1px solid #7cccff;
+  box-shadow: inset 0 0 0 1px #7cccff;
+}
+
+.cell input[type="checkbox"]:not(:disabled) {
+  cursor: pointer;
+}
+
+.cell input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.cell input[type="checkbox"]:checked {
+  accent-color: #000;
+  transform: scale(1.2);
+  filter: brightness(0.5);
+}
+
+.cell select.grid-dropdown {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background-color: transparent;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23000000'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 1px center;
+  background-size: 1.6em;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  font-family: inherit;
+  font-size: inherit;
+  text-align: left;
+  cursor: pointer;
+  padding-left: 0.5em;
+  padding-right: 1.8em;
+}
+
+.dropdown-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  padding-left: 0.5em;
+  padding-right: 1.8em;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23000000'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 1px center;
+  background-size: 1.6em;
+  cursor: pointer;
+}
+
+.cell.url-link {
+  cursor: pointer;
+  color: #0000ee;
+  text-decoration: underline;
+}
+
+.cell.url-link:hover {
+  color: #dd00dd;
+}
+
+.cell.custom-ability-cell {
+  cursor: pointer;
+}
+
+.cell.custom-data-cell {
+  box-shadow: inset 0 0 0 1px rgba(173, 216, 230, 0.9);
+}
+
+.cell.has-note {
+  position: relative;
+}
+
+.cell.has-note::after {
+  content: "";
+  position: absolute;
   top: 0;
   right: 0;
-  height: 100vh;
-  width: 18vw;
-  max-width: 300px;
-  min-width: 200px;
-  background-color: #f8f9fa;
-  border-left: 1px solid #ccc;
-  box-shadow: -3px 0 6px rgba(0, 0, 0, 0.1);
-  z-index: 200;
-  box-sizing: border-box;
-  display: none;
-  flex-direction: column;
-  padding: 10px;
-  font-family: monospace;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 0 6px 6px 0;
+  border-color: transparent #000000 transparent transparent;
 }
 
-#roll-log-sidebar.show {
-  display: flex;
+.cell.has-custom-note {
+  position: relative;
 }
+
+.cell.has-custom-note::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 0 6px 6px 0;
+  border-color: transparent #ff0000 transparent transparent;
+  z-index: 1;
+}
+
+.left-align-text {
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.header-button-img {
+  cursor: pointer;
+  transition: transform 0.5s ease-in-out, filter 0.5s ease-in-out;
+}
+
+.header-button-img:hover {
+  transform: scale(0.95);
+  filter: brightness(0.8);
+}
+
+.cell.header-button-cell:focus,
+.cell.header-button-cell:focus-visible,
+.cell.header-button-cell:active {
+  outline: none;
+  box-shadow: none;
+}
+
+/* ====================================================================================================================================
+ * End - Grid Cell Components
+ * Start - Sidebar Components
+ * ==================================================================================================================================== */
 
 .sidebar-header {
   display: flex;
@@ -556,26 +442,106 @@ body {
   font-weight: bold;
 }
 
-/* From: style.html */
+/* ====================================================================================================================================
+ * End - Sidebar Components
+ * Start - Overlays & Popups
+ * ==================================================================================================================================== */
 
-/* ========================================================================== */
-/* === Tooltip === */
-/* ========================================================================== */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  z-index: 1000;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  justify-content: center;
+  align-items: center;
+}
+
+.modal-content {
+  background-color: #fefefe;
+  padding: 20px 30px;
+  border: 1px solid #888;
+  border-radius: 5px;
+  width: auto;
+  max-width: 500px;
+  box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.2);
+  text-align: center;
+  font-size: 1.1em;
+}
+
+.modal-content p {
+  margin: 0 0 15px 0;
+}
+
+.modal-content button {
+  padding: 8px 16px;
+  cursor: pointer;
+}
+
+.prompt-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 15px;
+}
+
+#inputPromptModal .modal-content #inputPromptText {
+  width: 95%;
+  font-family: monospace;
+  font-size: 0.9em;
+  padding: 5px;
+  margin-bottom: 15px;
+  text-align: left !important;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+}
 
 #cell-tooltip {
-  display: none; /* Initially hidden */
-  position: absolute; /* Position relative to the document */
-  background-color: #ffffe0; /* Light yellow background */
+  display: none;
+  position: absolute;
+  background-color: #ffffe0;
   border: 1px solid #ccc;
   border-radius: 4px;
   padding: 8px 12px;
   font-size: 0.85em;
   line-height: 1.4;
   max-width: 600px;
-  z-index: 9999; /* Ensure it's on top of everything */
-  pointer-events: none; /* Prevent tooltip from capturing mouse events */
+  z-index: 9999;
+  pointer-events: none;
   box-shadow: 2px 2px 8px rgba(0, 0, 0, 0.15);
-  white-space: pre-wrap; /* Allow newlines from notes to work */
-  word-wrap: break-word; /* Wrap long words */
+  white-space: pre-wrap;
+  word-wrap: break-word;
 }
 
+/* ====================================================================================================================================
+ * End - Overlays & Popups
+ * Start - Utility Classes
+ * ==================================================================================================================================== */
+
+.green-bold {
+  color: green;
+  font-weight: bold;
+}
+
+.red-italic {
+  color: red;
+  font-style: italic;
+}
+
+.red-bold {
+  color: red;
+  font-weight: bold;
+}
+
+.blue-bold {
+  color: blue;
+  font-weight: bold;
+}
+
+.tremendous {
+  background-color: yellow;
+  color: green;
+  font-weight: bold;
+}
