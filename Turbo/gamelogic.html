@@ -3482,6 +3482,63 @@
     }
   } // End function fToggleGearColumns
 
+  /** function fLoot_SetupAndValidateCache
+   * Purpose: Centralizes the validation of a cache object and resolution of its required tags for loot functions.
+   * Assumptions: This is a helper function for the fLoot_* series. It handles its own error messaging.
+   * @param {object} config - Configuration object: { cacheKey: string, requiredTags: { col: string[], row: string[] } }.
+   * @returns {Promise<object>} An object { success: boolean, cache?: object, resolvedTags?: object }.
+   */
+  async function fLoot_SetupAndValidateCache(config) {
+    const funcName = "fLoot_SetupAndValidateCache";
+    const { cacheKey, requiredTags } = config;
+
+    const cache = gUI[cacheKey];
+    if (
+      !cache ||
+      !cache.text ||
+      !Array.isArray(cache.text) ||
+      !cache.colTagsMap ||
+      !cache.rowTagsMap
+    ) {
+      const errorMsg = `Required cache '${cacheKey}' is not loaded or has an invalid structure.`;
+      console.error(`${funcName}: ${errorMsg}`);
+      await fShowMessage(`❌ Error: ${errorMsg}`);
+      return { success: false };
+    }
+
+    const resolvedTags = { col: {}, row: {} };
+    const failedTags = [];
+
+    (requiredTags.col || []).forEach((tag) => {
+      const index = fResolveFSDataCol(cacheKey, tag);
+      if (isNaN(index)) {
+        failedTags.push(`Column: "${tag}"`);
+      } else {
+        resolvedTags.col[tag] = index;
+      }
+    });
+
+    (requiredTags.row || []).forEach((tag) => {
+      const index = fResolveFSDataRow(cacheKey, tag);
+      if (isNaN(index)) {
+        failedTags.push(`Row: "${tag}"`);
+      } else {
+        resolvedTags.row[tag] = index;
+      }
+    });
+
+    if (failedTags.length > 0) {
+      const errorMsg = `Could not resolve required tag(s) in cache '${cacheKey}':<br><b>${failedTags.join(
+        ", "
+      )}</b>`;
+      console.error(`${funcName}: ${errorMsg.replace("<br><b>", " ")}`);
+      await fShowMessage(`❌ Error: ${errorMsg}`);
+      return { success: false };
+    }
+
+    return { success: true, cache, resolvedTags };
+  } // End function fLoot_SetupAndValidateCache
+
   /** function fLoot_RollRndTreasure
    * Purpose: Rolls 1d12 to randomly trigger a specific type of loot roll.
    * Assumptions: Relies on other fLoot_* functions to handle the specific loot types.
@@ -3516,7 +3573,7 @@
 
   /** function fLoot_RollValuables
    * Purpose: Rolls level-appropriate Valuables from the dbCritFSData cache.
-   * Assumptions: gUI.characterInfo and gUI.dbCritFSData are populated.
+   * Assumptions: gUI.characterInfo is populated.
    * Notes: Logs the result to the sidebar.
    * @param {boolean} [isRandomRoll=false] - True if called via function fLoot_RollRndTreasure.
    * @returns {Promise<void>} Resolves after the operation is complete.
@@ -3524,123 +3581,71 @@
   async function fLoot_RollValuables(isRandomRoll = false) {
     const funcName = "fLoot_RollValuables";
     const lootType = "Valuables";
-    fMyConsoleLog(
-      `⚙️ ${funcName}: Triggered for ${lootType} (isRandomRoll: ${isRandomRoll})...`
-    );
+    fMyConsoleLog(`⚙️ ${funcName}: Triggered for ${lootType}...`);
+
+    const setup = await fLoot_SetupAndValidateCache({
+      cacheKey: "dbCritFSData",
+      requiredTags: {
+        col: ["TreasureColor", "Treasure"],
+        row: ["RowBeforeFirstDataRow"],
+      },
+    });
+    if (!setup.success) return;
+
+    const { cache, resolvedTags } = setup;
+    const treasureColor_C = resolvedTags.col.TreasureColor;
+    const treasureDesc_C = resolvedTags.col.Treasure;
+    const dataFirst_R_idx = resolvedTags.row.RowBeforeFirstDataRow + 1;
+    const dataLast_R_idx = cache.text.length - 1;
     const charLvl = Number(gUI.characterInfo?.level) || 0;
     const treasureColorArr = gUI.list?.metaColor;
-    const cacheKey = "dbCritFSData";
-    const critCache = gUI[cacheKey];
-    if (!Array.isArray(treasureColorArr) || treasureColorArr.length !== 5) {
-      const errorMsg = `Treasure color list (gUI.list.metaColor) is missing or invalid.`;
-      console.error(`${funcName}: ${errorMsg}`);
-      fMyConsoleLog(`   -> ❌ ${funcName} Error: ${errorMsg}`);
-      await fShowMessage(`❌ Error: ${errorMsg}`);
-      return;
-    }
-    if (
-      !critCache ||
-      !critCache.text ||
-      !Array.isArray(critCache.text) ||
-      !critCache.colTagsMap ||
-      typeof critCache.colTagsMap !== "object" ||
-      !critCache.rowTagsMap ||
-      typeof critCache.rowTagsMap !== "object"
-    ) {
-      const errorMsg = `Required cache ${cacheKey} is not loaded or invalid.`;
-      console.error(`${funcName}: ${errorMsg}`);
-      fMyConsoleLog(`   -> ❌ ${funcName} Error: ${errorMsg}`);
-      await fShowMessage(`❌ Error: ${errorMsg}`);
-      return;
-    }
-    const treasureColor_C = fResolveFSDataCol(cacheKey, "TreasureColor");
-    const treasureDesc_C = fResolveFSDataCol(cacheKey, "Treasure");
-    const startRowTag = "RowBeforeFirstDataRow";
-    const dataFirst_R_idx = fResolveFSDataRow(cacheKey, startRowTag) + 1;
-    const dataLast_R_idx = critCache.text.length - 1;
-    const failedTags = [];
-    if (isNaN(treasureColor_C)) failedTags.push("TreasureColor");
-    if (isNaN(treasureDesc_C)) failedTags.push("Treasure");
-    if (isNaN(dataFirst_R_idx)) failedTags.push(startRowTag);
-    if (failedTags.length > 0) {
-      const errorMsg = `Could not resolve required tags in ${cacheKey}: ${failedTags.join(
-        ", "
-      )}.`;
-      console.error(`${funcName}: ${errorMsg}`);
-      fMyConsoleLog(`   -> ❌ ${funcName} Error: ${errorMsg}`);
-      await fShowMessage(`❌ Error: ${errorMsg}`);
-      return;
-    }
-    if (dataFirst_R_idx > dataLast_R_idx) {
-      const errorMsg = `Start row index (${dataFirst_R_idx}) is after last row index (${dataLast_R_idx}) in ${cacheKey}.`;
-      console.error(`${funcName}: ${errorMsg}`);
-      fMyConsoleLog(`   -> ❌ ${funcName} Error: ${errorMsg}`);
-      await fShowMessage(`❌ Error: ${errorMsg}`);
-      return;
-    }
-    fMyConsoleLog(
-      `   -> Resolved Tags: TreasureColor=${treasureColor_C}, Treasure=${treasureDesc_C}. Data Range: ${dataFirst_R_idx}-${dataLast_R_idx}. CharLvl=${charLvl}.`
-    );
+
     let maxTreasureColorIndexBase;
     if (charLvl <= 4) maxTreasureColorIndexBase = 2;
     else if (charLvl <= 9) maxTreasureColorIndexBase = 3;
     else maxTreasureColorIndexBase = 4;
+
     const roll1 = fdRoll(maxTreasureColorIndexBase + 1);
     const roll2 = fdRoll(maxTreasureColorIndexBase + 1);
     const maxTreasureColorIndex = Math.min(roll1, roll2) - 1;
-    fMyConsoleLog(
-      `   -> Base Max Index=${maxTreasureColorIndexBase}. Rolls=(${roll1}, ${roll2}). Final Max Index=${maxTreasureColorIndex} (${treasureColorArr[maxTreasureColorIndex]}).`
-    );
+
     const eligibleValuables = [];
     for (let r = dataFirst_R_idx; r <= dataLast_R_idx; r++) {
-      const rowData = critCache.text[r];
-      if (!Array.isArray(rowData)) continue;
       const treasureColor = String(
-        rowData[treasureColor_C] ?? ""
+        cache.text[r][treasureColor_C] ?? ""
       ).toUpperCase();
-      const treasureDesc = String(rowData[treasureDesc_C] ?? "").trim();
+      const treasureDesc = String(cache.text[r][treasureDesc_C] ?? "").trim();
       const treasureColorIndex = treasureColorArr.indexOf(treasureColor);
       if (
         treasureColorIndex !== -1 &&
         treasureColorIndex <= maxTreasureColorIndex &&
-        treasureDesc !== ""
+        treasureDesc
       ) {
-        eligibleValuables.push({
-          index: r,
-          description: treasureDesc,
-        });
+        eligibleValuables.push({ description: treasureDesc });
       }
     }
+
     if (eligibleValuables.length === 0) {
-      const errorMsg = `No valuables found matching level ${charLvl} criteria (Max Color: ${treasureColorArr[maxTreasureColorIndex]}).`;
-      fMyConsoleLog(`   -> ⚠️ ${funcName} Warning: ${errorMsg}`);
-      await fShowMessage(`⚠️ Warning: ${errorMsg}`);
+      await fShowMessage(
+        `⚠️ No valuables found matching level ${charLvl} criteria.`
+      );
       return;
     }
-    fMyConsoleLog(
-      `   -> Found ${eligibleValuables.length} eligible valuables.`
-    );
-    const randomIndex = Math.floor(Math.random() * eligibleValuables.length);
-    const selectedValuable = eligibleValuables[randomIndex];
-    fMyConsoleLog(
-      `   -> Selected Valuable: "${selectedValuable.description}" (from original index ${selectedValuable.index}).`
-    );
-    let titleHtml, titleText;
-    if (isRandomRoll) {
-      titleHtml = `<span class="blue-bold">Loot ${lootType}:</span>`;
-      titleText = `Loot ${lootType}:`;
-    } else {
-      titleHtml = `<span class="red-bold">SPECIFIC</span> <span class="blue-bold">Loot ${lootType}:</span>`;
-      titleText = `SPECIFIC Loot ${lootType}:`;
-    }
-    const messageBodyHtml = selectedValuable.description;
-    const messageBodyText = selectedValuable.description;
-    const sidebarMsgHtml = `${titleHtml}<br>${messageBodyHtml}`;
-    const sidebarMsgText = `${titleText}\n${messageBodyText}`;
+
+    const selectedValuable =
+      eligibleValuables[Math.floor(Math.random() * eligibleValuables.length)];
+
+    let titleHtml = isRandomRoll
+      ? `<span class="blue-bold">Loot ${lootType}:</span>`
+      : `<span class="red-bold">SPECIFIC</span> <span class="blue-bold">Loot ${lootType}:</span>`;
+
+    const sidebarMsgHtml = `${titleHtml}<br>${selectedValuable.description}`;
+    const sidebarMsgText = `${titleHtml.replace(/<[^>]+>/g, "")}\n${
+      selectedValuable.description
+    }`;
     fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
     fShowSidebar();
     setTimeout(() => fSendLogToGMScreenAndPS(), 0);
-    fMyConsoleLog(`✅ ${funcName}: Valuables loot posted.`);
   } // End function fLoot_RollValuables
 
   /** function fLoot_RollGear
@@ -3653,95 +3658,49 @@
   async function fLoot_RollGear(isRandomRoll = false) {
     const funcName = "fLoot_RollGear";
     const lootType = "Gear";
-    fMyConsoleLog(
-      `⚙️ ${funcName}: Triggered for ${lootType} (isRandomRoll: ${isRandomRoll})...`
-    );
+    fMyConsoleLog(`⚙️ ${funcName}: Triggered for ${lootType}...`);
+
+    const setup = await fLoot_SetupAndValidateCache({
+      cacheKey: "dbGearFSData",
+      requiredTags: {
+        col: ["IsArtifact", "ItemCR", "Name"],
+        row: ["RowBeforeFirstDataRow"],
+      },
+    });
+    if (!setup.success) return;
+
+    const { cache, resolvedTags } = setup;
+    const isArtifact_C = resolvedTags.col.IsArtifact;
+    const itemCr_C = resolvedTags.col.ItemCR;
+    const itemName_C = resolvedTags.col.Name;
+    const firstDataRowIndex = resolvedTags.row.RowBeforeFirstDataRow + 1;
+    const dataLast_R_idx = cache.text.length - 1;
     const charLvl = Number(gUI.characterInfo?.level) || 0;
-    const cacheKey = "dbGearFSData";
-    const gearCache = gUI[cacheKey];
-    if (
-      !gearCache ||
-      !gearCache.text ||
-      !Array.isArray(gearCache.text) ||
-      !gearCache.colTagsMap ||
-      typeof gearCache.colTagsMap !== "object" ||
-      !gearCache.rowTagsMap ||
-      typeof gearCache.rowTagsMap !== "object"
-    ) {
-      const errorMsg = `Required cache ${cacheKey} is not loaded or invalid.`;
-      console.error(`${funcName}: ${errorMsg}`);
-      fMyConsoleLog(`   -> ❌ ${funcName} Error: ${errorMsg}`);
-      await fShowMessage(`Error: ${errorMsg}`);
-      return;
-    }
-    const isArtifact_C = fResolveFSDataCol(cacheKey, "IsArtifact");
-    const itemCr_C = fResolveFSDataCol(cacheKey, "ItemCR");
-    const itemName_C = fResolveFSDataCol(cacheKey, "Name");
-    const dataFirst_R_tag = "RowBeforeFirstDataRow";
-    const dataFirst_R_idx = fResolveFSDataRow(cacheKey, dataFirst_R_tag) + 1;
-    const dataLast_R_idx = gearCache.text.length - 1;
-    const failedTags = [];
-    if (isNaN(isArtifact_C)) failedTags.push("IsArtifact");
-    if (isNaN(itemCr_C)) failedTags.push("ItemCR");
-    if (isNaN(itemName_C)) failedTags.push("Name");
-    if (isNaN(dataFirst_R_idx)) failedTags.push(dataFirst_R_tag);
-    if (failedTags.length > 0) {
-      const errorMsg = `Could not resolve required tags in ${cacheKey}: ${failedTags.join(
-        ", "
-      )}.`;
-      console.error(`${funcName}: ${errorMsg}`);
-      fMyConsoleLog(`   -> ❌ ${funcName} Error: ${errorMsg}`);
-      await fShowMessage(`Error: ${errorMsg}`);
-      return;
-    }
-    const firstDataRowIndex = dataFirst_R_idx + 1;
-    if (firstDataRowIndex > dataLast_R_idx) {
-      const errorMsg = `Start row index (${firstDataRowIndex}) is after last row index (${dataLast_R_idx}) in ${cacheKey}.`;
-      console.error(`${funcName}: ${errorMsg}`);
-      fMyConsoleLog(`   -> ❌ ${funcName} Error: ${errorMsg}`);
-      await fShowMessage(`Error: ${errorMsg}`);
-      return;
-    }
-    fMyConsoleLog(
-      `   -> Resolved Tags: IsArtifact=${isArtifact_C}, ItemCR=${itemCr_C}, Name=${itemName_C}. Data Range: ${firstDataRowIndex}-${dataLast_R_idx}. CharLvl=${charLvl}.`
-    );
     const maxCr =
       charLvl <= 4 ? 100 : charLvl <= 9 ? 250 : charLvl <= 20 ? 1000 : 10000;
-    fMyConsoleLog(`   -> Max ItemCR for Level ${charLvl} is ${maxCr}.`);
+
     const eligibleGear = [];
     for (let r = firstDataRowIndex; r <= dataLast_R_idx; r++) {
-      const rowData = gearCache.text[r];
-      if (!Array.isArray(rowData)) continue;
-      const isArtifactVal = rowData[isArtifact_C];
+      const isArtifactVal = cache.text[r][isArtifact_C];
       const isTrulyArtifact =
         isArtifactVal === true ||
         String(isArtifactVal).toUpperCase() === "TRUE";
-      const itemCr = Number(rowData[itemCr_C]);
-      const itemName = String(rowData[itemName_C] ?? "").trim();
-      if (
-        !isTrulyArtifact &&
-        !isNaN(itemCr) &&
-        itemCr <= maxCr &&
-        itemName !== ""
-      ) {
-        eligibleGear.push({
-          index: r,
-          name: itemName,
-        });
+      const itemCr = Number(cache.text[r][itemCr_C]);
+      const itemName = String(cache.text[r][itemName_C] ?? "").trim();
+      if (!isTrulyArtifact && !isNaN(itemCr) && itemCr <= maxCr && itemName) {
+        eligibleGear.push({ name: itemName });
       }
     }
+
     if (eligibleGear.length === 0) {
-      const errorMsg = `No non-artifact gear found with ItemCR <= ${maxCr}.`;
-      fMyConsoleLog(`   -> ⚠️ ${funcName} Warning: ${errorMsg}`);
-      await fShowMessage(`Warning: ${errorMsg}`);
+      await fShowMessage(
+        `⚠️ No non-artifact gear found with ItemCR <= ${maxCr}.`
+      );
       return;
     }
-    fMyConsoleLog(`   -> Found ${eligibleGear.length} eligible gear items.`);
-    const randomIndex = Math.floor(Math.random() * eligibleGear.length);
-    const selectedGear = eligibleGear[randomIndex];
-    fMyConsoleLog(
-      `   -> Selected Gear: "${selectedGear.name}" (from original index ${selectedGear.index}).`
-    );
+
+    const selectedGear =
+      eligibleGear[Math.floor(Math.random() * eligibleGear.length)];
     const conditionArr = [
       "Useless",
       "Broken",
@@ -3750,25 +3709,22 @@
       "New",
       "High Quality (Cr*2)",
     ];
-    const conditionIndex = Math.floor(Math.random() * conditionArr.length);
-    const condition = conditionArr[conditionIndex];
-    fMyConsoleLog(`   -> Determined Condition: "${condition}"`);
-    let titleHtml, titleText;
-    if (isRandomRoll) {
-      titleHtml = `<span class="blue-bold">Loot ${lootType}:</span>`;
-      titleText = `Loot ${lootType}:`;
-    } else {
-      titleHtml = `<span class="red-bold">SPECIFIC</span> <span class="blue-bold">Loot ${lootType}:</span>`;
-      titleText = `SPECIFIC Loot ${lootType}:`;
-    }
+    const condition =
+      conditionArr[Math.floor(Math.random() * conditionArr.length)];
+
+    let titleHtml = isRandomRoll
+      ? `<span class="blue-bold">Loot ${lootType}:</span>`
+      : `<span class="red-bold">SPECIFIC</span> <span class="blue-bold">Loot ${lootType}:</span>`;
+
     const messageBodyHtml = `${selectedGear.name}<br>Condition: ${condition}`;
-    const messageBodyText = `${selectedGear.name}\nCondition: ${condition}`;
     const sidebarMsgHtml = `${titleHtml}<br>${messageBodyHtml}`;
-    const sidebarMsgText = `${titleText}\n${messageBodyText}`;
+    const sidebarMsgText = `${titleHtml.replace(
+      /<[^>]+>/g,
+      ""
+    )}\n${messageBodyHtml.replace("<br>", "\n")}`;
     fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
     fShowSidebar();
     setTimeout(() => fSendLogToGMScreenAndPS(), 0);
-    fMyConsoleLog(`✅ ${funcName}: Gear loot posted.`);
   } // End function fLoot_RollGear
 
   /** function fLoot_ChaosCrystal
@@ -3781,132 +3737,73 @@
   async function fLoot_ChaosCrystal(isRandomRoll = false) {
     const funcName = "fLoot_ChaosCrystal";
     const lootType = "Chaos Crystal";
-    fMyConsoleLog(
-      `⚙️ ${funcName}: Triggered placeholder for ${lootType} (isRandomRoll: ${isRandomRoll})...`
-    );
-    const cacheKey = "dbCritFSData";
-    const critCache = gUI[cacheKey];
-    if (
-      !critCache ||
-      !critCache.text ||
-      !Array.isArray(critCache.text) ||
-      !critCache.colTagsMap ||
-      typeof critCache.colTagsMap !== "object" ||
-      !critCache.rowTagsMap ||
-      typeof critCache.rowTagsMap !== "object"
-    ) {
-      const errorMsg = `Required cache ${cacheKey} is not loaded or invalid.`;
-      console.error(`${funcName}: ${errorMsg}`);
-      fMyConsoleLog(`   -> ❌ ${funcName} Error: ${errorMsg}`);
-      await fShowMessage(`Error: ${errorMsg}`);
-      return;
-    }
-    const chaosCrystalMaxUses_C = fResolveFSDataCol(
-      cacheKey,
-      "ChaosCrytstalMaxUses"
-    );
-    const chaosCrystal_C = fResolveFSDataCol(cacheKey, "ChaosCrystal");
-    const startRowTag = "RowBeforeFirstDataRow";
-    const dataFirst_R_idx = fResolveFSDataRow(cacheKey, startRowTag) + 1;
-    const dataLast_R_idx = critCache.text.length - 1;
-    const failedTags = [];
-    if (isNaN(chaosCrystalMaxUses_C)) failedTags.push("ChaosCrytstalMaxUses");
-    if (isNaN(chaosCrystal_C)) failedTags.push("ChaosCrystal");
-    if (isNaN(dataFirst_R_idx)) failedTags.push(startRowTag);
-    if (failedTags.length > 0) {
-      const errorMsg = `Could not resolve required tags in ${cacheKey}: ${failedTags.join(
-        ", "
-      )}.`;
-      console.error(`${funcName}: ${errorMsg}`);
-      fMyConsoleLog(`   -> ❌ ${funcName} Error: ${errorMsg}`);
-      await fShowMessage(`Error: ${errorMsg}`);
-      return;
-    }
-    if (dataFirst_R_idx > dataLast_R_idx) {
-      const errorMsg = `Start row index (${dataFirst_R_idx}) is after last row index (${dataLast_R_idx}) in ${cacheKey}.`;
-      console.error(`${funcName}: ${errorMsg}`);
-      fMyConsoleLog(`   -> ❌ ${funcName} Error: ${errorMsg}`);
-      await fShowMessage(`Error: ${errorMsg}`);
-      return;
-    }
-    fMyConsoleLog(
-      `   -> Resolved Tags: MaxUses=${chaosCrystalMaxUses_C}, Crystal=${chaosCrystal_C}. Data Range: ${dataFirst_R_idx}-${dataLast_R_idx}.`
-    );
+    fMyConsoleLog(`⚙️ ${funcName}: Triggered for ${lootType}...`);
+
+    const setup = await fLoot_SetupAndValidateCache({
+      cacheKey: "dbCritFSData",
+      requiredTags: {
+        col: ["ChaosCrytstalMaxUses", "ChaosCrystal"],
+        row: ["RowBeforeFirstDataRow"],
+      },
+    });
+    if (!setup.success) return;
+
+    const { cache, resolvedTags } = setup;
+    const chaosCrystalMaxUses_C = resolvedTags.col.ChaosCrytstalMaxUses;
+    const chaosCrystal_C = resolvedTags.col.ChaosCrystal;
+    const dataFirst_R_idx = resolvedTags.row.RowBeforeFirstDataRow + 1;
+    const dataLast_R_idx = cache.text.length - 1;
+
     const validRows = [];
     for (let r = dataFirst_R_idx; r <= dataLast_R_idx; r++) {
-      const rowData = critCache.text[r];
-      if (!Array.isArray(rowData)) continue;
-      const maxUsesVal = rowData[chaosCrystalMaxUses_C];
-      const abilityVal = rowData[chaosCrystal_C];
-      const hasMaxUses =
-        maxUsesVal !== undefined &&
-        maxUsesVal !== null &&
-        String(maxUsesVal).trim() !== "";
-      const hasAbility =
-        abilityVal !== undefined &&
-        abilityVal !== null &&
-        String(abilityVal).trim() !== "";
-      if (hasMaxUses && hasAbility) {
+      const maxUsesVal = cache.text[r][chaosCrystalMaxUses_C];
+      const abilityVal = cache.text[r][chaosCrystal_C];
+      if (String(maxUsesVal ?? "").trim() && String(abilityVal ?? "").trim()) {
         validRows.push(r);
       }
     }
+
     if (validRows.length === 0) {
-      const errorMsg = `No valid Chaos Crystal definitions found in the data range (${dataFirst_R_idx}-${dataLast_R_idx}).`;
-      fMyConsoleLog(`   -> ⚠️ ${funcName} Warning: ${errorMsg}`);
-      await fShowMessage(`Warning: ${errorMsg}`);
+      await fShowMessage(
+        "⚠️ No valid Chaos Crystal definitions found in the data."
+      );
       return;
     }
-    fMyConsoleLog(`   -> Found ${validRows.length} valid crystal rows.`);
-    const randomValidIndex = Math.floor(Math.random() * validRows.length);
-    const randomRow = validRows[randomValidIndex];
-    fMyConsoleLog(`   -> Selected valid row index: ${randomRow}`);
+
+    const randomRow = validRows[Math.floor(Math.random() * validRows.length)];
     const maxUsesStr = String(
-      critCache.text[randomRow][chaosCrystalMaxUses_C] ?? "1"
+      cache.text[randomRow][chaosCrystalMaxUses_C] ?? "1"
     ).trim();
     let chaosCrystalUses = 1;
     const rpgRollResult = fRollRPGDieString(maxUsesStr);
     if (rpgRollResult !== null && rpgRollResult >= 1) {
       chaosCrystalUses = rpgRollResult;
-      fMyConsoleLog(
-        `      -> Determined uses by parsing "${maxUsesStr}" as RPG string: ${chaosCrystalUses}`
-      );
     } else {
       const dieSize = parseInt(maxUsesStr, 10);
       if (!isNaN(dieSize) && dieSize >= 1) {
         chaosCrystalUses = fdRoll(dieSize);
-        fMyConsoleLog(
-          `      -> Determined uses by parsing "${maxUsesStr}" as die size and rolling d${dieSize}: ${chaosCrystalUses}`
-        );
-      } else {
-        fMyConsoleLog(
-          `      -> Warning: Failed to parse MaxUses string "${maxUsesStr}" as RPG string or die size. Defaulting uses to 1.`
-        );
-        chaosCrystalUses = 1;
       }
     }
-    fMyConsoleLog(`   -> Final Determined Uses: ${chaosCrystalUses}`);
+
     let chaosCrystalAbility = String(
-      critCache.text[randomRow][chaosCrystal_C] ?? "Unknown Ability"
-    ).trim();
-    chaosCrystalAbility = chaosCrystalAbility.replace(/[\r\n]/g, " ");
-    fMyConsoleLog(`   -> Selected Ability: "${chaosCrystalAbility}"`);
-    let titleHtml, titleText;
-    if (isRandomRoll) {
-      titleHtml = `<span class="blue-bold">Loot ${lootType}:</span>`;
-      titleText = `Loot ${lootType}:`;
-    } else {
-      titleHtml = `<span class="red-bold">SPECIFIC</span> <span class="blue-bold">Loot ${lootType}:</span>`;
-      titleText = `SPECIFIC Loot ${lootType}:`;
-    }
+      cache.text[randomRow][chaosCrystal_C] ?? "Unknown"
+    )
+      .trim()
+      .replace(/[\r\n]/g, " ");
+
+    let titleHtml = isRandomRoll
+      ? `<span class="blue-bold">Loot ${lootType}:</span>`
+      : `<span class="red-bold">SPECIFIC</span> <span class="blue-bold">Loot ${lootType}:</span>`;
     const usesLabel = chaosCrystalUses === 1 ? "Use" : "Uses";
     const messageBodyHtml = `${usesLabel}(${chaosCrystalUses})<br>${chaosCrystalAbility}`;
-    const messageBodyText = `${usesLabel}(${chaosCrystalUses})\n${chaosCrystalAbility}`;
     const sidebarMsgHtml = `${titleHtml}<br>${messageBodyHtml}`;
-    const sidebarMsgText = `${titleText}\n${messageBodyText}`;
+    const sidebarMsgText = `${titleHtml.replace(
+      /<[^>]+>/g,
+      ""
+    )}\n${usesLabel}(${chaosCrystalUses})\n${chaosCrystalAbility}`;
     fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
     fShowSidebar();
     setTimeout(() => fSendLogToGMScreenAndPS(), 0);
-    fMyConsoleLog(`✅ ${funcName}: Chaos Crystal loot posted.`);
   } // End function fLoot_ChaosCrystal
 
   /** function fLoot_RollSocketGem
@@ -3919,120 +3816,69 @@
   async function fLoot_RollSocketGem(isRandomRoll = false) {
     const funcName = "fLoot_RollSocketGem";
     const lootType = "Socket Gem";
-    fMyConsoleLog(
-      `⚙️ ${funcName}: Triggered for ${lootType} (isRandomRoll: ${isRandomRoll})...`
-    );
+    fMyConsoleLog(`⚙️ ${funcName}: Triggered for ${lootType}...`);
+
+    const setup = await fLoot_SetupAndValidateCache({
+      cacheKey: "dbCritFSData",
+      requiredTags: {
+        col: ["GemColor", "GemDesc"],
+        row: ["RowBeforeFirstDataRow"],
+      },
+    });
+    if (!setup.success) return;
+
+    const { cache, resolvedTags } = setup;
+    const gemColor_C = resolvedTags.col.GemColor;
+    const gemDesc_C = resolvedTags.col.GemDesc;
+    const dataFirst_R_idx = resolvedTags.row.RowBeforeFirstDataRow + 1;
+    const dataLast_R_idx = cache.text.length - 1;
     const charLvl = Number(gUI.characterInfo?.level) || 0;
     const socketColors = gUI.list?.metaColor;
-    const cacheKey = "dbCritFSData";
-    const critCache = gUI[cacheKey];
-    if (!Array.isArray(socketColors) || socketColors.length !== 5) {
-      const errorMsg = `Socket color list (gUI.list.metaColor) is missing or invalid.`;
-      console.error(`${funcName}: ${errorMsg}`);
-      fMyConsoleLog(`   -> ❌ ${funcName} Error: ${errorMsg}`);
-      await fShowMessage(`Error: ${errorMsg}`);
-      return;
-    }
-    if (
-      !critCache ||
-      !critCache.text ||
-      !Array.isArray(critCache.text) ||
-      !critCache.colTagsMap ||
-      typeof critCache.colTagsMap !== "object" ||
-      !critCache.rowTagsMap ||
-      typeof critCache.rowTagsMap !== "object"
-    ) {
-      const errorMsg = `Required cache ${cacheKey} is not loaded or invalid.`;
-      console.error(`${funcName}: ${errorMsg}`);
-      fMyConsoleLog(`   -> ❌ ${funcName} Error: ${errorMsg}`);
-      await fShowMessage(`Error: ${errorMsg}`);
-      return;
-    }
-    const gemColor_C = fResolveFSDataCol(cacheKey, "GemColor");
-    const gemDesc_C = fResolveFSDataCol(cacheKey, "GemDesc");
-    const startRowTag = "RowBeforeFirstDataRow";
-    const dataFirst_R_idx = fResolveFSDataRow(cacheKey, startRowTag) + 1;
-    const dataLast_R_idx = critCache.text.length - 1;
-    const failedTags = [];
-    if (isNaN(gemColor_C)) failedTags.push("GemColor");
-    if (isNaN(gemDesc_C)) failedTags.push("GemDesc");
-    if (isNaN(dataFirst_R_idx)) failedTags.push(startRowTag);
-    if (failedTags.length > 0) {
-      const errorMsg = `Could not resolve required tags in ${cacheKey}: ${failedTags.join(
-        ", "
-      )}.`;
-      console.error(`${funcName}: ${errorMsg}`);
-      fMyConsoleLog(`   -> ❌ ${funcName} Error: ${errorMsg}`);
-      await fShowMessage(`Error: ${errorMsg}`);
-      return;
-    }
-    if (dataFirst_R_idx > dataLast_R_idx) {
-      const errorMsg = `Start row index (${dataFirst_R_idx}) is after last row index (${dataLast_R_idx}) in ${cacheKey}.`;
-      console.error(`${funcName}: ${errorMsg}`);
-      fMyConsoleLog(`   -> ❌ ${funcName} Error: ${errorMsg}`);
-      await fShowMessage(`Error: ${errorMsg}`);
-      return;
-    }
-    fMyConsoleLog(
-      `   -> Resolved Tags: GemColor=${gemColor_C}, GemDesc=${gemDesc_C}. Data Range: ${dataFirst_R_idx}-${dataLast_R_idx}. CharLvl=${charLvl}.`
-    );
+
     let maxGemColorIndexBase;
     if (charLvl <= 4) maxGemColorIndexBase = 2;
     else if (charLvl <= 9) maxGemColorIndexBase = 3;
     else maxGemColorIndexBase = 4;
+
     const roll1 = fdRoll(maxGemColorIndexBase + 1);
     const roll2 = fdRoll(maxGemColorIndexBase + 1);
     const maxGemColorIndex = Math.min(roll1, roll2) - 1;
-    fMyConsoleLog(
-      `   -> Base Max Index=${maxGemColorIndexBase}. Rolls=(${roll1}, ${roll2}). Final Max Index=${maxGemColorIndex} (${socketColors[maxGemColorIndex]}).`
-    );
+
     const eligibleGems = [];
     for (let r = dataFirst_R_idx; r <= dataLast_R_idx; r++) {
-      const rowData = critCache.text[r];
-      if (!Array.isArray(rowData)) continue;
-      const gemColor = String(rowData[gemColor_C] ?? "").toUpperCase();
-      const gemDesc = String(rowData[gemDesc_C] ?? "").trim();
+      const gemColor = String(cache.text[r][gemColor_C] ?? "").toUpperCase();
+      const gemDesc = String(cache.text[r][gemDesc_C] ?? "").trim();
       const gemColorIndex = socketColors.indexOf(gemColor);
       if (
         gemColorIndex !== -1 &&
         gemColorIndex <= maxGemColorIndex &&
-        gemDesc !== ""
+        gemDesc
       ) {
-        eligibleGems.push({
-          index: r,
-          color: gemColor,
-          description: gemDesc,
-        });
+        eligibleGems.push({ color: gemColor, description: gemDesc });
       }
     }
+
     if (eligibleGems.length === 0) {
-      const errorMsg = `No socket gems found matching level ${charLvl} criteria (Max Color: ${socketColors[maxGemColorIndex]}).`;
-      fMyConsoleLog(`   -> ⚠️ ${funcName} Warning: ${errorMsg}`);
-      await fShowMessage(`Warning: ${errorMsg}`);
+      await fShowMessage(
+        `⚠️ No socket gems found matching level ${charLvl} criteria.`
+      );
       return;
     }
-    fMyConsoleLog(`   -> Found ${eligibleGems.length} eligible gems.`);
-    const randomIndex = Math.floor(Math.random() * eligibleGems.length);
-    const selectedGem = eligibleGems[randomIndex];
-    fMyConsoleLog(
-      `   -> Selected Gem: Color=${selectedGem.color}, Desc="${selectedGem.description}"`
-    );
-    let titleHtml, titleText;
-    if (isRandomRoll) {
-      titleHtml = `<span class="blue-bold">Loot ${lootType}:</span>`;
-      titleText = `Loot ${lootType}:`;
-    } else {
-      titleHtml = `<span class="red-bold">SPECIFIC</span> <span class="blue-bold">Loot ${lootType}:</span>`;
-      titleText = `SPECIFIC Loot ${lootType}:`;
-    }
+
+    const selectedGem =
+      eligibleGems[Math.floor(Math.random() * eligibleGems.length)];
+
+    let titleHtml = isRandomRoll
+      ? `<span class="blue-bold">Loot ${lootType}:</span>`
+      : `<span class="red-bold">SPECIFIC</span> <span class="blue-bold">Loot ${lootType}:</span>`;
     const messageBodyHtml = `${selectedGem.color} Gem:<br>${selectedGem.description}`;
-    const messageBodyText = `${selectedGem.color} Gem:\n${selectedGem.description}`;
     const sidebarMsgHtml = `${titleHtml}<br>${messageBodyHtml}`;
-    const sidebarMsgText = `${titleText}\n${messageBodyText}`;
+    const sidebarMsgText = `${titleHtml.replace(/<[^>]+>/g, "")}\n${
+      selectedGem.color
+    } Gem:\n${selectedGem.description}`;
     fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
     fShowSidebar();
     setTimeout(() => fSendLogToGMScreenAndPS(), 0);
-    fMyConsoleLog(`✅ ${funcName}: Socket Gem loot posted.`);
   } // End function fLoot_RollSocketGem
 
   /** function fLoot_RollArtifact
@@ -4045,117 +3891,64 @@
   async function fLoot_RollArtifact(isRandomRoll = false) {
     const funcName = "fLoot_RollArtifact";
     const lootType = "Artifact";
-    fMyConsoleLog(
-      `⚙️ ${funcName}: Triggered placeholder for ${lootType} (isRandomRoll: ${isRandomRoll})...`
-    );
+    fMyConsoleLog(`⚙️ ${funcName}: Triggered for ${lootType}...`);
+
+    const setup = await fLoot_SetupAndValidateCache({
+      cacheKey: "dbGearFSData",
+      requiredTags: {
+        col: ["IsArtifact", "Name", "AP"],
+        row: ["RowBeforeFirstDataRow"],
+      },
+    });
+    if (!setup.success) return;
+
+    const { cache, resolvedTags } = setup;
+    const isArtifact_C = resolvedTags.col.IsArtifact;
+    const artName_C = resolvedTags.col.Name;
+    const apCost_C = resolvedTags.col.AP;
+    const firstDataRowIndex = resolvedTags.row.RowBeforeFirstDataRow + 1;
+    const artDataLast_R = cache.text.length - 1;
     const charLvl = Number(gUI.characterInfo?.level) || 0;
-    const cacheKey = "dbGearFSData";
-    const gearCache = gUI[cacheKey];
-    if (
-      !gearCache ||
-      !gearCache.text ||
-      !Array.isArray(gearCache.text) ||
-      !gearCache.colTagsMap ||
-      typeof gearCache.colTagsMap !== "object" ||
-      !gearCache.rowTagsMap ||
-      typeof gearCache.rowTagsMap !== "object"
-    ) {
-      const errorMsg = `Required cache ${cacheKey} is not loaded or invalid.`;
-      console.error(`${funcName}: ${errorMsg}`);
-      fMyConsoleLog(`   -> ❌ ${funcName} Error: ${errorMsg}`);
-      await fShowMessage(`Error: ${errorMsg}`);
-      return;
-    }
-    const isArtifact_C = fResolveFSDataCol(cacheKey, "IsArtifact");
-    const artName_C = fResolveFSDataCol(cacheKey, "Name");
-    const apCost_C = fResolveFSDataCol(cacheKey, "AP");
-    const artDataFirst_R = fResolveFSDataRow(cacheKey, "RowBeforeFirstDataRow");
-    const firstDataRowIndex = artDataFirst_R + 1;
-    const artDataLast_R = gearCache.text.length - 1;
-    const failedTags = [];
-    if (isNaN(isArtifact_C)) failedTags.push("IsArtifact");
-    if (isNaN(artName_C)) failedTags.push("Name");
-    if (isNaN(apCost_C)) failedTags.push("AP");
-    if (isNaN(artDataFirst_R))
-      failedTags.push("RowBeforeFirstDataRow (start row)");
-    if (failedTags.length > 0) {
-      const errorMsg = `Could not resolve required tags in ${cacheKey}: ${failedTags.join(
-        ", "
-      )}.`;
-      console.error(`${funcName}: ${errorMsg}`);
-      fMyConsoleLog(`   -> ❌ ${funcName} Error: ${errorMsg}`);
-      await fShowMessage(`Error: ${errorMsg}`);
-      return;
-    }
-    fMyConsoleLog(
-      `   -> Resolved Tags: IsArtifact=${isArtifact_C}, Name=${artName_C}, AP=${apCost_C}. Data Range: ${firstDataRowIndex}-${artDataLast_R}. CharLvl=${charLvl}.`
-    );
-    const artifactRows = [];
+    const maxAPCost = Math.max(5, charLvl);
+
+    const eligibleArtifacts = [];
     for (let r = firstDataRowIndex; r <= artDataLast_R; r++) {
-      const rowData = gearCache.text[r];
-      if (!Array.isArray(rowData)) continue;
-      const isArtifactVal = rowData[isArtifact_C];
+      const isArtifactVal = cache.text[r][isArtifact_C];
       const isTrulyArtifact =
         isArtifactVal === true ||
         String(isArtifactVal).toUpperCase() === "TRUE";
-      if (isTrulyArtifact) {
-        artifactRows.push({
-          index: r,
-          data: rowData,
-        });
+      const apCost = Number(cache.text[r][apCost_C]);
+      if (isTrulyArtifact && !isNaN(apCost) && apCost <= maxAPCost) {
+        eligibleArtifacts.push({ data: cache.text[r] });
       }
     }
-    if (artifactRows.length === 0) {
-      const errorMsg = `No items marked as Artifact found in ${cacheKey}.`;
-      fMyConsoleLog(`   -> ⚠️ ${funcName} Warning: ${errorMsg}`);
-      await fShowMessage(`Warning: ${errorMsg}`);
-      return;
-    }
-    fMyConsoleLog(`   -> Found ${artifactRows.length} total artifacts.`);
-    const maxAPCost = Math.max(5, charLvl);
-    fMyConsoleLog(
-      `   -> Filtering artifacts by Max AP Cost <= ${maxAPCost} (based on charLvl ${charLvl}).`
-    );
-    const eligibleArtifacts = artifactRows.filter((artifact) => {
-      const apCost = Number(artifact.data[apCost_C]) || Infinity;
-      return apCost <= maxAPCost;
-    });
+
     if (eligibleArtifacts.length === 0) {
-      const errorMsg = `No artifacts found with AP Cost <= ${maxAPCost}.`;
-      fMyConsoleLog(`   -> ⚠️ ${funcName} Warning: ${errorMsg}`);
-      const userMsg = `No artifacts found suitable for character level ${charLvl} (Max AP Cost: ${maxAPCost}).`;
-      await fShowMessage(userMsg);
+      await fShowMessage(
+        `⚠️ No artifacts found suitable for character level ${charLvl} (Max AP Cost: ${maxAPCost}).`
+      );
       return;
     }
-    fMyConsoleLog(
-      `   -> Found ${eligibleArtifacts.length} eligible artifacts.`
-    );
-    const randomIndex = Math.floor(Math.random() * eligibleArtifacts.length);
-    const selectedArtifact = eligibleArtifacts[randomIndex];
-    const selectedRowData = selectedArtifact.data;
+
+    const selectedArtifact =
+      eligibleArtifacts[Math.floor(Math.random() * eligibleArtifacts.length)];
     const artName = String(
-      selectedRowData[artName_C] || "Unknown Artifact"
+      selectedArtifact.data[artName_C] || "Unknown Artifact"
     ).trim();
-    const apCost = selectedRowData[apCost_C] ?? "?";
-    fMyConsoleLog(
-      `   -> Selected Artifact: "${artName}" (AP: ${apCost}) at original index ${selectedArtifact.index}.`
-    );
-    let titleHtml, titleText;
-    if (isRandomRoll) {
-      titleHtml = `<span class="blue-bold">Loot ${lootType}:</span>`;
-      titleText = `Loot ${lootType}:`;
-    } else {
-      titleHtml = `<span class="red-bold">SPECIFIC</span> <span class="blue-bold">Loot ${lootType}:</span>`;
-      titleText = `SPECIFIC Loot ${lootType}:`;
-    }
+    const apCost = selectedArtifact.data[apCost_C] ?? "?";
+
+    let titleHtml = isRandomRoll
+      ? `<span class="blue-bold">Loot ${lootType}:</span>`
+      : `<span class="red-bold">SPECIFIC</span> <span class="blue-bold">Loot ${lootType}:</span>`;
     const messageBodyHtml = `${artName} (${apCost}AP)`;
-    const messageBodyText = `${artName} (${apCost}AP)`;
     const sidebarMsgHtml = `${titleHtml}<br>${messageBodyHtml}`;
-    const sidebarMsgText = `${titleText}\n${messageBodyText}`;
+    const sidebarMsgText = `${titleHtml.replace(
+      /<[^>]+>/g,
+      ""
+    )}\n${messageBodyHtml}`;
     fPostToSidebar(sidebarMsgHtml, sidebarMsgText);
     fShowSidebar();
     setTimeout(() => fSendLogToGMScreenAndPS(), 0);
-    fMyConsoleLog(`✅ ${funcName}: Artifact loot posted.`);
   } // End function fLoot_RollArtifact
 
   /** function fLoot_RollSockets
