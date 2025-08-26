@@ -1307,6 +1307,89 @@
     };
   } // End function fPerformMultiRolls
 
+  /** function fGetMonsterTargets
+   * Purpose: Finds all active monster targets and validates their required stat for a combat roll.
+   * Assumptions: This is a helper for the fPerformPlayer... functions. It handles its own error messages.
+   * @param {string} requiredStatColTag - The column tag for the specific monster stat needed (e.g., "MonDef", "MonAtk").
+   * @returns {Promise<object>} An object { success: boolean, targets: Array, allTargetedRows_R: Array }.
+   */
+  async function fGetMonsterTargets(requiredStatColTag) {
+    const funcName = "fGetMonsterTargets";
+    fMyConsoleLog(
+      `   -> Entering ${funcName} to find targets for stat: ${requiredStatColTag}...`
+    );
+    const monsterRangeDef = gUI.range?.monsters;
+    if (
+      !monsterRangeDef ||
+      !fDoesObjectHaveR1C1R2C2Properties(monsterRangeDef)
+    ) {
+      const msg =
+        "Monster range definition (gUI.range.monsters) missing or invalid.";
+      console.warn(`${funcName}: ${msg}`);
+      await fShowMessage(`❌ Error: ${msg}`);
+      return { success: false, targets: [], allTargetedRows_R: [] };
+    }
+
+    const resolved = fConvertsR1C1R2C2TagOrNumToIndices(monsterRangeDef);
+    if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
+      const msg = `Could not resolve monster range tags: ${JSON.stringify(
+        monsterRangeDef
+      )}`;
+      console.warn(`${funcName}: ${msg}`);
+      await fShowMessage(`❌ Error: ${msg}`);
+      return { success: false, targets: [], allTargetedRows_R: [] };
+    }
+
+    const cNumMon = fResolveCol("NumMon");
+    const cMonName = fResolveCol("MonName");
+    const cStat = fResolveCol(requiredStatColTag);
+    if ([cNumMon, cMonName, cStat].some(isNaN)) {
+      const msg = `Could not resolve required monster column tags (NumMon, MonName, or ${requiredStatColTag}).`;
+      console.warn(`${funcName}: ${msg}`);
+      await fShowMessage(`❌ Error: ${msg}`);
+      return { success: false, targets: [], allTargetedRows_R: [] };
+    }
+
+    const rMin = Math.min(resolved.r1, resolved.r2);
+    const rMax = Math.max(resolved.r1, resolved.r2);
+    const monsterTargets = [];
+    const allTargetedRows_R = [];
+    const firstMonsterRowIndex = rMin;
+
+    for (let mon_R = rMin; mon_R <= rMax; mon_R++) {
+      const numMonRaw = gUI.arr?.[mon_R]?.[cNumMon];
+      const numMon = parseInt(numMonRaw, 10);
+      if (!isNaN(numMon) && numMon >= 1 && numMon <= 30) {
+        allTargetedRows_R.push(mon_R);
+        const statRaw = gUI.arr?.[mon_R]?.[cStat];
+        const statValue = Number(statRaw);
+        if (isNaN(statValue) || String(statRaw).trim() === "") {
+          const isCustomRow = mon_R === firstMonsterRowIndex;
+          let errMsg = `❌ Invalid Monster ${requiredStatColTag} ('${statRaw}') found in row ${
+            mon_R + 1
+          }. Cannot complete roll.`;
+          if (isCustomRow)
+            errMsg = `❌ Invalid Monster ${requiredStatColTag} ('${statRaw}') found for Custom Monster. Cannot complete roll.`;
+          fMyConsoleLog(`         -> Validation Failed: ${errMsg}`);
+          await fShowMessage(errMsg);
+          return { success: false, targets: [], allTargetedRows_R: [] };
+        }
+
+        let originalMonName = String(gUI.arr?.[mon_R]?.[cMonName] || "").trim();
+        let monName = originalMonName || `Row ${mon_R + 1}`;
+        if (mon_R === firstMonsterRowIndex)
+          monName = `Custom ${originalMonName}`.trim();
+
+        monsterTargets.push({ mon_R, numRolls: numMon, monName, statValue });
+      }
+    }
+
+    fMyConsoleLog(
+      `      -> ${funcName} found ${monsterTargets.length} valid target(s).`
+    );
+    return { success: true, targets: monsterTargets, allTargetedRows_R };
+  } // End function fGetMonsterTargets
+
   /** function fPerformPlayerAttackRolls
    * Purpose: Handles 'Atk' rolls against monsters.
    * Assumptions: Validates targets, performs rolls, and builds log entries, adding a "Prep Dmg" button on success.
@@ -1315,161 +1398,46 @@
    * @returns {Promise<object>} An object with { logHtml, logText, success }.
    */
   async function fPerformPlayerAttackRolls(initialLogHtml, initialLogText) {
-    fMyConsoleLog("   -> Entering Player Attack Logic...");
-    const monsterRangeDef = gUI.range?.monsters;
-    if (
-      !monsterRangeDef ||
-      !fDoesObjectHaveR1C1R2C2Properties(monsterRangeDef)
-    ) {
-      const msg =
-        "Monster range definition (gUI.range.monsters) missing/invalid.";
-      console.warn(`fPerformPlayerAttackRolls: ${msg}`);
-      await fShowMessage(`❌ Error: ${msg}`);
-      return {
-        logHtml: "",
-        logText: "",
-        success: false,
-      };
-    }
-    const resolved = fConvertsR1C1R2C2TagOrNumToIndices(monsterRangeDef);
-    if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
-      const msg = `Could not resolve monster range tags: ${JSON.stringify(
-        monsterRangeDef
-      )}`;
-      console.warn(`fPerformPlayerAttackRolls: ${msg}`);
-      await fShowMessage(`❌ Error: ${msg}`);
-      return {
-        logHtml: "",
-        logText: "",
-        success: false,
-      };
-    }
-    const rMin = Math.min(resolved.r1, resolved.r2);
-    const rMax = Math.max(resolved.r1, resolved.r2);
-    const cNumMon = fResolveCol("NumMon");
-    const cMonDef = fResolveCol("MonDef");
-    const cMonName = fResolveCol("MonName");
-    if ([cNumMon, cMonDef, cMonName].some(isNaN)) {
-      const msg =
-        "Could not resolve required monster column tags (NumMon, MonDef, MonName).";
-      console.warn(`fPerformPlayerAttackRolls: ${msg}`);
-      await fShowMessage(`❌ Error: ${msg}`);
-      return {
-        logHtml: "",
-        logText: "",
-        success: false,
-      };
-    }
-    fMyConsoleLog(
-      `      -> Monster Table Range: Rows ${rMin}-${rMax}, Cols Def:${cMonDef}, Num:${cNumMon}, Name:${cMonName}`
+    const { success, targets, allTargetedRows_R } = await fGetMonsterTargets(
+      "MonDef"
     );
-    const monsterTargets = [];
-    const allTargetedRows_R = [];
-    const firstMonsterRowIndex = rMin;
-    for (let mon_R = rMin; mon_R <= rMax; mon_R++) {
-      const isCustomRow = mon_R === firstMonsterRowIndex;
-      const numMonRaw = gUI.arr?.[mon_R]?.[cNumMon];
-      const numMon = parseInt(numMonRaw, 10);
-      if (!isNaN(numMon) && numMon >= 1 && numMon <= 30) {
-        fMyConsoleLog(`      -> Row ${mon_R}: Found valid NumMon: ${numMon}`);
-        const monDefRaw = gUI.arr?.[mon_R]?.[cMonDef];
-        const monDef = Number(monDefRaw);
-        if (isNaN(monDef) || String(monDefRaw).trim() === "") {
-          let errMsg = `❌ Invalid Monster Defense ('${monDefRaw}') found in row ${
-            mon_R + 1
-          }. Cannot complete attack.`;
-          if (isCustomRow)
-            errMsg = `❌ Invalid Monster Defense ('${monDefRaw}') found for Custom Monster. Cannot complete attack.`;
-          fMyConsoleLog(`         -> Validation Failed: ${errMsg}`);
-          await fShowMessage(errMsg);
-          return {
-            logHtml: "",
-            logText: "",
-            success: false,
-          };
-        }
-        let originalMonName = String(gUI.arr?.[mon_R]?.[cMonName] || "").trim();
-        let monName = originalMonName || `Row ${mon_R + 1}`;
-        if (isCustomRow) monName = `Custom ${originalMonName}`.trim();
-        monsterTargets.push({
-          mon_R,
-          numRolls: numMon,
-          monName,
-          monDef,
-          numSuccesses: 0,
-        });
-        allTargetedRows_R.push(mon_R);
-        fMyConsoleLog(
-          `         -> Valid Target Added: Name='${monName}', Def=${monDef}, Rolls=${numMon} (Row index ${mon_R} added)`
-        );
-      } else {
-        if (numMonRaw !== "" && numMonRaw != null)
-          fMyConsoleLog(
-            `      -> Row ${mon_R}: Skipping - Invalid NumMon value: '${numMonRaw}'`
-          );
-      }
-    }
-    if (monsterTargets.length === 0) {
-      fMyConsoleLog(
-        "      -> No valid monster targets found. Performing standard attack roll instead."
-      );
+    if (!success) return { success: false };
+
+    if (targets.length === 0) {
       await fShowMessage(
         "ℹ️ No valid monsters found. Performing standard attack roll."
       );
       gUI.roll.resDif = "";
-      fMyConsoleLog("         -> Cleared resDif for standard roll.");
       const { finalLogHtml, finalLogText } = fPerformMultiRolls(
         initialLogHtml,
         initialLogText
       );
-      return {
-        logHtml: finalLogHtml,
-        logText: finalLogText,
-        success: true,
-      };
+      return { logHtml: finalLogHtml, logText: finalLogText, success: true };
     }
-    fMyConsoleLog(
-      `      -> Found ${monsterTargets.length} valid monster target(s).`
-    );
+
     let isOverallFirstRoll = true;
     const monsterLogLinesHtml = [];
     const monsterLogLinesText = [];
     const currentAttackResults = [];
-    for (const target of monsterTargets) {
-      fMyConsoleLog(
-        `   --- Attacking: ${target.monName} (Def: ${target.monDef}, Rolls: ${target.numRolls}) ---`
-      );
+
+    for (const target of targets) {
+      target.numSuccesses = 0;
       monsterLogLinesHtml.push("↓");
       monsterLogLinesText.push("↓");
       monsterLogLinesHtml.push(
-        `--- <span style="color: purple; font-weight: bold;">Mon: ${target.monName}</span> (Def: ${target.monDef}) ---`
+        `--- <span style="color: purple; font-weight: bold;">Mon: ${target.monName}</span> (Def: ${target.statValue}) ---`
       );
       monsterLogLinesText.push(
-        `--- Mon: ${target.monName} (Def: ${target.monDef}) ---`
+        `--- Mon: ${target.monName} (Def: ${target.statValue}) ---`
       );
-      gUI.roll.resDif = target.monDef;
+      gUI.roll.resDif = target.statValue;
+
       for (let rollNum = 1; rollNum <= target.numRolls; rollNum++) {
-        fMyConsoleLog(
-          `      -> Roll ${rollNum} of ${target.numRolls} against ${target.monName}...`
-        );
         fCalcGUIRollResSk();
         fCalcGUIRollRoll();
         fCalcGUIRollResRoll();
-        const rollResult = gUI.roll.resRoll;
-        const difficulty = gUI.roll.resDif;
-        if (
-          typeof rollResult === "number" &&
-          typeof difficulty === "number" &&
-          rollResult >= difficulty
-        ) {
+        if (gUI.roll.resRoll >= gUI.roll.resDif) {
           target.numSuccesses++;
-          fMyConsoleLog(
-            `         -> Attack Succeeded! (Roll ${rollResult} >= Def ${difficulty}). Success count: ${target.numSuccesses}`
-          );
-        } else {
-          fMyConsoleLog(
-            `         -> Attack Failed! (Roll ${rollResult} < Def ${difficulty})`
-          );
         }
         const { html: rollLineHtml, plainText: rollLineText } =
           fBuildSidebarHTMLAndSimpleText(
@@ -1481,13 +1449,8 @@
         monsterLogLinesText.push(rollLineText);
         if (isOverallFirstRoll) isOverallFirstRoll = false;
       }
-      fMyConsoleLog(
-        `   --- Finished Attacking: ${target.monName} (${target.numSuccesses} successes) ---`
-      );
+
       if (target.numSuccesses > 0) {
-        fMyConsoleLog(
-          `      -> Storing result for ${target.monName}: mon_R=${target.mon_R}, numSuccesses=${target.numSuccesses}`
-        );
         currentAttackResults.push({
           mon_R: target.mon_R,
           monName: target.monName,
@@ -1495,34 +1458,23 @@
         });
       }
     }
+
     let finalLogHtml =
       initialLogHtml + "<br>" + monsterLogLinesHtml.join("<br>");
     let finalLogText = initialLogText + "\n" + monsterLogLinesText.join("\n");
-    let rollId = null;
+
     if (currentAttackResults.length > 0) {
-      rollId = "prep_" + Date.now();
+      const rollId = "prep_" + Date.now();
       gUI.monsterRollResultsHistory[rollId] = {
         results: currentAttackResults,
         originalAbilityRow: gUI.roll.ability_R,
-        allTargetedRows_R: allTargetedRows_R,
+        allTargetedRows_R,
       };
-      fMyConsoleLog(
-        `   -> Stored attack results in gUI.monsterRollResultsHistory['${rollId}']`
-      );
       finalLogHtml += ` <button class="prep-dmg-btn" data-roll-id="${rollId}">Prep Dmg</button>`;
       finalLogText += ` [Prep Dmg Available]`;
-      fMyConsoleLog("   -> Added 'Prep Dmg' button to HTML log output.");
-    } else {
-      fMyConsoleLog(
-        "   -> No successes recorded, 'Prep Dmg' button not added."
-      );
     }
-    fMyConsoleLog("   -> Player Attack Logic Complete.");
-    return {
-      logHtml: finalLogHtml,
-      logText: finalLogText,
-      success: true,
-    };
+
+    return { logHtml: finalLogHtml, logText: finalLogText, success: true };
   } // End function fPerformPlayerAttackRolls
 
   /** function fPerformPlayerDamageRolls
@@ -1533,160 +1485,45 @@
    * @returns {Promise<object>} An object with { logHtml, logText, success }.
    */
   async function fPerformPlayerDamageRolls(initialLogHtml, initialLogText) {
-    fMyConsoleLog("   -> Entering Player Damage Logic...");
-    const monsterRangeDef = gUI.range?.monsters;
-    if (
-      !monsterRangeDef ||
-      !fDoesObjectHaveR1C1R2C2Properties(monsterRangeDef)
-    ) {
-      const msg =
-        "Monster range definition (gUI.range.monsters) missing/invalid.";
-      console.warn(`fPerformPlayerDamageRolls: ${msg}`);
-      await fShowMessage(`❌ Error: ${msg}`);
-      return {
-        logHtml: "",
-        logText: "",
-        success: false,
-      };
-    }
-    const resolved = fConvertsR1C1R2C2TagOrNumToIndices(monsterRangeDef);
-    if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
-      const msg = `Could not resolve monster range tags: ${JSON.stringify(
-        monsterRangeDef
-      )}`;
-      console.warn(`fPerformPlayerDamageRolls: ${msg}`);
-      await fShowMessage(`❌ Error: ${msg}`);
-      return {
-        logHtml: "",
-        logText: "",
-        success: false,
-      };
-    }
-    const rMin = Math.min(resolved.r1, resolved.r2);
-    const rMax = Math.max(resolved.r1, resolved.r2);
-    const cNumMon = fResolveCol("NumMon");
-    const cMonAR = fResolveCol("MonAR");
-    const cMonName = fResolveCol("MonName");
-    if ([cNumMon, cMonAR, cMonName].some(isNaN)) {
-      const msg =
-        "Could not resolve required monster column tags (NumMon, MonAR, MonName).";
-      console.warn(`fPerformPlayerDamageRolls: ${msg}`);
-      await fShowMessage(`❌ Error: ${msg}`);
-      return {
-        logHtml: "",
-        logText: "",
-        success: false,
-      };
-    }
-    fMyConsoleLog(
-      `      -> Monster Table Range: Rows ${rMin}-${rMax}, Cols AR:${cMonAR}, Num:${cNumMon}, Name:${cMonName}`
-    );
-    const monsterTargets = [];
-    const firstMonsterRowIndex = rMin;
-    for (let mon_R = rMin; mon_R <= rMax; mon_R++) {
-      const isCustomRow = mon_R === firstMonsterRowIndex;
-      const numMonRaw = gUI.arr?.[mon_R]?.[cNumMon];
-      const numMon = parseInt(numMonRaw, 10);
-      if (!isNaN(numMon) && numMon >= 1 && numMon <= 30) {
-        fMyConsoleLog(`      -> Row ${mon_R}: Found valid NumMon: ${numMon}`);
-        const monARRaw = gUI.arr?.[mon_R]?.[cMonAR];
-        const monARBase = Number(monARRaw);
-        if (isNaN(monARBase) || String(monARRaw).trim() === "") {
-          let errMsg = `❌ Invalid Monster Armor value ('${monARRaw}') found in row ${
-            mon_R + 1
-          }. Cannot complete damage roll.`;
-          if (isCustomRow)
-            errMsg = `❌ Invalid Monster Armor value ('${monARRaw}') found for Custom Monster. Cannot complete damage roll.`;
-          fMyConsoleLog(`         -> Validation Failed: ${errMsg}`);
-          await fShowMessage(errMsg);
-          return {
-            logHtml: "",
-            logText: "",
-            success: false,
-          };
-        }
-        const calculatedArmor = Math.max(1, monARBase / 10).toFixed(1);
-        fMyConsoleLog(
-          `         -> Calculated Armor Difficulty: ${monARBase}/10=${
-            monARBase / 10
-          } -> max(1, ${monARBase / 10}) -> ${calculatedArmor}`
-        );
-        let originalMonName = String(gUI.arr?.[mon_R]?.[cMonName] || "").trim();
-        let monName = originalMonName || `Row ${mon_R + 1}`;
-        if (isCustomRow) monName = `Custom ${originalMonName}`.trim();
-        monsterTargets.push({
-          mon_R,
-          numRolls: numMon,
-          monName,
-          calculatedArmor: Number(calculatedArmor),
-        });
-        fMyConsoleLog(
-          `         -> Valid Target Added: Name='${monName}', Calculated AR=${calculatedArmor}, Rolls=${numMon}`
-        );
-      } else {
-        if (numMonRaw !== "" && numMonRaw != null)
-          fMyConsoleLog(
-            `      -> Row ${mon_R}: Skipping - Invalid NumMon value: '${numMonRaw}'`
-          );
-      }
-    }
-    if (monsterTargets.length === 0) {
-      fMyConsoleLog(
-        "      -> No valid monster targets found (with MonAR). Performing standard damage roll instead."
-      );
+    const { success, targets } = await fGetMonsterTargets("MonAR");
+    if (!success) return { success: false };
+
+    if (targets.length === 0) {
       await fShowMessage(
         "ℹ️ No valid monsters found with Armor values. Performing standard damage roll."
       );
       gUI.roll.resDif = "";
-      fMyConsoleLog("         -> Cleared resDif for standard roll.");
       const { finalLogHtml, finalLogText } = fPerformMultiRolls(
         initialLogHtml,
         initialLogText
       );
-      return {
-        logHtml: finalLogHtml,
-        logText: finalLogText,
-        success: true,
-      };
+      return { logHtml: finalLogHtml, logText: finalLogText, success: true };
     }
-    fMyConsoleLog(
-      `      -> Found ${monsterTargets.length} valid monster target(s) with Armor values.`
-    );
+
     let isOverallFirstRoll = true;
     const monsterLogLinesHtml = [];
     const monsterLogLinesText = [];
-    for (const target of monsterTargets) {
-      fMyConsoleLog(
-        `   --- Damaging: ${target.monName} (Calc AR: ${target.calculatedArmor}, Rolls: ${target.numRolls}) ---`
-      );
+
+    for (const target of targets) {
+      const calculatedArmor = Math.max(1, target.statValue / 10).toFixed(1);
       let totalWoundsPerMonster = 0;
       monsterLogLinesHtml.push("↓");
       monsterLogLinesText.push("↓");
       monsterLogLinesHtml.push(
-        `--- <span style="color: purple; font-weight: bold;">Mon: ${target.monName}</span> (AR: ${target.calculatedArmor}) ---`
+        `--- <span style="color: purple; font-weight: bold;">Mon: ${target.monName}</span> (AR: ${calculatedArmor}) ---`
       );
       monsterLogLinesText.push(
-        `--- Mon: ${target.monName} (AR: ${target.calculatedArmor}) ---`
+        `--- Mon: ${target.monName} (AR: ${calculatedArmor}) ---`
       );
-      gUI.roll.resDif = target.calculatedArmor;
+      gUI.roll.resDif = Number(calculatedArmor);
+
       for (let rollNum = 1; rollNum <= target.numRolls; rollNum++) {
-        fMyConsoleLog(
-          `      -> Damage Roll ${rollNum} of ${target.numRolls} against ${target.monName}...`
-        );
         fCalcGUIRollResSk();
         fCalcGUIRollRoll();
         fCalcGUIRollResRoll();
-        const rollResult = gUI.roll.resRoll;
-        const armorDifficulty = gUI.roll.resDif;
-        let woundsDealt = 0;
-        if (
-          typeof rollResult === "number" &&
-          typeof armorDifficulty === "number"
-        ) {
-          woundsDealt = Math.max(0, Math.round(rollResult / armorDifficulty));
-        }
-        fMyConsoleLog(
-          `         -> Wound Calc: Dmg Roll=${rollResult}, calcAR=${armorDifficulty} => Wounds = max(0, round(${rollResult}/${armorDifficulty})) = ${woundsDealt}`
+        const woundsDealt = Math.max(
+          0,
+          Math.round(gUI.roll.resRoll / gUI.roll.resDif)
         );
         totalWoundsPerMonster += woundsDealt;
         const { html: rollLineHtml, plainText: rollLineText } =
@@ -1699,25 +1536,19 @@
         monsterLogLinesText.push(rollLineText);
         if (isOverallFirstRoll) isOverallFirstRoll = false;
       }
+
       monsterLogLinesHtml.push(
         `<span style="font-weight:bold;">${target.monName} Total Wounds = +${totalWoundsPerMonster}</span>`
       );
       monsterLogLinesText.push(
         `${target.monName} Total Wounds = +${totalWoundsPerMonster}`
       );
-      fMyConsoleLog(
-        `   --- Finished Damaging: ${target.monName} (Total Wounds: ${totalWoundsPerMonster}) ---`
-      );
     }
+
     const finalLogHtml =
       initialLogHtml + "<br>" + monsterLogLinesHtml.join("<br>");
     const finalLogText = initialLogText + "\n" + monsterLogLinesText.join("\n");
-    fMyConsoleLog("   -> Player Damage Logic Complete.");
-    return {
-      logHtml: finalLogHtml,
-      logText: finalLogText,
-      success: true,
-    };
+    return { logHtml: finalLogHtml, logText: finalLogText, success: true };
   } // End function fPerformPlayerDamageRolls
 
   /** function fPerformPlayerDefenseRolls
@@ -1728,161 +1559,46 @@
    * @returns {Promise<object>} An object with { logHtml, logText, success }.
    */
   async function fPerformPlayerDefenseRolls(initialLogHtml, initialLogText) {
-    fMyConsoleLog("   -> Entering Player Defense Logic...");
-    const monsterRangeDef = gUI.range?.monsters;
-    if (
-      !monsterRangeDef ||
-      !fDoesObjectHaveR1C1R2C2Properties(monsterRangeDef)
-    ) {
-      const msg =
-        "Monster range definition (gUI.range.monsters) missing/invalid.";
-      console.warn(`fPerformPlayerDefenseRolls: ${msg}`);
-      await fShowMessage(`❌ Error: ${msg}`);
-      return {
-        logHtml: "",
-        logText: "",
-        success: false,
-      };
-    }
-    const resolved = fConvertsR1C1R2C2TagOrNumToIndices(monsterRangeDef);
-    if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
-      const msg = `Could not resolve monster range tags: ${JSON.stringify(
-        monsterRangeDef
-      )}`;
-      console.warn(`fPerformPlayerDefenseRolls: ${msg}`);
-      await fShowMessage(`❌ Error: ${msg}`);
-      return {
-        logHtml: "",
-        logText: "",
-        success: false,
-      };
-    }
-    const rMin = Math.min(resolved.r1, resolved.r2);
-    const rMax = Math.max(resolved.r1, resolved.r2);
-    const cNumMon = fResolveCol("NumMon");
-    const cMonAtk = fResolveCol("MonAtk");
-    const cMonName = fResolveCol("MonName");
-    if ([cNumMon, cMonAtk, cMonName].some(isNaN)) {
-      const msg =
-        "Could not resolve required monster column tags (NumMon, MonAtk, MonName).";
-      console.warn(`fPerformPlayerDefenseRolls: ${msg}`);
-      await fShowMessage(`❌ Error: ${msg}`);
-      return {
-        logHtml: "",
-        logText: "",
-        success: false,
-      };
-    }
-    fMyConsoleLog(
-      `      -> Monster Table Range: Rows ${rMin}-${rMax}, Cols Atk:${cMonAtk}, Num:${cNumMon}, Name:${cMonName}`
+    const { success, targets, allTargetedRows_R } = await fGetMonsterTargets(
+      "MonAtk"
     );
-    const monsterTargets = [];
-    const allTargetedRows_R = [];
-    const firstMonsterRowIndex = rMin;
-    for (let mon_R = rMin; mon_R <= rMax; mon_R++) {
-      const isCustomRow = mon_R === firstMonsterRowIndex;
-      const numMonRaw = gUI.arr?.[mon_R]?.[cNumMon];
-      const numMon = parseInt(numMonRaw, 10);
-      if (!isNaN(numMon) && numMon >= 1 && numMon <= 30) {
-        fMyConsoleLog(`      -> Row ${mon_R}: Found valid NumMon: ${numMon}`);
-        const monAtkRaw = gUI.arr?.[mon_R]?.[cMonAtk];
-        const monAtk = Number(monAtkRaw);
-        if (isNaN(monAtk) || String(monAtkRaw).trim() === "") {
-          let errMsg = `❌ Invalid Monster Attack value ('${monAtkRaw}') found in row ${
-            mon_R + 1
-          }. Cannot complete defense roll.`;
-          if (isCustomRow)
-            errMsg = `❌ Invalid Monster Attack value ('${monAtkRaw}') found for Custom Monster. Cannot complete defense roll.`;
-          fMyConsoleLog(`         -> Validation Failed: ${errMsg}`);
-          await fShowMessage(errMsg);
-          return {
-            logHtml: "",
-            logText: "",
-            success: false,
-          };
-        }
-        let originalMonName = String(gUI.arr?.[mon_R]?.[cMonName] || "").trim();
-        let monName = originalMonName || `Row ${mon_R + 1}`;
-        if (isCustomRow) monName = `Custom ${originalMonName}`.trim();
-        monsterTargets.push({
-          mon_R,
-          numRolls: numMon,
-          monName,
-          monAtk,
-          numFailures: 0,
-        });
-        allTargetedRows_R.push(mon_R);
-        fMyConsoleLog(
-          `         -> Valid Target Added: Name='${monName}', Atk=${monAtk}, Rolls=${numMon} (Row index ${mon_R} added)`
-        );
-      } else {
-        if (numMonRaw !== "" && numMonRaw != null)
-          fMyConsoleLog(
-            `      -> Row ${mon_R}: Skipping - Invalid NumMon value: '${numMonRaw}'`
-          );
-      }
-    }
-    if (monsterTargets.length === 0) {
-      fMyConsoleLog(
-        "      -> No valid monster targets found (with MonAtk). Performing standard defense roll instead."
-      );
+    if (!success) return { success: false };
+
+    if (targets.length === 0) {
       await fShowMessage(
         "ℹ️ No valid monsters found with Attack values. Performing standard defense roll."
       );
       gUI.roll.resDif = "";
-      fMyConsoleLog("         -> Cleared resDif for standard roll.");
       const { finalLogHtml, finalLogText } = fPerformMultiRolls(
         initialLogHtml,
         initialLogText
       );
-      return {
-        logHtml: finalLogHtml,
-        logText: finalLogText,
-        success: true,
-      };
+      return { logHtml: finalLogHtml, logText: finalLogText, success: true };
     }
-    fMyConsoleLog(
-      `      -> Found ${monsterTargets.length} valid monster target(s) with Attack values.`
-    );
+
     let isOverallFirstRoll = true;
     const monsterLogLinesHtml = [];
     const monsterLogLinesText = [];
     const currentDefenseResults = [];
-    for (const target of monsterTargets) {
-      fMyConsoleLog(
-        `   --- Defending Against: ${target.monName} (Atk: ${target.monAtk}, Rolls: ${target.numRolls}) ---`
-      );
+
+    for (const target of targets) {
+      target.numFailures = 0;
       monsterLogLinesHtml.push("↓");
       monsterLogLinesText.push("↓");
       monsterLogLinesHtml.push(
-        `--- <span style="color: purple; font-weight: bold;">Mon: ${target.monName}</span> (Atk: ${target.monAtk}) ---`
+        `--- <span style="color: purple; font-weight: bold;">Mon: ${target.monName}</span> (Atk: ${target.statValue}) ---`
       );
       monsterLogLinesText.push(
-        `--- Mon: ${target.monName} (Atk: ${target.monAtk}) ---`
+        `--- Mon: ${target.monName} (Atk: ${target.statValue}) ---`
       );
-      gUI.roll.resDif = target.monAtk;
+      gUI.roll.resDif = target.statValue;
+
       for (let rollNum = 1; rollNum <= target.numRolls; rollNum++) {
-        fMyConsoleLog(
-          `      -> Defense Roll ${rollNum} of ${target.numRolls} against ${target.monName}...`
-        );
         fCalcGUIRollResSk();
         fCalcGUIRollRoll();
         fCalcGUIRollResRoll();
-        const rollResult = gUI.roll.resRoll;
-        const difficulty = gUI.roll.resDif;
-        if (
-          typeof rollResult === "number" &&
-          typeof difficulty === "number" &&
-          rollResult < difficulty
-        ) {
+        if (gUI.roll.resRoll < gUI.roll.resDif) {
           target.numFailures++;
-          fMyConsoleLog(
-            `         -> Defense Failed! (Roll ${rollResult} < Atk ${difficulty}). Failure count: ${target.numFailures}`
-          );
-        } else {
-          fMyConsoleLog(
-            `         -> Defense Succeeded! (Roll ${rollResult} >= Atk ${difficulty})`
-          );
         }
         const { html: rollLineHtml, plainText: rollLineText } =
           fBuildSidebarHTMLAndSimpleText(
@@ -1894,9 +1610,7 @@
         monsterLogLinesText.push(rollLineText);
         if (isOverallFirstRoll) isOverallFirstRoll = false;
       }
-      fMyConsoleLog(
-        `   --- Finished Defending Against: ${target.monName} (${target.numFailures} failures) ---`
-      );
+
       if (target.numFailures > 0) {
         currentDefenseResults.push({
           mon_R: target.mon_R,
@@ -1905,34 +1619,23 @@
         });
       }
     }
+
     let finalLogHtml =
       initialLogHtml + "<br>" + monsterLogLinesHtml.join("<br>");
     let finalLogText = initialLogText + "\n" + monsterLogLinesText.join("\n");
-    let rollId = null;
+
     if (currentDefenseResults.length > 0) {
-      rollId = "prep_" + Date.now();
+      const rollId = "prep_" + Date.now();
       gUI.monsterRollResultsHistory[rollId] = {
         results: currentDefenseResults,
         originalAbilityRow: gUI.roll.ability_R,
-        allTargetedRows_R: allTargetedRows_R,
+        allTargetedRows_R,
       };
-      fMyConsoleLog(
-        `   -> Data stored for rollId '${rollId}'. History keys: ${Object.keys(
-          gUI.monsterRollResultsHistory
-        ).join(", ")}`
-      );
       finalLogHtml += ` <button class="prep-ar-btn" data-roll-id="${rollId}">Prep AR</button>`;
       finalLogText += ` [Prep AR Available]`;
-      fMyConsoleLog("   -> Added 'Prep AR' button to log output.");
-    } else {
-      fMyConsoleLog("   -> No failures recorded, 'Prep AR' button not added.");
     }
-    fMyConsoleLog("   -> Player Defense Logic Complete.");
-    return {
-      logHtml: finalLogHtml,
-      logText: finalLogText,
-      success: true,
-    };
+
+    return { logHtml: finalLogHtml, logText: finalLogText, success: true };
   } // End function fPerformPlayerDefenseRolls
 
   /** function fPerformPlayerArmorRolls
@@ -1943,164 +1646,46 @@
    * @returns {Promise<object>} An object with { logHtml, logText, success }.
    */
   async function fPerformPlayerArmorRolls(initialLogHtml, initialLogText) {
-    fMyConsoleLog("   -> Entering Player Armor Logic...");
-    const monsterRangeDef = gUI.range?.monsters;
-    if (
-      !monsterRangeDef ||
-      !fDoesObjectHaveR1C1R2C2Properties(monsterRangeDef)
-    ) {
-      const msg =
-        "Monster range definition (gUI.range.monsters) missing/invalid.";
-      console.warn(`fPerformPlayerArmorRolls: ${msg}`);
-      await fShowMessage(`❌ Error: ${msg}`);
-      return {
-        logHtml: "",
-        logText: "",
-        success: false,
-      };
-    }
-    const resolved = fConvertsR1C1R2C2TagOrNumToIndices(monsterRangeDef);
-    if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
-      const msg = `Could not resolve monster range tags: ${JSON.stringify(
-        monsterRangeDef
-      )}`;
-      console.warn(`fPerformPlayerArmorRolls: ${msg}`);
-      await fShowMessage(`❌ Error: ${msg}`);
-      return {
-        logHtml: "",
-        logText: "",
-        success: false,
-      };
-    }
-    const rMin = Math.min(resolved.r1, resolved.r2);
-    const rMax = Math.max(resolved.r1, resolved.r2);
-    const cNumMon = fResolveCol("NumMon");
-    const cMonDmg = fResolveCol("MonDmg");
-    const cMonName = fResolveCol("MonName");
-    if ([cNumMon, cMonDmg, cMonName].some(isNaN)) {
-      const msg =
-        "Could not resolve required monster column tags (NumMon, MonDmg, MonName).";
-      console.warn(`fPerformPlayerArmorRolls: ${msg}`);
-      await fShowMessage(`❌ Error: ${msg}`);
-      return {
-        logHtml: "",
-        logText: "",
-        success: false,
-      };
-    }
-    fMyConsoleLog(
-      `      -> Monster Table Range: Rows ${rMin}-${rMax}, Cols Dmg:${cMonDmg}, Num:${cNumMon}, Name:${cMonName}`
-    );
-    const monsterTargets = [];
-    const firstMonsterRowIndex = rMin;
-    for (let mon_R = rMin; mon_R <= rMax; mon_R++) {
-      const isCustomRow = mon_R === firstMonsterRowIndex;
-      const numMonRaw = gUI.arr?.[mon_R]?.[cNumMon];
-      const numMon = parseInt(numMonRaw, 10);
-      if (!isNaN(numMon) && numMon >= 1 && numMon <= 30) {
-        fMyConsoleLog(`      -> Row ${mon_R}: Found valid NumMon: ${numMon}`);
-        const monDmgRaw = gUI.arr?.[mon_R]?.[cMonDmg];
-        const monDmg = Number(monDmgRaw);
-        if (isNaN(monDmg) || String(monDmgRaw).trim() === "") {
-          let errMsg = `❌ Invalid Monster Damage ('${monDmgRaw}') found in row ${
-            mon_R + 1
-          }. Cannot complete armor roll.`;
-          if (isCustomRow)
-            errMsg = `❌ Invalid Monster Damage ('${monDmgRaw}') found for Custom Monster. Cannot complete armor roll.`;
-          fMyConsoleLog(`         -> Validation Failed: ${errMsg}`);
-          await fShowMessage(errMsg);
-          return {
-            logHtml: "",
-            logText: "",
-            success: false,
-          };
-        }
-        let originalMonName = String(gUI.arr?.[mon_R]?.[cMonName] || "").trim();
-        let monName = originalMonName || `Row ${mon_R + 1}`;
-        if (isCustomRow) monName = `Custom ${originalMonName}`.trim();
-        monsterTargets.push({
-          mon_R,
-          numRolls: numMon,
-          monName,
-          monDmg,
-        });
-        fMyConsoleLog(
-          `         -> Valid Target Added: Name='${monName}', Dmg=${monDmg}, Rolls=${numMon}`
-        );
-      } else {
-        if (numMonRaw !== "" && numMonRaw != null)
-          fMyConsoleLog(
-            `      -> Row ${mon_R}: Skipping - Invalid NumMon value: '${numMonRaw}'`
-          );
-      }
-    }
-    if (monsterTargets.length === 0) {
-      fMyConsoleLog(
-        "      -> No valid monster targets found (with MonDmg). Performing standard armor roll instead."
-      );
+    const { success, targets } = await fGetMonsterTargets("MonDmg");
+    if (!success) return { success: false };
+
+    if (targets.length === 0) {
       await fShowMessage(
         "ℹ️ No valid monsters found with Damage values. Performing standard armor roll."
       );
       gUI.roll.resDif = "";
-      fMyConsoleLog("         -> Cleared resDif for standard roll.");
       const { finalLogHtml, finalLogText } = fPerformMultiRolls(
         initialLogHtml,
         initialLogText
       );
-      return {
-        logHtml: finalLogHtml,
-        logText: finalLogText,
-        success: true,
-      };
+      return { logHtml: finalLogHtml, logText: finalLogText, success: true };
     }
-    fMyConsoleLog(
-      `      -> Found ${monsterTargets.length} valid monster target(s) with Damage values.`
-    );
+
     let isOverallFirstRoll = true;
     const monsterLogLinesHtml = [];
     const monsterLogLinesText = [];
     let totalWoundsOverall = 0;
-    for (const target of monsterTargets) {
-      fMyConsoleLog(
-        `   --- Rolling Armor vs: ${target.monName} (Dmg: ${target.monDmg}, Rolls: ${target.numRolls}) ---`
-      );
+
+    for (const target of targets) {
       let totalWoundsPerMonster = 0;
       monsterLogLinesHtml.push("↓");
       monsterLogLinesText.push("↓");
       monsterLogLinesHtml.push(
-        `--- <span style="color: purple; font-weight: bold;">Mon: ${target.monName}</span> (Dmg: ${target.monDmg}) ---`
+        `--- <span style="color: purple; font-weight: bold;">Mon: ${target.monName}</span> (Dmg: ${target.statValue}) ---`
       );
       monsterLogLinesText.push(
-        `--- Mon: ${target.monName} (Dmg: ${target.monDmg}) ---`
+        `--- Mon: ${target.monName} (Dmg: ${target.statValue}) ---`
       );
-      gUI.roll.resDif = target.monDmg;
+      gUI.roll.resDif = target.statValue;
+
       for (let rollNum = 1; rollNum <= target.numRolls; rollNum++) {
-        fMyConsoleLog(
-          `      -> Armor Roll ${rollNum} of ${target.numRolls} against ${target.monName}...`
-        );
         fCalcGUIRollResSk();
         fCalcGUIRollRoll();
         fCalcGUIRollResRoll();
-        const armorRollResult = gUI.roll.resRoll;
-        const monsterDamage = gUI.roll.resDif;
-        let woundsDealt = 0;
-        if (
-          typeof armorRollResult === "number" &&
-          armorRollResult !== 0 &&
-          typeof monsterDamage === "number"
-        ) {
-          woundsDealt = Math.min(
-            0,
-            Math.round(-(monsterDamage / armorRollResult))
-          );
-          fMyConsoleLog(
-            `         -> Wound Calc: Dmg=${monsterDamage}, AR Roll=${armorRollResult} => Wounds = min(0, round(-(${monsterDamage}/${armorRollResult}))) = ${woundsDealt}`
-          );
-        } else {
-          fMyConsoleLog(
-            `         -> Wound Calc: Invalid input (Dmg=${monsterDamage}, AR Roll=${armorRollResult}). Wounds = 0`
-          );
-        }
+        const woundsDealt =
+          gUI.roll.resRoll !== 0
+            ? Math.min(0, Math.round(-(gUI.roll.resDif / gUI.roll.resRoll)))
+            : 0;
         totalWoundsPerMonster += woundsDealt;
         totalWoundsOverall += woundsDealt;
         const { html: rollLineHtml, plainText: rollLineText } =
@@ -2113,16 +1698,15 @@
         monsterLogLinesText.push(rollLineText);
         if (isOverallFirstRoll) isOverallFirstRoll = false;
       }
+
       monsterLogLinesHtml.push(
         `<span style="font-weight:bold;">${target.monName} Wounds to PC = ${totalWoundsPerMonster}</span>`
       );
       monsterLogLinesText.push(
         `${target.monName} Wounds to PC = ${totalWoundsPerMonster}`
       );
-      fMyConsoleLog(
-        `   --- Finished Rolling vs: ${target.monName} (Wounds This Monster: ${totalWoundsPerMonster}) ---`
-      );
     }
+
     monsterLogLinesHtml.push("↓");
     monsterLogLinesText.push("↓");
     const positiveWoundAmount = Math.abs(totalWoundsOverall);
@@ -2130,18 +1714,11 @@
       `<span class="red-bold">Total Wounds to PC = ${totalWoundsOverall}</span> <button class="apply-wounds-btn" data-wound-amount="${positiveWoundAmount}">Apply</button>`
     );
     monsterLogLinesText.push(`Total Wounds to PC = ${totalWoundsOverall}`);
-    fMyConsoleLog(
-      `      -> Overall Wounds Inflicted on PC: ${totalWoundsOverall} (Button amount: ${positiveWoundAmount})`
-    );
+
     const finalLogHtml =
       initialLogHtml + "<br>" + monsterLogLinesHtml.join("<br>");
     const finalLogText = initialLogText + "\n" + monsterLogLinesText.join("\n");
-    fMyConsoleLog("   -> Player Armor Logic Complete.");
-    return {
-      logHtml: finalLogHtml,
-      logText: finalLogText,
-      success: true,
-    };
+    return { logHtml: finalLogHtml, logText: finalLogText, success: true };
   } // End function fPerformPlayerArmorRolls
 
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
