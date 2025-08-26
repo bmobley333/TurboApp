@@ -17,16 +17,220 @@
     HOVER_DELAY_MS: 400, // tooltip delay
     TOOLTIP_OFFSET_X: 12,
     TOOLTIP_OFFSET_Y: 14,
+    GMSCREEN_LOG_MAX_CHARS: 40000,
+
+    // === Centralized Tags & Constants ===
+    tags: {
+      col: {
+        // Core Ability / Gear Table
+        ABILITY: "Ability",
+        ACT: "Act",
+        CONDITION: "Condition",
+        DUR: "Dur",
+        KEY: "Key",
+        META_COST: "MetaCost",
+        MORPH_1: "Morph1",
+        MORPH_2: "Morph2",
+        NOTES: "Notes",
+        ON: "On",
+        PERM_MORPH_1: "PermMorph1",
+        PERM_MORPH_2: "PermMorph2",
+        PIC: "Pic",
+        REGAIN: "Regain",
+        RNG: "Rng",
+        SK_1: "Sk1",
+        SK_1_CHK_BOX: "Sk1ChkBox",
+        SK_1_TYP: "Sk1Typ",
+        SK_2: "Sk2",
+        SK_2_CHK_BOX: "Sk2ChkBox",
+        SK_2_TYP: "Sk2Typ",
+        USES: "Uses",
+        VER: "Ver",
+        // Gear Possessions Table
+        POSS_AP_EA: "PossAPEa",
+        POSS_AP_TOT: "PossAPTot",
+        POSS_CR_EA: "PossCrEa",
+        POSS_CR_TOT: "PossCrTot",
+        POSS_ENC: "PossEnc",
+        POSS_GRAND_AP_TOT: "PossGrandAPTot",
+        POSS_IS_ARTIFACT: "PossIsArtifact",
+        POSS_NAME: "PossName",
+        POSS_NUM: "PossNum",
+        POSS_PER_OFF: "PossPerOff",
+        POSS_WORN: "PossWorn",
+        POSS_ENC_TOT: "PossEncTot",
+        // Monster Table
+        MON_AR: "MonAR",
+        MON_ATK: "MonAtk",
+        MON_DEF: "MonDef",
+        MON_DMG: "MonDmg",
+        MON_NAME: "MonName",
+        MON_PIC: "MonPic",
+        MON_SIZE: "MonSize",
+        MON_VIT: "MonVit",
+        NUM_MON: "NumMon",
+        // Header / Layout
+        ULLUCKBOX: "ULLuckBox",
+        ULMR: "ULMR",
+        ULMETA: "ULMeta",
+        ULNISH: "ULNish",
+        ULACT: "ULAct",
+        CODE_VER: "CodeVer",
+        FIRST_C: "FirstC",
+        LAST_C: "LastC",
+        // Stat Block
+        LUCK_BOX: "LuckBox",
+        NISH: "Nish",
+        MR: "MR",
+        ACT_TOT: "ActTot",
+        VIT_MAX: "vitMax",
+        VIT_PLUS: "vitPlus",
+        VIT_1ST: "vit1st",
+        VIT_2ND: "vit2nd",
+        VIT_3RD: "vit3rd",
+        VIT_NOW: "vitNow",
+        VIT_NOW_PERCENT: "VitNowPercent",
+        // Meta Colors
+        R: "R",
+        O: "O",
+        Y: "Y",
+        G: "G",
+        B: "B",
+        // Gear Section
+        SPEED_HEADER: "SpeedHeader",
+        GEAR_PLUS_MR: "GearPlusMR",
+        GEAR_PLUS_CARRY: "GearPlusCarry",
+        GEAR_SPE_AND_STR: "GearSpeAndStr",
+        MR_HEADER: "MRHeader",
+        MR_HEADER_END_C: "MRHeaderEndC",
+        GEAR_MR_COL_1: "GearMRCol1",
+        GEAR_MR_COL_2: "GearMRCol2",
+        GEAR_MR_COL_3: "GearMRCol3",
+        GEAR_MR_COL_4: "GearMRCol4",
+        GEAR_MR_COL_5: "GearMRCol5",
+        GEAR_MR_COL_6: "GearMRCol6",
+        CURRENT_ENC_HEADER: "CurrentEncHeader",
+        POSS_ENC_TOT_END_C: "PossEncTotEndC",
+        GEAR_AP_TOT_HEADER: "GearAPTotHeader",
+        // Sockets & Chaos
+        ASTRAL_GAUNTLET_SLOT: "AstralGauntletSlot",
+        ASTRAL_GAUNTLET_HEADER_END_C: "AstralGauntletHeaderEndC",
+        SOCKETED_GEAR_SLOT: "SocketedGearSlot",
+        CHAOS_USES: "ChaosUses",
+        CHAOS_ABILITY: "ChaosAbility",
+        SOCKETED_GEAR: "SocketedGear",
+        SOCKETED_GEMS: "SocketedGems",
+        // Buttons (Header)
+        DIE_BUTTON_C: "DieButtonC",
+        REFRESH_BUTTON_C: "RefreshButtonC",
+        UP_ARROW_BUTTON_C: "UpArrowButtonC",
+        DOWN_ARROW_BUTTON_C: "DownArrowButtonC",
+        MONSTER_BUTTON_C: "MonsterButtonC",
+        // Cache Sheet Tags (DB/MyCS/MyKL)
+        ABILITIES_NAME_ID: "AbilitiesNameID",
+        ACTIVE_MON_TF: "ActiveMonTF",
+        IS_ARTIFACT: "IsArtifact",
+        ITEM_CR: "ItemCR",
+        AP: "AP",
+        NAME: "Name",
+        NAME_ID: "Name_ID",
+        WORN_ENC: "WornEnc",
+        ITEM_ENC: "ItemEnc",
+        FINAL_SK1: "FinalSk1",
+        FINAL_SK2: "FinalSk2",
+        SKTYP: "SkTyp",
+        META: "Meta",
+        TREASURE_COLOR: "TreasureColor",
+        TREASURE: "Treasure",
+        CHAOS_CRYSTAL_MAX_USES: "ChaosCrytstalMaxUses",
+        CHAOS_CRYSTAL: "ChaosCrystal",
+        GEM_COLOR: "GemColor",
+        GEM_DESC: "GemDesc",
+        NISH_TREM: "NishTrem",
+        NISH_CRIT: "NishCrit",
+        GM_AWARD: "GMAward",
+        MON_CUST_NAME: "MonCustName",
+        VAL: "Val",
+      },
+      row: {
+        // Core Sections
+        FROZEN_HEADER: "FrozenHeader",
+        NISH_ATR_R: "NishAtr_R",
+        ABILITY_START_BELOW_NISH_R: "AbilityStartBelowNish_R",
+        ABIL_TBL_START_R: "AbilTblStartR",
+        ABIL_TBL_END_R: "AbilTblEnd_R",
+        GEAR_TBL_HEADER_START_R: "GearTblHeaderStartR",
+        GEAR_TBL_START_R: "GearTblStart_R",
+        GEAR_TBL_END_R: "GearTblEnd_R",
+        UL_MONSTER_TBL: "ULMonsterTbl",
+        CUST_MON: "CustMon",
+        LAST_MON_R: "LastMon_R",
+        // Stat Block
+        NISH: "Nish",
+        MR: "MR",
+        META: "meta",
+        CHNL: "chnl",
+        LUCK_BOX: "LuckBox",
+        LUCK_PLUS: "LuckPlus",
+        ACT: "Act",
+        ACT_PLUS: "ActPlus",
+        VIT_TBL: "VitTbl",
+        HEALTH: "Health",
+        FOR: "For",
+        AGI: "Agi",
+        STR: "Str",
+        ARC: "Arc",
+        // Gear Section
+        GEAR_SPE: "GearSpe",
+        GEAR_STR: "GearStr",
+        GEAR_MR_TBL: "GearMRTbl",
+        GEAR_MR_CHECKBOX: "GearMRCheckBox",
+        GEAR_CARRY_TBL: "GearCarryTbl",
+        POSS_ENC_TOT: "PossEncTot",
+        POSS_AP_TOT: "PossAPTot",
+        // Sockets & Chaos
+        ASTRAL_GAUNT_HEADER_R: "AstralGauntHeader_R",
+        CHAOS_2ND_HEADER: "Chaos2ndHeader",
+        CHAOS_WRIST: "ChaosWrist",
+        CHAOS_1: "Chaos1",
+        SOCKETED_GEAR_HEADER: "SocketedGearHeader",
+        SOCKET_TBL_START: "SocketTblStart",
+        SOCKET_TBL_END: "SocketTblEnd",
+        // Layout
+        VER_UL: "VerUL",
+        BUTTON_R: "Button_R",
+        // Cache Sheet Tags (DB/MyCS/MyKL)
+        TABLE_FIRST_ROW: "TableFirstRow",
+        ROW_BEFORE_FIRST_DATA_ROW: "RowBeforeFirstDataRow",
+        MON_TBL_FIRST_R: "MonTblFirst_R",
+        MON_TBL_LAST_R: "MonTblLast_R",
+        CUST_MON_FIRST_R: "CustMonFirst_R",
+        RC: "RC",
+        LEVEL: "level",
+        PLAYER_NAME: "playerName",
+        CHAR_NAME: "charName",
+        SLOT: "slot",
+      },
+      cache: {
+        DB_ABILITIES: "dbAbilitiesFSData",
+        DB_CRIT: "dbCritFSData",
+        DB_ELEMENTS: "dbElementsFSData",
+        DB_GEAR: "dbGearFSData",
+        MY_CS_RACECLASS: "myCSRaceClassFSData",
+        MY_CS_LIST: "myCSListFSData",
+        MY_KL_KNOWN_ABILITIES: "myKLKnownAbilitiesFSData",
+      },
+      special: {
+        CALC_LAST_ROW: "Calc_LastRow",
+        CUSTOM_ABILITY_PREFIX: "⚡",
+      },
+    },
 
     // === Logging / Perf timers ===
     startTime:
       typeof performance !== "undefined" ? performance.now() : Date.now(),
     lastLogTime:
       typeof performance !== "undefined" ? performance.now() : Date.now(),
-
-    // === Tooltip runtime cache ===
-    tooltipElement: null,
-    tooltipTimeoutId: null,
 
     // === Core Data Arrays ===
     arr: [], // 2D array of data from the sheet
@@ -44,23 +248,20 @@
     monsterRollResultsHistory: {}, // Stores { rollId: { results: [...], originalAbilityRow: r, allTargetedRows_R: [...] } }
     currentSkRadioChecked: { r: null, c: null }, // Tracks coords of the single checked Sk1/Sk2 box
     buttonOrMenu: {
-      // Tracks the source of the current button or
-      // menu action
-      isNish: false, // Nish button pressed
-      isRoll: false, // Standard Roll button pressed
-      isFree: false, // Free button pressed
-      isLuck: false, // Luck button pressed
+      isNish: false,
+      isRoll: false,
+      isFree: false,
+      isLuck: false,
     },
     hiddenColumns: new Set(), // Stores indices of currently hidden columns
     hiddenRows: new Set(), // Stores indices of currently hidden rows
     plainTextLogEntries: [], // Array to store plain text log entries for GMScreen update
     isSendingLog: false, // Flag/Lock to prevent concurrent log sends
-    isDesignerMode: false, // Flag for designer mode access >>>
-    isCurrentMessageModalUserCloseable: true, // ADDED: Tracks if the message modal can be closed by user action
+    isDesignerMode: false, // Flag for designer mode access
+    isCurrentMessageModalUserCloseable: true,
     headerButtonCoords: new Set(), // Set to store "r,c" strings of button cells
-    hiddenColumns: new Set(), // Stores indices of currently hidden columns
+    validationLists: {}, // Caches valid inputs for certain columns (e.g., 'SkTyp')
 
-    //
     // === Character RaceClass Info ===
     characterInfo: {
       slotNum: "",
@@ -130,158 +331,163 @@
 
     // === Configuration & Definitions ===
     manualBorderSections: [
-      // Defines sections for applying manual borders post-render
-      // Each object: { r1, c1, r2, c2 (tags/indices), edges ('t'op, 'b'ottom, 'l'eft, 'r'ight), style? (CSS string) }
-      { r1: "Nish", c1: "ULNish", r2: "Nish", c2: "Nish", edges: "br" },
-      { r1: "MR", c1: "ULMR", r2: "MR", c2: "MR", edges: "br" },
-      { r1: "meta", c1: "ULMeta", r2: "chnl", c2: "B", edges: "r" },
       {
-        r1: "LuckBox",
-        c1: "ULLuckBox",
-        r2: "LuckPlus",
-        c2: "LuckBox",
-        edges: "r",
-      },
-      { r1: "Act", c1: "ULAct", r2: "ActPlus", c2: "ActTot", edges: "r" },
-      {
-        r1: "Health",
-        c1: "vitPlus",
-        r2: "VitTbl",
-        c2: "VitNowPercent",
+        r1: gUI.tags.row.NISH,
+        c1: gUI.tags.col.ULNISH,
+        r2: gUI.tags.row.NISH,
+        c2: gUI.tags.col.NISH,
         edges: "br",
       },
       {
-        r1: "VerUL",
-        c1: "CodeVer",
-        r2: "FrozenHeader",
-        c2: "CodeVer",
+        r1: gUI.tags.row.MR,
+        c1: gUI.tags.col.ULMR,
+        r2: gUI.tags.row.MR,
+        c2: gUI.tags.col.MR,
+        edges: "br",
+      },
+      {
+        r1: gUI.tags.row.META,
+        c1: gUI.tags.col.ULMETA,
+        r2: gUI.tags.row.CHNL,
+        c2: gUI.tags.col.B,
         edges: "r",
       },
       {
-        r1: "FrozenHeader",
-        c1: "PermMorph1",
-        r2: "AbilTblEnd_R",
-        c2: "Regain",
-        edges: "br",
-      },
-      {
-        r1: "FrozenHeader",
-        c1: "PossNum",
-        r2: "AbilTblEnd_R",
-        c2: "PossAPTot",
-        edges: "br",
-      },
-      {
-        r1: "ULMonsterTbl",
-        c1: "NumMon",
-        r2: "LastMon_R",
-        c2: "MonSize",
-        edges: "br",
-      },
-      {
-        r1: "AstralGauntHeader_R",
-        c1: "AstralGauntletSlot",
-        r2: "AstralGauntHeader_R",
-        c2: "AstralGauntletHeaderEndC",
+        r1: gUI.tags.row.LUCK_BOX,
+        c1: gUI.tags.col.ULLUCKBOX,
+        r2: gUI.tags.row.LUCK_PLUS,
+        c2: gUI.tags.col.LUCK_BOX,
         edges: "r",
       },
       {
-        r1: "Chaos2ndHeader",
-        c1: "AstralGauntletSlot",
-        r2: "ChaosWrist",
-        c2: "LastC",
+        r1: gUI.tags.row.ACT,
+        c1: gUI.tags.col.ULACT,
+        r2: gUI.tags.row.ACT_PLUS,
+        c2: gUI.tags.col.ACT_TOT,
+        edges: "r",
+      },
+      {
+        r1: gUI.tags.row.HEALTH,
+        c1: gUI.tags.col.VIT_PLUS,
+        r2: gUI.tags.row.VIT_TBL,
+        c2: gUI.tags.col.VIT_NOW_PERCENT,
         edges: "br",
       },
       {
-        r1: "SocketedGearHeader",
-        c1: "SocketedGearSlot",
-        r2: "SocketTblEnd",
-        c2: "LastC",
-        edges: "br",
-      },
-
-      {
-        r1: "GearTblHeaderStartR",
-        c1: "PermMorph1",
-        r2: "GearTblEnd_R",
-        c2: "Regain",
-        edges: "br",
+        r1: gUI.tags.row.VER_UL,
+        c1: gUI.tags.col.CODE_VER,
+        r2: gUI.tags.row.FROZEN_HEADER,
+        c2: gUI.tags.col.CODE_VER,
+        edges: "r",
       },
       {
-        r1: "GearTblHeaderStartR",
-        c1: "PossNum",
-        r2: "GearTblEnd_R",
-        c2: "PossAPTot",
+        r1: gUI.tags.row.FROZEN_HEADER,
+        c1: gUI.tags.col.PERM_MORPH_1,
+        r2: gUI.tags.row.ABIL_TBL_END_R,
+        c2: gUI.tags.col.REGAIN,
         edges: "br",
       },
       {
-        r1: "GearSpe",
-        c1: "SpeedHeader",
-        r2: "GearStr",
-        c2: "GearPlusMR",
+        r1: gUI.tags.row.FROZEN_HEADER,
+        c1: gUI.tags.col.POSS_NUM,
+        r2: gUI.tags.row.ABIL_TBL_END_R,
+        c2: gUI.tags.col.POSS_AP_TOT,
         edges: "br",
       },
       {
-        r1: "GearMRTbl",
-        c1: "MRHeader",
-        r2: "GearMRTbl",
-        c2: "MRHeaderEndC",
+        r1: gUI.tags.row.UL_MONSTER_TBL,
+        c1: gUI.tags.col.NUM_MON,
+        r2: gUI.tags.row.LAST_MON_R,
+        c2: gUI.tags.col.MON_SIZE,
+        edges: "br",
+      },
+      {
+        r1: gUI.tags.row.ASTRAL_GAUNT_HEADER_R,
+        c1: gUI.tags.col.ASTRAL_GAUNTLET_SLOT,
+        r2: gUI.tags.row.ASTRAL_GAUNT_HEADER_R,
+        c2: gUI.tags.col.ASTRAL_GAUNTLET_HEADER_END_C,
+        edges: "r",
+      },
+      {
+        r1: gUI.tags.row.CHAOS_2ND_HEADER,
+        c1: gUI.tags.col.ASTRAL_GAUNTLET_SLOT,
+        r2: gUI.tags.row.CHAOS_WRIST,
+        c2: gUI.tags.col.LAST_C,
+        edges: "br",
+      },
+      {
+        r1: gUI.tags.row.SOCKETED_GEAR_HEADER,
+        c1: gUI.tags.col.SOCKETED_GEAR_SLOT,
+        r2: gUI.tags.row.SOCKET_TBL_END,
+        c2: gUI.tags.col.LAST_C,
+        edges: "br",
+      },
+      {
+        r1: gUI.tags.row.GEAR_TBL_HEADER_START_R,
+        c1: gUI.tags.col.PERM_MORPH_1,
+        r2: gUI.tags.row.GEAR_TBL_END_R,
+        c2: gUI.tags.col.REGAIN,
+        edges: "br",
+      },
+      {
+        r1: gUI.tags.row.GEAR_TBL_HEADER_START_R,
+        c1: gUI.tags.col.POSS_NUM,
+        r2: gUI.tags.row.GEAR_TBL_END_R,
+        c2: gUI.tags.col.POSS_AP_TOT,
+        edges: "br",
+      },
+      {
+        r1: gUI.tags.row.GEAR_SPE,
+        c1: gUI.tags.col.SPEED_HEADER,
+        r2: gUI.tags.row.GEAR_STR,
+        c2: gUI.tags.col.GEAR_PLUS_MR,
+        edges: "br",
+      },
+      {
+        r1: gUI.tags.row.GEAR_MR_TBL,
+        c1: gUI.tags.col.MR_HEADER,
+        r2: gUI.tags.row.GEAR_MR_TBL,
+        c2: gUI.tags.col.MR_HEADER_END_C,
         edges: "b",
       },
       {
-        r1: "GearCarryTbl",
-        c1: "MRHeader",
-        r2: "GearCarryTbl",
-        c2: "MRHeaderEndC",
+        r1: gUI.tags.row.GEAR_CARRY_TBL,
+        c1: gUI.tags.col.MR_HEADER,
+        r2: gUI.tags.row.GEAR_CARRY_TBL,
+        c2: gUI.tags.col.MR_HEADER_END_C,
         edges: "b",
       },
       {
-        r1: "GearMRTbl",
-        c1: "GearMRCol1",
-        r2: "GearCarryTbl",
-        c2: "LastC",
+        r1: gUI.tags.row.GEAR_MR_TBL,
+        c1: gUI.tags.col.GEAR_MR_COL_1,
+        r2: gUI.tags.row.GEAR_CARRY_TBL,
+        c2: gUI.tags.col.LAST_C,
         edges: "br",
       },
       {
-        r1: "PossAPTot",
-        c1: "CurrentEncHeader",
-        r2: "PossAPTot",
-        c2: "PossEncTotEndC",
+        r1: gUI.tags.row.POSS_AP_TOT,
+        c1: gUI.tags.col.CURRENT_ENC_HEADER,
+        r2: gUI.tags.row.POSS_AP_TOT,
+        c2: gUI.tags.col.POSS_ENC_TOT_END_C,
         edges: "br",
       },
       {
-        r1: "PossEncTot",
-        c1: "GearAPTotHeader",
-        r2: "PossEncTot",
-        c2: "LastC",
+        r1: gUI.tags.row.POSS_ENC_TOT,
+        c1: gUI.tags.col.GEAR_AP_TOT_HEADER,
+        r2: gUI.tags.row.POSS_ENC_TOT,
+        c2: gUI.tags.col.LAST_C,
         edges: "br",
       },
-      // Add { style: '1px solid #888' } to specific objects if dark grey is desired
     ],
-    initialHiddenCols: [
-      // Defines columns initially hidden on load from c1 to c2 (if one column both c1 and c2 should be same value)
-      { c1: "Key", c2: "Key" },
-      // { c1: 0, c2: 0 }, // Example: Single column using index
-    ],
-    gearTblCols: [
-      // Defines columns belonging to the Gear section (for toggling)
-      { c1: "PossNum", c2: "PossAPTot" },
-    ],
+    initialHiddenCols: [{ c1: gUI.tags.col.KEY, c2: gUI.tags.col.KEY }],
+    gearTblCols: [{ c1: gUI.tags.col.POSS_NUM, c2: gUI.tags.col.POSS_AP_TOT }],
     permMorphCols: [
-      // Defines columns belonging to the PermMorph section (for toggling)
-      { c1: "PermMorph1", c2: "PermMorph1" },
-      { c1: "PermMorph2", c2: "PermMorph2" },
+      { c1: gUI.tags.col.PERM_MORPH_1, c2: gUI.tags.col.PERM_MORPH_1 },
+      { c1: gUI.tags.col.PERM_MORPH_2, c2: gUI.tags.col.PERM_MORPH_2 },
     ],
-    initialHiddenRows: [
-      // Defines rows initially hidden on load
-      { r1: "Agi", r2: "Arc" },
-      // { r1: 0, r2: 1 } // Example: Range using indices
-    ],
+    initialHiddenRows: [{ r1: gUI.tags.row.AGI, r2: gUI.tags.row.ARC }],
     dropDownBox: [
-      // Defines ranges for dropdown cells and their choices
-      // NOTE: The dropdown abilityNames are created dynamically by fFetchAndApplyAbilityDropdowns
       {
-        // Is On column
         choices: [
           "",
           "Y",
@@ -302,10 +508,16 @@
           "E",
           "*",
         ],
-        ranges: [{ r1: "NishAtr_R", c1: "On", r2: "AbilTblEnd_R", c2: "On" }],
+        ranges: [
+          {
+            r1: gUI.tags.row.NISH_ATR_R,
+            c1: gUI.tags.col.ON,
+            r2: gUI.tags.row.ABIL_TBL_END_R,
+            c2: gUI.tags.col.ON,
+          },
+        ],
       },
       {
-        // Monster # column
         choices: [
           "",
           1,
@@ -340,354 +552,510 @@
           30,
         ],
         ranges: [
-          { r1: "CustMon", c1: "NumMon", r2: "LastMon_R", c2: "NumMon" },
+          {
+            r1: gUI.tags.row.CUST_MON,
+            c1: gUI.tags.col.NUM_MON,
+            r2: gUI.tags.row.LAST_MON_R,
+            c2: gUI.tags.col.NUM_MON,
+          },
         ],
       },
     ],
     fontColorRange: [
-      // Defines ranges for applying specific font colors post-render
       {
-        color: "#FF0000", // Red
+        color: "#FF0000",
         ranges: [
-          { r1: "FrozenHeader", c1: "R", r2: "FrozenHeader", c2: "R" },
-          { r1: "ULMonsterTbl", c1: "MonAtk", r2: "LastMon_R", c2: "MonDmg" },
+          {
+            r1: gUI.tags.row.FROZEN_HEADER,
+            c1: gUI.tags.col.R,
+            r2: gUI.tags.row.FROZEN_HEADER,
+            c2: gUI.tags.col.R,
+          },
+          {
+            r1: gUI.tags.row.UL_MONSTER_TBL,
+            c1: gUI.tags.col.MON_ATK,
+            r2: gUI.tags.row.LAST_MON_R,
+            c2: gUI.tags.col.MON_DMG,
+          },
         ],
       },
       {
-        color: "#FFA500", // Orange
-        ranges: [{ r1: "FrozenHeader", c1: "O", r2: "FrozenHeader", c2: "O" }],
+        color: "#FFA500",
+        ranges: [
+          {
+            r1: gUI.tags.row.FROZEN_HEADER,
+            c1: gUI.tags.col.O,
+            r2: gUI.tags.row.FROZEN_HEADER,
+            c2: gUI.tags.col.O,
+          },
+        ],
       },
       {
-        color: "#fcba03", // Gold
-        ranges: [{ r1: "FrozenHeader", c1: "Y", r2: "FrozenHeader", c2: "Y" }],
+        color: "#fcba03",
+        ranges: [
+          {
+            r1: gUI.tags.row.FROZEN_HEADER,
+            c1: gUI.tags.col.Y,
+            r2: gUI.tags.row.FROZEN_HEADER,
+            c2: gUI.tags.col.Y,
+          },
+        ],
       },
       {
-        color: "#008000", // Green
-        ranges: [{ r1: "FrozenHeader", c1: "G", r2: "FrozenHeader", c2: "G" }],
+        color: "#008000",
+        ranges: [
+          {
+            r1: gUI.tags.row.FROZEN_HEADER,
+            c1: gUI.tags.col.G,
+            r2: gUI.tags.row.FROZEN_HEADER,
+            c2: gUI.tags.col.G,
+          },
+        ],
       },
       {
-        color: "#0000FF", // Blue
-        ranges: [{ r1: "FrozenHeader", c1: "B", r2: "FrozenHeader", c2: "B" }],
+        color: "#0000FF",
+        ranges: [
+          {
+            r1: gUI.tags.row.FROZEN_HEADER,
+            c1: gUI.tags.col.B,
+            r2: gUI.tags.row.FROZEN_HEADER,
+            c2: gUI.tags.col.B,
+          },
+        ],
       },
     ],
-
-    // Range //////////////////////////////////////////////////////////////////////
-    // Named ranges for easy access to specific cells/areas
     range: {
       abilityTable: [
         {
-          r1: "AbilTblStartR",
-          c1: "PermMorph1",
-          r2: "AbilTblEnd_R",
-          c2: "Regain",
+          r1: gUI.tags.row.ABIL_TBL_START_R,
+          c1: gUI.tags.col.PERM_MORPH_1,
+          r2: gUI.tags.row.ABIL_TBL_END_R,
+          c2: gUI.tags.col.REGAIN,
         },
         {
-          r1: "GearTblStart_R",
-          c1: "PermMorph1",
-          r2: "GearTblEnd_R",
-          c2: "Regain",
+          r1: gUI.tags.row.GEAR_TBL_START_R,
+          c1: gUI.tags.col.PERM_MORPH_1,
+          r2: gUI.tags.row.GEAR_TBL_END_R,
+          c2: gUI.tags.col.REGAIN,
         },
       ],
       gearTable: [
         {
-          r1: "AbilTblStartR",
-          c1: "PossNum",
-          r2: "AbilTblEnd_R",
-          c2: "PossAPTot",
+          r1: gUI.tags.row.ABIL_TBL_START_R,
+          c1: gUI.tags.col.POSS_NUM,
+          r2: gUI.tags.row.ABIL_TBL_END_R,
+          c2: gUI.tags.col.POSS_AP_TOT,
         },
         {
-          r1: "GearTblStart_R",
-          c1: "PossNum",
-          r2: "GearTblEnd_R",
-          c2: "PossAPTot",
+          r1: gUI.tags.row.GEAR_TBL_START_R,
+          c1: gUI.tags.col.POSS_NUM,
+          r2: gUI.tags.row.GEAR_TBL_END_R,
+          c2: gUI.tags.col.POSS_AP_TOT,
         },
       ],
-      // entireAbilityNGearTables below is a NECESSARY total table of the above two tables abilityTable and gearTable
       entireAbilityNGearTables: [
-        { r1: "AbilTblStartR", c1: "FirstC", r2: "AbilTblEnd_R", c2: "LastC" },
         {
-          r1: "GearTblHeaderStartR",
-          c1: "FirstC",
-          r2: "GearTblEnd_R",
-          c2: "LastC",
+          r1: gUI.tags.row.ABIL_TBL_START_R,
+          c1: gUI.tags.col.FIRST_C,
+          r2: gUI.tags.row.ABIL_TBL_END_R,
+          c2: gUI.tags.col.LAST_C,
+        },
+        {
+          r1: gUI.tags.row.GEAR_TBL_HEADER_START_R,
+          c1: gUI.tags.col.FIRST_C,
+          r2: gUI.tags.row.GEAR_TBL_END_R,
+          c2: gUI.tags.col.LAST_C,
         },
       ],
       morphs: [
-        { r1: "AbilTblStartR", c1: "Morph1", r2: "AbilTblEnd_R", c2: "Morph1" },
         {
-          r1: "GearTblStart_R",
-          c1: "Morph1",
-          r2: "GearTblEnd_R",
-          c2: "Morph1",
+          r1: gUI.tags.row.ABIL_TBL_START_R,
+          c1: gUI.tags.col.MORPH_1,
+          r2: gUI.tags.row.ABIL_TBL_END_R,
+          c2: gUI.tags.col.MORPH_1,
         },
-        { r1: "AbilTblStartR", c1: "Morph2", r2: "AbilTblEnd_R", c2: "Morph2" },
         {
-          r1: "GearTblStart_R",
-          c1: "Morph2",
-          r2: "GearTblEnd_R",
-          c2: "Morph2",
+          r1: gUI.tags.row.GEAR_TBL_START_R,
+          c1: gUI.tags.col.MORPH_1,
+          r2: gUI.tags.row.GEAR_TBL_END_R,
+          c2: gUI.tags.col.MORPH_1,
+        },
+        {
+          r1: gUI.tags.row.ABIL_TBL_START_R,
+          c1: gUI.tags.col.MORPH_2,
+          r2: gUI.tags.row.ABIL_TBL_END_R,
+          c2: gUI.tags.col.MORPH_2,
+        },
+        {
+          r1: gUI.tags.row.GEAR_TBL_START_R,
+          c1: gUI.tags.col.MORPH_2,
+          r2: gUI.tags.row.GEAR_TBL_END_R,
+          c2: gUI.tags.col.MORPH_2,
         },
       ],
       isONDur: [
-        { r1: "NishAtr_R", c1: "On", r2: "AbilTblEnd_R", c2: "On" },
-        { r1: "GearTblStart_R", c1: "On", r2: "GearTblEnd_R", c2: "On" },
+        {
+          r1: gUI.tags.row.NISH_ATR_R,
+          c1: gUI.tags.col.ON,
+          r2: gUI.tags.row.ABIL_TBL_END_R,
+          c2: gUI.tags.col.ON,
+        },
+        {
+          r1: gUI.tags.row.GEAR_TBL_START_R,
+          c1: gUI.tags.col.ON,
+          r2: gUI.tags.row.GEAR_TBL_END_R,
+          c2: gUI.tags.col.ON,
+        },
       ],
       abilNameNoNish: [
         {
-          r1: "AbilityStartBelowNish_R",
-          c1: "Ability",
-          r2: "AbilTblEnd_R",
-          c2: "Ability",
+          r1: gUI.tags.row.ABILITY_START_BELOW_NISH_R,
+          c1: gUI.tags.col.ABILITY,
+          r2: gUI.tags.row.ABIL_TBL_END_R,
+          c2: gUI.tags.col.ABILITY,
         },
         {
-          r1: "GearTblStart_R",
-          c1: "Ability",
-          r2: "GearTblEnd_R",
-          c2: "Ability",
+          r1: gUI.tags.row.GEAR_TBL_START_R,
+          c1: gUI.tags.col.ABILITY,
+          r2: gUI.tags.row.GEAR_TBL_END_R,
+          c2: gUI.tags.col.ABILITY,
         },
       ],
       sk1sk2CheckBoxes: [
-        // Defines the Sk1/Sk2 checkbox columns (treated as radio buttons)
         {
-          r1: "NishAtr_R",
-          c1: "Sk1ChkBox",
-          r2: "AbilTblEnd_R",
-          c2: "Sk1ChkBox",
+          r1: gUI.tags.row.NISH_ATR_R,
+          c1: gUI.tags.col.SK_1_CHK_BOX,
+          r2: gUI.tags.row.ABIL_TBL_END_R,
+          c2: gUI.tags.col.SK_1_CHK_BOX,
         },
         {
-          r1: "NishAtr_R",
-          c1: "Sk2ChkBox",
-          r2: "AbilTblEnd_R",
-          c2: "Sk2ChkBox",
+          r1: gUI.tags.row.NISH_ATR_R,
+          c1: gUI.tags.col.SK_2_CHK_BOX,
+          r2: gUI.tags.row.ABIL_TBL_END_R,
+          c2: gUI.tags.col.SK_2_CHK_BOX,
         },
         {
-          r1: "GearTblStart_R",
-          c1: "Sk1ChkBox",
-          r2: "GearTblEnd_R",
-          c2: "Sk1ChkBox",
+          r1: gUI.tags.row.GEAR_TBL_START_R,
+          c1: gUI.tags.col.SK_1_CHK_BOX,
+          r2: gUI.tags.row.GEAR_TBL_END_R,
+          c2: gUI.tags.col.SK_1_CHK_BOX,
         },
         {
-          r1: "GearTblStart_R",
-          c1: "Sk2ChkBox",
-          r2: "GearTblEnd_R",
-          c2: "Sk2ChkBox",
+          r1: gUI.tags.row.GEAR_TBL_START_R,
+          c1: gUI.tags.col.SK_2_CHK_BOX,
+          r2: gUI.tags.row.GEAR_TBL_END_R,
+          c2: gUI.tags.col.SK_2_CHK_BOX,
         },
       ],
       gearNumCol: [
-        { r1: "NishAtr_R", c1: "PossNum", r2: "AbilTblEnd_R", c2: "PossNum" },
         {
-          r1: "GearTblStart_R",
-          c1: "PossNum",
-          r2: "GearTblEnd_R",
-          c2: "PossNum",
+          r1: gUI.tags.row.NISH_ATR_R,
+          c1: gUI.tags.col.POSS_NUM,
+          r2: gUI.tags.row.ABIL_TBL_END_R,
+          c2: gUI.tags.col.POSS_NUM,
+        },
+        {
+          r1: gUI.tags.row.GEAR_TBL_START_R,
+          c1: gUI.tags.col.POSS_NUM,
+          r2: gUI.tags.row.GEAR_TBL_END_R,
+          c2: gUI.tags.col.POSS_NUM,
         },
       ],
       gearIsWornCol: [
-        { r1: "NishAtr_R", c1: "PossWorn", r2: "AbilTblEnd_R", c2: "PossWorn" },
         {
-          r1: "GearTblStart_R",
-          c1: "PossWorn",
-          r2: "GearTblEnd_R",
-          c2: "PossWorn",
+          r1: gUI.tags.row.NISH_ATR_R,
+          c1: gUI.tags.col.POSS_WORN,
+          r2: gUI.tags.row.ABIL_TBL_END_R,
+          c2: gUI.tags.col.POSS_WORN,
+        },
+        {
+          r1: gUI.tags.row.GEAR_TBL_START_R,
+          c1: gUI.tags.col.POSS_WORN,
+          r2: gUI.tags.row.GEAR_TBL_END_R,
+          c2: gUI.tags.col.POSS_WORN,
         },
       ],
       gearPercOffCol: [
         {
-          r1: "NishAtr_R",
-          c1: "PossPerOff",
-          r2: "AbilTblEnd_R",
-          c2: "PossPerOff",
+          r1: gUI.tags.row.NISH_ATR_R,
+          c1: gUI.tags.col.POSS_PER_OFF,
+          r2: gUI.tags.row.ABIL_TBL_END_R,
+          c2: gUI.tags.col.POSS_PER_OFF,
         },
         {
-          r1: "GearTblStart_R",
-          c1: "PossPerOff",
-          r2: "GearTblEnd_R",
-          c2: "PossPerOff",
+          r1: gUI.tags.row.GEAR_TBL_START_R,
+          c1: gUI.tags.col.POSS_PER_OFF,
+          r2: gUI.tags.row.GEAR_TBL_END_R,
+          c2: gUI.tags.col.POSS_PER_OFF,
         },
       ],
       gearEncCol: [
-        { r1: "NishAtr_R", c1: "PossEnc", r2: "AbilTblEnd_R", c2: "PossEnc" },
         {
-          r1: "GearTblStart_R",
-          c1: "PossEnc",
-          r2: "GearTblEnd_R",
-          c2: "PossEnc",
+          r1: gUI.tags.row.NISH_ATR_R,
+          c1: gUI.tags.col.POSS_ENC,
+          r2: gUI.tags.row.ABIL_TBL_END_R,
+          c2: gUI.tags.col.POSS_ENC,
+        },
+        {
+          r1: gUI.tags.row.GEAR_TBL_START_R,
+          c1: gUI.tags.col.POSS_ENC,
+          r2: gUI.tags.row.GEAR_TBL_END_R,
+          c2: gUI.tags.col.POSS_ENC,
         },
       ],
       gearApTotalCol: [
         {
-          r1: "NishAtr_R",
-          c1: "PossAPTot",
-          r2: "AbilTblEnd_R",
-          c2: "PossAPTot",
+          r1: gUI.tags.row.NISH_ATR_R,
+          c1: gUI.tags.col.POSS_AP_TOT,
+          r2: gUI.tags.row.ABIL_TBL_END_R,
+          c2: gUI.tags.col.POSS_AP_TOT,
         },
         {
-          r1: "GearTblStart_R",
-          c1: "PossAPTot",
-          r2: "GearTblEnd_R",
-          c2: "PossAPTot",
+          r1: gUI.tags.row.GEAR_TBL_START_R,
+          c1: gUI.tags.col.POSS_AP_TOT,
+          r2: gUI.tags.row.GEAR_TBL_END_R,
+          c2: gUI.tags.col.POSS_AP_TOT,
         },
       ],
-      monsters: { r1: "CustMon", c1: "NumMon", r2: "LastMon_R", c2: "MonSize" },
-      currentNish: { r1: "Nish", c1: "Nish", r2: "Nish", c2: "Nish" },
-      meta: { r1: "meta", c1: "R", r2: "meta", c2: "B" },
-      metaChannel: { r1: "chnl", c1: "R", r2: "chnl", c2: "B" },
-      luckBox: { r1: "LuckBox", c1: "LuckBox", r2: "LuckBox", c2: "LuckBox" },
-      luckBoxPlus: {
-        r1: "LuckPlus",
-        c1: "LuckBox",
-        r2: "LuckPlus",
-        c2: "LuckBox",
+      monsters: {
+        r1: gUI.tags.row.CUST_MON,
+        c1: gUI.tags.col.NUM_MON,
+        r2: gUI.tags.row.LAST_MON_R,
+        c2: gUI.tags.col.MON_SIZE,
       },
-      actTotal: { r1: "Act", c1: "ActTot", r2: "Act", c2: "ActTot" },
-      actPlus: { r1: "ActPlus", c1: "ActTot", r2: "ActPlus", c2: "ActTot" },
-      fortitudeSk1: { r1: "For", c1: "Sk1", r2: "For", c2: "Sk1" },
-      vitMax: { r1: "VitTbl", c1: "vitMax", r2: "VitTbl", c2: "vitMax" },
-      vitMaxPlus: { r1: "VitTbl", c1: "vitPlus", r2: "VitTbl", c2: "vitPlus" },
-      vit1stWnds: { r1: "VitTbl", c1: "vit1st", r2: "VitTbl", c2: "vit1st" },
-      vit2ndWnds: { r1: "VitTbl", c1: "vit2nd", r2: "VitTbl", c2: "vit2nd" },
-      vit3rdWnds: { r1: "VitTbl", c1: "vit3rd", r2: "VitTbl", c2: "vit3rd" },
-      vit1stTo3rd: { r1: "VitTbl", c1: "vit1st", r2: "VitTbl", c2: "vit3rd" },
-      vitNow: { r1: "VitTbl", c1: "vitNow", r2: "VitTbl", c2: "vitNow" },
+      currentNish: {
+        r1: gUI.tags.row.NISH,
+        c1: gUI.tags.col.NISH,
+        r2: gUI.tags.row.NISH,
+        c2: gUI.tags.col.NISH,
+      },
+      meta: {
+        r1: gUI.tags.row.META,
+        c1: gUI.tags.col.R,
+        r2: gUI.tags.row.META,
+        c2: gUI.tags.col.B,
+      },
+      metaChannel: {
+        r1: gUI.tags.row.CHNL,
+        c1: gUI.tags.col.R,
+        r2: gUI.tags.row.CHNL,
+        c2: gUI.tags.col.B,
+      },
+      luckBox: {
+        r1: gUI.tags.row.LUCK_BOX,
+        c1: gUI.tags.col.LUCK_BOX,
+        r2: gUI.tags.row.LUCK_BOX,
+        c2: gUI.tags.col.LUCK_BOX,
+      },
+      luckBoxPlus: {
+        r1: gUI.tags.row.LUCK_PLUS,
+        c1: gUI.tags.col.LUCK_BOX,
+        r2: gUI.tags.row.LUCK_PLUS,
+        c2: gUI.tags.col.LUCK_BOX,
+      },
+      actTotal: {
+        r1: gUI.tags.row.ACT,
+        c1: gUI.tags.col.ACT_TOT,
+        r2: gUI.tags.row.ACT,
+        c2: gUI.tags.col.ACT_TOT,
+      },
+      actPlus: {
+        r1: gUI.tags.row.ACT_PLUS,
+        c1: gUI.tags.col.ACT_TOT,
+        r2: gUI.tags.row.ACT_PLUS,
+        c2: gUI.tags.col.ACT_TOT,
+      },
+      fortitudeSk1: {
+        r1: gUI.tags.row.FOR,
+        c1: gUI.tags.col.SK_1,
+        r2: gUI.tags.row.FOR,
+        c2: gUI.tags.col.SK_1,
+      },
+      vitMax: {
+        r1: gUI.tags.row.VIT_TBL,
+        c1: gUI.tags.col.VIT_MAX,
+        r2: gUI.tags.row.VIT_TBL,
+        c2: gUI.tags.col.VIT_MAX,
+      },
+      vitMaxPlus: {
+        r1: gUI.tags.row.VIT_TBL,
+        c1: gUI.tags.col.VIT_PLUS,
+        r2: gUI.tags.row.VIT_TBL,
+        c2: gUI.tags.col.VIT_PLUS,
+      },
+      vit1stWnds: {
+        r1: gUI.tags.row.VIT_TBL,
+        c1: gUI.tags.col.VIT_1ST,
+        r2: gUI.tags.row.VIT_TBL,
+        c2: gUI.tags.col.VIT_1ST,
+      },
+      vit2ndWnds: {
+        r1: gUI.tags.row.VIT_TBL,
+        c1: gUI.tags.col.VIT_2ND,
+        r2: gUI.tags.row.VIT_TBL,
+        c2: gUI.tags.col.VIT_2ND,
+      },
+      vit3rdWnds: {
+        r1: gUI.tags.row.VIT_TBL,
+        c1: gUI.tags.col.VIT_3RD,
+        r2: gUI.tags.row.VIT_TBL,
+        c2: gUI.tags.col.VIT_3RD,
+      },
+      vit1stTo3rd: {
+        r1: gUI.tags.row.VIT_TBL,
+        c1: gUI.tags.col.VIT_1ST,
+        r2: gUI.tags.row.VIT_TBL,
+        c2: gUI.tags.col.VIT_3RD,
+      },
+      vitNow: {
+        r1: gUI.tags.row.VIT_TBL,
+        c1: gUI.tags.col.VIT_NOW,
+        r2: gUI.tags.row.VIT_TBL,
+        c2: gUI.tags.col.VIT_NOW,
+      },
       vitNowPercent: {
-        r1: "VitTbl",
-        c1: "VitNowPercent",
-        r2: "VitTbl",
-        c2: "VitNowPercent",
+        r1: gUI.tags.row.VIT_TBL,
+        c1: gUI.tags.col.VIT_NOW_PERCENT,
+        r2: gUI.tags.row.VIT_TBL,
+        c2: gUI.tags.col.VIT_NOW_PERCENT,
       },
       chaosGems: {
-        r1: "Chaos1",
-        c1: "ChaosUses",
-        r2: "ChaosWrist",
-        c2: "ChaosAbility",
+        r1: gUI.tags.row.CHAOS_1,
+        c1: gUI.tags.col.CHAOS_USES,
+        r2: gUI.tags.row.CHAOS_WRIST,
+        c2: gUI.tags.col.CHAOS_ABILITY,
       },
       socketedGear: {
-        r1: "SocketTblStart",
-        c1: "SocketedGear",
-        r2: "SocketTblEnd",
-        c2: "SocketedGems",
+        r1: gUI.tags.row.SOCKET_TBL_START,
+        c1: gUI.tags.col.SOCKETED_GEAR,
+        r2: gUI.tags.row.SOCKET_TBL_END,
+        c2: gUI.tags.col.SOCKETED_GEMS,
       },
       currentEnc: {
-        r1: "PossEncTot",
-        c1: "PossEncTot",
-        r2: "PossEncTot",
-        c2: "PossEncTot",
+        r1: gUI.tags.row.POSS_ENC_TOT,
+        c1: gUI.tags.col.POSS_ENC_TOT,
+        r2: gUI.tags.row.POSS_ENC_TOT,
+        c2: gUI.tags.col.POSS_ENC_TOT,
       },
       gearAPTotal: {
-        r1: "PossAPTot",
-        c1: "PossGrandAPTot",
-        r2: "PossAPTot",
-        c2: "PossGrandAPTot",
+        r1: gUI.tags.row.POSS_AP_TOT,
+        c1: gUI.tags.col.POSS_GRAND_AP_TOT,
+        r2: gUI.tags.row.POSS_AP_TOT,
+        c2: gUI.tags.col.POSS_GRAND_AP_TOT,
       },
       abilityNameCells: [
-        { r1: "NishAtr_R", c1: "Ability", r2: "AbilTblEnd_R", c2: "Ability" },
         {
-          r1: "GearTblStart_R",
-          c1: "Ability",
-          r2: "GearTblEnd_R",
-          c2: "Ability",
+          r1: gUI.tags.row.NISH_ATR_R,
+          c1: gUI.tags.col.ABILITY,
+          r2: gUI.tags.row.ABIL_TBL_END_R,
+          c2: gUI.tags.col.ABILITY,
+        },
+        {
+          r1: gUI.tags.row.GEAR_TBL_START_R,
+          c1: gUI.tags.col.ABILITY,
+          r2: gUI.tags.row.GEAR_TBL_END_R,
+          c2: gUI.tags.col.ABILITY,
         },
       ],
     },
     rangeCSList: {
       abilitiesNameID: {
-        r1: "TableFirstRow",
-        c1: "AbilitiesNameID",
-        r2: "Calc_LastRow",
-        c2: "AbilitiesNameID",
-      }, // Calc_LastRow is a flag not a tag
+        r1: gUI.tags.row.TABLE_FIRST_ROW,
+        c1: gUI.tags.col.ABILITIES_NAME_ID,
+        r2: gUI.tags.special.CALC_LAST_ROW,
+        c2: gUI.tags.col.ABILITIES_NAME_ID,
+      },
     },
     rangeDB: {
       monstersDB: {
-        r1: "MonTblFirst_R",
-        c1: "ActiveMonTF",
-        r2: "MonTblLast_R",
-        c2: "Notes",
+        r1: gUI.tags.row.MON_TBL_FIRST_R,
+        c1: gUI.tags.col.ACTIVE_MON_TF,
+        r2: gUI.tags.row.MON_TBL_LAST_R,
+        c2: gUI.tags.col.NOTES,
       },
     },
     list: {
       // Static lists and values
-      skTyp: ["Atr", "Sk", "Atk", "DMG", "Def", "AR", "Str", "TC"], // Note free, luck, un, unSk are not skill Types and dealth with elsewhere
-      metaColor: ["R", "O", "Y", "G", "B"],
-      metaFull: [5, 4, 3, 2, 1], // Maximums for each meta color
+      skTyp: ["Atr", "Sk", "Atk", "DMG", "Def", "AR", "Str", "TC"],
+      metaColor: [
+        gUI.tags.col.R,
+        gUI.tags.col.O,
+        gUI.tags.col.Y,
+        gUI.tags.col.G,
+        gUI.tags.col.B,
+      ],
+      metaFull: [5, 4, 3, 2, 1],
       luckBoxMax: 5,
       actMax: 5,
       clearAbilityColTags_EmptyString: [
-        "PermMorph1",
-        "Morph1",
-        "Sk1Typ",
-        "Sk1",
-        "On",
-        "Ability",
-        "Condition",
-        "Sk2",
-        "Sk2Typ",
-        "Morph2",
-        "PermMorph2",
-        "Ver",
-        "Notes",
-        "Pic",
-        "Act",
-        "Dur",
-        "Rng",
-        "MetaCost",
-        "Uses",
-        "Regain",
-        "PossNum",
-        "PossName",
-        "PossEnc",
-        "PossCrEa",
-        "PossPerOff",
-        "PossCrTot",
-        "PossAPEa",
-        "PossAPTot",
+        gUI.tags.col.PERM_MORPH_1,
+        gUI.tags.col.MORPH_1,
+        gUI.tags.col.SK_1_TYP,
+        gUI.tags.col.SK_1,
+        gUI.tags.col.ON,
+        gUI.tags.col.ABILITY,
+        gUI.tags.col.CONDITION,
+        gUI.tags.col.SK_2,
+        gUI.tags.col.SK_2_TYP,
+        gUI.tags.col.MORPH_2,
+        gUI.tags.col.PERM_MORPH_2,
+        gUI.tags.col.VER,
+        gUI.tags.col.NOTES,
+        gUI.tags.col.PIC,
+        gUI.tags.col.ACT,
+        gUI.tags.col.DUR,
+        gUI.tags.col.RNG,
+        gUI.tags.col.META_COST,
+        gUI.tags.col.USES,
+        gUI.tags.col.REGAIN,
+        gUI.tags.col.POSS_NUM,
+        gUI.tags.col.POSS_NAME,
+        gUI.tags.col.POSS_ENC,
+        gUI.tags.col.POSS_CR_EA,
+        gUI.tags.col.POSS_PER_OFF,
+        gUI.tags.col.POSS_CR_TOT,
+        gUI.tags.col.POSS_AP_EA,
+        gUI.tags.col.POSS_AP_TOT,
       ],
       clearAbilityColTags_False: [
-        "Sk1ChkBox",
-        "Sk2ChkBox",
-        "PossWorn",
-        "PossIsArtifact",
+        gUI.tags.col.SK_1_CHK_BOX,
+        gUI.tags.col.SK_2_CHK_BOX,
+        gUI.tags.col.POSS_WORN,
+        gUI.tags.col.POSS_IS_ARTIFACT,
       ],
     },
 
     // === UI Element References ===
-    tooltipElement: null, // Reference to the #cell-tooltip div
-    modalElement: null, // Reference to #image-modal container
-    modalImageElement: null, // Reference to #modal-image img tag
-    modalCloseBtn: null, // Reference to #modal-close-btn span
-    modalBackdrop: null, // Reference to #modal-backdrop div
-    messageModalOverlay: null, // Reference to #messageModal div
-    messageModalText: null, // Reference to #messageText p tag
-    messageModalCloseButton: null, // Reference to #closeMessageModal button
-    promptModalOverlay: null, // Reference to #promptModal div
-    promptModalText: null, // Reference to #promptText p tag
-    promptYesButton: null, // Reference to #promptYesButton button
-    promptNoButton: null, // Reference to #promptNoButton button
+    tooltipElement: null,
+    modalElement: null,
+    modalImageElement: null,
+    modalCloseBtn: null,
+    modalBackdrop: null,
+    messageModalOverlay: null,
+    messageModalText: null,
+    messageModalCloseButton: null,
+    promptModalOverlay: null,
+    promptModalText: null,
+    promptYesButton: null,
+    promptNoButton: null,
 
     // === Async/Timing State ===
-    startTime: 0, // Timestamp for tracking load/render time
-    lastLogTime: 0, // Timestamp for tracking delta time between logs
-    tooltipTimeoutId: null, // Stores the timeout ID for the hover delay
-    messagePromiseResolve: null, // Function to resolve the message promise
-    promptPromiseResolve: null, // Function to resolve the prompt promise
-    promptPromiseReject: null, // Function to reject the prompt promise
-
-    // === Constants & Settings ===
-    HOVER_DELAY_MS: 300, // Delay before showing tooltip (milliseconds)
-    TOOLTIP_OFFSET_Y: 15, // Tooltip vertical offset from cursor (px)
-    TOOLTIP_OFFSET_X: 10, // Tooltip horizontal offset from cursor (px)
-    ROW_HEIGHT_PX: 20, // Matches grid-auto-rows in style.html, used for sticky offset calculation
-    isDebugMode: true, // Turns console logging on (true) or off (false)
-    GMSCREEN_LOG_MAX_CHARS: 40000, // Max characters for GMScreen log cell
+    tooltipTimeoutId: null,
+    messagePromiseResolve: null,
+    promptPromiseResolve: null,
+    promptPromiseReject: null,
 
     cachesToLoadOnStartup: [
-      { key: "myCSRaceClassFSData", label: "MyCS/RaceClass" },
-      { key: "myCSListFSData", label: "MyCS/List" },
-      { key: "myKLKnownAbilitiesFSData", label: "MyKL/KnownAbilities" },
-      { key: "dbAbilitiesFSData", label: "DB/Abilities" },
-      { key: "dbCritFSData", label: "DB/Crit" },
-      { key: "dbElementsFSData", label: "DB/Elements" },
-      { key: "dbGearFSData", label: "DB/Gear" },
+      { key: gUI.tags.cache.MY_CS_RACECLASS, label: "MyCS/RaceClass" },
+      { key: gUI.tags.cache.MY_CS_LIST, label: "MyCS/List" },
+      {
+        key: gUI.tags.cache.MY_KL_KNOWN_ABILITIES,
+        label: "MyKL/KnownAbilities",
+      },
+      { key: gUI.tags.cache.DB_ABILITIES, label: "DB/Abilities" },
+      { key: gUI.tags.cache.DB_CRIT, label: "DB/Crit" },
+      { key: gUI.tags.cache.DB_ELEMENTS, label: "DB/Elements" },
+      { key: gUI.tags.cache.DB_GEAR, label: "DB/Gear" },
     ],
   };
 </script>
