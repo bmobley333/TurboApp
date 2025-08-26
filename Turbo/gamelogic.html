@@ -32,7 +32,7 @@
         return;
       }
 
-      const nishRowIndex = fResolveRow("NishAtr_R");
+      const nishRowIndex = fResolveRow(gUI.tags.row.NISH_ATR_R);
       const isNishAbilityRoll = gUI.roll.ability_R === nishRowIndex;
       if (isNishAbilityRoll && !gUI.buttonOrMenu.isNish) {
         fMyConsoleLog(
@@ -107,7 +107,11 @@
         if (isLuckedRoll) {
           fMyConsoleLog("   -> Verifying Luck Cost...");
           const luckCost = 1;
-          const currentLuck = fGetGridValue("LuckBox", "LuckBox", true);
+          const currentLuck = fGetGridValue(
+            gUI.tags.row.LUCK_BOX,
+            gUI.tags.col.LUCK_BOX,
+            true
+          );
           if (isNaN(currentLuck)) {
             await fShowMessage("❌ Error reading current Luck value.");
             fMyConsoleLog(
@@ -122,7 +126,13 @@
             allCostsMet = false;
           } else {
             const newLuck = currentLuck - luckCost;
-            addChangesToMap([{ r: "LuckBox", c: "LuckBox", value: newLuck }]);
+            addChangesToMap([
+              {
+                r: gUI.tags.row.LUCK_BOX,
+                c: gUI.tags.col.LUCK_BOX,
+                value: newLuck,
+              },
+            ]);
             fMyConsoleLog(
               `      -> Luck Cost OK (${currentLuck} -> ${newLuck}). Change added to map.`
             );
@@ -355,16 +365,20 @@
         const finalNishRoll = gUI.roll.resRoll;
         if (typeof finalNishRoll === "number" || finalNishRoll === "") {
           fMyConsoleLog(
-            `   -> Updating ('Nish', 'Nish') cell with final roll result: ${finalNishRoll}`
+            `   -> Updating ('${gUI.tags.row.NISH}', '${gUI.tags.col.NISH}') cell with final roll result: ${finalNishRoll}`
           );
-          if (!fSetGridValue("Nish", "Nish", finalNishRoll)) {
+          if (
+            !fSetGridValue(gUI.tags.row.NISH, gUI.tags.col.NISH, finalNishRoll)
+          ) {
             fMyConsoleLog(
-              "      -> ⚠️ Failed to update ('Nish', 'Nish') cell."
+              `      -> ⚠️ Failed to update ('${gUI.tags.row.NISH}', '${gUI.tags.col.NISH}') cell.`
             );
           }
         } else {
           fMyConsoleLog(
-            `   -> Skipping update to ('Nish', 'Nish') cell: Invalid final roll result type (${typeof finalNishRoll}).`
+            `   -> Skipping update to ('${gUI.tags.row.NISH}', '${
+              gUI.tags.col.NISH
+            }') cell: Invalid final roll result type (${typeof finalNishRoll}).`
           );
         }
       }
@@ -407,12 +421,16 @@
   async function fClearAndSetGUIRoll(r, c) {
     try {
       const getVal = (tag) => gUI.arr[r]?.[fResolveCol(tag)] ?? "";
-      const isSk1 = c === fResolveCol("Sk1ChkBox");
+      const isSk1 = c === fResolveCol(gUI.tags.col.SK_1_CHK_BOX);
       const permMorph = String(
-        isSk1 ? getVal("PermMorph1") : getVal("PermMorph2") || ""
+        isSk1
+          ? getVal(gUI.tags.col.PERM_MORPH_1)
+          : getVal(gUI.tags.col.PERM_MORPH_2) || ""
       ).trim();
       const tempMorph = String(
-        isSk1 ? getVal("Morph1") : getVal("Morph2") || ""
+        isSk1
+          ? getVal(gUI.tags.col.MORPH_1)
+          : getVal(gUI.tags.col.MORPH_2) || ""
       ).trim();
       const combinedMorph = [permMorph, tempMorph]
         .filter(Boolean)
@@ -425,14 +443,16 @@
         skMorph: combinedMorph,
         permMorph: permMorph,
         tempMorph: tempMorph,
-        skTyp: isSk1 ? getVal("Sk1Typ") : getVal("Sk2Typ"),
-        skSk: isSk1 ? getVal("Sk1") : getVal("Sk2"),
-        skIsOn: getVal("On"),
-        skNameID: getVal("Ability"),
-        skAct: isSk1 ? getVal("Act") : "",
-        skDur: isSk1 ? getVal("Dur") : "",
-        skMeta: isSk1 ? getVal("Meta") : "",
-        skUses: isSk1 ? getVal("Uses") : "",
+        skTyp: isSk1
+          ? getVal(gUI.tags.col.SK_1_TYP)
+          : getVal(gUI.tags.col.SK_2_TYP),
+        skSk: isSk1 ? getVal(gUI.tags.col.SK_1) : getVal(gUI.tags.col.SK_2),
+        skIsOn: getVal(gUI.tags.col.ON),
+        skNameID: getVal(gUI.tags.col.ABILITY),
+        skAct: isSk1 ? getVal(gUI.tags.col.ACT) : "",
+        skDur: isSk1 ? getVal(gUI.tags.col.DUR) : "",
+        skMeta: isSk1 ? getVal(gUI.tags.col.META_COST) : "",
+        skUses: isSk1 ? getVal(gUI.tags.col.USES) : "",
         skName: "",
         resTyp: "",
         resSk: "",
@@ -453,7 +473,7 @@
         resRoll: "",
         htmlHeader: "",
       };
-      const nishRowResolved = fResolveRow("NishAtr_R");
+      const nishRowResolved = fResolveRow(gUI.tags.row.NISH_ATR_R);
       if (!isNaN(nishRowResolved) && r === nishRowResolved) {
         gUI.roll.isNish = true;
         fMyConsoleLog("   -> Setting gUI.roll.isNish = true");
@@ -796,10 +816,14 @@
     const headers = [];
     const headersText = [];
     if (actCost > 0) {
-      let currentAct = fGetGridValue("Act", "ActTot", true);
+      let currentAct = fGetGridValue(
+        gUI.tags.row.ACT,
+        gUI.tags.col.ACT_TOT,
+        true
+      );
       if (isNaN(currentAct)) {
         await fShowMessage(
-          `❌ Error reading current Action Points from cell ('Act', 'ActTot'). Cannot proceed.`
+          `❌ Error reading current Action Points from cell ('${gUI.tags.row.ACT}', '${gUI.tags.col.ACT_TOT}'). Cannot proceed.`
         );
         fMyConsoleLog(
           "🚫 Failed to verify Act cost: Could not read Action Points."
@@ -840,8 +864,8 @@
       }
       const newActTotal = currentAct - actCost;
       changes.push({
-        r: "Act",
-        c: "ActTot",
+        r: gUI.tags.row.ACT,
+        c: gUI.tags.col.ACT_TOT,
         value: newActTotal,
       });
       fMyConsoleLog(
@@ -912,7 +936,7 @@
     }
     changes.push({
       r: ability_R,
-      c: "Uses",
+      c: gUI.tags.col.USES,
       value: newUses,
     });
     fMyConsoleLog(
@@ -940,7 +964,7 @@
     if (sk1CB === true) {
       changes.push({
         r: ability_R,
-        c: "On",
+        c: gUI.tags.col.ON,
         value: skDur,
       });
       fMyConsoleLog(
@@ -1076,11 +1100,11 @@
     for (let i = startIndex; i < numColors; i++) {
       const currentColorTag = metaColors[i];
       fMyConsoleLog(`         - Checking Color: ${currentColorTag}`);
-      const chnlVal = getCurrentValue("chnl", currentColorTag);
+      const chnlVal = getCurrentValue(gUI.tags.row.CHNL, currentColorTag);
       if (chnlVal >= 1) {
         const newVal = chnlVal - 1;
         const change = {
-          r: "chnl",
+          r: gUI.tags.row.CHNL,
           c: currentColorTag,
           value: newVal >= 1 ? newVal : "",
         };
@@ -1094,11 +1118,11 @@
           change: change,
         };
       }
-      const metaVal = getCurrentValue("meta", currentColorTag);
+      const metaVal = getCurrentValue(gUI.tags.row.META, currentColorTag);
       if (metaVal >= 1) {
         const newVal = metaVal - 1;
         const change = {
-          r: "meta",
+          r: gUI.tags.row.META,
           c: currentColorTag,
           value: newVal >= 1 ? newVal : "",
         };
@@ -1346,9 +1370,9 @@
     }
     const rMin = Math.min(resolved.r1, resolved.r2);
     const rMax = Math.max(resolved.r1, resolved.r2);
-    const cNumMon = fResolveCol("NumMon");
-    const cMonDef = fResolveCol("MonDef");
-    const cMonName = fResolveCol("MonName");
+    const cNumMon = fResolveCol(gUI.tags.col.NUM_MON);
+    const cMonDef = fResolveCol(gUI.tags.col.MON_DEF);
+    const cMonName = fResolveCol(gUI.tags.col.MON_NAME);
     if ([cNumMon, cMonDef, cMonName].some(isNaN)) {
       const msg =
         "Could not resolve required monster column tags (NumMon, MonDef, MonName).";
@@ -1564,9 +1588,9 @@
     }
     const rMin = Math.min(resolved.r1, resolved.r2);
     const rMax = Math.max(resolved.r1, resolved.r2);
-    const cNumMon = fResolveCol("NumMon");
-    const cMonAR = fResolveCol("MonAR");
-    const cMonName = fResolveCol("MonName");
+    const cNumMon = fResolveCol(gUI.tags.col.NUM_MON);
+    const cMonAR = fResolveCol(gUI.tags.col.MON_AR);
+    const cMonName = fResolveCol(gUI.tags.col.MON_NAME);
     if ([cNumMon, cMonAR, cMonName].some(isNaN)) {
       const msg =
         "Could not resolve required monster column tags (NumMon, MonAR, MonName).";
@@ -1759,9 +1783,9 @@
     }
     const rMin = Math.min(resolved.r1, resolved.r2);
     const rMax = Math.max(resolved.r1, resolved.r2);
-    const cNumMon = fResolveCol("NumMon");
-    const cMonAtk = fResolveCol("MonAtk");
-    const cMonName = fResolveCol("MonName");
+    const cNumMon = fResolveCol(gUI.tags.col.NUM_MON);
+    const cMonAtk = fResolveCol(gUI.tags.col.MON_ATK);
+    const cMonName = fResolveCol(gUI.tags.col.MON_NAME);
     if ([cNumMon, cMonAtk, cMonName].some(isNaN)) {
       const msg =
         "Could not resolve required monster column tags (NumMon, MonAtk, MonName).";
@@ -1974,9 +1998,9 @@
     }
     const rMin = Math.min(resolved.r1, resolved.r2);
     const rMax = Math.max(resolved.r1, resolved.r2);
-    const cNumMon = fResolveCol("NumMon");
-    const cMonDmg = fResolveCol("MonDmg");
-    const cMonName = fResolveCol("MonName");
+    const cNumMon = fResolveCol(gUI.tags.col.NUM_MON);
+    const cMonDmg = fResolveCol(gUI.tags.col.MON_DMG);
+    const cMonName = fResolveCol(gUI.tags.col.MON_NAME);
     if ([cNumMon, cMonDmg, cMonName].some(isNaN)) {
       const msg =
         "Could not resolve required monster column tags (NumMon, MonDmg, MonName).";
@@ -2830,8 +2854,8 @@
       return false;
     }
     fMyConsoleLog(`   -> Click [${r}, ${c}] is inside Chaos Gem range.`);
-    const usesCol = fResolveCol("ChaosUses");
-    const abilityCol = fResolveCol("ChaosAbility");
+    const usesCol = fResolveCol(gUI.tags.col.CHAOS_USES);
+    const abilityCol = fResolveCol(gUI.tags.col.CHAOS_ABILITY);
     if (isNaN(usesCol) || isNaN(abilityCol)) {
       fMyConsoleLog(
         "   -> Cannot check Chaos Gem: Could not resolve 'ChaosUses' or 'ChaosAbility' column tags."
@@ -3952,7 +3976,7 @@
     );
     const charLvl = Number(gUI.characterInfo?.level) || 0;
     const treasureColorArr = gUI.list?.metaColor;
-    const cacheKey = "dbCritFSData";
+    const cacheKey = gUI.tags.cache.DB_CRIT;
     const critCache = gUI[cacheKey];
     if (!Array.isArray(treasureColorArr) || treasureColorArr.length !== 5) {
       const errorMsg = `Treasure color list (gUI.list.metaColor) is missing or invalid.`;
@@ -3976,14 +4000,17 @@
       await fShowMessage(`❌ Error: ${errorMsg}`);
       return;
     }
-    const treasureColor_C = fResolveFSDataCol(cacheKey, "TreasureColor");
-    const treasureDesc_C = fResolveFSDataCol(cacheKey, "Treasure");
-    const startRowTag = "RowBeforeFirstDataRow";
+    const treasureColor_C = fResolveFSDataCol(
+      cacheKey,
+      gUI.tags.col.TREASURE_COLOR
+    );
+    const treasureDesc_C = fResolveFSDataCol(cacheKey, gUI.tags.col.TREASURE);
+    const startRowTag = gUI.tags.row.ROW_BEFORE_FIRST_DATA_ROW;
     const dataFirst_R_idx = fResolveFSDataRow(cacheKey, startRowTag) + 1;
     const dataLast_R_idx = critCache.text.length - 1;
     const failedTags = [];
-    if (isNaN(treasureColor_C)) failedTags.push("TreasureColor");
-    if (isNaN(treasureDesc_C)) failedTags.push("Treasure");
+    if (isNaN(treasureColor_C)) failedTags.push(gUI.tags.col.TREASURE_COLOR);
+    if (isNaN(treasureDesc_C)) failedTags.push(gUI.tags.col.TREASURE);
     if (isNaN(dataFirst_R_idx)) failedTags.push(startRowTag);
     if (failedTags.length > 0) {
       const errorMsg = `Could not resolve required tags in ${cacheKey}: ${failedTags.join(
@@ -4080,7 +4107,7 @@
       `⚙️ ${funcName}: Triggered for ${lootType} (isRandomRoll: ${isRandomRoll})...`
     );
     const charLvl = Number(gUI.characterInfo?.level) || 0;
-    const cacheKey = "dbGearFSData";
+    const cacheKey = gUI.tags.cache.DB_GEAR;
     const gearCache = gUI[cacheKey];
     if (
       !gearCache ||
@@ -4097,16 +4124,16 @@
       await fShowMessage(`Error: ${errorMsg}`);
       return;
     }
-    const isArtifact_C = fResolveFSDataCol(cacheKey, "IsArtifact");
-    const itemCr_C = fResolveFSDataCol(cacheKey, "ItemCR");
-    const itemName_C = fResolveFSDataCol(cacheKey, "Name");
-    const dataFirst_R_tag = "RowBeforeFirstDataRow";
+    const isArtifact_C = fResolveFSDataCol(cacheKey, gUI.tags.col.IS_ARTIFACT);
+    const itemCr_C = fResolveFSDataCol(cacheKey, gUI.tags.col.ITEM_CR);
+    const itemName_C = fResolveFSDataCol(cacheKey, gUI.tags.col.NAME);
+    const dataFirst_R_tag = gUI.tags.row.ROW_BEFORE_FIRST_DATA_ROW;
     const dataFirst_R_idx = fResolveFSDataRow(cacheKey, dataFirst_R_tag) + 1;
     const dataLast_R_idx = gearCache.text.length - 1;
     const failedTags = [];
-    if (isNaN(isArtifact_C)) failedTags.push("IsArtifact");
-    if (isNaN(itemCr_C)) failedTags.push("ItemCR");
-    if (isNaN(itemName_C)) failedTags.push("Name");
+    if (isNaN(isArtifact_C)) failedTags.push(gUI.tags.col.IS_ARTIFACT);
+    if (isNaN(itemCr_C)) failedTags.push(gUI.tags.col.ITEM_CR);
+    if (isNaN(itemName_C)) failedTags.push(gUI.tags.col.NAME);
     if (isNaN(dataFirst_R_idx)) failedTags.push(dataFirst_R_tag);
     if (failedTags.length > 0) {
       const errorMsg = `Could not resolve required tags in ${cacheKey}: ${failedTags.join(
@@ -4926,22 +4953,39 @@
     const movementMultipliers = [1, 0.9, 0.8, 0.65, 0.5, 0.25];
     const carryMultipliers = [1, 2, 4, 8, 12, 16];
     const mrColumnTags = [
-      "GearMRCol1",
-      "GearMRCol2",
-      "GearMRCol3",
-      "GearMRCol4",
-      "GearMRCol5",
-      "GearMRCol6",
+      gUI.tags.col.GEAR_MR_COL_1,
+      gUI.tags.col.GEAR_MR_COL_2,
+      gUI.tags.col.GEAR_MR_COL_3,
+      gUI.tags.col.GEAR_MR_COL_4,
+      gUI.tags.col.GEAR_MR_COL_5,
+      gUI.tags.col.GEAR_MR_COL_6,
     ];
-    const MR_TABLE_ROW = "GearMRTbl";
-    const CARRY_TABLE_ROW = "GearCarryTbl";
-    const CHECKBOX_ROW = "GearMRCheckBox";
+    const MR_TABLE_ROW = gUI.tags.row.GEAR_MR_TBL;
+    const CARRY_TABLE_ROW = gUI.tags.row.GEAR_CARRY_TBL;
+    const CHECKBOX_ROW = gUI.tags.row.GEAR_MR_CHECKBOX;
     let errorMsg = "";
-    const agilityValue = fGetGridValue("Agi", "Sk1", true);
-    const strengthValue = fGetGridValue("Str", "Sk1", true);
-    const plusMRValue = fGetGridValue("GearPlusMR", "GearPlusMR", true) || 0;
+    const agilityValue = fGetGridValue(
+      gUI.tags.row.AGI,
+      gUI.tags.col.SK_1,
+      true
+    );
+    const strengthValue = fGetGridValue(
+      gUI.tags.row.STR,
+      gUI.tags.col.SK_1,
+      true
+    );
+    const plusMRValue =
+      fGetGridValue(
+        gUI.tags.row.GEAR_PLUS_MR,
+        gUI.tags.col.GEAR_PLUS_MR,
+        true
+      ) || 0;
     const plusCarryValue =
-      fGetGridValue("GearPlusCarry", "GearPlusCarry", true) || 0;
+      fGetGridValue(
+        gUI.tags.row.GEAR_PLUS_CARRY,
+        gUI.tags.col.GEAR_PLUS_CARRY,
+        true
+      ) || 0;
     const currentEncumbrance = fCalcTotalEnc() || 0;
     if (isNaN(agilityValue))
       errorMsg += "Agility ('Agi', 'Sk1') is not a valid number. ";
@@ -4962,8 +5006,16 @@
       `   -> Inputs: Agi=${agilityValue}, Str=${strengthValue}, +MR=${plusMRValue}, +Carry=${plusCarryValue}, CurrentEnc=${currentEncumbrance}`
     );
     let updateSuccess = true;
-    updateSuccess &&= fSetGridValue("GearSpe", "GearSpeAndStr", agilityValue);
-    updateSuccess &&= fSetGridValue("GearStr", "GearSpeAndStr", strengthValue);
+    updateSuccess &&= fSetGridValue(
+      gUI.tags.row.GEAR_SPE,
+      gUI.tags.col.GEAR_SPE_AND_STR,
+      agilityValue
+    );
+    updateSuccess &&= fSetGridValue(
+      gUI.tags.row.GEAR_STR,
+      gUI.tags.col.GEAR_SPE_AND_STR,
+      strengthValue
+    );
     if (!updateSuccess) {
       fMyConsoleLog(
         "   -> ⚠️ Warning: Failed to update GearSpe/GearStr overview cells."
@@ -5005,8 +5057,10 @@
         }
       }
     }
-    if (!fSetGridValue("MR", "MR", finalMovementRate)) {
-      fMyConsoleLog("   -> ⚠️ Error setting final MR value in ('MR', 'MR').");
+    if (!fSetGridValue(gUI.tags.row.MR, gUI.tags.col.MR, finalMovementRate)) {
+      fMyConsoleLog(
+        `   -> ⚠️ Error setting final MR value in ('${gUI.tags.row.MR}', '${gUI.tags.col.MR}').`
+      );
       calculationErrors = true;
     }
     if (!foundActiveMRLevel || finalMovementRate === 0) {
@@ -5414,18 +5468,15 @@
     fMyConsoleLog(
       `⚖️ ${funcName}: Handling edit for cell [${r}, ${c}] with new value: "${newValue}" (Old: "${oldValue}")`
     );
-    const possNumColTag = "PossNum";
-    const possWornColTag = "PossWorn";
-    const possPerOffColTag = "PossPerOff";
-    const possEncColTag = "PossEnc";
-    const possCrTotColTag = "PossCrTot";
-    const possAPTotColTag = "PossAPTot";
+    const possNumColTag = gUI.tags.col.POSS_NUM;
+    const possWornColTag = gUI.tags.col.POSS_WORN;
+    const possPerOffColTag = gUI.tags.col.POSS_PER_OFF;
     const gearColumnsToCalculate = [
       possNumColTag,
       possWornColTag,
       possPerOffColTag,
     ];
-    const possNameVal = fGetGridValue(r, "Ability");
+    const possNameVal = fGetGridValue(r, gUI.tags.col.ABILITY);
     const gearID = fGetIDFromNameID(possNameVal);
     const gearCache = gUI.dbGearFSData;
     if (!gearID) {
@@ -5435,7 +5486,7 @@
       await fShowMessage(
         "ℹ️ Cannot modify gear numbers/status until a valid item with an ID is selected in the 'Ability' column."
       );
-      fRevertCellDOM(r, c, oldValue);
+      fSetGridValue(r, c, oldValue);
       return null;
     }
     if (!gearCache || !gearCache.text || !gearCache.colTagsMap) {
@@ -5445,7 +5496,7 @@
       await fShowMessage(
         "❌ Error: Gear definition cache not loaded. Cannot calculate gear line."
       );
-      fRevertCellDOM(r, c, oldValue);
+      fSetGridValue(r, c, oldValue);
       return null;
     }
     const editedColTag = Object.keys(gUI.colTag).find(
@@ -5457,7 +5508,7 @@
       fMyConsoleLog(
         `   -> ❌ Error: ${funcName} called unexpectedly for non-gear-input column: ${editedColTag}`
       );
-      fRevertCellDOM(r, c, oldValue);
+      fSetGridValue(r, c, oldValue);
       return null;
     }
     switch (editedColTag) {
@@ -5493,12 +5544,12 @@
     if (validatedValue === null) {
       fMyConsoleLog(`   -> ❌ Input Validation Failed: ${validationError}`);
       await fShowMessage(validationError);
-      fRevertCellDOM(r, c, oldValue);
+      fSetGridValue(r, c, oldValue);
       return null;
     }
-    const previousEnc = fGetGridValue(r, possEncColTag);
-    const previousCr = fGetGridValue(r, possCrTotColTag);
-    const previousAp = fGetGridValue(r, possAPTotColTag);
+    const previousEnc = fGetGridValue(r, gUI.tags.col.POSS_ENC);
+    const previousCr = fGetGridValue(r, gUI.tags.col.POSS_CR_TOT);
+    const previousAp = fGetGridValue(r, gUI.tags.col.POSS_AP_TOT);
     if (!fSetGridValue(r, c, validatedValue)) {
       fMyConsoleLog(
         `   -> ❌ Error setting validated value for edited cell [${r}, ${c}].`
@@ -5550,13 +5601,13 @@
     fMyConsoleLog(
       `   -> ${funcName}: Refreshing derived calculations for row ${r}...`
     );
-    const possNameColTag = "Ability";
-    const possNumColTag = "PossNum";
-    const possWornColTag = "PossWorn";
-    const possPerOffColTag = "PossPerOff";
-    const possEncColTag = "PossEnc";
-    const possCrTotColTag = "PossCrTot";
-    const possAPTotColTag = "PossAPTot";
+    const possNameColTag = gUI.tags.col.ABILITY;
+    const possNumColTag = gUI.tags.col.POSS_NUM;
+    const possWornColTag = gUI.tags.col.POSS_WORN;
+    const possPerOffColTag = gUI.tags.col.POSS_PER_OFF;
+    const possEncColTag = gUI.tags.col.POSS_ENC;
+    const possCrTotColTag = gUI.tags.col.POSS_CR_TOT;
+    const possAPTotColTag = gUI.tags.col.POSS_AP_TOT;
     const possNameVal = fGetGridValue(r, possNameColTag);
     const calc_possNumVal = fGetGridValue(r, possNumColTag, true) || 0;
     const calc_isWornVal = fGetGridValue(r, possWornColTag) || false;
@@ -5585,10 +5636,18 @@
       return false;
     }
     fMyConsoleLog(`      -> ${funcName}: Using Gear ID: ${gearID}`);
-    const wornEnc = Number(fGetVal_GUICache(gearID, "WornEnc", gearCache) || 0);
-    const itemEnc = Number(fGetVal_GUICache(gearID, "ItemEnc", gearCache) || 0);
-    const crEach = Number(fGetVal_GUICache(gearID, "ItemCR", gearCache) || 0);
-    const apEach = Number(fGetVal_GUICache(gearID, "AP", gearCache) || 0);
+    const wornEnc = Number(
+      fGetVal_GUICache(gearID, gUI.tags.col.WORN_ENC, gearCache) || 0
+    );
+    const itemEnc = Number(
+      fGetVal_GUICache(gearID, gUI.tags.col.ITEM_ENC, gearCache) || 0
+    );
+    const crEach = Number(
+      fGetVal_GUICache(gearID, gUI.tags.col.ITEM_CR, gearCache) || 0
+    );
+    const apEach = Number(
+      fGetVal_GUICache(gearID, gUI.tags.col.AP, gearCache) || 0
+    );
     fMyConsoleLog(
       `      -> DB Constants: WornEnc=${wornEnc}, ItemEnc=${itemEnc}, CrEach=${crEach}, APEach=${apEach}`
     );
@@ -5683,7 +5742,7 @@
       );
       return;
     }
-    const cacheKey = "dbCritFSData";
+    const cacheKey = gUI.tags.cache.DB_CRIT;
     const cache = gUI[cacheKey];
     if (
       !cache ||
@@ -5697,11 +5756,12 @@
       fMyConsoleLog(`   -> ❌ ${funcName} Error: ${errorMsg}`);
       return;
     }
-    const columnTag = inputLower === "t" ? "NishTrem" : "NishCrit";
+    const columnTag =
+      inputLower === "t" ? gUI.tags.col.NISH_TREM : gUI.tags.col.NISH_CRIT;
     const titleText =
       inputLower === "t" ? "Tremendous Nish:" : "Critical Nish:";
     const titleHtml = `<span class="red-bold">${titleText}</span>`;
-    const startRowTag = "RowBeforeFirstDataRow";
+    const startRowTag = gUI.tags.row.ROW_BEFORE_FIRST_DATA_ROW;
     const resultColIndex = fResolveFSDataCol(cacheKey, columnTag);
     const startRowIndex = fResolveFSDataRow(cacheKey, startRowTag) + 1;
     if (isNaN(resultColIndex)) {
