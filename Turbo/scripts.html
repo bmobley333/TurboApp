@@ -205,32 +205,6 @@
   // Start - Low-Level Cell Creation
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-  /** function fMakeDropdown
-   * Purpose: Builds a <select> element populated with choices for a grid dropdown.
-   * Assumptions: The config object and choices array are valid.
-   * @param {number} r - 0-based row index for data attributes.
-   * @param {number} c - 0-based column index for data attributes.
-   * @param {object} config - Dropdown configuration object from gUI.dropDownBox.
-   * @param {any} currentVal - The current value to pre-select.
-   * @returns {HTMLSelectElement} The configured <select> element.
-   */
-  function fMakeDropdown(r, c, config, currentVal) {
-    const select = document.createElement("select");
-    select.dataset.r = r;
-    select.dataset.c = c;
-    for (const choice of config.choices) {
-      const option = document.createElement("option");
-      option.value = String(choice);
-      option.textContent = String(choice);
-      if (String(choice) === String(currentVal)) {
-        option.selected = true;
-      }
-      select.appendChild(option);
-    }
-    select.classList.add("grid-dropdown");
-    return select;
-  } // End function fMakeDropdown
-
   /** function fCheckAndTagNote
    * Purpose: Adds the 'has-note' CSS class to a cell if a corresponding note exists.
    * Assumptions: gUI.notes is populated.
@@ -283,17 +257,13 @@
       cell.classList.add("custom-ability-cell");
     }
     const dropConfig = fFindDropdownMatch(r, c);
-    if (dropConfig) {
-      const isAbilityDropdown = dropConfig.gUIListKey === "myCSListFSData";
-      const isEmpty = originalValue === "" || originalValue === null;
-      if (isAbilityDropdown && isEmpty) {
-        const placeholder = document.createElement("div");
-        placeholder.className = "dropdown-placeholder";
-        cell.appendChild(placeholder);
-      } else {
-        const select = fMakeDropdown(r, c, dropConfig, value);
-        cell.appendChild(select);
-      }
+    const isAbilityDropdown = dropConfig?.gUIListKey === "myCSListFSData";
+    const isEmptyAbilityCell =
+      isAbilityDropdown && (originalValue === "" || originalValue === null);
+    if (isEmptyAbilityCell) {
+      const placeholder = document.createElement("div");
+      placeholder.className = "dropdown-placeholder";
+      cell.appendChild(placeholder);
       cell.style.padding = "0";
       cell.style.overflow = "visible";
     } else {
@@ -400,16 +370,6 @@
       !bgColor || bgColor.toLowerCase() === "#ffffff" || bgColor === "white";
     return isWhiteBg && !isCheckbox;
   } // End function fCheckIfEditable
-
-  /** function fIsEditableCell
-   * Purpose: Helper to check if a cell element is contentEditable.
-   * Assumptions: The cellDiv is a valid HTMLElement.
-   * @param {HTMLElement} cellDiv - The cell div element.
-   * @returns {boolean} True if the cell's `isContentEditable` property is true.
-   */
-  function fIsEditableCell(cellDiv) {
-    return cellDiv?.isContentEditable;
-  } // End function fIsEditableCell
 
   /** function fMakeCorrectCheckBoxType
    * Purpose: Creates a checkbox element with appropriate state and attributes for a grid cell.
@@ -1408,66 +1368,6 @@
       fSetTurbosGridHeaderRows();
     }
   } // End function fSetGridRowVisibility
-
-  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-  // End - Column & Row Visibility
-  // Start - Designer Mode Logic
-  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-  /** function fHandleRefreshUITemplate
-   * Purpose: Handles the 'Refresh UI Template Cache' designer menu action.
-   * Assumptions: Designer Mode is enabled (gUI.isDesignerMode is true).
-   * Notes: Calls the server to re-read and cache the MasterCS 'Game' tab layout in Firestore.
-   * @returns {Promise<void>} Resolves after the operation is complete.
-   */
-  async function fHandleRefreshUITemplate() {
-    const funcName = "fHandleRefreshUITemplate";
-    fMyConsoleLog(`⚙️ Menu Action: ${funcName} Triggered...`);
-    if (!gUI.isDesignerMode) {
-      await fShowMessage(
-        "❌ This action requires Designer Mode to be enabled."
-      );
-      return;
-    }
-    const userConfirmed = await fShowPrompt(
-      `⚠️ <b>Refresh the UI Template Cache for v${gIndex.GameVer}?</b><br><br>
-        This will overwrite the cached UI layout in Firestore with the current version from the Master Character Sheet.<br><br>
-        This action is slow and should only be done after changing the 'Game' tab layout.`
-    );
-    if (!userConfirmed) {
-      fMyConsoleLog(`   -> User cancelled UI Template refresh.`);
-      return;
-    }
-    fShowMessageNoClose(
-      "⏳ Refreshing UI Template Cache...<br><br>This may take a minute.<br><br>Please wait."
-    );
-    try {
-      const result = await new Promise((resolve, reject) => {
-        google.script.run
-          .withSuccessHandler(resolve)
-          .withFailureHandler(reject)
-          .fSrvRefreshUITemplateCache(gIndex);
-      });
-      fHideMessage();
-      if (result && result.success) {
-        fMyConsoleLog(
-          `✅ ${funcName}: Server confirmed success. ${result.message || ""}`
-        );
-      } else {
-        throw new Error(
-          result.message || "An unknown error occurred on the server."
-        );
-      }
-    } catch (error) {
-      fHideMessage();
-      const errorMsg = `Error refreshing UI Template: ${
-        error.message || error
-      }`;
-      console.error(`${funcName}:`, error);
-      fMyConsoleLog(`❌ ${funcName}: ${errorMsg}`);
-      await fShowMessage(`❌ ${errorMsg}`);
-    }
-  } // End function fHandleRefreshUITemplate
 
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   // End - Designer Mode Logic
@@ -5043,8 +4943,6 @@
           break;
         case "data-designerOnly":
           fHandleDesignerOnlyClick();
-          break;
-        case "designer-saveDbSheetVer":
           break;
         default:
           fMyConsoleLog(
