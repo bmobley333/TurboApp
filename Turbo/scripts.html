@@ -1224,114 +1224,90 @@
     }
   } // End function fSetsGridColumnVisibility
 
-  /** function fHideGridsColumnRange
-   * Purpose: Hides one or more ranges of columns.
+  /** function fApplyVisibilityToColumnRange
+   * Purpose: Centralized helper to hide or show one or more ranges of columns.
    * Assumptions: Batches DOM updates by calling `function fAppliesGridColumnOnOff` once at the end.
+   * @param {object[]} rangeArray - An array of range definition objects with c1 and c2 properties.
+   * @param {boolean} isVisible - True to show the columns, false to hide them.
+   * @returns {void}
+   */
+  function fApplyVisibilityToColumnRange(rangeArray, isVisible) {
+    const action = isVisible ? "Showing" : "Hiding";
+    fMyConsoleLog(`👁️ ${action} Column Ranges...`);
+    if (!Array.isArray(rangeArray)) {
+      console.error(
+        `fApplyVisibilityToColumnRange: Invalid input - requires an array.`
+      );
+      return;
+    }
+
+    let anyColumnsChanged = false;
+    for (const range of rangeArray) {
+      if (
+        !range ||
+        typeof range.c1 === "undefined" ||
+        typeof range.c2 === "undefined"
+      ) {
+        console.warn(
+          `fApplyVisibilityToColumnRange: Skipping invalid range object:`,
+          range
+        );
+        continue;
+      }
+      const startCol = fResolveCol(range.c1);
+      const endCol = fResolveCol(range.c2);
+      if (isNaN(startCol) || isNaN(endCol)) {
+        console.warn(
+          `fApplyVisibilityToColumnRange: Skipping range due to invalid tags/indices: ${range.c1}, ${range.c2}`
+        );
+        continue;
+      }
+
+      const cMin = Math.min(startCol, endCol);
+      const cMax = Math.max(startCol, endCol);
+      for (let c = cMin; c <= cMax; c++) {
+        const isCurrentlyHidden = gUI.hiddenColumns.has(c);
+        // We need to make a change if we want to show a hidden column OR hide a visible column.
+        const needsChange =
+          (isVisible && isCurrentlyHidden) ||
+          (!isVisible && !isCurrentlyHidden);
+        if (needsChange) {
+          fSetsGridColumnVisibility(c, isVisible, false); // Pass false to prevent immediate template update
+          anyColumnsChanged = true;
+        }
+      }
+    }
+
+    if (anyColumnsChanged) {
+      fAppliesGridColumnOnOff(); // Update the grid template once after all changes are staged
+      fMyConsoleLog(`✅ Column Ranges ${isVisible ? "Shown" : "Hidden"}.`);
+    } else {
+      fMyConsoleLog(
+        `ℹ️ All Specified Column Ranges Already ${
+          isVisible ? "Visible" : "Hidden"
+        }.`
+      );
+    }
+  } // End function fApplyVisibilityToColumnRange
+
+  /** function fHideGridsColumnRange
+   * Purpose: Hides one or more ranges of columns by calling the central helper.
+   * Assumptions: This is a wrapper for `function fApplyVisibilityToColumnRange`.
    * @param {object[]} rangeArray - An array of range definition objects with c1 and c2 properties.
    * @returns {void}
    */
   function fHideGridsColumnRange(rangeArray) {
-    fMyConsoleLog(`👁️ Hiding Column Ranges...`);
-    if (!Array.isArray(rangeArray)) {
-      console.error(
-        "fHideGridsColumnRange: Invalid input - requires an array.",
-        rangeArray
-      );
-      return;
-    }
-    let anyColumnsChanged = false;
-    for (const range of rangeArray) {
-      if (
-        !range ||
-        typeof range.c1 === "undefined" ||
-        typeof range.c2 === "undefined"
-      ) {
-        console.warn(
-          "fHideGridsColumnRange: Skipping invalid range object:",
-          range
-        );
-        continue;
-      }
-      const startCol = fResolveCol(range.c1);
-      const endCol = fResolveCol(range.c2);
-      if (isNaN(startCol) || isNaN(endCol)) {
-        console.warn(
-          `fHideGridsColumnRange: Skipping range due to invalid tags/indices: ${range.c1}, ${range.c2}`
-        );
-        continue;
-      }
-      const cMin = Math.min(startCol, endCol);
-      const cMax = Math.max(startCol, endCol);
-      for (let c = cMin; c <= cMax; c++) {
-        if (!gUI.hiddenColumns.has(c)) {
-          fSetsGridColumnVisibility(c, false, false);
-          anyColumnsChanged = true;
-        }
-      }
-    }
-    if (anyColumnsChanged) {
-      fAppliesGridColumnOnOff();
-      fMyConsoleLog(`✅ Column Ranges Hidden.`);
-    } else {
-      fMyConsoleLog(
-        `ℹ️ All Specified Column Ranges Already Hidden (or no valid ranges found).`
-      );
-    }
+    fApplyVisibilityToColumnRange(rangeArray, false);
   } // End function fHideGridsColumnRange
 
   /** function fShowGridsColumnRange
-   * Purpose: Shows one or more ranges of columns.
-   * Assumptions: Batches DOM updates by calling `function fAppliesGridColumnOnOff` once at the end.
+   * Purpose: Shows one or more ranges of columns by calling the central helper.
+   * Assumptions: This is a wrapper for `function fApplyVisibilityToColumnRange`.
    * @param {object[]} rangeArray - An array of range definition objects with c1 and c2 properties.
    * @returns {void}
    */
   function fShowGridsColumnRange(rangeArray) {
-    fMyConsoleLog(`👁️ Showing Column Ranges...`);
-    if (!Array.isArray(rangeArray)) {
-      console.error(
-        "fShowGridsColumnRange: Invalid input - requires an array.",
-        rangeArray
-      );
-      return;
-    }
-    let anyColumnsChanged = false;
-    for (const range of rangeArray) {
-      if (
-        !range ||
-        typeof range.c1 === "undefined" ||
-        typeof range.c2 === "undefined"
-      ) {
-        console.warn(
-          "fShowGridsColumnRange: Skipping invalid range object:",
-          range
-        );
-        continue;
-      }
-      const startCol = fResolveCol(range.c1);
-      const endCol = fResolveCol(range.c2);
-      if (isNaN(startCol) || isNaN(endCol)) {
-        console.warn(
-          `fShowGridsColumnRange: Skipping range due to invalid tags/indices: ${range.c1}, ${range.c2}`
-        );
-        continue;
-      }
-      const cMin = Math.min(startCol, endCol);
-      const cMax = Math.max(startCol, endCol);
-      for (let c = cMin; c <= cMax; c++) {
-        if (gUI.hiddenColumns.has(c)) {
-          fSetsGridColumnVisibility(c, true, false);
-          anyColumnsChanged = true;
-        }
-      }
-    }
-    if (anyColumnsChanged) {
-      fAppliesGridColumnOnOff();
-      fMyConsoleLog(`✅ Column Ranges Shown.`);
-    } else {
-      fMyConsoleLog(
-        `ℹ️ All Specified Column Ranges Already Visible (or no valid ranges found).`
-      );
-    }
+    fApplyVisibilityToColumnRange(rangeArray, true);
   } // End function fShowGridsColumnRange
 
   /** function fSetGridRowVisibility
