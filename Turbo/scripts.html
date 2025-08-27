@@ -3378,43 +3378,26 @@
     };
   } // End function fHandleNewAbilitySelection
 
-  /** function fSaveNewAbilityToAbilTbl
-   * Purpose: Applies fetched data from various caches to the appropriate columns in a grid row.
-   * Assumptions: Also sets default values and calculates derived gear properties.
+  /** function fApplyAbilityMappings
+   * Purpose: Maps common ability properties from DB/KL caches to a grid row.
+   * Assumptions: Helper for fSaveNewAbilityToAbilTbl.
    * @param {number} r - The target row index in the grid.
-   * @param {object | null} dbAbilityResult - Result from DB Abilities fetch.
-   * @param {object | null} klKnownAbilitiesResult - Result from KL KnownAbilities fetch.
-   * @param {object | null} dbGearResult - Result from DB Gear fetch.
+   * @param {object} dbAbilityResult - Result from DB Abilities fetch.
+   * @param {object} klKnownAbilitiesResult - Result from KL KnownAbilities fetch.
    * @returns {void}
    */
-  function fSaveNewAbilityToAbilTbl(
-    r,
-    dbAbilityResult,
-    klKnownAbilitiesResult,
-    dbGearResult
-  ) {
-    const funcName = "fSaveNewAbilityToAbilTbl";
-    fMyConsoleLog(
-      `   -> ${funcName}: Applying fetched data to grid row ${r}...`
-    );
+  function fApplyAbilityMappings(r, dbAbilityResult, klKnownAbilitiesResult) {
     const dbAbilityRow = dbAbilityResult?.dataRow;
     const dbAbilityColTags = dbAbilityResult?.colTagsMap;
     const klKnownAbilitiesRow = klKnownAbilitiesResult?.dataRow;
     const klKnownAbilitiesColTags = klKnownAbilitiesResult?.colTagsMap;
-    const dbGearRow = dbGearResult?.dataRow;
-    const dbGearColTags = dbGearResult?.colTagsMap;
+
     const getValueFromSource = (sourceRow, sourceColTags, sourceTag) => {
       if (!sourceRow || !sourceColTags) return undefined;
       const sourceIndex = sourceColTags[sourceTag];
-      if (
-        sourceIndex !== undefined &&
-        sourceIndex !== null &&
-        sourceIndex < sourceRow.length
-      ) {
-        return sourceRow[sourceIndex];
-      }
-      return undefined;
+      return sourceRow[sourceIndex];
     };
+
     const dataMappings = [
       {
         gridTag: "Sk1",
@@ -3495,6 +3478,7 @@
         sourceTag: "Pic",
       },
     ];
+
     fMyConsoleLog(`     -> Applying Ability/KnownAbilities mappings...`);
     dataMappings.forEach((map) => {
       const value = getValueFromSource(
@@ -3502,89 +3486,103 @@
         map.sourceColTags,
         map.sourceTag
       );
-      if (value !== undefined) {
-        fSetGridValue(r, map.gridTag, value);
-      } else {
-        fSetGridValue(r, map.gridTag, "");
-      }
+      fSetGridValue(r, map.gridTag, value ?? "");
     });
-    if (dbGearRow && dbGearColTags) {
+  } // End function fApplyAbilityMappings
+
+  /** function fApplyGearMappingsAndCalcs
+   * Purpose: Maps and calculates gear-specific properties from the DB/Gear cache to a grid row.
+   * Assumptions: Helper for fSaveNewAbilityToAbilTbl.
+   * @param {number} r - The target row index in the grid.
+   * @param {object} dbGearResult - Result from DB Gear fetch.
+   * @returns {void}
+   */
+  function fApplyGearMappingsAndCalcs(r, dbGearResult) {
+    const dbGearRow = dbGearResult.dataRow;
+    const dbGearColTags = dbGearResult.colTagsMap;
+
+    const getValue = (tag) => dbGearRow[dbGearColTags[tag]] ?? "";
+
+    const possNameVal = getValue("Name_ID");
+    const isArtifactVal = getValue("IsArtifact");
+    const wornEnc = Number(getValue("WornEnc")) || 0;
+    const itemEnc = Number(getValue("ItemEnc")) || 0;
+    const crEach = Number(getValue("ItemCR")) || 0;
+    const apEach = Number(getValue("AP")) || 0;
+
+    fSetGridValue(r, "PossNum", 1);
+    fSetGridValue(r, "PossWorn", true);
+    fSetGridValue(r, "PossPerOff", "");
+
+    const encEach = wornEnc !== 0 ? wornEnc : itemEnc;
+    const encTotal = 1 * encEach;
+    const crTotal = 1 * crEach;
+    const apTotal = 1 * apEach;
+
+    fSetGridValue(r, "PossName", possNameVal);
+    fSetGridValue(r, "PossEnc", encTotal);
+    fSetGridValue(r, "PossCrEa", crEach);
+    fSetGridValue(r, "PossCrTot", crTotal);
+    fSetGridValue(r, "PossIsArtifact", isArtifactVal);
+    fSetGridValue(r, "PossAPEa", apEach);
+    fSetGridValue(r, "PossAPTot", apTotal);
+  } // End function fApplyGearMappingsAndCalcs
+
+  /** function fClearGearFields
+   * Purpose: Clears all gear-specific fields in a grid row.
+   * Assumptions: Helper for fSaveNewAbilityToAbilTbl.
+   * @param {number} r - The target row index in the grid.
+   * @returns {void}
+   */
+  function fClearGearFields(r) {
+    const gearFieldsToClear = [
+      "PossNum",
+      "PossName",
+      "PossEnc",
+      "PossCrEa",
+      "PossPerOff",
+      "PossCrTot",
+      "PossAPEa",
+      "PossAPTot",
+    ];
+    gearFieldsToClear.forEach((tag) => fSetGridValue(r, tag, ""));
+
+    fSetGridValue(r, "PossWorn", false);
+    fSetGridValue(r, "PossIsArtifact", false);
+  } // End function fClearGearFields
+
+  /** function fSaveNewAbilityToAbilTbl
+   * Purpose: Controller to apply fetched data from various caches to a grid row.
+   * Assumptions: Orchestrates mapping for ability, known ability, and gear data via helpers.
+   * @param {number} r - The target row index in the grid.
+   * @param {object | null} dbAbilityResult - Result from DB Abilities fetch.
+   * @param {object | null} klKnownAbilitiesResult - Result from KL KnownAbilities fetch.
+   * @param {object | null} dbGearResult - Result from DB Gear fetch.
+   * @returns {void}
+   */
+  function fSaveNewAbilityToAbilTbl(
+    r,
+    dbAbilityResult,
+    klKnownAbilitiesResult,
+    dbGearResult
+  ) {
+    const funcName = "fSaveNewAbilityToAbilTbl";
+    fMyConsoleLog(
+      `   -> ${funcName}: Applying fetched data to grid row ${r}...`
+    );
+
+    fApplyAbilityMappings(r, dbAbilityResult, klKnownAbilitiesResult);
+
+    if (dbGearResult?.found) {
       fMyConsoleLog(`     -> Applying Gear mappings and calculations...`);
-      const possNameVal =
-        getValueFromSource(dbGearRow, dbGearColTags, "Name_ID") ?? "";
-      const isArtifactVal = getValueFromSource(
-        dbGearRow,
-        dbGearColTags,
-        "IsArtifact"
-      );
-      const wornEncValRaw = getValueFromSource(
-        dbGearRow,
-        dbGearColTags,
-        "WornEnc"
-      );
-      const itemEncValRaw = getValueFromSource(
-        dbGearRow,
-        dbGearColTags,
-        "ItemEnc"
-      );
-      const crEachValRaw = getValueFromSource(
-        dbGearRow,
-        dbGearColTags,
-        "ItemCR"
-      );
-      const apEachValRaw = getValueFromSource(dbGearRow, dbGearColTags, "AP");
-      const possNumVal = 1;
-      fSetGridValue(r, "PossNum", 1);
-      fMyConsoleLog(`       -> Set possNumVal to: ${possNumVal}`);
-      const isWornVal = true;
-      fSetGridValue(r, "PossWorn", true);
-      fMyConsoleLog(`       -> Set isWornVal: ${isWornVal}`);
-      const wornEnc = Number(wornEncValRaw) || 0;
-      const itemEnc = Number(itemEncValRaw) || 0;
-      const encEachVal = isWornVal && wornEncValRaw !== "" ? wornEnc : itemEnc;
-      const encTotalVal = possNumVal * encEachVal;
-      fMyConsoleLog(
-        `       -> Enc Calc: Worn=${isWornVal}, WornEnc=${wornEnc}, ItemEnc=${itemEnc} => EncEach=${encEachVal}, TotalEnc=${encTotalVal}`
-      );
-      const crEachVal = Number(crEachValRaw) || 0;
-      const perOffVal = "";
-      fSetGridValue(r, "PossPerOff", "");
-      const crTotalVal = possNumVal * crEachVal;
-      fMyConsoleLog(
-        `       -> CR Calc: CREach=${crEachVal}, Num=${possNumVal}, PerOff=${perOffVal} => CRTotal=${crTotalVal}`
-      );
-      const apEachVal = Number(apEachValRaw) || 0;
-      const apTotalVal = possNumVal * apEachVal;
-      fMyConsoleLog(
-        `       -> AP Calc: APEach=${apEachVal}, Num=${possNumVal} => APTotal=${apTotalVal}`
-      );
-      fSetGridValue(r, "PossName", possNameVal);
-      fSetGridValue(r, "PossEnc", encTotalVal);
-      fSetGridValue(r, "PossCrEa", crEachVal);
-      fSetGridValue(r, "PossCrTot", crTotalVal);
-      fSetGridValue(r, "PossIsArtifact", isArtifactVal);
-      fSetGridValue(r, "PossAPEa", apEachVal);
-      fSetGridValue(r, "PossAPTot", apTotalVal);
+      fApplyGearMappingsAndCalcs(r, dbGearResult);
     } else {
       fMyConsoleLog(
         `     -> Clearing Gear-specific fields as item not found in DB Gear.`
       );
-      const gearFieldsToClear = [
-        "PossNum",
-        "PossName",
-        "PossWorn",
-        "PossEnc",
-        "PossCrEa",
-        "PossPerOff",
-        "PossCrTot",
-        "PossIsArtifact",
-        "PossAPEa",
-        "PossAPTot",
-      ];
-      gearFieldsToClear.forEach((tag) => fSetGridValue(r, tag, ""));
-      fSetGridValue(r, "PossWorn", false);
-      fSetGridValue(r, "PossIsArtifact", false);
+      fClearGearFields(r);
     }
+
     fMyConsoleLog(
       `   -> ${funcName}: Finished applying data to grid row ${r}.`
     );
