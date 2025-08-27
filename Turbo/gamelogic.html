@@ -6,394 +6,373 @@
   // Start - Core Roll Action
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-  /** function fMain_AbilityRoll
-   * Purpose: Top-level handler for initiating an ability/gear roll.
-   * Assumptions: gUI state is ready for a roll action. The `tag` object is populated.
-   * @returns {Promise<void>}
+  /** function fPrepareAbilityRoll
+   * Purpose: Validates that a valid ability is selected and populates the initial gUI.roll object.
+   * Assumptions: This is the first step in the main roll sequence.
+   * @returns {Promise<boolean>} True if preparation is successful, false otherwise.
    */
-  async function fMain_AbilityRoll() {
-    fMyConsoleLog("🎲 Roll Dice Action Triggered");
-    let logHtmlToSend = "";
-    let logTextToSend = "";
+  async function fPrepareAbilityRoll() {
+    const { r, c } = gUI.currentSkRadioChecked;
+    if (!fIsSkRadioGroupMember(r, c)) {
+      await fShowMessage("⚠️ Please select a valid Ability checkbox first!");
+      return false;
+    }
+    if (!(await fClearAndSetGUIRoll(r, c))) {
+      return false;
+    }
+    if (!(await fVerifyAbilityHasSkAndType())) {
+      return false;
+    }
+    return true;
+  } // End function fPrepareAbilityRoll
 
-    try {
-      const { r, c } = gUI.currentSkRadioChecked;
-      if (!fIsSkRadioGroupMember(r, c)) {
-        await fShowMessage("⚠️ Please select a valid Ability checkbox first!");
-        fSetButtonOrMenuState(null);
-        return;
-      }
-      if (!(await fClearAndSetGUIRoll(r, c))) {
-        fSetButtonOrMenuState(null);
-        return;
-      }
-      if (!(await fVerifyAbilityHasSkAndType())) {
-        fSetButtonOrMenuState(null);
-        return;
-      }
+  /** function fHandleNishPreRollSequence
+   * Purpose: Checks if the current roll is for the Nish ability and executes the pre-roll sequence if needed.
+   * Assumptions: gUI.roll is populated.
+   * @returns {Promise<boolean>} True if the roll is a Nish roll, false otherwise.
+   */
+  async function fHandleNishPreRollSequence() {
+    const nishRowIndex = tag.cs.game.r.NishAtr_R.index;
+    const isNishAbilityRoll = gUI.roll.ability_R === nishRowIndex;
 
-      const nishRowIndex = tag.cs.game.r.NishAtr_R.index;
-      const isNishAbilityRoll = gUI.roll.ability_R === nishRowIndex;
-      if (isNishAbilityRoll && !gUI.buttonOrMenu.isNish) {
+    if (isNishAbilityRoll) {
+      if (!gUI.buttonOrMenu.isNish) {
         fMyConsoleLog(
           "   -> Nish ability triggered via Checkbox + Roll/Free/Luck. Executing Nish sequence first..."
         );
         await fExecuteNishSequence();
-      } else if (isNishAbilityRoll && gUI.buttonOrMenu.isNish) {
+      } else {
         fMyConsoleLog(
           "   -> Nish ability triggered via Nish Button. Pre-sequence already executed."
         );
       }
+    }
+    return isNishAbilityRoll;
+  } // End function fHandleNishPreRollSequence
 
-      fMyConsoleLog("   -> Processing morph string...");
-      await fProcessMorph();
-      if (typeof gUI.roll.multiRollCount === "undefined") {
-        gUI.roll.multiRollCount = 1;
-      }
+  /** function fFinalizeRollParameters
+   * Purpose: Processes morphs and button states to set final roll parameters in gUI.roll.
+   * Assumptions: gUI.roll is populated.
+   * @param {boolean} isNishRoll - Whether the current roll is a Nish roll.
+   * @returns {void}
+   */
+  async function fFinalizeRollParameters(isNishRoll) {
+    await fProcessMorph();
+    if (typeof gUI.roll.multiRollCount === "undefined") {
+      gUI.roll.multiRollCount = 1;
+    }
+    gUI.roll.isFreeRoll =
+      gUI.buttonOrMenu.isFree ||
+      gUI.roll.isFreeRoll ||
+      (isNishRoll && gUI.buttonOrMenu.isNish);
+    gUI.roll.isLuckedRoll = gUI.buttonOrMenu.isLuck || gUI.roll.isLuckedRoll;
 
-      const multiRollCount = gUI.roll.multiRollCount;
-      const isFreeRoll =
-        gUI.buttonOrMenu.isFree ||
-        gUI.roll.isFreeRoll ||
-        (isNishAbilityRoll && gUI.buttonOrMenu.isNish);
-      const isLuckedRoll = gUI.buttonOrMenu.isLuck || gUI.roll.isLuckedRoll;
-      gUI.roll.isFreeRoll = isFreeRoll;
-      gUI.roll.isLuckedRoll = isLuckedRoll;
-      const resTyp = gUI.roll.resTyp;
-      const hasDifficultyMorph =
-        typeof gUI.roll.resDif === "number" && gUI.roll.resDif !== "";
+    fMyConsoleLog(
+      `   -> Final Roll Type: ${gUI.roll.resTyp}, Multi-Roll: ${gUI.roll.multiRollCount}, Free: ${gUI.roll.isFreeRoll}, Lucked: ${gUI.roll.isLuckedRoll}`
+    );
+  } // End function fFinalizeRollParameters
 
-      fMyConsoleLog(
-        `   -> Final Roll Type: ${resTyp}, Multi-Roll: ${multiRollCount}, Free: ${isFreeRoll}, Lucked: ${isLuckedRoll}, Difficulty Morph: ${hasDifficultyMorph}`
-      );
+  /** function fVerifyAndProcessAllCosts
+   * Purpose: Orchestrates all cost verification steps for a roll.
+   * Assumptions: gUI.roll is populated. Manages gUI.pendingChangesMap.
+   * @returns {Promise<object>} An object { success, headers: { html, text } }.
+   */
+  async function fVerifyAndProcessAllCosts() {
+    gUI.pendingChangesMap = {};
+    const { isFreeRoll, isLuckedRoll, multiRollCount } = gUI.roll;
+    const allHeaders = { html: [], text: [] };
 
-      const pendingHeadersHtml = [];
-      const pendingHeadersText = [];
-      let allCostsMet = true;
-      let userCancelled = false;
-      gUI.pendingChangesMap = {};
+    const addChangesToMap = (changesArray) => {
+      if (!Array.isArray(changesArray)) return;
+      changesArray.forEach((change) => {
+        const key = `${change.r},${change.c}`;
+        gUI.pendingChangesMap[key] = change.value;
+      });
+    };
 
-      const addChangesToMap = (changesArray) => {
-        if (!Array.isArray(changesArray)) return;
-        changesArray.forEach((change) => {
-          if (
-            change &&
-            typeof change.r !== "undefined" &&
-            typeof change.c !== "undefined"
-          ) {
-            const key = `${change.r},${change.c}`;
-            gUI.pendingChangesMap[key] = change.value;
-          } else {
-            console.warn("addChangesToMap received invalid change:", change);
-          }
-        });
-      };
-
-      if (isLuckedRoll) {
-        pendingHeadersHtml.push(
-          '⚠️ <span class="blue-bold">Lucked Roll Below:</span>'
-        );
-        pendingHeadersText.push("⚠️ Lucked Roll Below:");
-      }
-      if (isFreeRoll && !(isNishAbilityRoll && gUI.buttonOrMenu.isNish)) {
-        pendingHeadersHtml.push(
+    if (isFreeRoll) {
+      fMyConsoleLog("🛡️ Verifying Costs (Free Roll - Focus Only)...");
+      if (!gUI.roll.isNish) {
+        allHeaders.html.push(
           '⚠️ <span class="blue-bold">Free Roll Below:</span>'
         );
-        pendingHeadersText.push("⚠️ Free Roll Below:");
+        allHeaders.text.push("⚠️ Free Roll Below:");
       }
 
-      if (!isFreeRoll) {
-        fMyConsoleLog("🛡️ Verifying Costs (Luck and/or Standard)...");
-        if (isLuckedRoll) {
-          fMyConsoleLog("   -> Verifying Luck Cost...");
-          const luckCost = 1;
-          const currentLuck = fGetGridValue(
-            tag.cs.game.r.LuckBox.index,
-            tag.cs.game.c.LuckBox.index,
-            true
-          );
-          if (isNaN(currentLuck)) {
-            await fShowMessage("❌ Error reading current Luck value.");
-            fMyConsoleLog(
-              "🚫 Failed Luck Cost Verification: Could not read LuckBox."
-            );
-            allCostsMet = false;
-          } else if (currentLuck < luckCost) {
-            await fShowMessage("❌ Not Enough Luck!");
-            fMyConsoleLog(
-              "🚫 Failed Luck Cost Verification: Insufficient Luck."
-            );
-            allCostsMet = false;
-          } else {
-            const newLuck = currentLuck - luckCost;
-            addChangesToMap([
-              {
-                r: tag.cs.game.r.LuckBox.index,
-                c: tag.cs.game.c.LuckBox.index,
-                value: newLuck,
-              },
-            ]);
-            fMyConsoleLog(
-              `      -> Luck Cost OK (${currentLuck} -> ${newLuck}). Change added to map.`
-            );
-          }
-        }
-
-        if (!isLuckedRoll && allCostsMet) {
-          fMyConsoleLog("   -> Verifying Standard Costs...");
-          const usesResult = await fUses_VerifyAndProcessCost(multiRollCount);
-          if (!usesResult.success) {
-            allCostsMet = false;
-            userCancelled = usesResult.cancelledByUser;
-          } else {
-            addChangesToMap(usesResult.changes);
-            pendingHeadersHtml.push(...usesResult.headers);
-            pendingHeadersText.push(...usesResult.headersText);
-          }
-
-          if (allCostsMet) {
-            const actResult = await fAct_VerifyAndProcessCost();
-            if (!actResult.success) {
-              allCostsMet = false;
-              userCancelled = actResult.cancelledByUser;
-            } else {
-              addChangesToMap(actResult.changes);
-              pendingHeadersHtml.push(...actResult.headers);
-              pendingHeadersText.push(...actResult.headersText);
-            }
-          }
-          if (allCostsMet) {
-            const isOnResult = await fIsOn_VerifyAndProcessCost();
-            addChangesToMap(isOnResult.changes);
-          }
-          if (allCostsMet) {
-            const skMetaResult = await fSkMeta_VerifyAndProcessCost(
-              gUI.pendingChangesMap
-            );
-            if (!skMetaResult.success) {
-              allCostsMet = false;
-            } else {
-              addChangesToMap(skMetaResult.changes);
-            }
-          }
-          if (allCostsMet) {
-            const focusMetaResult = await fFocus_VerifyAndProcessCost(
-              gUI.pendingChangesMap
-            );
-            if (!focusMetaResult.success) {
-              allCostsMet = false;
-            } else {
-              addChangesToMap(focusMetaResult.changes);
-            }
-          }
-        }
-
-        if (!allCostsMet || userCancelled) {
-          const reason = userCancelled
-            ? "cost verification cancelled by user"
-            : "insufficient resources";
-          fMyConsoleLog(
-            `🚦 Halting Roll Dice Action due to ${reason}. Costs NOT applied.`
-          );
-          gUI.pendingChangesMap = {};
-          fSetButtonOrMenuState(null);
-          return;
-        }
-        fMyConsoleLog(
-          "✅ All necessary costs verified successfully. Changes prepared in map."
-        );
-      } else {
-        fMyConsoleLog(`✅ Skipping ALL Cost Verification (Free Roll).`);
-        gUI.pendingChangesMap = {};
-      }
-
-      let initialLogHtml = "";
-      let initialLogText = "";
-      pendingHeadersHtml.forEach(
-        (header) => (initialLogHtml += `${header}<br>`)
+      const focusMetaResult = await fFocus_VerifyAndProcessCost(
+        gUI.pendingChangesMap
       );
-      pendingHeadersText.forEach((header) => (initialLogText += `${header}\n`));
-
-      let titleHtml = `<span class="sidebar-ability-name">${
-        gUI.roll.skName || "Unknown Ability"
-      }</span>`;
-      let titleText = `${gUI.roll.skName || "Unknown Ability"}`;
-      if (gUI.roll.skTyp) {
-        titleHtml += ` ${gUI.roll.skTyp}`;
-        titleText += ` ${gUI.roll.skTyp}`;
-      }
-      if (gUI.roll.resTyp && gUI.roll.resTyp !== gUI.roll.skTyp) {
-        titleHtml += ` (<span class="red-bold">now</span> ${gUI.roll.resTyp})`;
-        titleText += ` (now ${gUI.roll.resTyp})`;
-      }
-      initialLogHtml += titleHtml;
-      initialLogText += titleText;
-
-      const morph =
-        typeof gUI.roll.skMorph === "string" && gUI.roll.skMorph !== ","
-          ? gUI.roll.skMorph.trim()
-          : "";
-      if (morph) {
-        initialLogHtml += `<br>morph: ${morph}`;
-        initialLogText += `\nmorph: ${morph}`;
-      }
-      initialLogHtml = initialLogHtml.trim();
-      initialLogText = initialLogText.trim();
-
-      let finalLogResult = null;
-      let helperSucceeded = false;
-      let wasMonsterInteractionRoll = false;
-      const resTypLower = resTyp.toLowerCase();
-
-      if (resTypLower === "atk" && !hasDifficultyMorph) {
-        fMyConsoleLog("⚔️ Performing Player Attack Rolls...");
-        finalLogResult = await fPerformPlayerAttackRolls(
-          initialLogHtml,
-          initialLogText
-        );
-        helperSucceeded = finalLogResult.success;
-        if (helperSucceeded) {
-          logHtmlToSend = finalLogResult.logHtml;
-          logTextToSend = finalLogResult.logText;
-          wasMonsterInteractionRoll = true;
-        }
-      } else if (resTypLower === "def" && !hasDifficultyMorph) {
-        fMyConsoleLog("🛡️ Performing Player Defense Rolls...");
-        finalLogResult = await fPerformPlayerDefenseRolls(
-          initialLogHtml,
-          initialLogText
-        );
-        helperSucceeded = finalLogResult.success;
-        if (helperSucceeded) {
-          logHtmlToSend = finalLogResult.logHtml;
-          logTextToSend = finalLogResult.logText;
-          wasMonsterInteractionRoll = true;
-        }
-      } else if (resTypLower === "dmg" && !hasDifficultyMorph) {
-        fMyConsoleLog("💥 Performing Player Damage Rolls...");
-        finalLogResult = await fPerformPlayerDamageRolls(
-          initialLogHtml,
-          initialLogText
-        );
-        helperSucceeded = finalLogResult.success;
-        if (helperSucceeded) {
-          logHtmlToSend = finalLogResult.logHtml;
-          logTextToSend = finalLogResult.logText;
-          wasMonsterInteractionRoll = true;
-        }
-      } else if (resTypLower === "ar" && !hasDifficultyMorph) {
-        fMyConsoleLog("🛡️ Performing Player Armor Rolls...");
-        finalLogResult = await fPerformPlayerArmorRolls(
-          initialLogHtml,
-          initialLogText
-        );
-        helperSucceeded = finalLogResult.success;
-        if (helperSucceeded) {
-          logHtmlToSend = finalLogResult.logHtml;
-          logTextToSend = finalLogResult.logText;
-          wasMonsterInteractionRoll = true;
-        }
-      } else {
-        fMyConsoleLog("🎯 Performing Standard Roll(s)...");
-        finalLogResult = fPerformMultiRolls(initialLogHtml, initialLogText);
-        logHtmlToSend = finalLogResult.finalLogHtml;
-        logTextToSend = finalLogResult.finalLogText;
-        helperSucceeded = true;
-        wasMonsterInteractionRoll = false;
-      }
-
-      if (!helperSucceeded) {
-        fMyConsoleLog("   -> Roll sequence halted. Costs NOT applied.");
+      if (!focusMetaResult.success) {
         gUI.pendingChangesMap = {};
-        fSetButtonOrMenuState(null);
-        return;
+        return { success: false, headers: allHeaders };
       }
+
+      addChangesToMap(focusMetaResult.changes);
+      fMyConsoleLog("✅ Free Roll Cost Verification Complete (Focus Only).");
+      return { success: true, headers: allHeaders };
+    }
+
+    if (isLuckedRoll) {
+      fMyConsoleLog("🛡️ Verifying Luck Cost...");
+      allHeaders.html.push(
+        '⚠️ <span class="blue-bold">Lucked Roll Below:</span>'
+      );
+      allHeaders.text.push("⚠️ Lucked Roll Below:");
+
+      const luckCost = 1;
+      const currentLuck = fGetGridValue("LuckBox", "LuckBox", true);
+      if (isNaN(currentLuck) || currentLuck < luckCost) {
+        await fShowMessage(
+          isNaN(currentLuck)
+            ? "❌ Error reading current Luck value."
+            : "❌ Not Enough Luck!"
+        );
+        gUI.pendingChangesMap = {};
+        return { success: false, headers: allHeaders };
+      }
+      addChangesToMap([
+        {
+          r: tag.cs.game.r.LuckBox.index,
+          c: tag.cs.game.c.LuckBox.index,
+          value: currentLuck - luckCost,
+        },
+      ]);
+      fMyConsoleLog("✅ Luck Cost verified successfully.");
+      return { success: true, headers: allHeaders };
+    }
+
+    // --- Standard Roll Cost Verification ---
+    fMyConsoleLog("🛡️ Verifying Standard Costs...");
+    let allCostsMet = true;
+    let userCancelled = false;
+
+    const costFunctions = [
+      () => fUses_VerifyAndProcessCost(multiRollCount),
+      fAct_VerifyAndProcessCost,
+      fIsOn_VerifyAndProcessCost,
+      () => fSkMeta_VerifyAndProcessCost(gUI.pendingChangesMap),
+      () => fFocus_VerifyAndProcessCost(gUI.pendingChangesMap),
+    ];
+
+    for (const costFn of costFunctions) {
+      const result = await costFn();
+      if (!result.success) {
+        allCostsMet = false;
+        userCancelled = result.cancelledByUser || false;
+        break;
+      }
+      if (result.changes) addChangesToMap(result.changes);
+      if (result.headers) allHeaders.html.push(...result.headers);
+      if (result.headersText) allHeaders.text.push(...result.headersText);
+    }
+
+    if (!allCostsMet || userCancelled) {
+      const reason = userCancelled
+        ? "cost verification cancelled by user"
+        : "insufficient resources";
       fMyConsoleLog(
-        `   -> ${
-          wasMonsterInteractionRoll ? "Monster interaction" : "Standard"
-        } roll sequence completed.`
+        `🚦 Halting Roll Dice Action due to ${reason}. Costs NOT applied.`
       );
+      gUI.pendingChangesMap = {};
+      return { success: false, headers: allHeaders };
+    }
 
-      let applyErrors = false;
-      if (Object.keys(gUI.pendingChangesMap).length > 0) {
-        fMyConsoleLog(
-          "✅ Roll sequence successful. Applying Pending Cost Changes..."
-        );
-        const changeEntries = Object.entries(gUI.pendingChangesMap);
-        fMyConsoleLog(
-          `   -> Applying ${changeEntries.length} changes from map...`
-        );
-        for (const [key, value] of changeEntries) {
-          try {
-            const keyParts = key.split(",");
-            if (keyParts.length !== 2) {
-              console.warn(`Invalid key format: "${key}"`);
-              applyErrors = true;
-              continue;
-            }
-            const [rowPart, colPart] = keyParts;
-            let rowRef = parseInt(rowPart, 10);
-            if (isNaN(rowRef) || rowRef < 0) {
-              rowRef = rowPart;
-            }
+    fMyConsoleLog("✅ All necessary costs verified successfully.");
+    return { success: true, headers: allHeaders };
+  } // End function fVerifyAndProcessAllCosts
 
-            // ** THE FIX IS HERE **
-            let colRef = parseInt(colPart, 10);
-            if (isNaN(colRef) || colRef < 0) {
-              colRef = colPart;
-            }
+  /** function fBuildInitialRollLogHeader
+   * Purpose: Constructs the initial HTML and plain text header for the sidebar log entry.
+   * Assumptions: gUI.roll is populated.
+   * @param {object} headers - An object { html: string[], text: string[] } from cost verification.
+   * @returns {object} An object containing the final { logHtml, logText } headers.
+   */
+  function fBuildInitialRollLogHeader(headers) {
+    let initialLogHtml =
+      headers.html.join("<br>") + (headers.html.length > 0 ? "<br>" : "");
+    let initialLogText =
+      headers.text.join("\n") + (headers.text.length > 0 ? "\n" : "");
 
-            if (!fSetGridValue(rowRef, colRef, value)) {
-              applyErrors = true;
-            }
-          } catch (parseError) {
-            console.error(`Error processing change key "${key}":`, parseError);
-            applyErrors = true;
-          }
+    let titleHtml = `<span class="sidebar-ability-name">${
+      gUI.roll.skName || "Unknown Ability"
+    }</span>`;
+    let titleText = `${gUI.roll.skName || "Unknown Ability"}`;
+
+    if (gUI.roll.skTyp) {
+      titleHtml += ` ${gUI.roll.skTyp}`;
+      titleText += ` ${gUI.roll.skTyp}`;
+    }
+    if (gUI.roll.resTyp && gUI.roll.resTyp !== gUI.roll.skTyp) {
+      titleHtml += ` (<span class="red-bold">now</span> ${gUI.roll.resTyp})`;
+      titleText += ` (now ${gUI.roll.resTyp})`;
+    }
+
+    const morph = (gUI.roll.skMorph || "").replace(/,/g, " ").trim();
+    if (morph) {
+      titleHtml += `<br>morph: ${morph}`;
+      titleText += `\nmorph: ${morph}`;
+    }
+
+    return {
+      logHtml: initialLogHtml + titleHtml,
+      logText: initialLogText + titleText,
+    };
+  } // End function fBuildInitialRollLogHeader
+
+  /** function fDispatchAndPerformRolls
+   * Purpose: Selects and executes the correct roll type based on gUI.roll state.
+   * Assumptions: gUI.roll is finalized.
+   * @param {object} logHeader - The object { logHtml, logText } for the roll header.
+   * @returns {Promise<object>} An object { success, logHtml, logText }.
+   */
+  async function fDispatchAndPerformRolls(logHeader) {
+    const { resTyp } = gUI.roll;
+    const hasDifficultyMorph =
+      typeof gUI.roll.resDif === "number" && gUI.roll.resDif !== "";
+    const resTypLower = (resTyp || "").toLowerCase();
+    let finalLogResult = null;
+
+    const rollTypeMap = {
+      atk: fPerformPlayerAttackRolls,
+      def: fPerformPlayerDefenseRolls,
+      dmg: fPerformPlayerDamageRolls,
+      ar: fPerformPlayerArmorRolls,
+    };
+
+    if (rollTypeMap[resTypLower] && !hasDifficultyMorph) {
+      fMyConsoleLog(`⚔️ Performing Player ${resTyp} Rolls...`);
+      finalLogResult = await rollTypeMap[resTypLower](
+        logHeader.logHtml,
+        logHeader.logText
+      );
+    } else {
+      fMyConsoleLog("🎯 Performing Standard Roll(s)...");
+      const standardResult = fPerformMultiRolls(
+        logHeader.logHtml,
+        logHeader.logText
+      );
+      finalLogResult = {
+        success: true,
+        logHtml: standardResult.finalLogHtml,
+        logText: standardResult.finalLogText,
+      };
+    }
+
+    if (!finalLogResult || !finalLogResult.success) {
+      fMyConsoleLog("   -> Roll sequence halted by a helper function.");
+      return { success: false };
+    }
+
+    fMyConsoleLog(`   -> Roll sequence completed successfully.`);
+    return {
+      success: true,
+      logHtml: finalLogResult.logHtml,
+      logText: finalLogResult.logText,
+    };
+  } // End function fDispatchAndPerformRolls
+
+  /** function fApplyPendingChanges
+   * Purpose: Iterates through gUI.pendingChangesMap and applies them to the grid.
+   * Assumptions: gUI.pendingChangesMap contains valid change objects.
+   * @returns {Promise<boolean>} True if all changes applied successfully, false otherwise.
+   */
+  async function fApplyPendingChanges() {
+    const changesMap = gUI.pendingChangesMap;
+    if (Object.keys(changesMap).length === 0) {
+      fMyConsoleLog("✅ No Pending Cost Changes to Apply.");
+      return true;
+    }
+
+    fMyConsoleLog(
+      `✅ Applying ${Object.keys(changesMap).length} Pending Cost Changes...`
+    );
+    let applyErrors = false;
+    for (const [key, value] of Object.entries(changesMap)) {
+      try {
+        const [rowPart, colPart] = key.split(",");
+        const rowRef = parseInt(rowPart, 10);
+        const colRef = parseInt(colPart, 10);
+
+        if (isNaN(rowRef) || isNaN(colRef)) {
+          console.warn(`Invalid key format in pendingChangesMap: "${key}"`);
+          applyErrors = true;
+          continue;
         }
-        gUI.pendingChangesMap = {};
-        if (applyErrors) {
-          fMyConsoleLog(
-            "❌ Errors occurred while applying cost/state changes."
-          );
-          await fShowMessage(
-            "Error applying some cost/state changes post-roll."
-          );
-        } else {
-          fMyConsoleLog("✅ Costs Applied Successfully.");
+        if (!fSetGridValue(rowRef, colRef, value)) {
+          applyErrors = true;
         }
-      } else {
-        fMyConsoleLog(
-          "✅ Roll sequence successful. No Pending Cost Changes to Apply."
-        );
+      } catch (parseError) {
+        console.error(`Error processing change key "${key}":`, parseError);
+        applyErrors = true;
+      }
+    }
+
+    if (applyErrors) {
+      fMyConsoleLog("❌ Errors occurred while applying cost/state changes.");
+    } else {
+      fMyConsoleLog("✅ Costs Applied Successfully.");
+    }
+    return !applyErrors;
+  } // End function fApplyPendingChanges
+
+  /** function fApplyFinalNishRollValue
+   * Purpose: Updates the ('Nish', 'Nish') cell with the final result of a Nish roll.
+   * Assumptions: Called only after a successful Nish roll. gUI.roll contains the final result.
+   * @returns {void}
+   */
+  function fApplyFinalNishRollValue() {
+    const finalNishRoll = gUI.roll.resRoll;
+    if (typeof finalNishRoll === "number" || finalNishRoll === "") {
+      fMyConsoleLog(
+        `   -> Updating ('Nish', 'Nish') cell with final roll result: ${finalNishRoll}`
+      );
+      if (
+        !fSetGridValue(
+          tag.cs.game.r.Nish.index,
+          tag.cs.game.c.Nish.index,
+          finalNishRoll
+        )
+      ) {
+        fMyConsoleLog("      -> ⚠️ Failed to update ('Nish', 'Nish') cell.");
+      }
+    } else {
+      fMyConsoleLog(
+        `   -> Skipping update to ('Nish', 'Nish') cell: Invalid final roll result type (${typeof finalNishRoll}).`
+      );
+    }
+  } // End function fApplyFinalNishRollValue
+
+  /** function fMain_AbilityRoll
+   * Purpose: Top-level controller for initiating an ability/gear roll.
+   * Assumptions: Orchestrates validation, cost-checking, execution, and logging by calling helper functions.
+   * @returns {Promise<void>}
+   */
+  async function fMain_AbilityRoll() {
+    fMyConsoleLog("🎲 Roll Dice Action Triggered");
+    try {
+      if (!(await fPrepareAbilityRoll())) return;
+
+      const isNishRoll = await fHandleNishPreRollSequence();
+      await fFinalizeRollParameters(isNishRoll);
+
+      const costResult = await fVerifyAndProcessAllCosts();
+      if (!costResult.success) return;
+
+      const logHeader = fBuildInitialRollLogHeader(costResult.headers);
+
+      const rollResult = await fDispatchAndPerformRolls(logHeader);
+      if (!rollResult.success) return;
+
+      if (!(await fApplyPendingChanges())) {
+        await fShowMessage("Error applying some cost/state changes post-roll.");
       }
 
-      if (isNishAbilityRoll) {
-        const finalNishRoll = gUI.roll.resRoll;
-        if (typeof finalNishRoll === "number" || finalNishRoll === "") {
-          fMyConsoleLog(
-            `   -> Updating ('Nish', 'Nish') cell with final roll result: ${finalNishRoll}`
-          );
-          if (
-            !fSetGridValue(
-              tag.cs.game.r.Nish.index,
-              tag.cs.game.c.Nish.index,
-              finalNishRoll
-            )
-          ) {
-            fMyConsoleLog(
-              "      -> ⚠️ Failed to update ('Nish', 'Nish') cell."
-            );
-          }
-        } else {
-          fMyConsoleLog(
-            `   -> Skipping update to ('Nish', 'Nish') cell: Invalid final roll result type (${typeof finalNishRoll}).`
-          );
-        }
+      if (isNishRoll) {
+        fApplyFinalNishRollValue();
       }
 
-      if (logHtmlToSend) {
-        fPostToSidebar(logHtmlToSend, logTextToSend);
+      if (rollResult.logHtml) {
+        fPostToSidebar(rollResult.logHtml, rollResult.logText);
         fShowSidebar();
       } else {
         fMyConsoleLog("ℹ️ No final log message generated.");
@@ -404,15 +383,12 @@
       await fShowMessage(
         `❌ Critical Error during roll: ${err.message}. Please check console.`
       );
+    } finally {
       fSetButtonOrMenuState(null);
+      gUI.pendingChangesMap = {};
       setTimeout(() => fSendLogToGMScreenAndPS(), 0);
-      return;
+      fMyConsoleLog(`✅ Roll Dice Action Completed.`);
     }
-
-    fSetButtonOrMenuState(null);
-    fMyConsoleLog(`✅ Roll Dice Action Completed.`);
-
-    setTimeout(() => fSendLogToGMScreenAndPS(), 0);
   } // End function fMain_AbilityRoll
 
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
