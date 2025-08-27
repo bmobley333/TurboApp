@@ -1888,72 +1888,64 @@
     }
   } // End function fHandleGridButtonClick
 
-  /** function fUpdateMonsterTable
-   * Purpose: Processes monster data from the GM Screen DB and populates the Turbo monster table.
-   * Assumptions: Skips the first row (CustMon) of the Turbo table. Handles various data transformations.
-   * @param {any[][]} gmDataArray - 2D array of monster data from the GM Screen.
-   * @param {object} gmColTags - Map of GM Screen column tags to indices.
-   * @param {object} gmRowTags - Map of GM Screen row tags to indices.
-   * @returns {void}
+  /** function fValidateMonsterUpdateInputs
+   * Purpose: Validates all inputs for the monster table update process.
+   * Assumptions: Helper for fUpdateMonsterTable.
+   * @param {any[][]} gmDataArray - 2D array of monster data.
+   * @param {object} gmColTags - Map of GM Screen column tags.
+   * @param {object} gmRowTags - Map of GM Screen row tags.
+   * @returns {Promise<object>} An object with { success, errorMsg, turboMon_R_start, turboMon_R_end }.
    */
-  async function fUpdateMonsterTable(gmDataArray, gmColTags, gmRowTags) {
-    fMyConsoleLog("🧬 Processing GM Monster Data for Turbo Table...");
+  async function fValidateMonsterUpdateInputs(
+    gmDataArray,
+    gmColTags,
+    gmRowTags
+  ) {
     if (!Array.isArray(gmDataArray)) {
-      fMyConsoleLog(
-        "❌ fUpdateMonsterTable Error: gmDataArray is not an array."
-      );
-      await fShowMessage(
-        "Error: Invalid monster data received from server (not an array)."
-      );
-      return;
+      return {
+        success: false,
+        errorMsg: "Error: Invalid monster data received (not an array).",
+      };
     }
     if (typeof gmColTags !== "object" || gmColTags === null) {
-      fMyConsoleLog(
-        "❌ fUpdateMonsterTable Error: gmColTags is not a valid object."
-      );
-      await fShowMessage(
-        "Error: Invalid column tag mapping received from server."
-      );
-      return;
+      return {
+        success: false,
+        errorMsg: "Error: Invalid column tag mapping received.",
+      };
     }
     if (typeof gmRowTags !== "object" || gmRowTags === null) {
-      fMyConsoleLog(
-        "❌ fUpdateMonsterTable Error: gmRowTags is not a valid object."
-      );
-      await fShowMessage(
-        "Error: Invalid row tag mapping received from server."
-      );
-      return;
+      return {
+        success: false,
+        errorMsg: "Error: Invalid row tag mapping received.",
+      };
     }
+
     const turboRangeDef = gUI.resolvedRanges?.monsters;
     if (!turboRangeDef || !fDoesObjectHaveR1C1R2C2Properties(turboRangeDef)) {
-      fMyConsoleLog(
-        "❌ fUpdateMonsterTable Error: Turbo monster range (gUI.resolvedRanges.monsters) invalid."
-      );
-      await fShowMessage(
-        "Error: Turbo monster table range definition is missing."
-      );
-      return;
+      return {
+        success: false,
+        errorMsg: "Error: Turbo monster table range definition is missing.",
+      };
     }
-    const turboMon_R_start = turboRangeDef.r1;
-    const turboMon_R_end = turboRangeDef.r2;
+
+    const { r1: turboMon_R_start, r2: turboMon_R_end } = turboRangeDef;
     if ([turboMon_R_start, turboMon_R_end].some(isNaN)) {
-      fMyConsoleLog(
-        "❌ fUpdateMonsterTable Error: Could not resolve Turbo monster range boundaries."
-      );
-      await fShowMessage(
-        "Error: Could not resolve Turbo monster table boundaries."
-      );
-      return;
+      return {
+        success: false,
+        errorMsg: "Error: Could not resolve Turbo monster table boundaries.",
+      };
     }
-    const turboTableAvailableRows = turboMon_R_end - (turboMon_R_start + 1) + 1;
-    const turboFill_R_start = turboMon_R_start + 1;
-    fMyConsoleLog(
-      `   -> Turbo Table: CustMon Row=${turboMon_R_start}, LastMon Row=${turboMon_R_end}.`
-    );
-    fMyConsoleLog(
-      `   -> Filling starts at row ${turboFill_R_start}. Available Rows for DB monsters: ${turboTableAvailableRows}.`
-    );
+
+    return { success: true, turboMon_R_start, turboMon_R_end };
+  } // End function fValidateMonsterUpdateInputs
+
+  /** function fResolveGMMonsterColumnTags
+   * Purpose: Resolves required GM Screen monster column tags to their indices.
+   * Assumptions: Helper for fUpdateMonsterTable.
+   * @param {object} gmColTags - The map of GM Screen column tags to indices.
+   * @returns {object|null} An object of resolved indices, or null if a tag is missing.
+   */
+  function fResolveGMMonsterColumnTags(gmColTags) {
     const requiredGmColTags = [
       "ActiveMonTF",
       "MonCustName",
@@ -1967,158 +1959,177 @@
       "Notes",
     ];
     const resolvedGmColIndices = {};
-    let missingColTag = null;
+
     for (const tag of requiredGmColTags) {
       const index = gmColTags?.[tag];
-      if (typeof index === "number" && !isNaN(index)) {
-        resolvedGmColIndices[tag] = index;
-      } else {
-        if (gmColTags?.hasOwnProperty(tag)) {
-          fMyConsoleLog(
-            `   -> Warning: GM Column tag '${tag}' exists but index is invalid: ${index}`
-          );
-        }
-        missingColTag = tag;
-        break;
+      if (typeof index !== "number" || isNaN(index)) {
+        fMyConsoleLog(
+          `❌ fResolveGMMonsterColumnTags Error: Missing or invalid index for required tag: '${tag}'.`
+        );
+        return null;
       }
-    }
-    if (missingColTag) {
-      fMyConsoleLog(
-        `❌ fUpdateMonsterTable Error: Missing required GM Screen column tag or invalid index for: '${missingColTag}'.`
-      );
-      await fShowMessage(
-        `Error: GM Screen data is missing expected column tag or index for: ${missingColTag}.`
-      );
-      return;
+      resolvedGmColIndices[tag] = index;
     }
     fMyConsoleLog(
       `   -> Resolved GM Column Indices: ${JSON.stringify(
         resolvedGmColIndices
       )}`
     );
-    const custMonFirst_R_idx_raw = gmRowTags["CustMonFirst_R"];
-    const monTblLast_R_idx_raw = gmRowTags["MonTblLast_R"];
-    const hasCustomBounds =
-      typeof custMonFirst_R_idx_raw === "number" &&
-      typeof monTblLast_R_idx_raw === "number";
-    if (hasCustomBounds) {
+    return resolvedGmColIndices;
+  } // End function fResolveGMMonsterColumnTags
+
+  /** function fExtractAndProcessGMMonsterData
+   * Purpose: Extracts and processes data for a single monster row from the GM Screen data.
+   * Assumptions: Helper for fUpdateMonsterTable.
+   * @param {any[]} dbMon_R - A single row of monster data from the GM Screen array.
+   * @param {object} colIndices - The resolved map of GM column tags to indices.
+   * @param {object} gmRowTags - The map of GM Screen row tags.
+   * @returns {object} A structured object with processed monster data and a shouldProcess flag.
+   */
+  function fExtractAndProcessGMMonsterData(dbMon_R, colIndices, gmRowTags) {
+    const isActiveVal = dbMon_R?.[colIndices["ActiveMonTF"]];
+    const isActive =
+      isActiveVal === true || String(isActiveVal).toUpperCase() === "TRUE";
+    if (!isActive) {
+      return { shouldProcess: false };
+    }
+
+    const monCustName = String(dbMon_R[colIndices["MonCustName"]] ?? "").trim();
+    const monName = String(dbMon_R[colIndices["MonName"]] ?? "").trim();
+
+    // Custom monster logic can be added here if needed using gmRowTags
+
+    if (!monCustName && !monName) {
+      return { shouldProcess: false };
+    }
+
+    let finalMonsterName = monCustName || monName;
+    const namePrefix = "Mon: ";
+    if (finalMonsterName.startsWith(namePrefix)) {
+      finalMonsterName = finalMonsterName.substring(namePrefix.length);
+    }
+    const underscoreIndex = finalMonsterName.indexOf(" _");
+    if (underscoreIndex !== -1) {
+      finalMonsterName = finalMonsterName.substring(0, underscoreIndex);
+    }
+
+    const notes = String(dbMon_R[colIndices["Notes"]] ?? "");
+    let size = "";
+    const sizePrefix = "SIZE: ";
+    const sizeIndex = notes.toUpperCase().indexOf(sizePrefix);
+    if (sizeIndex !== -1) {
+      const lineEndIndex = notes.indexOf("\n", sizeIndex);
+      size = (
+        lineEndIndex === -1
+          ? notes.substring(sizeIndex + sizePrefix.length)
+          : notes.substring(sizeIndex + sizePrefix.length, lineEndIndex)
+      ).trim();
+    }
+
+    return {
+      shouldProcess: true,
+      name: finalMonsterName,
+      vit: dbMon_R[colIndices["Vit"]],
+      atk: dbMon_R[colIndices["Atk"]],
+      dmg: dbMon_R[colIndices["Dmg"]],
+      def: dbMon_R[colIndices["Def"]],
+      ar: dbMon_R[colIndices["Ar"]],
+      pic: dbMon_R[colIndices["Pic"]],
+      size: size,
+    };
+  } // End function fExtractAndProcessGMMonsterData
+
+  /** function fPopulateTurboMonsterRow
+   * Purpose: Populates a single row in the Turbo monster table with processed data.
+   * Assumptions: Helper for fUpdateMonsterTable.
+   * @param {number} turboMon_R - The target row index in the Turbo grid.
+   * @param {object} monsterData - The processed monster data object.
+   * @returns {boolean} True if all values were set successfully, false otherwise.
+   */
+  function fPopulateTurboMonsterRow(turboMon_R, monsterData) {
+    let rowUpdateSuccess = true;
+    rowUpdateSuccess &&= fSetGridValue(turboMon_R, "MonName", monsterData.name);
+    rowUpdateSuccess &&= fSetGridValue(turboMon_R, "MonVit", monsterData.vit);
+    rowUpdateSuccess &&= fSetGridValue(turboMon_R, "MonAtk", monsterData.atk);
+    rowUpdateSuccess &&= fSetGridValue(turboMon_R, "MonDmg", monsterData.dmg);
+    rowUpdateSuccess &&= fSetGridValue(turboMon_R, "MonDef", monsterData.def);
+    rowUpdateSuccess &&= fSetGridValue(turboMon_R, "MonAR", monsterData.ar);
+    rowUpdateSuccess &&= fSetGridValue(turboMon_R, "MonPic", monsterData.pic);
+    rowUpdateSuccess &&= fSetGridValue(turboMon_R, "MonSize", monsterData.size);
+    rowUpdateSuccess &&= fSetGridValue(turboMon_R, "NumMon", ""); // Clear NumMon for fresh input
+
+    if (!rowUpdateSuccess) {
       fMyConsoleLog(
-        `   -> Received GM Custom Monster Row Indices (relative presumed): ${custMonFirst_R_idx_raw} to ${monTblLast_R_idx_raw}`
-      );
-    } else {
-      fMyConsoleLog(
-        `   -> Warning: Could not resolve GM custom monster row boundary tags ('CustMonFirst_R', 'MonTblLast_R'). Custom monster logic may be inaccurate.`
+        `      -> ⚠️ Error setting some values for Turbo monster row ${turboMon_R}.`
       );
     }
-    let turboMon_R = turboFill_R_start;
-    let isOverflowing = false;
+    return rowUpdateSuccess;
+  } // End function fPopulateTurboMonsterRow
+
+  /** function fUpdateMonsterTable
+   * Purpose: Controller to process GM Screen monster data and populate the Turbo monster table.
+   * Assumptions: Orchestrates validation, data extraction, and grid updates via helper functions.
+   * @param {any[][]} gmDataArray - 2D array of monster data from the GM Screen.
+   * @param {object} gmColTags - Map of GM Screen column tags to indices.
+   * @param {object} gmRowTags - Map of GM Screen row tags to indices.
+   * @returns {Promise<void>} Resolves after the update is complete.
+   */
+  async function fUpdateMonsterTable(gmDataArray, gmColTags, gmRowTags) {
+    fMyConsoleLog("🧬 Processing GM Monster Data for Turbo Table...");
+
+    const validation = await fValidateMonsterUpdateInputs(
+      gmDataArray,
+      gmColTags,
+      gmRowTags
+    );
+    if (!validation.success) {
+      await fShowMessage(validation.errorMsg);
+      return;
+    }
+
+    const resolvedGmColIndices = fResolveGMMonsterColumnTags(gmColTags);
+    if (!resolvedGmColIndices) {
+      await fShowMessage(
+        "❌ Error: GM Screen data is missing expected column tags."
+      );
+      return;
+    }
+
+    const { turboMon_R_start, turboMon_R_end } = validation;
+    const turboTableAvailableRows = turboMon_R_end - (turboMon_R_start + 1) + 1;
+    let turboMon_R = turboMon_R_start + 1;
     let monstersAdded = 0;
     let errorsSettingValue = 0;
-    const activeColIdx = resolvedGmColIndices["ActiveMonTF"];
-    for (let db_idx = 0; db_idx < gmDataArray.length; db_idx++) {
-      const dbMon_R = gmDataArray[db_idx];
-      const isActiveVal = dbMon_R?.[activeColIdx];
-      const isActive =
-        isActiveVal === true || String(isActiveVal).toUpperCase() === "TRUE";
-      if (!isActive) {
-        continue;
-      }
-      const isCustomMonsterRow =
-        hasCustomBounds &&
-        db_idx >= custMonFirst_R_idx_raw &&
-        db_idx <= monTblLast_R_idx_raw;
-      const monCustName = String(
-        dbMon_R[resolvedGmColIndices["MonCustName"]] ?? ""
-      ).trim();
-      const monName = String(
-        dbMon_R[resolvedGmColIndices["MonName"]] ?? ""
-      ).trim();
-      if (isCustomMonsterRow && !monCustName) {
-        continue;
-      }
-      let finalMonsterName =
-        monCustName || monName || `Unnamed Monster ${db_idx + 1}`;
-      const prefix = "Mon: ";
-      if (finalMonsterName.startsWith(prefix)) {
-        finalMonsterName = finalMonsterName.substring(prefix.length);
-      }
-      const indexOfUnderscore = finalMonsterName.indexOf(" _");
-      const indexOfSpaces = finalMonsterName.indexOf("   ");
-      let trimIndex = -1;
-      if (indexOfUnderscore !== -1 && indexOfSpaces !== -1) {
-        trimIndex = Math.min(indexOfUnderscore, indexOfSpaces);
-      } else if (indexOfUnderscore !== -1) {
-        trimIndex = indexOfUnderscore;
-      } else if (indexOfSpaces !== -1) {
-        trimIndex = indexOfSpaces;
-      }
-      if (trimIndex !== -1) {
-        finalMonsterName = finalMonsterName.substring(0, trimIndex);
-      }
+
+    for (const dbMon_R of gmDataArray) {
+      const monsterData = fExtractAndProcessGMMonsterData(
+        dbMon_R,
+        resolvedGmColIndices,
+        gmRowTags
+      );
+      if (!monsterData.shouldProcess) continue;
+
       if (turboMon_R > turboMon_R_end) {
-        isOverflowing = true;
+        const message = `⚠️ Too many active monsters on GM Screen!<br>Only the first ${turboTableAvailableRows} could be loaded.`;
         fMyConsoleLog(
-          `   -> Turbo table overflow detected at GM row index ${db_idx}. Attempting to write to row ${turboMon_R}, but last available is ${turboMon_R_end}.`
+          `   -> Turbo table overflow detected. Max rows: ${turboTableAvailableRows}.`
         );
+        await fShowMessage(message);
         break;
       }
-      const vit = dbMon_R[resolvedGmColIndices["Vit"]];
-      const atk = dbMon_R[resolvedGmColIndices["Atk"]];
-      const dmg = dbMon_R[resolvedGmColIndices["Dmg"]];
-      const def = dbMon_R[resolvedGmColIndices["Def"]];
-      const ar = dbMon_R[resolvedGmColIndices["Ar"]];
-      const pic = isCustomMonsterRow
-        ? ""
-        : dbMon_R[resolvedGmColIndices["Pic"]];
-      const notes = String(dbMon_R[resolvedGmColIndices["Notes"]] ?? "");
-      let size = "";
-      const sizePrefix = "SIZE: ";
-      const sizeIndex = notes.toUpperCase().indexOf(sizePrefix);
-      if (sizeIndex !== -1) {
-        const lineEndIndex = notes.indexOf("\n", sizeIndex);
-        const sizeText =
-          lineEndIndex === -1
-            ? notes.substring(sizeIndex + sizePrefix.length)
-            : notes.substring(sizeIndex + sizePrefix.length, lineEndIndex);
-        size = sizeText.trim();
-      }
-      if (isCustomMonsterRow) size = "";
-      let rowUpdateSuccess = true;
-      rowUpdateSuccess &&= fSetGridValue(
-        turboMon_R,
-        "MonName",
-        finalMonsterName
-      );
-      rowUpdateSuccess &&= fSetGridValue(turboMon_R, "MonVit", vit);
-      rowUpdateSuccess &&= fSetGridValue(turboMon_R, "MonAtk", atk);
-      rowUpdateSuccess &&= fSetGridValue(turboMon_R, "MonDmg", dmg);
-      rowUpdateSuccess &&= fSetGridValue(turboMon_R, "MonDef", def);
-      rowUpdateSuccess &&= fSetGridValue(turboMon_R, "MonAR", ar);
-      rowUpdateSuccess &&= fSetGridValue(turboMon_R, "MonPic", pic);
-      rowUpdateSuccess &&= fSetGridValue(turboMon_R, "MonSize", size);
-      rowUpdateSuccess &&= fSetGridValue(turboMon_R, "NumMon", "");
-      if (rowUpdateSuccess) {
+
+      if (fPopulateTurboMonsterRow(turboMon_R, monsterData)) {
         monstersAdded++;
       } else {
         errorsSettingValue++;
-        fMyConsoleLog(
-          `      -> ⚠️ Error setting some values for Turbo row ${turboMon_R}.`
-        );
       }
       turboMon_R++;
     }
-    if (isOverflowing) {
-      const message = `⚠️ Too many active monsters on GM Screen!
-   <br>Only the first ${turboTableAvailableRows} could be loaded. Please ask the GM to reduce active monsters.`;
-      fMyConsoleLog(`   -> ${message.replace("<br>", " ")}`);
-      await fShowMessage(message);
-    }
+
     fMyConsoleLog(
       `✅ Monster Table Update Complete. Added: ${monstersAdded} monsters.${
-        errorsSettingValue > 0
-          ? ` (${errorsSettingValue} errors setting values)`
-          : ""
-      }${isOverflowing ? " (Overflow occurred)" : ""}`
+        errorsSettingValue > 0 ? ` (${errorsSettingValue} value errors)` : ""
+      }`
     );
   } // End function fUpdateMonsterTable
 
