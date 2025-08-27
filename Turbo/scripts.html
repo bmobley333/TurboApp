@@ -5190,14 +5190,13 @@
       .fSrvGetInitialGridData(gIndex);
   } // End function fLoadGameSheet
 
-  /** function fOnCSGameDataLoaded
-   * Purpose: Handles the initial data payload from the server.
-   * Assumptions: The response object has a specific structure.
-   * Notes: This function orchestrates the subsequent data fetching, validation, and rendering flow.
-   * @param {object} response - The wrapper object from the server containing data and source info.
-   * @returns {Promise<void>} Resolves after the entire load and render process is kicked off.
+  /** function fProcessInitialDataPayload
+   * Purpose: Handles the initial server response, validates data, and builds core objects.
+   * Assumptions: This is the first step in the data loading pipeline.
+   * @param {object} response - The wrapper object from the server.
+   * @returns {boolean} True if the payload is valid and processed, false otherwise.
    */
-  async function fOnCSGameDataLoaded(response) {
+  function fProcessInitialDataPayload(response) {
     const source = response?.source || "Unknown";
     if (source === "Firestore") {
       fMyConsoleLog("✅ Initial Game UI Data loaded from Firestore");
@@ -5208,95 +5207,108 @@
         `💾 Creating and Saving "v${gameVerMajor} Game UI" to Firestore...`
       );
     }
-    const dataPayload = response?.data;
-    const isSheetDataValid = fStoreAndValidateData(dataPayload);
+
+    const isSheetDataValid = fStoreAndValidateData(response?.data);
     if (!isSheetDataValid) {
       fMyConsoleLog("❌ Initial data invalid or empty. Halting load process.");
-      fHideMessage();
-      return;
+      return false;
     }
+
     fMyConsoleLog("   -> Stored initial data into gUI.");
-
-    // Build the tag object for the main game sheet
     fBuildTagObject("cs", "game", gUI.arr);
-    // Resolve all ranges now that tags are available
     fResolveAllRanges();
+    return true;
+  } // End function fProcessInitialDataPayload
 
-    fInitializeCustomNotesArray();
+  /** function fFetchAndApplyUserFirestoreData
+   * Purpose: Fetches and applies the user's saved gUI.arr and customNotes from Firestore.
+   * Assumptions: Skips if user email or CSID are missing.
+   * @returns {Promise<void>} Resolves after the Firestore check is complete.
+   */
+  async function fFetchAndApplyUserFirestoreData() {
     fMyConsoleLog(
       "⚙️ Checking Firestore for saved Grid (gUI.arr) and Custom Notes data..."
     );
+
     if (!gIndex.Email || !gIndex.CSID) {
       fMyConsoleLog(
         "   -> ⚠️ Skipping Firestore data check: Missing Email or CSID."
       );
-      fSetupTooltipAndModal();
-      fMyConsoleLog("   -> Proceeding to fetch background caches...");
-      const cachesLoaded = await fBulkCacheFSData();
-      if (cachesLoaded) {
-        fRenderGridWithFinalData();
-      } else {
-        fMyConsoleLog(
-          "❌ Background cache loading failed. Halting further rendering."
-        );
-        fHideMessage();
-      }
       return;
     }
-    google.script.run
-      .withSuccessHandler(async (firestoreResponse) => {
-        if (firestoreResponse?.success) {
-          if (firestoreResponse.firestoreArr) {
+
+    return new Promise((resolve) => {
+      google.script.run
+        .withSuccessHandler((firestoreResponse) => {
+          if (firestoreResponse?.success) {
+            if (firestoreResponse.firestoreArr) {
+              fMyConsoleLog(
+                "   -> ✅ Firestore Grid data found. Overwriting gUI.arr."
+              );
+              gUI.arr = firestoreResponse.firestoreArr;
+            }
+            if (firestoreResponse.customNotes) {
+              fMyConsoleLog(
+                "   -> ✅ Firestore Custom Notes found. Overwriting gUI.customNotes."
+              );
+              gUI.customNotes = firestoreResponse.customNotes;
+            }
+          } else {
+            const reason = firestoreResponse?.message || "Reason unknown.";
             fMyConsoleLog(
-              "   -> ✅ Firestore Grid data found. Overwriting gUI.arr."
+              `   -> ℹ️ Firestore data check returned false (${reason}). Using template/Sheet data.`
             );
-            gUI.arr = firestoreResponse.firestoreArr;
           }
-          if (firestoreResponse.customNotes) {
-            fMyConsoleLog(
-              "   -> ✅ Firestore Custom Notes found. Overwriting gUI.customNotes."
-            );
-            gUI.customNotes = firestoreResponse.customNotes;
-          }
-        } else {
-          const reason = firestoreResponse?.message || "Reason unknown.";
+          resolve();
+        })
+        .withFailureHandler((error) => {
+          const errorMsg = `Error checking Firestore for data: ${error.message}`;
+          console.error(errorMsg, error);
           fMyConsoleLog(
-            `   -> ℹ️ Firestore data check returned false (${reason}). Using template/Sheet data.`
+            `   -> ❌ ${errorMsg}. Using template/Sheet data as fallback.`
           );
-        }
-        fSetupTooltipAndModal();
-        fMyConsoleLog("   -> Proceeding to fetch background caches...");
-        const cachesLoaded = await fBulkCacheFSData();
-        if (cachesLoaded) {
-          fRenderGridWithFinalData();
-        } else {
-          fMyConsoleLog(
-            "❌ Background cache loading failed. Halting further rendering."
-          );
-          fHideMessage();
-        }
-      })
-      .withFailureHandler(async (error) => {
-        const errorMsg = `Error checking Firestore for data: ${error.message}`;
-        console.error(errorMsg, error);
-        fMyConsoleLog(
-          `   -> ❌ ${errorMsg}. Using template/Sheet data as fallback.`
-        );
-        fSetupTooltipAndModal();
-        fMyConsoleLog(
-          "   -> Proceeding to fetch background caches (Firestore check failed)..."
-        );
-        const cachesLoaded = await fBulkCacheFSData();
-        if (cachesLoaded) {
-          fRenderGridWithFinalData();
-        } else {
-          fMyConsoleLog(
-            "❌ Background cache loading failed. Halting further rendering."
-          );
-          fHideMessage();
-        }
-      })
-      .fSrvCheckAndLoadFirestoreGUIarrAs2D(gIndex);
+          resolve(); // Resolve anyway to not halt the app on this failure
+        })
+        .fSrvCheckAndLoadFirestoreGUIarrAs2D(gIndex);
+    });
+  } // End function fFetchAndApplyUserFirestoreData
+
+  /** function fFetchCachesAndRenderFinalGrid
+   * Purpose: Fetches all background caches and initiates the final grid rendering.
+   * Assumptions: This is the final step of the data loading pipeline.
+   * @returns {Promise<void>} Resolves after rendering is complete or has failed.
+   */
+  async function fFetchCachesAndRenderFinalGrid() {
+    fMyConsoleLog("   -> Proceeding to fetch background caches...");
+    const cachesLoaded = await fBulkCacheFSData();
+
+    if (cachesLoaded) {
+      fRenderGridWithFinalData();
+    } else {
+      fMyConsoleLog(
+        "❌ Background cache loading failed. Halting further rendering."
+      );
+      fHideMessage();
+    }
+  } // End function fFetchCachesAndRenderFinalGrid
+
+  /** function fOnCSGameDataLoaded
+   * Purpose: Main controller for the application's data loading and rendering pipeline.
+   * Assumptions: This is the primary success handler after the initial data fetch.
+   * @param {object} response - The wrapper object from the server containing data and source info.
+   * @returns {Promise<void>} Resolves after the entire load and render process is complete.
+   */
+  async function fOnCSGameDataLoaded(response) {
+    const isPayloadValid = fProcessInitialDataPayload(response);
+    if (!isPayloadValid) {
+      fHideMessage();
+      return;
+    }
+
+    fInitializeCustomNotesArray();
+    await fFetchAndApplyUserFirestoreData();
+    fSetupTooltipAndModal();
+    await fFetchCachesAndRenderFinalGrid();
   } // End function fOnCSGameDataLoaded
 
   /** function fStoreAndValidateData
