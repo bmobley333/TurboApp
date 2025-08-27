@@ -1700,9 +1700,29 @@
    * @returns {Promise<void>}
    */
   async function fHandleVitalityCellEdit(r, c, newValue, oldValue) {
-    gUI.arr[r][c] = newValue; // Tentatively update the model
-    await fVitNowNPercent_Calc(); // This recalculates and sets multiple Vit fields, including the one just edited
-    fHandleAutoSaveTextToFirestore();
+    const trimmedValue = newValue.trim();
+    let finalValue = oldValue;
+    let isValid = false;
+
+    if (trimmedValue === "") {
+      finalValue = ""; // Treat blank as 0
+      isValid = true;
+    } else {
+      const parsedNum = parseInt(trimmedValue, 10);
+      if (!isNaN(parsedNum) && String(parsedNum) === trimmedValue) {
+        finalValue = parsedNum;
+        isValid = true;
+      }
+    }
+
+    if (isValid) {
+      gUI.arr[r][c] = finalValue;
+      fUpdateCustomDataIndicator(r, c);
+      await fCalc_VitMaxNowPerc();
+      fHandleAutoSaveTextToFirestore();
+    } else {
+      fRevertCellDOM(r, c, oldValue);
+    }
   } // End function fHandleVitalityCellEdit
 
   /** function fHandleGenericCellEdit
@@ -1719,6 +1739,41 @@
     fUpdateCustomDataIndicator(r, c);
     fHandleAutoSaveTextToFirestore();
   } // End function fHandleGenericCellEdit
+
+  /** function fHandleMrCarryCellEdit
+   * Purpose: Handles saving and validating an edit for +MR or +Carry cells.
+   * Assumptions: Helper for fHandleGridCellEdit. Triggers MR/Enc recalculation.
+   * @param {number} r - The 0-based row index.
+   * @param {number} c - The 0-based column index.
+   * @param {string} newValue - The new text content of the cell.
+   * @param {any} oldValue - The original value from the data model.
+   * @returns {Promise<void>}
+   */
+  async function fHandleMrCarryCellEdit(r, c, newValue, oldValue) {
+    const trimmedValue = newValue.trim();
+    let finalValue = oldValue;
+    let isValid = false;
+
+    if (trimmedValue === "") {
+      finalValue = ""; // Treat blank as 0
+      isValid = true;
+    } else {
+      const parsedNum = parseInt(trimmedValue, 10);
+      if (!isNaN(parsedNum) && String(parsedNum) === trimmedValue) {
+        finalValue = parsedNum;
+        isValid = true;
+      }
+    }
+
+    if (isValid) {
+      gUI.arr[r][c] = finalValue;
+      fUpdateCustomDataIndicator(r, c);
+      fHandleAutoSaveTextToFirestore();
+      await fCalculatesEnc_MR_AP();
+    } else {
+      fRevertCellDOM(r, c, oldValue);
+    }
+  } // End function fHandleMrCarryCellEdit
 
   /** function fHandleGridCellEdit
    * Purpose: Main dispatcher for the 'blur' event on editable cells.
@@ -1760,6 +1815,11 @@
       gUI.resolvedRanges?.vitMaxPlus,
       gUI.resolvedRanges?.vit1stTo3rd,
     ]);
+    const isMrCarryCell =
+      (r === tag.cs.game.r.GearPlusMR.index &&
+        c === tag.cs.game.c.GearPlusMR.index) ||
+      (r === tag.cs.game.r.GearPlusCarry.index &&
+        c === tag.cs.game.c.GearPlusCarry.index);
 
     if (isMetaCell) {
       await fHandleMetaCellEdit(r, c, newValue, oldValue);
@@ -1767,6 +1827,8 @@
       await fHandleGearStatCellEdit(r, c, newValue, oldValue);
     } else if (isVitalityRecalcCell) {
       await fHandleVitalityCellEdit(r, c, newValue, oldValue);
+    } else if (isMrCarryCell) {
+      await fHandleMrCarryCellEdit(r, c, newValue, oldValue);
     } else {
       await fHandleGenericCellEdit(r, c, newValue, oldValue);
     }

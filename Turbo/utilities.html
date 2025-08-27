@@ -472,6 +472,21 @@
     );
   } // End function fResolveAllRanges
 
+  /** function fRevertCellDOM
+   * Purpose: Reverts the text content of a DOM cell to its original value.
+   * Assumptions: The cell exists in gUI.grid2D. Used after failed validation.
+   * @param {number} r - The 0-based row index.
+   * @param {number} c - The 0-based column index.
+   * @param {any} oldValue - The original value to restore in the cell.
+   * @returns {void}
+   */
+  function fRevertCellDOM(r, c, oldValue) {
+    const cell = gUI.grid2D?.[r]?.[c];
+    if (cell) {
+      cell.textContent = oldValue ?? "";
+    }
+  } // End function fRevertCellDOM
+
   /** function fGetGridValue
    * Purpose: Retrieves a value from gUI.arr using tags or indices.
    * Assumptions: gUI.arr, gUI.rowTag, and gUI.colTag are populated.
