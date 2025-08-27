@@ -4859,9 +4859,11 @@
       possWornColTag,
       possPerOffColTag,
     ];
+
     const possNameVal = fGetGridValue(r, "Ability");
     const gearID = fGetIDFromNameID(possNameVal);
     const gearCache = gUI.dbGearFSData;
+
     if (!gearID) {
       fMyConsoleLog(
         `   -> Skipping ${funcName}: PossName invalid or missing ID for row ${r}.`
@@ -4869,9 +4871,10 @@
       await fShowMessage(
         "ℹ️ Cannot modify gear numbers/status until a valid item with an ID is selected in the 'Ability' column."
       );
-      fRevertCellDOM(r, c, oldValue);
+      fSetGridValue(r, c, ""); // Clear the cell for a non-gear item
       return null;
     }
+
     if (!gearCache || !gearCache.text || !gearCache.colTagsMap) {
       fMyConsoleLog(
         `   -> ❌ Error: DB/Gear cache (gUI.dbGearFSData) not loaded or invalid.`
@@ -4879,37 +4882,39 @@
       await fShowMessage(
         "❌ Error: Gear definition cache not loaded. Cannot calculate gear line."
       );
-      fRevertCellDOM(r, c, oldValue);
+      fSetGridValue(r, c, oldValue); // Revert the cell on critical error
       return null;
     }
+
     const editedColTag = Object.keys(gUI.colTag).find(
       (tag) => gUI.colTag[tag] === c
     );
     let validatedValue = newValue;
     let validationError = "";
+
     if (!gearColumnsToCalculate.includes(editedColTag)) {
       fMyConsoleLog(
         `   -> ❌ Error: ${funcName} called unexpectedly for non-gear-input column: ${editedColTag}`
       );
-      fRevertCellDOM(r, c, oldValue);
+      fSetGridValue(r, c, oldValue); // Revert the cell
       return null;
     }
+
     switch (editedColTag) {
       case possNumColTag:
         const numInput = Number(newValue);
         if (isNaN(numInput) || !Number.isInteger(numInput) || numInput < 0) {
-          validationError = `❌ Invalid number ("${newValue}"). '${possNumColTag}' must be a whole number >= 0.`;
+          validationError = `❌ Invalid number ("${newValue}"). '#' must be a whole number >= 0.`;
           validatedValue = null;
         } else {
           validatedValue = numInput;
         }
         break;
       case possWornColTag:
-        if (typeof newValue !== "boolean") {
-          validatedValue = String(newValue).toUpperCase() === "TRUE";
-        } else {
-          validatedValue = newValue;
-        }
+        validatedValue =
+          typeof newValue === "boolean"
+            ? newValue
+            : String(newValue).toUpperCase() === "TRUE";
         break;
       case possPerOffColTag:
         const perOffInput = String(newValue ?? "").trim();
@@ -4924,15 +4929,18 @@
         }
         break;
     }
+
     if (validatedValue === null) {
       fMyConsoleLog(`   -> ❌ Input Validation Failed: ${validationError}`);
       await fShowMessage(validationError);
-      fRevertCellDOM(r, c, oldValue);
+      fSetGridValue(r, c, oldValue); // Revert the cell
       return null;
     }
+
     const previousEnc = fGetGridValue(r, possEncColTag);
     const previousCr = fGetGridValue(r, possCrTotColTag);
     const previousAp = fGetGridValue(r, possAPTotColTag);
+
     if (!fSetGridValue(r, c, validatedValue)) {
       fMyConsoleLog(
         `   -> ❌ Error setting validated value for edited cell [${r}, ${c}].`
@@ -4942,6 +4950,7 @@
       );
       return null;
     }
+
     fMyConsoleLog(
       `   -> Successfully updated edited cell [${r}, ${c}] with validated value: "${validatedValue}"`
     );
@@ -4951,6 +4960,7 @@
       previousCr,
       previousAp
     );
+
     if (refreshSuccess) {
       fMyConsoleLog(
         `   -> Triggering funct. fCalculatesEnc_MR_AP after successful refresh for row ${r}...`
