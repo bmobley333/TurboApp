@@ -10,6 +10,33 @@
   // gIndex.Email    --> User's gmail address
   // gIndex.GameVer  --> Game version from CS 'Game' such as 28.3
 
+  // ==========================================================================
+  // === Tag Definitions ===
+  // ==========================================================================
+
+  // This object is populated dynamically by fBuildTagObject after data loads.
+  // It provides a centralized, namespaced, and performant way to access row/col tags.
+  // Structure: tag.[workbookAbr].[sheetName].[r or c].[TagName] = { label: "TagName", index: 0-based-index }
+  const tag = {
+    cs: {
+      // Character Sheet
+      game: { r: {}, c: {} },
+      raceclass: { r: {}, c: {} },
+      list: { r: {}, c: {} },
+    },
+    kl: {
+      // Known Lore (MyKL)
+      knownabilities: { r: {}, c: {} },
+    },
+    db: {
+      // Database
+      abilities: { r: {}, c: {} },
+      crit: { r: {}, c: {} },
+      elements: { r: {}, c: {} },
+      gear: { r: {}, c: {} },
+    },
+  };
+
   const gUI = {
     // === Runtime Defaults / Constants (safe fallbacks) ===
     isDebugMode: false, // flip to true to see status logs

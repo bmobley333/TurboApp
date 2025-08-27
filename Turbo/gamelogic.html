@@ -8,7 +8,7 @@
 
   /** function fMain_AbilityRoll
    * Purpose: Top-level handler for initiating an ability/gear roll.
-   * Assumptions: gUI state is ready for a roll action.
+   * Assumptions: gUI state is ready for a roll action. The `tag` object is populated.
    * @returns {Promise<void>}
    */
   async function fMain_AbilityRoll() {
@@ -32,7 +32,7 @@
         return;
       }
 
-      const nishRowIndex = fResolveRow("NishAtr_R");
+      const nishRowIndex = tag.cs.game.r.NishAtr_R.index;
       const isNishAbilityRoll = gUI.roll.ability_R === nishRowIndex;
       if (isNishAbilityRoll && !gUI.buttonOrMenu.isNish) {
         fMyConsoleLog(
@@ -107,7 +107,11 @@
         if (isLuckedRoll) {
           fMyConsoleLog("   -> Verifying Luck Cost...");
           const luckCost = 1;
-          const currentLuck = fGetGridValue("LuckBox", "LuckBox", true);
+          const currentLuck = fGetGridValue(
+            tag.cs.game.r.LuckBox.index,
+            tag.cs.game.c.LuckBox.index,
+            true
+          );
           if (isNaN(currentLuck)) {
             await fShowMessage("❌ Error reading current Luck value.");
             fMyConsoleLog(
@@ -122,7 +126,13 @@
             allCostsMet = false;
           } else {
             const newLuck = currentLuck - luckCost;
-            addChangesToMap([{ r: "LuckBox", c: "LuckBox", value: newLuck }]);
+            addChangesToMap([
+              {
+                r: tag.cs.game.r.LuckBox.index,
+                c: tag.cs.game.c.LuckBox.index,
+                value: newLuck,
+              },
+            ]);
             fMyConsoleLog(
               `      -> Luck Cost OK (${currentLuck} -> ${newLuck}). Change added to map.`
             );
@@ -326,7 +336,14 @@
             if (isNaN(rowRef) || rowRef < 0) {
               rowRef = rowPart;
             }
-            if (!fSetGridValue(rowRef, colPart, value)) {
+
+            // ** THE FIX IS HERE **
+            let colRef = parseInt(colPart, 10);
+            if (isNaN(colRef) || colRef < 0) {
+              colRef = colPart;
+            }
+
+            if (!fSetGridValue(rowRef, colRef, value)) {
               applyErrors = true;
             }
           } catch (parseError) {
@@ -357,7 +374,13 @@
           fMyConsoleLog(
             `   -> Updating ('Nish', 'Nish') cell with final roll result: ${finalNishRoll}`
           );
-          if (!fSetGridValue("Nish", "Nish", finalNishRoll)) {
+          if (
+            !fSetGridValue(
+              tag.cs.game.r.Nish.index,
+              tag.cs.game.c.Nish.index,
+              finalNishRoll
+            )
+          ) {
             fMyConsoleLog(
               "      -> ⚠️ Failed to update ('Nish', 'Nish') cell."
             );
@@ -399,40 +422,53 @@
 
   /** function fClearAndSetGUIRoll
    * Purpose: Resets and populates the global gUI.roll object with data from a specific grid row.
-   * Assumptions: The action originates from a valid Sk1/Sk2 checkbox click.
+   * Assumptions: The action originates from a valid Sk1/Sk2 checkbox click. The `tag` object is populated.
    * @param {number} r - Row index of the selected ability/gear.
    * @param {number} c - Column index of the selected checkbox (determines Sk1 vs Sk2).
    * @returns {Promise<boolean>} Resolves true if successful, false on error.
    */
   async function fClearAndSetGUIRoll(r, c) {
     try {
-      const getVal = (tag) => gUI.arr[r]?.[fResolveCol(tag)] ?? "";
-      const isSk1 = c === fResolveCol("Sk1ChkBox");
+      const isSk1 = c === tag.cs.game.c.Sk1ChkBox.index;
+
       const permMorph = String(
-        isSk1 ? getVal("PermMorph1") : getVal("PermMorph2") || ""
+        gUI.arr[r]?.[
+          isSk1
+            ? tag.cs.game.c.PermMorph1.index
+            : tag.cs.game.c.PermMorph2.index
+        ] || ""
       ).trim();
       const tempMorph = String(
-        isSk1 ? getVal("Morph1") : getVal("Morph2") || ""
+        gUI.arr[r]?.[
+          isSk1 ? tag.cs.game.c.Morph1.index : tag.cs.game.c.Morph2.index
+        ] || ""
       ).trim();
+
       const combinedMorph = [permMorph, tempMorph]
         .filter(Boolean)
         .join(",")
         .replace(/,+/g, ",")
         .replace(/^,|,$/g, "");
+
       gUI.roll = {
         ability_R: r,
         sk1CB: isSk1,
         skMorph: combinedMorph,
         permMorph: permMorph,
         tempMorph: tempMorph,
-        skTyp: isSk1 ? getVal("Sk1Typ") : getVal("Sk2Typ"),
-        skSk: isSk1 ? getVal("Sk1") : getVal("Sk2"),
-        skIsOn: getVal("On"),
-        skNameID: getVal("Ability"),
-        skAct: isSk1 ? getVal("Act") : "",
-        skDur: isSk1 ? getVal("Dur") : "",
-        skMeta: isSk1 ? getVal("Meta") : "",
-        skUses: isSk1 ? getVal("Uses") : "",
+        skTyp:
+          gUI.arr[r]?.[
+            isSk1 ? tag.cs.game.c.Sk1Typ.index : tag.cs.game.c.Sk2Typ.index
+          ],
+        skSk: gUI.arr[r]?.[
+          isSk1 ? tag.cs.game.c.Sk1.index : tag.cs.game.c.Sk2.index
+        ],
+        skIsOn: gUI.arr[r]?.[tag.cs.game.c.On.index],
+        skNameID: gUI.arr[r]?.[tag.cs.game.c.Ability.index],
+        skAct: isSk1 ? gUI.arr[r]?.[tag.cs.game.c.Act.index] : "",
+        skDur: isSk1 ? gUI.arr[r]?.[tag.cs.game.c.Dur.index] : "",
+        skMeta: isSk1 ? gUI.arr[r]?.[tag.cs.game.c.MetaCost.index] : "",
+        skUses: isSk1 ? gUI.arr[r]?.[tag.cs.game.c.Uses.index] : "",
         skName: "",
         resTyp: "",
         resSk: "",
@@ -453,11 +489,13 @@
         resRoll: "",
         htmlHeader: "",
       };
-      const nishRowResolved = fResolveRow("NishAtr_R");
+
+      const nishRowResolved = tag.cs.game.r.NishAtr_R.index;
       if (!isNaN(nishRowResolved) && r === nishRowResolved) {
         gUI.roll.isNish = true;
         fMyConsoleLog("   -> Setting gUI.roll.isNish = true");
       }
+
       const rData = gUI.roll;
       rData.skName = String(rData.skNameID || "")
         .replace(/\s{2,}_\w{6}$/, "")
@@ -478,6 +516,7 @@
       const uses = parseInt(rData.skUses, 10);
       rData.skUses = !isNaN(uses) ? uses : "";
       rData.resTyp = rData.skTyp;
+
       fMyConsoleLog(
         `⚙️ Populated & Cleaned gUI.roll for row ${r} (isSk1: ${isSk1}, isNish: ${gUI.roll.isNish})`
       );
@@ -785,7 +824,7 @@
 
   /** function fAct_VerifyAndProcessCost
    * Purpose: Verifies and processes the Action Point cost for an ability.
-   * Assumptions: gUI.roll is populated. fShowPrompt is available.
+   * Assumptions: gUI.roll is populated. The `tag` object is populated.
    * @param {} - No parameters.
    * @returns {Promise<object>} An object detailing the success and changes.
    */
@@ -796,7 +835,11 @@
     const headers = [];
     const headersText = [];
     if (actCost > 0) {
-      let currentAct = fGetGridValue("Act", "ActTot", true);
+      let currentAct = fGetGridValue(
+        tag.cs.game.r.Act.index,
+        tag.cs.game.c.ActTot.index,
+        true
+      );
       if (isNaN(currentAct)) {
         await fShowMessage(
           `❌ Error reading current Action Points from cell ('Act', 'ActTot'). Cannot proceed.`
@@ -840,8 +883,8 @@
       }
       const newActTotal = currentAct - actCost;
       changes.push({
-        r: "Act",
-        c: "ActTot",
+        r: tag.cs.game.r.Act.index,
+        c: tag.cs.game.c.ActTot.index,
         value: newActTotal,
       });
       fMyConsoleLog(
@@ -861,7 +904,7 @@
 
   /** function fUses_VerifyAndProcessCost
    * Purpose: Verifies and processes the "Uses" cost for an ability.
-   * Assumptions: gUI.roll is populated. fShowPrompt is available.
+   * Assumptions: gUI.roll is populated. The `tag` object is populated.
    * @param {number} multiRollCount - The number of uses required for the action.
    * @returns {Promise<object>} An object detailing the success and changes.
    */
@@ -912,7 +955,7 @@
     }
     changes.push({
       r: ability_R,
-      c: "Uses",
+      c: tag.cs.game.c.Uses.index,
       value: newUses,
     });
     fMyConsoleLog(
@@ -929,7 +972,7 @@
 
   /** function fIsOn_VerifyAndProcessCost
    * Purpose: Prepares the change to set an ability's "Is On" cell to its duration.
-   * Assumptions: Only applies if the roll was initiated from an Sk1 checkbox.
+   * Assumptions: Only applies if the roll was initiated from an Sk1 checkbox. The `tag` object is populated.
    * @param {} - No parameters.
    * @returns {Promise<object>} An object detailing the success and changes.
    */
@@ -940,7 +983,7 @@
     if (sk1CB === true) {
       changes.push({
         r: ability_R,
-        c: "On",
+        c: tag.cs.game.c.On.index,
         value: skDur,
       });
       fMyConsoleLog(
@@ -960,7 +1003,7 @@
 
   /** function fSkMeta_VerifyAndProcessCost
    * Purpose: Verifies and processes an ability's innate Meta cost.
-   * Assumptions: Only applies if from an Sk1 checkbox. Uses function fSpendOneMeta.
+   * Assumptions: Only applies if from an Sk1 checkbox. Uses  fSpendOneMeta.
    * @param {object} pendingChangesMap - Map of changes pending from previous cost checks.
    * @returns {Promise<object>} An object detailing the success and changes.
    */
@@ -1026,7 +1069,7 @@
 
   /** function fSpendOneMeta
    * Purpose: Finds and prepares the change for spending 1 unit of Meta.
-   * Assumptions: Checks Channel and Main pools, starting from a specified color and moving up.
+   * Assumptions: Checks Channel and Main pools, starting from a specified color and moving up. The `tag` object is populated.
    * @param {string} metaColor - The preferred Meta color TAG ('R'...'B') to start spending from.
    * @param {object} pendingChangesMap - Map holding pending changes.
    * @returns {Promise<object>} An object with { success, change } or { success: false }.
@@ -1062,26 +1105,31 @@
     fMyConsoleLog(
       `      -> Validated start color: ${validMetaColorTag} (Index: ${startIndex})`
     );
-    const getCurrentValue = (rowTag, colTag) => {
-      const key = `${rowTag},${colTag}`;
+    const getCurrentValue = (rowIdx, colIdx) => {
+      const key = `${rowIdx},${colIdx}`;
       if (pendingChangesMap.hasOwnProperty(key)) {
         const pendingValue = Number(pendingChangesMap[key]);
         return !isNaN(pendingValue) && pendingValue >= 1 ? pendingValue : 0;
       } else {
-        const gridVal = fGetGridValue(rowTag, colTag, true);
+        const gridVal = fGetGridValue(rowIdx, colIdx, true);
         return gridVal >= 1 ? gridVal : 0;
       }
     };
     const numColors = metaColors.length;
     for (let i = startIndex; i < numColors; i++) {
       const currentColorTag = metaColors[i];
+      const currentColIndex = tag.cs.game.c[currentColorTag]?.index;
+      if (typeof currentColIndex !== "number") continue;
+
       fMyConsoleLog(`         - Checking Color: ${currentColorTag}`);
-      const chnlVal = getCurrentValue("chnl", currentColorTag);
+
+      const chnlRowIndex = tag.cs.game.r.chnl.index;
+      const chnlVal = getCurrentValue(chnlRowIndex, currentColIndex);
       if (chnlVal >= 1) {
         const newVal = chnlVal - 1;
         const change = {
-          r: "chnl",
-          c: currentColorTag,
+          r: chnlRowIndex,
+          c: currentColIndex,
           value: newVal >= 1 ? newVal : "",
         };
         fMyConsoleLog(
@@ -1094,12 +1142,14 @@
           change: change,
         };
       }
-      const metaVal = getCurrentValue("meta", currentColorTag);
+
+      const metaRowIndex = tag.cs.game.r.meta.index;
+      const metaVal = getCurrentValue(metaRowIndex, currentColIndex);
       if (metaVal >= 1) {
         const newVal = metaVal - 1;
         const change = {
-          r: "meta",
-          c: currentColorTag,
+          r: metaRowIndex,
+          c: currentColIndex,
           value: newVal >= 1 ? newVal : "",
         };
         fMyConsoleLog(
@@ -1309,7 +1359,7 @@
 
   /** function fGetMonsterTargets
    * Purpose: Finds all active monster targets and validates their required stat for a combat roll.
-   * Assumptions: This is a helper for the fPerformPlayer... functions. It handles its own error messages.
+   * Assumptions: The `tag` object is populated. Handles its own error messages.
    * @param {string} requiredStatColTag - The column tag for the specific monster stat needed (e.g., "MonDef", "MonAtk").
    * @returns {Promise<object>} An object { success: boolean, targets: Array, allTargetedRows_R: Array }.
    */
@@ -1340,10 +1390,11 @@
       return { success: false, targets: [], allTargetedRows_R: [] };
     }
 
-    const cNumMon = fResolveCol("NumMon");
-    const cMonName = fResolveCol("MonName");
-    const cStat = fResolveCol(requiredStatColTag);
-    if ([cNumMon, cMonName, cStat].some(isNaN)) {
+    const cNumMon = tag.cs.game.c.NumMon.index;
+    const cMonName = tag.cs.game.c.MonName.index;
+    const cStat = tag.cs.game.c[requiredStatColTag]?.index;
+
+    if ([cNumMon, cMonName, cStat].some((idx) => typeof idx !== "number")) {
       const msg = `Could not resolve required monster column tags (NumMon, MonName, or ${requiredStatColTag}).`;
       console.warn(`${funcName}: ${msg}`);
       await fShowMessage(`❌ Error: ${msg}`);
@@ -1399,7 +1450,7 @@
    */
   async function fPerformPlayerAttackRolls(initialLogHtml, initialLogText) {
     const { success, targets, allTargetedRows_R } = await fGetMonsterTargets(
-      "MonDef"
+      tag.cs.game.c.MonDef.label
     );
     if (!success) return { success: false };
 
@@ -1485,7 +1536,9 @@
    * @returns {Promise<object>} An object with { logHtml, logText, success }.
    */
   async function fPerformPlayerDamageRolls(initialLogHtml, initialLogText) {
-    const { success, targets } = await fGetMonsterTargets("MonAR");
+    const { success, targets } = await fGetMonsterTargets(
+      tag.cs.game.c.MonAR.label
+    );
     if (!success) return { success: false };
 
     if (targets.length === 0) {
@@ -1560,7 +1613,7 @@
    */
   async function fPerformPlayerDefenseRolls(initialLogHtml, initialLogText) {
     const { success, targets, allTargetedRows_R } = await fGetMonsterTargets(
-      "MonAtk"
+      tag.cs.game.c.MonAtk.label
     );
     if (!success) return { success: false };
 
@@ -1646,7 +1699,9 @@
    * @returns {Promise<object>} An object with { logHtml, logText, success }.
    */
   async function fPerformPlayerArmorRolls(initialLogHtml, initialLogText) {
-    const { success, targets } = await fGetMonsterTargets("MonDmg");
+    const { success, targets } = await fGetMonsterTargets(
+      tag.cs.game.c.MonDmg.label
+    );
     if (!success) return { success: false };
 
     if (targets.length === 0) {
@@ -2496,7 +2551,7 @@
 
   /** function fHandleRestTimeSleep
    * Purpose: Handles the "Sleep" menu action.
-   * Assumptions: function fMeta_SetToMax and function fCalc_NaturalHealing are available.
+   * Assumptions: funct. fMeta_SetToMax and funct. fCalc_NaturalHealing are available.
    * Notes: Sets Meta to Max, performs Natural Healing, logs the sleep action, and sends an update.
    * @returns {Promise<void>} Resolves after completing actions.
    */
@@ -2520,12 +2575,15 @@
    */
   async function fHealAllWounds() {
     fMyConsoleLog("⚙️ Menu Action: Clearing All Wounds...");
-    const woundTags = ["vit1stWnds", "vit2ndWnds", "vit3rdWnds"];
+    const woundRanges = [
+      gUI.range?.vit1stWnds,
+      gUI.range?.vit2ndWnds,
+      gUI.range?.vit3rdWnds,
+    ];
     let errorsOccurred = false;
-    for (const tag of woundTags) {
-      const woundRange = gUI.range?.[tag];
+    for (const woundRange of woundRanges) {
       if (!woundRange || !woundRange.r1 || !woundRange.c1) {
-        const msg = `Wound range definition missing for tag: ${tag}.`;
+        const msg = `A wound range definition is missing or invalid.`;
         console.warn(`fHealAllWounds: ${msg}`);
         fMyConsoleLog(`   -> ⚠️ Error: ${msg}`);
         await fShowMessage(`❌ Error clearing wounds: ${msg}`);
@@ -2533,12 +2591,12 @@
         continue;
       }
       if (!fSetGridValue(woundRange.r1, woundRange.c1, 0)) {
-        const msg = `Failed to update grid for tag: ${tag}.`;
+        const msg = `Failed to update grid for a wound range.`;
         fMyConsoleLog(`   -> ⚠️ Error: ${msg}`);
         await fShowMessage(`❌ Error clearing wounds: ${msg}`);
         errorsOccurred = true;
       } else {
-        fMyConsoleLog(`   -> Cleared wounds for tag: ${tag}`);
+        fMyConsoleLog(`   -> Cleared wounds for a range.`);
       }
     }
     if (!errorsOccurred) {
@@ -2562,24 +2620,24 @@
 
   /** function fProcessWoundHealing
    * Purpose: Calculates and applies healing for a specific wound degree.
-   * Assumptions: Called by function fCalc_NaturalHealing.
+   * Assumptions: Called by function fCalc_NaturalHealing. The `tag` object is populated.
    * Notes: This is a helper function for the natural healing process.
-   * @param {string} woundRangeTag - Tag for the specific wound cell.
+   * @param {object} woundRangeObject - The range object for the specific wound cell (e.g., gUI.range.vit1stWnds).
    * @param {number} vitMax - Character's maximum vitality.
    * @param {number} divisor - Divisor for Vit Max to determine healing die size.
    * @param {string} degreeLabel - Label for logging ('1st', '2nd', '3rd').
    * @returns {Promise<number | null>} The amount healed, or null on error.
    */
   async function fProcessWoundHealing(
-    woundRangeTag,
+    woundRangeObject,
     vitMax,
     divisor,
     degreeLabel
   ) {
     fMyConsoleLog(`      -> Processing ${degreeLabel} Degree wounds...`);
-    const woundRange = gUI.range?.[woundRangeTag];
+    const woundRange = woundRangeObject;
     if (!woundRange || !woundRange.r1 || !woundRange.c1) {
-      const msg = `Wound range definition missing for tag: ${woundRangeTag}.`;
+      const msg = `Wound range object for ${degreeLabel} is invalid.`;
       console.warn(`fProcessWoundHealing: ${msg}`);
       fMyConsoleLog(`         -> ⚠️ Error: ${msg}`);
       await fShowMessage(`❌ Error processing ${degreeLabel} wounds: ${msg}`);
@@ -2617,7 +2675,7 @@
 
   /** function fCalc_NaturalHealing
    * Purpose: Handles the "Natural Healing" menu action.
-   * Assumptions: gUI.range definitions for Vit and Wounds are correct.
+   * Assumptions: gUI.range definitions for Vit and Wounds are correct. The `tag` object is populated.
    * Notes: Calculates healing, updates wound cells, recalculates Vit Now/Percent, logs results, and sends an update.
    * @returns {Promise<void>} Resolves after the operation is complete.
    */
@@ -2645,21 +2703,21 @@
     let errorsOccurred = false;
     const healingResults = {};
     healingResults["1st"] = await fProcessWoundHealing(
-      "vit1stWnds",
+      gUI.range.vit1stWnds,
       vitMax,
       4,
       "1st"
     );
     if (healingResults["1st"] === null) errorsOccurred = true;
     healingResults["2nd"] = await fProcessWoundHealing(
-      "vit2ndWnds",
+      gUI.range.vit2ndWnds,
       vitMax,
       8,
       "2nd"
     );
     if (healingResults["2nd"] === null) errorsOccurred = true;
     healingResults["3rd"] = await fProcessWoundHealing(
-      "vit3rdWnds",
+      gUI.range.vit3rdWnds,
       vitMax,
       16,
       "3rd"
@@ -2741,31 +2799,29 @@
 
   /** function fLuck_SetToMax
    * Purpose: Handles the "Set Luck to Max" menu action.
-   * Assumptions: gUI.list.luckBoxMax, gUI.range.luckBox, and gUI.range.luckBoxPlus are correctly defined.
+   * Assumptions: gUI.list.luckBoxMax is correctly defined. The `tag` object is populated.
    * Notes: Calculates maximum luck, updates the cell, logs the action, and sends an update.
    * @returns {Promise<void>} Resolves after the operation is complete.
    */
   async function fLuck_SetToMax() {
     fMyConsoleLog("⚙️ Menu Action: Setting Luck to Max...");
     const baseLuck = gUI.list?.luckBoxMax;
-    const luckBoxRange = gUI.range?.luckBox;
-    const luckBoxPlusRange = gUI.range?.luckBoxPlus;
+
     let errorMsg = "";
-    if (typeof baseLuck !== "number" || isNaN(baseLuck))
+    if (typeof baseLuck !== "number" || isNaN(baseLuck)) {
       errorMsg = "Base Luck value (gUI.list.luckBoxMax) missing or invalid.";
-    else if (!luckBoxRange || !luckBoxRange.r1 || !luckBoxRange.c1)
-      errorMsg = "LuckBox range definition missing or incomplete.";
-    else if (!luckBoxPlusRange || !luckBoxPlusRange.r1 || !luckBoxPlusRange.c1)
-      errorMsg = "LuckBoxPlus range definition missing or incomplete.";
+    }
+
     if (errorMsg) {
       console.warn(`fLuck_SetToMax: ${errorMsg}`);
       fMyConsoleLog(`⚠️ Cannot set Luck to max: ${errorMsg}`);
       await fShowMessage(`❌ Error: ${errorMsg}`);
       return;
     }
+
     const luckPlusValueRaw = fGetGridValue(
-      luckBoxPlusRange.r1,
-      luckBoxPlusRange.c1
+      tag.cs.game.r.LuckPlus.index,
+      tag.cs.game.c.LuckBox.index
     );
     let luckPlusBonus = 0;
     if (
@@ -2780,15 +2836,18 @@
     } else {
       fMyConsoleLog(`   -> No valid Luck Plus Bonus found. Using 0.`);
     }
+
     const newLuckValue = baseLuck + luckPlusBonus;
     fMyConsoleLog(
       `   -> Calculated Max Luck: ${baseLuck} (Base) + ${luckPlusBonus} (Bonus) = ${newLuckValue}`
     );
+
     const success = fSetGridValue(
-      luckBoxRange.r1,
-      luckBoxRange.c1,
+      tag.cs.game.r.LuckBox.index,
+      tag.cs.game.c.LuckBox.index,
       newLuckValue
     );
+
     if (!success) {
       fMyConsoleLog(`⚠️ Failed to set Luck to max value (${newLuckValue}).`);
       await fShowMessage(
@@ -2806,30 +2865,30 @@
 
   /** function fAct_SetToMax
    * Purpose: Sets the current Action Points value to its maximum.
-   * Assumptions: gUI.list.actMax, gUI.range.actTotal, and gUI.range.actPlus are correctly defined.
+   * Assumptions: gUI.list.actMax is correctly defined. The `tag` object is populated.
    * Notes: Calculates max AP from a base value and a grid bonus, then updates the cell.
    * @returns {Promise<void>} Resolves after the operation is complete.
    */
   async function fAct_SetToMax() {
     fMyConsoleLog("⚙️ Setting Action Points to Max...");
     const baseActMax = gUI.list?.actMax;
-    const actTotalRange = gUI.range?.actTotal;
-    const actPlusRange = gUI.range?.actPlus;
     let errorMsg = "";
-    if (typeof baseActMax !== "number" || isNaN(baseActMax))
+    if (typeof baseActMax !== "number" || isNaN(baseActMax)) {
       errorMsg =
         "Base Action Points Max value (gUI.list.actMax) missing or invalid.";
-    else if (!actTotalRange || !actTotalRange.r1 || !actTotalRange.c1)
-      errorMsg = "Action Points Total range definition missing or incomplete.";
-    else if (!actPlusRange || !actPlusRange.r1 || !actPlusRange.c1)
-      errorMsg = "Action Points Plus range definition missing or incomplete.";
+    }
+
     if (errorMsg) {
       console.warn(`fAct_SetToMax: ${errorMsg}`);
       fMyConsoleLog(`⚠️ Cannot set Act to max: ${errorMsg}`);
       await fShowMessage(`❌ Error: ${errorMsg}`);
       return;
     }
-    const actPlusValueRaw = fGetGridValue(actPlusRange.r1, actPlusRange.c1);
+
+    const actPlusValueRaw = fGetGridValue(
+      tag.cs.game.r.ActPlus.index,
+      tag.cs.game.c.ActTot.index
+    );
     let actPlusBonus = 0;
     if (
       actPlusValueRaw !== null &&
@@ -2841,23 +2900,22 @@
         `   -> Act Plus Bonus found: ${actPlusValueRaw} -> Rounded: ${actPlusBonus}`
       );
     } else {
-      fMyConsoleLog(
-        `   -> No valid Act Plus Bonus found in cell (${actPlusRange.r1}, ${actPlusRange.c1}). Using 0.`
-      );
+      fMyConsoleLog(`   -> No valid Act Plus Bonus found. Using 0.`);
     }
+
     const newActValue = baseActMax + actPlusBonus;
     fMyConsoleLog(
       `   -> Calculated Max Act: ${baseActMax} (Base) + ${actPlusBonus} (Bonus) = ${newActValue}`
     );
+
     const success = fSetGridValue(
-      actTotalRange.r1,
-      actTotalRange.c1,
+      tag.cs.game.r.Act.index,
+      tag.cs.game.c.ActTot.index,
       newActValue
     );
+
     if (!success) {
-      fMyConsoleLog(
-        `⚠️ Failed to set Act to max value (${newActValue}) in cell (${actTotalRange.r1}, ${actTotalRange.c1}).`
-      );
+      fMyConsoleLog(`⚠️ Failed to set Act to max value (${newActValue}).`);
       await fShowMessage(
         `❌ Error: Failed to update the Action Points value in the grid.`
       );
@@ -2868,7 +2926,7 @@
 
   /** function fHandleResetAllToMax
    * Purpose: Handles the 'Reset All to Max' menu action.
-   * Assumptions: Relies on various helper functions to perform the reset actions.
+   * Assumptions: Relies on various helper functions to perform the reset actions. The `tag` object is populated.
    * Notes: Prompts user, runs reset functions, logs completion, and sends one final update.
    * @returns {Promise<void>} Resolves after completing actions or if cancelled.
    */
@@ -4287,7 +4345,7 @@
 
   /** function fCalculatesEnc_MR_AP
    * Purpose: Calculates Movement Rate (MR) and Carry Capacity, updates the grid, and recalculates total AP.
-   * Assumptions: Relies on various values and range definitions in the gUI object.
+   * Assumptions: Relies on various values and range definitions in the gUI object. The `tag` object is populated.
    * Notes: This is a core calculation function triggered after gear or stat changes.
    * @returns {Promise<void>} Resolves when calculations and updates are complete.
    */
@@ -4296,23 +4354,42 @@
     const movementMultipliers = [1, 0.9, 0.8, 0.65, 0.5, 0.25];
     const carryMultipliers = [1, 2, 4, 8, 12, 16];
     const mrColumnTags = [
-      "GearMRCol1",
-      "GearMRCol2",
-      "GearMRCol3",
-      "GearMRCol4",
-      "GearMRCol5",
-      "GearMRCol6",
+      tag.cs.game.c.GearMRCol1.label,
+      tag.cs.game.c.GearMRCol2.label,
+      tag.cs.game.c.GearMRCol3.label,
+      tag.cs.game.c.GearMRCol4.label,
+      tag.cs.game.c.GearMRCol5.label,
+      tag.cs.game.c.GearMRCol6.label,
     ];
-    const MR_TABLE_ROW = "GearMRTbl";
-    const CARRY_TABLE_ROW = "GearCarryTbl";
-    const CHECKBOX_ROW = "GearMRCheckBox";
+    const MR_TABLE_ROW = tag.cs.game.r.GearMRTbl.index;
+    const CARRY_TABLE_ROW = tag.cs.game.r.GearCarryTbl.index;
+    const CHECKBOX_ROW = tag.cs.game.r.GearMRCheckBox.index;
     let errorMsg = "";
-    const agilityValue = fGetGridValue("Agi", "Sk1", true);
-    const strengthValue = fGetGridValue("Str", "Sk1", true);
-    const plusMRValue = fGetGridValue("GearPlusMR", "GearPlusMR", true) || 0;
+
+    const agilityValue = fGetGridValue(
+      tag.cs.game.r.Agi.index,
+      tag.cs.game.c.Sk1.index,
+      true
+    );
+    const strengthValue = fGetGridValue(
+      tag.cs.game.r.Str.index,
+      tag.cs.game.c.Sk1.index,
+      true
+    );
+    const plusMRValue =
+      fGetGridValue(
+        tag.cs.game.r.GearPlusMR.index,
+        tag.cs.game.c.GearPlusMR.index,
+        true
+      ) || 0;
     const plusCarryValue =
-      fGetGridValue("GearPlusCarry", "GearPlusCarry", true) || 0;
+      fGetGridValue(
+        tag.cs.game.r.GearPlusCarry.index,
+        tag.cs.game.c.GearPlusCarry.index,
+        true
+      ) || 0;
     const currentEncumbrance = fCalcTotalEnc() || 0;
+
     if (isNaN(agilityValue))
       errorMsg += "Agility ('Agi', 'Sk1') is not a valid number. ";
     if (isNaN(strengthValue))
@@ -4320,6 +4397,7 @@
     if (isNaN(currentEncumbrance))
       errorMsg +=
         "Current Encumbrance ('PossEncTot', 'PossEncTot') is not a valid number.";
+
     if (errorMsg) {
       console.error(
         `fCalculatesEnc_MR_AP: Input validation failed: ${errorMsg}`
@@ -4331,14 +4409,24 @@
     fMyConsoleLog(
       `   -> Inputs: Agi=${agilityValue}, Str=${strengthValue}, +MR=${plusMRValue}, +Carry=${plusCarryValue}, CurrentEnc=${currentEncumbrance}`
     );
+
     let updateSuccess = true;
-    updateSuccess &&= fSetGridValue("GearSpe", "GearSpeAndStr", agilityValue);
-    updateSuccess &&= fSetGridValue("GearStr", "GearSpeAndStr", strengthValue);
+    updateSuccess &&= fSetGridValue(
+      tag.cs.game.r.GearSpe.index,
+      tag.cs.game.c.GearSpeAndStr.index,
+      agilityValue
+    );
+    updateSuccess &&= fSetGridValue(
+      tag.cs.game.r.GearStr.index,
+      tag.cs.game.c.GearSpeAndStr.index,
+      strengthValue
+    );
     if (!updateSuccess) {
       fMyConsoleLog(
         "   -> ⚠️ Warning: Failed to update GearSpe/GearStr overview cells."
       );
     }
+
     let foundActiveMRLevel = false;
     let finalMovementRate = 0;
     let calculationErrors = false;
@@ -4375,7 +4463,14 @@
         }
       }
     }
-    if (!fSetGridValue("MR", "MR", finalMovementRate)) {
+
+    if (
+      !fSetGridValue(
+        tag.cs.game.r.MR.index,
+        tag.cs.game.c.MR.index,
+        finalMovementRate
+      )
+    ) {
       fMyConsoleLog("   -> ⚠️ Error setting final MR value in ('MR', 'MR').");
       calculationErrors = true;
     }
@@ -4383,7 +4478,9 @@
       fMyConsoleLog("   -> 🚨 Character is over-encumbered!");
       await fShowMessage("⚠️ You are over encumbered, MR is 0.");
     }
+
     fCalcTotalAP();
+
     if (calculationErrors) {
       fMyConsoleLog("❌ MR/Enc/AP Calc Completed with errors.");
     } else {
@@ -4594,44 +4691,32 @@
 
   /** function fCalc_VitMaxNowPerc
    * Purpose: Handles the "Set Vit Max" menu action by recalculating derived vitality values.
-   * Assumptions: gUI.range definitions for Vit and Fortitude are correct.
+   * Assumptions: gUI.range definitions for Vit and Fortitude are correct. The `tag` object is populated.
    * Notes: Calculates and updates Vit Max, Vit Now, and Vit Now Percent based on Fortitude and bonuses.
    * @returns {Promise<void>} Resolves after the operation is complete.
    */
   async function fCalc_VitMaxNowPerc() {
     fMyConsoleLog("⚙️ Menu Action: Setting Vit to Max...");
-    const fortitudeRange = gUI.range?.fortitudeSk1;
-    const vitMaxRange = gUI.range?.vitMax;
-    const vitMaxPlusRange = gUI.range?.vitMaxPlus;
-    let errorMsg = "";
-    if (!fortitudeRange || !fortitudeRange.r1 || !fortitudeRange.c1)
-      errorMsg = "Fortitude range definition missing.";
-    else if (!vitMaxRange || !vitMaxRange.r1 || !vitMaxRange.c1)
-      errorMsg = "Vit Max range definition missing.";
-    else if (!vitMaxPlusRange || !vitMaxPlusRange.r1 || !vitMaxPlusRange.c1)
-      errorMsg = "Vit Max Plus range definition missing.";
-    if (errorMsg) {
-      console.warn(`fCalc_VitMaxNowPerc: ${errorMsg}`);
-      fMyConsoleLog(`⚠️ Cannot set Vit to max: ${errorMsg}`);
-      await fShowMessage(`❌ Error: ${errorMsg}`);
-      return;
-    }
-    const fortitudeValueRaw = fGetGridValue(
-      fortitudeRange.r1,
-      fortitudeRange.c1
+
+    const fortitudeValue = fGetGridValue(
+      tag.cs.game.r.For.index,
+      tag.cs.game.c.Sk1.index,
+      true
     );
-    const fortitudeValue = Number(fortitudeValueRaw);
+
     if (isNaN(fortitudeValue)) {
-      errorMsg = `Fortitude Sk1 value ('${fortitudeValueRaw}') is not a valid number.`;
+      const errorMsg = `Fortitude Sk1 value ('${fortitudeValue}') is not a valid number.`;
       console.warn(`fCalc_VitMaxNowPerc: ${errorMsg}`);
       fMyConsoleLog(`⚠️ Cannot set Vit to max: ${errorMsg}`);
       await fShowMessage(`❌ Error: ${errorMsg}`);
       return;
     }
+
     fMyConsoleLog(`   -> Fortitude Sk1 value: ${fortitudeValue}`);
+
     const vitMaxPlusValueRaw = fGetGridValue(
-      vitMaxPlusRange.r1,
-      vitMaxPlusRange.c1
+      tag.cs.game.r.VitTbl.index,
+      tag.cs.game.c.vitPlus.index
     );
     let vitMaxPlusBonus = 0;
     if (
@@ -4646,24 +4731,27 @@
     } else {
       fMyConsoleLog(`   -> No valid Vit Max Plus Bonus found. Using 0.`);
     }
+
     const newVitMax = Math.round(fortitudeValue + vitMaxPlusBonus);
     fMyConsoleLog(
       `   -> Calculated New Vit Max: ${fortitudeValue} (For) + ${vitMaxPlusBonus} (Bonus) = ${newVitMax}`
     );
+
     const setMaxSuccess = fSetGridValue(
-      vitMaxRange.r1,
-      vitMaxRange.c1,
+      tag.cs.game.r.VitTbl.index,
+      tag.cs.game.c.vitMax.index,
       newVitMax
     );
     if (!setMaxSuccess) {
       fMyConsoleLog(
-        `⚠️ Failed to set Vit Max value (${newVitMax}) in cell (${vitMaxRange.r1}, ${vitMaxRange.c1}). Aborting further updates.`
+        `⚠️ Failed to set Vit Max value (${newVitMax}). Aborting further updates.`
       );
       await fShowMessage(
         `❌ Error: Failed to update the Vit Max value in the grid.`
       );
       return;
     }
+
     fMyConsoleLog(`   -> Successfully set Vit Max to ${newVitMax}.`);
     await fVitNowNPercent_Calc();
     fMyConsoleLog("✅ Vit Set to Max sequence complete.");
@@ -4889,7 +4977,7 @@
     );
     if (refreshSuccess) {
       fMyConsoleLog(
-        `   -> Triggering function fCalculatesEnc_MR_AP after successful refresh for row ${r}...`
+        `   -> Triggering funct. fCalculatesEnc_MR_AP after successful refresh for row ${r}...`
       );
       await fCalculatesEnc_MR_AP();
       fMyConsoleLog(`✅ ${funcName} completed successfully for [${r}, ${c}].`);

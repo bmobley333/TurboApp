@@ -248,7 +248,7 @@
     } else {
       fCheckAndTagNote(cell, r, c);
     }
-    const abilityCol = fResolveCol("Ability");
+    const abilityCol = tag.cs.game.c.Ability.index;
     if (
       c === abilityCol &&
       typeof value === "string" &&
@@ -532,7 +532,7 @@
 
   /** function fAddGridsHeaderRowButtons
    * Purpose: Inserts configured image buttons into designated header cells.
-   * Assumptions: Populates `gUI.headerButtonCoords` with the button locations. `gUI.grid2D` is populated.
+   * Assumptions: Populates `gUI.headerButtonCoords` with the button locations. `gUI.grid2D` and `tag` object are populated.
    * @param {} - No parameters.
    * @returns {void}
    */
@@ -541,8 +541,8 @@
     let buttonsAdded = 0;
     const headerButtonConfigs = [
       {
-        rowTag: "Button_R",
-        colTag: "DieButtonC",
+        r: tag.cs.game.r.Button_R.index,
+        c: tag.cs.game.c.DieButtonC.index,
         action: "action-rollDice",
         imageUrl:
           "https://raw.githubusercontent.com/bmobley333/TurboApp/main/Pics/Buttons/Button_d20.png",
@@ -550,8 +550,8 @@
         titleText: "Roll Dice",
       },
       {
-        rowTag: "Button_R",
-        colTag: "RefreshButtonC",
+        r: tag.cs.game.r.Button_R.index,
+        c: tag.cs.game.c.RefreshButtonC.index,
         action: "action-refreshData",
         imageUrl:
           "https://raw.githubusercontent.com/bmobley333/TurboApp/main/Pics/Buttons/Button_Refresh.png",
@@ -559,8 +559,8 @@
         titleText: "Refresh Data",
       },
       {
-        rowTag: "Button_R",
-        colTag: "UpArrowButtonC",
+        r: tag.cs.game.r.Button_R.index,
+        c: tag.cs.game.c.UpArrowButtonC.index,
         action: "action-jumpTop",
         imageUrl:
           "https://raw.githubusercontent.com/bmobley333/TurboApp/main/Pics/Buttons/Button_UpArrow.png",
@@ -568,8 +568,8 @@
         titleText: "Jump to Top",
       },
       {
-        rowTag: "Button_R",
-        colTag: "DownArrowButtonC",
+        r: tag.cs.game.r.Button_R.index,
+        c: tag.cs.game.c.DownArrowButtonC.index,
         action: "action-jumpBottom",
         imageUrl:
           "https://raw.githubusercontent.com/bmobley333/TurboApp/main/Pics/Buttons/Button_DownArrow.png",
@@ -577,8 +577,8 @@
         titleText: "Jump to Bottom",
       },
       {
-        rowTag: "Button_R",
-        colTag: "MonsterButtonC",
+        r: tag.cs.game.r.Button_R.index,
+        c: tag.cs.game.c.MonsterButtonC.index,
         action: "action-showMonsters",
         imageUrl:
           "https://raw.githubusercontent.com/bmobley333/TurboApp/main/Pics/Buttons/Button_Monster.png",
@@ -587,14 +587,13 @@
       },
     ];
     headerButtonConfigs.forEach((config) => {
-      const r = fResolveRow(config.rowTag);
-      const c = fResolveCol(config.colTag);
-      if (isNaN(r) || isNaN(c)) {
+      const { r, c } = config;
+      if (typeof r !== "number" || typeof c !== "number") {
         console.warn(`Could not resolve coords for button: ${config.action}`);
         return;
       }
       gUI.headerButtonCoords.add(`${r},${c}`);
-      const cell = fGetGridCellFromRTagCTag(config.rowTag, config.colTag);
+      const cell = gUI.grid2D?.[r]?.[c];
       if (!cell) return;
       const img = fCreateGridHeaderRowButtonImage(config);
       fApplyGridButtonToCell(cell, img);
@@ -2290,7 +2289,7 @@
     }
     const isChecked = checkbox.checked;
     const isSkGroupMember = checkbox.dataset.skGroup === "true";
-    const possWornCol = fResolveCol("PossWorn");
+    const possWornCol = tag.cs.game.c.PossWorn.index;
     const oldValue = gUI.arr[r][c];
     gUI.arr[r][c] = isChecked;
     fMyConsoleLog(`Checkbox [${r}, ${c}] toggled to: ${isChecked}`);
@@ -3771,16 +3770,20 @@
    */
   function fFlagAbilityAsCustom(r) {
     const funcName = "fFlagAbilityAsCustom";
-    const abilityCol = fResolveCol("Ability");
-    if (isNaN(abilityCol)) return;
+    const abilityCol = tag.cs.game.c.Ability.index;
+    if (typeof abilityCol !== "number") return;
+
     const cell = gUI.grid2D?.[r]?.[abilityCol];
     const currentName = String(gUI.arr[r]?.[abilityCol] ?? "");
+
     if (!cell || currentName.startsWith("⚡")) {
       return;
     }
+
     fMyConsoleLog(
       `   -> ${funcName}: Auto-flagging item in row ${r} as custom...`
     );
+
     const newCustomName = "⚡" + currentName;
     gUI.arr[r][abilityCol] = newCustomName;
     cell.innerHTML = "";
@@ -4083,11 +4086,15 @@
    */
   async function fPrep_SwitchActiveCheckbox(abilityRowIndex) {
     const funcName = "fPrep_SwitchActiveCheckbox";
-    const originalSk1Col = fResolveCol("Sk1ChkBox");
-    const targetSk2Col = fResolveCol("Sk2ChkBox");
+    const originalSk1Col = tag.cs.game.c.Sk1ChkBox.index;
+    const targetSk2Col = tag.cs.game.c.Sk2ChkBox.index;
 
-    if (isNaN(originalSk1Col) || isNaN(targetSk2Col)) {
-      const missingTag = isNaN(originalSk1Col) ? "Sk1ChkBox" : "Sk2ChkBox";
+    if (
+      typeof originalSk1Col !== "number" ||
+      typeof targetSk2Col !== "number"
+    ) {
+      const missingTag =
+        typeof originalSk1Col !== "number" ? "Sk1ChkBox" : "Sk2ChkBox";
       await fShowMessage(
         `❌ Error: Could not resolve column tag '${missingTag}'.`
       );
@@ -4163,21 +4170,21 @@
       return;
     }
     fMyConsoleLog(`   -> Wound Amount to Apply: ${woundAmount}`);
-    const targetRow = "VitTbl";
-    const targetCol = "vit1st";
-    let currentVit1st = fGetGridValue(targetRow, targetCol, true);
+    const targetRowIndex = tag.cs.game.r.VitTbl.index;
+    const targetColIndex = tag.cs.game.c.vit1st.index;
+    let currentVit1st = fGetGridValue(targetRowIndex, targetColIndex, true);
     if (isNaN(currentVit1st)) {
       fMyConsoleLog(
-        `   -> Warning: Current value in ('${targetRow}', '${targetCol}') is not a number. Treating as 0.`
+        `   -> Warning: Current value in ('VitTbl', 'vit1st') is not a number. Treating as 0.`
       );
       currentVit1st = 0;
     }
     fMyConsoleLog(`   -> Current 1st Degree Wounds: ${currentVit1st}`);
     const newWoundValue = Math.round(currentVit1st + woundAmount);
     fMyConsoleLog(`   -> Calculated New 1st Degree Wounds: ${newWoundValue}`);
-    if (!fSetGridValue(targetRow, targetCol, newWoundValue)) {
+    if (!fSetGridValue(targetRowIndex, targetColIndex, newWoundValue)) {
       fMyConsoleLog(
-        `❌ Error applying wounds: fSetGridValue failed for ('${targetRow}', '${targetCol}').`
+        `❌ Error applying wounds: fSetGridValue failed for ('VitTbl', 'vit1st').`
       );
       await fShowMessage("Error: Failed to update the 1st Degree Wounds cell.");
       return;
@@ -4421,18 +4428,19 @@
     if (event) event.stopPropagation();
     fCloseAllDropdowns();
     fSetButtonOrMenuState("Nish");
-    const nishRowTag = "NishAtr_R";
-    const nishColTag = "Sk1ChkBox";
-    const r = fResolveRow(nishRowTag);
-    const c = fResolveCol(nishColTag);
-    if (isNaN(r) || isNaN(c)) {
+
+    const r = tag.cs.game.r.NishAtr_R.index;
+    const c = tag.cs.game.c.Sk1ChkBox.index;
+
+    if (typeof r !== "number" || typeof c !== "number") {
       console.error(
-        `fHandleNishButtonClick: Could not resolve Nish checkbox coordinates (${nishRowTag}, ${nishColTag}).`
+        `fHandleNishButtonClick: Could not resolve Nish checkbox coordinates.`
       );
       await fShowMessage(`❌ Error: Cannot find Nish checkbox definition.`);
       fSetButtonOrMenuState(null);
       return;
     }
+
     const currentChecked = gUI.currentSkRadioChecked;
     if (
       currentChecked.r !== null &&
@@ -4441,17 +4449,16 @@
     ) {
       fUncheckOldSkGroupBox(currentChecked.r, currentChecked.c);
     }
+
     const nishCellDiv = gUI.grid2D?.[r]?.[c];
     const nishCheckbox = nishCellDiv?.querySelector(
       'input[data-sk-group="true"]'
     );
+
     if (nishCheckbox) {
       nishCheckbox.checked = true;
       gUI.arr[r][c] = true;
-      gUI.currentSkRadioChecked = {
-        r,
-        c,
-      };
+      gUI.currentSkRadioChecked = { r, c };
       fMyConsoleLog(
         `   -> Programmatically checked Nish checkbox [${r}, ${c}].`
       );
@@ -4463,6 +4470,7 @@
       fSetButtonOrMenuState(null);
       return;
     }
+
     await fExecuteNishSequence();
     fMyConsoleLog("   -> Triggering fMain_AbilityRoll for Nish ability...");
     await fMain_AbilityRoll();
@@ -5209,6 +5217,10 @@
       return;
     }
     fMyConsoleLog("   -> Stored initial data into gUI.");
+
+    // Build the tag object for the main game sheet
+    fBuildTagObject("cs", "game", gUI.arr);
+
     fInitializeCustomNotesArray();
     fMyConsoleLog(
       "⚙️ Checking Firestore for saved Grid (gUI.arr) and Custom Notes data..."

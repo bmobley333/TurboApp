@@ -6,6 +6,82 @@
   // Start - Core Utilities
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  // End - n/a
+  // Start - Tag Management
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+  /** function fBuildTagObject
+   * Purpose: Parses a 2D data array to populate a specific namespace within the global `tag` object.
+   * Assumptions: The global `tag` object exists. Row tags are in column 0, and column tags are in row 0.
+   * Notes: This is the core of our dynamic "magic string" elimination strategy.
+   * @param {string} wbAbr - The two-letter workbook abbreviation (e.g., 'cs', 'db').
+   * @param {string} sheetName - The sheet name (e.g., 'game', 'abilities').
+   * @param {any[][]} dataArr - The 2D data array to parse for tags.
+   * @returns {boolean} True on success, false on failure.
+   */
+  function fBuildTagObject(wbAbr, sheetName, dataArr) {
+    const funcName = "fBuildTagObject";
+    const wb = String(wbAbr || "").toLowerCase();
+    const sheet = String(sheetName || "")
+      .toLowerCase()
+      .replace(/ /g, "");
+
+    if (!tag[wb] || !tag[wb][sheet]) {
+      console.error(`${funcName}: Invalid namespace provided: ${wb}.${sheet}`);
+      return false;
+    }
+    if (
+      !Array.isArray(dataArr) ||
+      dataArr.length === 0 ||
+      !Array.isArray(dataArr[0])
+    ) {
+      console.warn(
+        `${funcName}: Cannot build tags for ${wb}.${sheet}, data array is empty or malformed.`
+      );
+      return true; // Not a failure, just nothing to do.
+    }
+
+    // Clear any existing tags for this namespace before rebuilding
+    tag[wb][sheet].r = {};
+    tag[wb][sheet].c = {};
+
+    const rows = dataArr.length;
+    const cols = dataArr[0].length;
+
+    // Process Row Tags (Column 0)
+    for (let r = 0; r < rows; r++) {
+      const rowCell = dataArr[r]?.[0];
+      if (typeof rowCell === "string" && rowCell) {
+        rowCell.split(",").forEach((t) => {
+          const trimmedTag = t.trim();
+          if (trimmedTag) {
+            tag[wb][sheet].r[trimmedTag] = { label: trimmedTag, index: r };
+          }
+        });
+      }
+    }
+
+    // Process Column Tags (Row 0)
+    const colHeaderRow = dataArr[0];
+    if (colHeaderRow) {
+      for (let c = 0; c < cols; c++) {
+        const colCell = colHeaderRow[c];
+        if (typeof colCell === "string" && colCell) {
+          colCell.split(",").forEach((t) => {
+            const trimmedTag = t.trim();
+            if (trimmedTag) {
+              tag[wb][sheet].c[trimmedTag] = { label: trimmedTag, index: c };
+            }
+          });
+        }
+      }
+    }
+
+    fMyConsoleLog(`✅ Tags built for namespace: ${wb}.${sheet}`);
+    return true;
+  } // End function fBuildTagObject
+
   /** function fMyConsoleLog
    * Purpose: Logs messages to the console with timestamps, only if gUI.isDebugMode is true.
    * Assumptions: gUI.isDebugMode is a boolean. gUI.startTime and gUI.lastLogTime are numbers.
@@ -30,29 +106,55 @@
 
   /** function fResolveRow
    * Purpose: Converts a string tag or numeric index to a 0-based row index.
-   * Assumptions: gUI.rowTag is a populated object.
+   * Assumptions: gUI.rowTag is populated. The `tag` object is the primary lookup source.
    * @param {string | number} v - Row tag string or 0-based numeric index.
    * @returns {number} The 0-based row index, or NaN if resolution fails.
    */
   const fResolveRow = (v) => {
-    if (typeof v === "string") return gUI.rowTag[v];
-    if (typeof v === "number" && v >= 0) return v;
+    if (typeof v === "string") {
+      // Fast path: Check the pre-resolved tag object first.
+      const resolvedIndex = tag.cs.game.r[v]?.index;
+      if (typeof resolvedIndex === "number") {
+        return resolvedIndex;
+      }
+      // Fallback path: For legacy or non-game-sheet tags.
+      const fallbackIndex = gUI.rowTag[v];
+      if (typeof fallbackIndex === "number") {
+        return fallbackIndex;
+      }
+    }
+    if (typeof v === "number" && v >= 0) {
+      return v;
+    }
     console.warn(`fResolveRow failed for value:`, v);
     return NaN;
-  }; // End fResolveRow
+  }; // End function fResolveRow
 
   /** function fResolveCol
    * Purpose: Converts a string tag or numeric index to a 0-based col index.
-   * Assumptions: gUI.colTag is a populated object.
+   * Assumptions: gUI.colTag is populated. The `tag` object is the primary lookup source.
    * @param {string | number} v - Column tag string or 0-based numeric index.
    * @returns {number} The 0-based column index, or NaN if resolution fails.
    */
   const fResolveCol = (v) => {
-    if (typeof v === "string") return gUI.colTag[v];
-    if (typeof v === "number" && v >= 0) return v;
+    if (typeof v === "string") {
+      // Fast path: Check the pre-resolved tag object first.
+      const resolvedIndex = tag.cs.game.c[v]?.index;
+      if (typeof resolvedIndex === "number") {
+        return resolvedIndex;
+      }
+      // Fallback path: For legacy or non-game-sheet tags.
+      const fallbackIndex = gUI.colTag[v];
+      if (typeof fallbackIndex === "number") {
+        return fallbackIndex;
+      }
+    }
+    if (typeof v === "number" && v >= 0) {
+      return v;
+    }
     console.warn(`fResolveCol failed for value:`, v);
     return NaN;
-  }; // End fResolveCol
+  }; // End function fResolveCol
 
   /** function fResolveFSDataRow
    * Purpose: Resolve a row tag or index against a specified Firestore data cache object.
