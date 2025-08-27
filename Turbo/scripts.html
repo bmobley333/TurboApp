@@ -1597,24 +1597,137 @@
     }
   } // End function fHandleGridDblClick
 
+  /** function fHandleMetaCellEdit
+   * Purpose: Handles saving and validating an edit within a Meta or Meta Channel cell.
+   * Assumptions: Helper for fHandleGridCellEdit. Posts an alert to the sidebar on change.
+   * @param {number} r - The 0-based row index.
+   * @param {number} c - The 0-based column index.
+   * @param {string} newValue - The new text content of the cell.
+   * @param {any} oldValue - The original value from the data model.
+   * @returns {Promise<void>}
+   */
+  async function fHandleMetaCellEdit(r, c, newValue, oldValue) {
+    const trimmedNewValue = newValue.trim();
+    let finalValueToStore = oldValue;
+    let isValidInput = false;
+
+    if (trimmedNewValue === "") {
+      finalValueToStore = "";
+      isValidInput = true;
+    } else {
+      const parsedNum = parseInt(trimmedNewValue, 10);
+      if (
+        !isNaN(parsedNum) &&
+        parsedNum > 0 &&
+        String(parsedNum) === trimmedNewValue
+      ) {
+        if (fIsCellInRangeArray(r, c, [gUI.resolvedRanges?.meta])) {
+          const colorIndex = gUI.list.metaColor.findIndex(
+            (colorTag) => tag.cs.game.c[colorTag]?.index === c
+          );
+          const maxAllowed = gUI.list.metaFull?.[colorIndex];
+          if (typeof maxAllowed === "number" && parsedNum <= maxAllowed) {
+            finalValueToStore = parsedNum;
+            isValidInput = true;
+          }
+        } else {
+          // It's a Meta Channel cell
+          finalValueToStore = parsedNum;
+          isValidInput = true;
+        }
+      }
+    }
+
+    if (isValidInput && String(gUI.arr[r][c]) !== String(finalValueToStore)) {
+      gUI.arr[r][c] = finalValueToStore;
+      fUpdateCustomDataIndicator(r, c);
+      fHandleAutoSaveTextToFirestore();
+      const metaType = fIsCellInRangeArray(r, c, [gUI.resolvedRanges?.meta])
+        ? "Meta Color"
+        : "Meta Channel Color";
+      const colorTag =
+        gUI.list.metaColor.find(
+          (colorTag) => tag.cs.game.c[colorTag]?.index === c
+        ) || `Col${c}`;
+      const oldValueDisp =
+        oldValue === "" || oldValue === 0 || oldValue === null
+          ? "0"
+          : String(oldValue);
+      const newValueDisp =
+        finalValueToStore === "" || finalValueToStore === 0
+          ? "0"
+          : String(finalValueToStore);
+
+      const alertMsgHtml = `⚠️ <span class="red-bold">Alert:</span> ${metaType} ${colorTag} was changed from ${oldValueDisp} to ${newValueDisp}`;
+      const alertMsgText = `⚠️ Alert: ${metaType} ${colorTag} was changed from ${oldValueDisp} to ${newValueDisp}`;
+      fPostToSidebar(alertMsgHtml, alertMsgText);
+      fShowSidebar();
+      setTimeout(() => fSendLogToGMScreenAndPS(), 0);
+    }
+
+    fSetGridValue(r, c, gUI.arr[r][c]); // Re-sets the DOM to the final value (either new or reverted)
+  } // End function fHandleMetaCellEdit
+
+  /** function fHandleGearStatCellEdit
+   * Purpose: Handles saving an edit within a gear input cell and triggering recalculations.
+   * Assumptions: Helper for fHandleGridCellEdit.
+   * @param {number} r - The 0-based row index.
+   * @param {number} c - The 0-based column index.
+   * @param {string} newValue - The new text content of the cell.
+   * @param {any} oldValue - The original value from the data model.
+   * @returns {Promise<void>}
+   */
+  async function fHandleGearStatCellEdit(r, c, newValue, oldValue) {
+    const validatedValue = await fCalcGearLine(
+      r,
+      c,
+      newValue,
+      String(oldValue ?? "")
+    );
+    if (validatedValue !== null) {
+      gUI.arr[r][c] = validatedValue; // fCalcGearLine already calls fSetGridValue and save
+    }
+    // If validation fails, fCalcGearLine handles reverting the DOM.
+  } // End function fHandleGearStatCellEdit
+
+  /** function fHandleVitalityCellEdit
+   * Purpose: Handles saving an edit within a vitality cell and triggering recalculations.
+   * Assumptions: Helper for fHandleGridCellEdit.
+   * @param {number} r - The 0-based row index.
+   * @param {number} c - The 0-based column index.
+   * @param {string} newValue - The new text content of the cell.
+   * @param {any} oldValue - The original value from the data model.
+   * @returns {Promise<void>}
+   */
+  async function fHandleVitalityCellEdit(r, c, newValue, oldValue) {
+    gUI.arr[r][c] = newValue; // Tentatively update the model
+    await fVitNowNPercent_Calc(); // This recalculates and sets multiple Vit fields, including the one just edited
+    fHandleAutoSaveTextToFirestore();
+  } // End function fHandleVitalityCellEdit
+
+  /** function fHandleGenericCellEdit
+   * Purpose: Handles saving a generic editable cell.
+   * Assumptions: Helper for fHandleGridCellEdit.
+   * @param {number} r - The 0-based row index.
+   * @param {number} c - The 0-based column index.
+   * @param {string} newValue - The new text content of the cell.
+   * @param {any} oldValue - The original value from the data model.
+   * @returns {Promise<void>}
+   */
+  async function fHandleGenericCellEdit(r, c, newValue, oldValue) {
+    gUI.arr[r][c] = newValue;
+    fUpdateCustomDataIndicator(r, c);
+    fHandleAutoSaveTextToFirestore();
+  } // End function fHandleGenericCellEdit
+
   /** function fHandleGridCellEdit
-   * Purpose: Handles the 'blur' event for contenteditable cells, with a guard to prevent execution on header buttons.
-   * Assumptions: This is the primary handler for saving user-edited text.
-   * Notes: This version includes a brute-force guard clause as the definitive fix for the vanishing button bug.
+   * Purpose: Main dispatcher for the 'blur' event on editable cells.
+   * Assumptions: Routes the event to specialized handlers based on the cell's context.
    * @param {FocusEvent} event - The blur event object.
-   * @returns {void}
+   * @returns {Promise<void>} Resolves after the specific handler has completed.
    */
   async function fHandleGridCellEdit(event) {
     const cellDiv = event.target;
-    const r_check = parseInt(cellDiv?.dataset?.r, 10);
-    const c_check = parseInt(cellDiv?.dataset?.c, 10);
-    if (
-      !isNaN(r_check) &&
-      !isNaN(c_check) &&
-      gUI.headerButtonCoords.has(`${r_check},${c_check}`)
-    ) {
-      return;
-    }
     if (
       !cellDiv ||
       !cellDiv.classList.contains("cell") ||
@@ -1622,176 +1735,40 @@
     ) {
       return;
     }
+
     const r = parseInt(cellDiv.dataset.r, 10);
     const c = parseInt(cellDiv.dataset.c, 10);
-    if (isNaN(r) || isNaN(c) || !gUI.arr[r]) {
+    if (isNaN(r) || isNaN(c) || gUI.headerButtonCoords.has(`${r},${c}`)) {
       return;
     }
-    fHideTooltip();
-    const colTag = Object.keys(gUI.colTag).find((tag) => gUI.colTag[tag] === c);
-    const customizableDataCols = [
-      "Sk1Typ",
-      "Sk1",
-      "Sk2Typ",
-      "Sk2",
-      "Act",
-      "Dur",
-      "Rng",
-      "Meta",
-    ];
-    if (colTag && customizableDataCols.includes(colTag)) {
-      cellDiv.contentEditable = false;
-      const newText = cellDiv.textContent.trim();
-      const oldValueInModel = String(gUI.arr[r][c] ?? "");
-      const validateAndGetFinalValue = (text, list) => {
-        if (text === "") return "";
-        if (list) {
-          const lowerText = text.toLowerCase();
-          const match = list.find((item) => item.toLowerCase() === lowerText);
-          return match || null;
-        } else {
-          const num = parseInt(text, 10);
-          if (!isNaN(num) && num >= 1 && String(num) === text) {
-            return num;
-          }
-          return null;
-        }
-      };
-      const validationList = gUI.validationLists?.[colTag];
-      let finalValue = validateAndGetFinalValue(newText, validationList);
-      if (colTag === "Rng" && finalValue === null) {
-        const num = parseInt(newText, 10);
-        if (!isNaN(num) && num >= 1 && String(num) === newText) {
-          finalValue = num;
-        }
-      }
-      if (finalValue === null) {
-        cellDiv.textContent = oldValueInModel;
-        return;
-      }
-      if (String(finalValue) === oldValueInModel) {
-        cellDiv.textContent = oldValueInModel;
-        return;
-      }
-      gUI.arr[r][c] = finalValue;
-      cellDiv.textContent = finalValue;
-      fFlagAbilityAsCustom(r);
-      fHandleAutoSaveTextToFirestore();
-      return;
+
+    const oldValue = gUI.arr[r]?.[c] ?? "";
+    const newValue = cellDiv.textContent ?? "";
+    if (String(newValue) === String(oldValue)) {
+      return; // No change
     }
-    const newValue = cellDiv.textContent;
-    const oldValueInModel = gUI.arr[r][c];
-    if (String(newValue ?? "") === String(oldValueInModel ?? "")) {
-      return;
-    }
-    const gearColumnsToCalculate = ["PossNum", "PossWorn", "PossPerOff"];
-    let finalValueToStore = newValue;
-    let shouldUpdateModelAndSave = true;
-    let specificCalcDone = false;
-    let metaOrChannelAlertPosted = false;
-    const isMetaCell =
-      gUI.range?.meta && fIsCellInRangeArray(r, c, [gUI.range.meta]);
-    const isMetaChannelCell =
-      gUI.range?.metaChannel &&
-      fIsCellInRangeArray(r, c, [gUI.range.metaChannel]);
-    if (isMetaCell || isMetaChannelCell) {
-      const trimmedNewValue = newValue.trim();
-      let parsedNum = parseInt(trimmedNewValue, 10);
-      let isValidInput = false;
-      if (trimmedNewValue === "") {
-        finalValueToStore = "";
-        isValidInput = true;
-      } else if (
-        !isNaN(parsedNum) &&
-        parsedNum > 0 &&
-        String(parsedNum) === trimmedNewValue
-      ) {
-        if (isMetaCell) {
-          const colorIndex = gUI.list.metaColor.findIndex(
-            (tag) => gUI.colTag[tag] === c
-          );
-          if (
-            colorIndex !== -1 &&
-            gUI.list.metaFull &&
-            colorIndex < gUI.list.metaFull.length
-          ) {
-            const maxAllowed = gUI.list.metaFull[colorIndex];
-            if (parsedNum <= maxAllowed) {
-              finalValueToStore = parsedNum;
-              isValidInput = true;
-            }
-          }
-        } else {
-          finalValueToStore = parsedNum;
-          isValidInput = true;
-        }
-      }
-      if (!isValidInput) {
-        cellDiv.textContent = String(oldValueInModel ?? "");
-        shouldUpdateModelAndSave = false;
-      }
-      if (shouldUpdateModelAndSave && finalValueToStore !== oldValueInModel) {
-        const metaType = isMetaCell ? "Meta Color" : "Meta Channel Color";
-        const colorTag =
-          gUI.list.metaColor.find((tag) => gUI.colTag[tag] === c) || `Col${c}`;
-        const oldValueForDisplay =
-          oldValueInModel === "" || oldValueInModel === 0
-            ? "0"
-            : String(oldValueInModel);
-        const newValueForDisplay =
-          finalValueToStore === "" || finalValueToStore === 0
-            ? "0"
-            : String(finalValueToStore);
-        const alertPrefixHtml = `⚠️ <span class="red-bold">Alert:</span> `;
-        const alertPrefixText = `⚠️ Alert: `;
-        const alertMsgHtml = `${alertPrefixHtml}${metaType} ${colorTag} was changed from ${oldValueForDisplay} to ${newValueForDisplay}`;
-        const alertMsgText = `${alertPrefixText}${metaType} ${colorTag} was changed from ${oldValueForDisplay} to ${newValueForDisplay}`;
-        fPostToSidebar(alertMsgHtml, alertMsgText);
-        fShowSidebar();
-        metaOrChannelAlertPosted = true;
-      }
-      specificCalcDone = true;
-    }
-    if (!specificCalcDone && gearColumnsToCalculate.includes(colTag)) {
-      const validatedValue = await fCalcGearLine(
-        r,
-        c,
-        newValue,
-        String(oldValueInModel ?? "")
-      );
-      if (validatedValue !== null) {
-        finalValueToStore = validatedValue;
-      } else {
-        shouldUpdateModelAndSave = false;
-      }
-      specificCalcDone = true;
-    }
-    if (!specificCalcDone) {
-      const isVitMaxPlus =
-        gUI.range?.vitMaxPlus &&
-        fIsCellInRangeArray(r, c, [gUI.range.vitMaxPlus]);
-      const isVit1stTo3rd =
-        gUI.range?.vit1stTo3rd &&
-        fIsCellInRangeArray(r, c, [gUI.range.vit1stTo3rd]);
-      if (isVitMaxPlus || isVit1stTo3rd) {
-        gUI.arr[r][c] = newValue;
-        await fCalc_VitMaxNowPerc();
-        finalValueToStore = gUI.arr[r][c];
-      }
-    }
-    if (shouldUpdateModelAndSave) {
-      if (gUI.arr[r][c] !== finalValueToStore) {
-        gUI.arr[r][c] = finalValueToStore;
-        fUpdateCustomDataIndicator(r, c);
-        fHandleAutoSaveTextToFirestore();
-        if (metaOrChannelAlertPosted) {
-          setTimeout(() => fSendLogToGMScreenAndPS(), 0);
-        }
-      } else if (metaOrChannelAlertPosted) {
-        setTimeout(() => fSendLogToGMScreenAndPS(), 0);
-      }
+
+    const isMetaCell = fIsCellInRangeArray(r, c, [
+      gUI.resolvedRanges?.meta,
+      gUI.resolvedRanges?.metaChannel,
+    ]);
+    const isGearInputCell = fIsCellInRangeArray(r, c, [
+      ...(gUI.resolvedRanges?.gearNumCol || []),
+      ...(gUI.resolvedRanges?.gearPercOffCol || []),
+    ]);
+    const isVitalityRecalcCell = fIsCellInRangeArray(r, c, [
+      gUI.resolvedRanges?.vitMaxPlus,
+      gUI.resolvedRanges?.vit1stTo3rd,
+    ]);
+
+    if (isMetaCell) {
+      await fHandleMetaCellEdit(r, c, newValue, oldValue);
+    } else if (isGearInputCell) {
+      await fHandleGearStatCellEdit(r, c, newValue, oldValue);
+    } else if (isVitalityRecalcCell) {
+      await fHandleVitalityCellEdit(r, c, newValue, oldValue);
     } else {
-      fUpdateCustomDataIndicator(r, c);
+      await fHandleGenericCellEdit(r, c, newValue, oldValue);
     }
   } // End function fHandleGridCellEdit
 
