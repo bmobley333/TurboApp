@@ -430,6 +430,48 @@
   // Start - Grid Data Access
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+  /** function fResolveAllRanges
+   * Purpose: Populates gUI.resolvedRanges by converting all string tags in gUI.range to numeric indices.
+   * Assumptions: This function is called once at startup after `fBuildTagObject` has run.
+   * Notes: This is a key step for performance, allowing the app to use direct numeric indices instead of string lookups at runtime.
+   * @param {} - No parameters.
+   * @returns {void}
+   */
+  function fResolveAllRanges() {
+    const funcName = "fResolveAllRanges";
+    fMyConsoleLog(
+      `⚙️ ${funcName}: Resolving all configured ranges to numeric indices...`
+    );
+    gUI.resolvedRanges = {};
+
+    const resolveSingleRange = (rangeDef) => {
+      if (fDoesObjectHaveR1C1R2C2Properties(rangeDef)) {
+        return fConvertsR1C1R2C2TagOrNumToIndices(rangeDef);
+      }
+      return rangeDef; // Return as-is if not a standard range object
+    };
+
+    for (const key in gUI.range) {
+      if (Object.hasOwnProperty.call(gUI.range, key)) {
+        const originalValue = gUI.range[key];
+        if (Array.isArray(originalValue)) {
+          gUI.resolvedRanges[key] = originalValue.map(resolveSingleRange);
+        } else if (
+          typeof originalValue === "object" &&
+          originalValue !== null
+        ) {
+          gUI.resolvedRanges[key] = resolveSingleRange(originalValue);
+        } else {
+          gUI.resolvedRanges[key] = originalValue;
+        }
+      }
+    }
+
+    fMyConsoleLog(
+      `✅ ${funcName}: All ranges resolved and stored in gUI.resolvedRanges.`
+    );
+  } // End function fResolveAllRanges
+
   /** function fGetGridValue
    * Purpose: Retrieves a value from gUI.arr using tags or indices.
    * Assumptions: gUI.arr, gUI.rowTag, and gUI.colTag are populated.

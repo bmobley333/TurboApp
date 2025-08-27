@@ -85,7 +85,6 @@
     isDesignerMode: false, // Flag for designer mode access >>>
     isCurrentMessageModalUserCloseable: true, // ADDED: Tracks if the message modal can be closed by user action
     headerButtonCoords: new Set(), // Set to store "r,c" strings of button cells
-    hiddenColumns: new Set(), // Stores indices of currently hidden columns
 
     //
     // === Character RaceClass Info ===
@@ -431,10 +430,10 @@
       ],
       // entireAbilityNGearTables below is a NECESSARY total table of the above two tables abilityTable and gearTable
       entireAbilityNGearTables: [
-        { r1: "AbilTblStartR", c1: "FirstC", r2: "AbilTblEnd_R", c2: "LastC" },
+        { r1: "AbilTblStartR", c1: 0, r2: "AbilTblEnd_R", c2: "LastC" },
         {
           r1: "GearTblHeaderStartR",
-          c1: "FirstC",
+          c1: 0,
           r2: "GearTblEnd_R",
           c2: "LastC",
         },
@@ -616,6 +615,7 @@
         },
       ],
     },
+    resolvedRanges: {}, // Populated at runtime by fResolveAllRanges
     rangeCSList: {
       abilitiesNameID: {
         r1: "TableFirstRow",

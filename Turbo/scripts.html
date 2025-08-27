@@ -359,10 +359,11 @@
       return false;
     }
     const isMetaRange =
-      gUI.range?.meta && fIsCellInRangeArray(r, c, [gUI.range.meta]);
+      gUI.resolvedRanges?.meta &&
+      fIsCellInRangeArray(r, c, [gUI.resolvedRanges.meta]);
     const isMetaChannelRange =
-      gUI.range?.metaChannel &&
-      fIsCellInRangeArray(r, c, [gUI.range.metaChannel]);
+      gUI.resolvedRanges?.metaChannel &&
+      fIsCellInRangeArray(r, c, [gUI.resolvedRanges.metaChannel]);
     if (isMetaRange || isMetaChannelRange) {
       return true;
     }
@@ -400,17 +401,17 @@
 
   /** function fIsSkRadioGroupMember
    * Purpose: Checks if a cell is part of the Sk1/Sk2 checkbox 'radio group'.
-   * Assumptions: gUI.range.sk1sk2CheckBoxes is a valid array of range objects.
+   * Assumptions: gUI.resolvedRanges.sk1sk2CheckBoxes is a valid array of range objects.
    * @param {number} r - The 0-based row index.
    * @param {number} c - The 0-based column index.
    * @returns {boolean} True if the cell is within a defined Sk checkbox range.
    */
   function fIsSkRadioGroupMember(r, c) {
-    const ranges = gUI.range.sk1sk2CheckBoxes;
+    const ranges = gUI.resolvedRanges.sk1sk2CheckBoxes;
 
     if (!Array.isArray(ranges)) {
       console.warn(
-        "fIsSkRadioGroupMember: gUI.range.sk1sk2CheckBoxes is not a valid array."
+        "fIsSkRadioGroupMember: gUI.resolvedRanges.sk1sk2CheckBoxes is not a valid array."
       );
       return false;
     }
@@ -436,7 +437,7 @@
         continue;
       }
 
-      const resolved = fConvertsR1C1R2C2TagOrNumToIndices(range);
+      const resolved = range; // Ranges are already resolved
       if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
         console.warn(
           "fIsSkRadioGroupMember: Skipping range due to unresolved indices",
@@ -1375,14 +1376,14 @@
 
   /** function fTotalRereshOfAllAbilitiesAndAllGear
    * Purpose: Performs a full refresh of all non-custom Ability and Gear rows.
-   * Assumptions: `gUI.range` and all necessary caches are populated.
+   * Assumptions: `gUI.resolvedRanges` and all necessary caches are populated.
    * Notes: Skips custom rows (⚡), clears invalid rows, and re-fetches data for valid rows.
    * @returns {Promise<void>} Resolves after the refresh is complete.
    */
   async function fTotalRereshOfAllAbilitiesAndAllGear() {
     const funcName = "fTotalRereshOfAllAbilitiesAndAllGear";
     fMyConsoleLog(`🔄 ${funcName}: Starting Full Ability/Gear Refresh...`);
-    const abilityGearRanges = gUI.range?.entireAbilityNGearTables;
+    const abilityGearRanges = gUI.resolvedRanges?.entireAbilityNGearTables;
     const listCache = gUI.myCSListFSData;
     if (
       !Array.isArray(abilityGearRanges) ||
@@ -1407,7 +1408,7 @@
     let rowsCleared = 0;
     let rowsRefreshed = 0;
     for (const range of abilityGearRanges) {
-      const resolved = fConvertsR1C1R2C2TagOrNumToIndices(range);
+      const resolved = range; // Already resolved
       if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN))
         continue;
       const rMin = Math.min(resolved.r1, resolved.r2);
@@ -1924,21 +1925,19 @@
       );
       return;
     }
-    const turboRangeDef = gUI.range?.monsters;
+    const turboRangeDef = gUI.resolvedRanges?.monsters;
     if (!turboRangeDef || !fDoesObjectHaveR1C1R2C2Properties(turboRangeDef)) {
       fMyConsoleLog(
-        "❌ fUpdateMonsterTable Error: Turbo monster range (gUI.range.monsters) invalid."
+        "❌ fUpdateMonsterTable Error: Turbo monster range (gUI.resolvedRanges.monsters) invalid."
       );
       await fShowMessage(
         "Error: Turbo monster table range definition is missing."
       );
       return;
     }
-    const turboMon_R_start = fResolveRow(turboRangeDef.r1);
-    const turboMon_R_end = fResolveRow(turboRangeDef.r2);
-    const turbo_c1 = fResolveCol(turboRangeDef.c1);
-    const turbo_c2 = fResolveCol(turboRangeDef.c2);
-    if ([turboMon_R_start, turboMon_R_end, turbo_c1, turbo_c2].some(isNaN)) {
+    const turboMon_R_start = turboRangeDef.r1;
+    const turboMon_R_end = turboRangeDef.r2;
+    if ([turboMon_R_start, turboMon_R_end].some(isNaN)) {
       fMyConsoleLog(
         "❌ fUpdateMonsterTable Error: Could not resolve Turbo monster range boundaries."
       );
@@ -3088,7 +3087,7 @@
       const isAbilityNameCell = fIsCellInRangeArray(
         r,
         c,
-        gUI.range.abilNameNoNish
+        gUI.resolvedRanges.abilNameNoNish
       );
       gUI.arr[r][c] = finalValue;
       fMyConsoleLog(
@@ -3803,7 +3802,7 @@
   function fUpdateCustomDataIndicator(r, c) {
     const cell = gUI.grid2D?.[r]?.[c];
     if (!cell) return;
-    if (cell.isContentEditable && !fIsCellInAnyDefinedTable(r, c)) {
+    if (cell.contentEditable === "true" && !fIsCellInAnyDefinedTable(r, c)) {
       const hasText = !!String(gUI.arr[r][c] ?? "").trim();
       const hasCustomNote = !!gUI.customNotes?.[r]?.[c]?.trim();
       if (hasText || hasCustomNote) {
@@ -3818,30 +3817,30 @@
 
   /** function fIsCellInAnyDefinedTable
    * Purpose: Checks if a cell's coordinates fall within any of the major defined table ranges.
-   * Assumptions: `gUI.range` contains the necessary table range definitions.
+   * Assumptions: `gUI.resolvedRanges` contains the necessary table range definitions.
    * @param {number} r - The 0-based row index of the cell.
    * @param {number} c - The 0-based column index of the cell.
    * @returns {boolean} True if the cell is inside a defined table, false otherwise.
    */
   function fIsCellInAnyDefinedTable(r, c) {
     const tableRanges = [
-      ...(gUI.range?.abilityTable || []),
-      ...(gUI.range?.gearTable || []),
-      gUI.range?.monsters,
-      gUI.range?.meta,
-      gUI.range?.metaChannel,
-      gUI.range?.luckBox,
-      gUI.range?.luckBoxPlus,
-      gUI.range?.actTotal,
-      gUI.range?.actPlus,
-      gUI.range?.vit1stTo3rd,
-      gUI.range?.chaosGems,
-      gUI.range?.socketedGear,
+      ...(gUI.resolvedRanges?.abilityTable || []),
+      ...(gUI.resolvedRanges?.gearTable || []),
+      gUI.resolvedRanges?.monsters,
+      gUI.resolvedRanges?.meta,
+      gUI.resolvedRanges?.metaChannel,
+      gUI.resolvedRanges?.luckBox,
+      gUI.resolvedRanges?.luckBoxPlus,
+      gUI.resolvedRanges?.actTotal,
+      gUI.resolvedRanges?.actPlus,
+      gUI.resolvedRanges?.vit1stTo3rd,
+      gUI.resolvedRanges?.chaosGems,
+      gUI.resolvedRanges?.socketedGear,
       {
-        r1: "GearMRTbl",
-        c1: "GearMRCol1",
-        r2: "GearCarryTbl",
-        c2: "GearMRCol6",
+        r1: tag.cs.game.r.GearMRTbl.index,
+        c1: tag.cs.game.c.GearMRCol1.index,
+        r2: tag.cs.game.r.GearCarryTbl.index,
+        c2: tag.cs.game.c.GearMRCol6.index,
       },
     ];
     return fIsCellInRangeArray(r, c, tableRanges);
@@ -5220,6 +5219,8 @@
 
     // Build the tag object for the main game sheet
     fBuildTagObject("cs", "game", gUI.arr);
+    // Resolve all ranges now that tags are available
+    fResolveAllRanges();
 
     fInitializeCustomNotesArray();
     fMyConsoleLog(
