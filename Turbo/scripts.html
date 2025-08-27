@@ -1775,6 +1775,98 @@
     }
   } // End function fHandleMrCarryCellEdit
 
+  /** function fHandleLuckCellEdit
+   * Purpose: Handles saving/validating an edit for the +Luck cell and recalculating the main LuckBox value.
+   * Assumptions: Helper for fHandleGridCellEdit.
+   * @param {number} r - The 0-based row index.
+   * @param {number} c - The 0-based column index.
+   * @param {string} newValue - The new text content of the cell.
+   * @param {any} oldValue - The original value from the data model.
+   * @returns {Promise<void>}
+   */
+  async function fHandleLuckCellEdit(r, c, newValue, oldValue) {
+    const trimmedValue = newValue.trim();
+    let finalBonus = oldValue;
+    let isValid = false;
+
+    if (trimmedValue === "") {
+      finalBonus = ""; // Store as blank, but calculate as 0
+      isValid = true;
+    } else {
+      const parsedNum = parseInt(trimmedValue, 10);
+      if (
+        !isNaN(parsedNum) &&
+        String(parsedNum) === trimmedValue &&
+        parsedNum >= 0
+      ) {
+        finalBonus = parsedNum;
+        isValid = true;
+      }
+    }
+
+    if (isValid) {
+      const oldBonusNum = Number(oldValue) || 0;
+      const newBonusNum = Number(finalBonus) || 0;
+      const delta = newBonusNum - oldBonusNum;
+
+      const currentLuck = fGetGridValue("LuckBox", "LuckBox", true);
+      if (!isNaN(currentLuck)) {
+        const newLuckTotal = currentLuck + delta;
+        fSetGridValue("LuckBox", "LuckBox", newLuckTotal);
+      }
+
+      gUI.arr[r][c] = finalBonus;
+      fUpdateCustomDataIndicator(r, c);
+      fHandleAutoSaveTextToFirestore();
+    } else {
+      fRevertCellDOM(r, c, oldValue);
+    }
+  } // End function fHandleLuckCellEdit
+
+  /** function fHandleActCellEdit
+   * Purpose: Handles saving/validating an edit for the +Act cell and recalculating the main Act Total value.
+   * Assumptions: Helper for fHandleGridCellEdit.
+   * @param {number} r - The 0-based row index.
+   * @param {number} c - The 0-based column index.
+   * @param {string} newValue - The new text content of the cell.
+   * @param {any} oldValue - The original value from the data model.
+   * @returns {Promise<void>}
+   */
+  async function fHandleActCellEdit(r, c, newValue, oldValue) {
+    const trimmedValue = newValue.trim();
+    let finalBonus = oldValue;
+    let isValid = false;
+
+    if (trimmedValue === "") {
+      finalBonus = ""; // Store as blank, but calculate as 0
+      isValid = true;
+    } else {
+      const parsedNum = parseInt(trimmedValue, 10);
+      if (!isNaN(parsedNum) && String(parsedNum) === trimmedValue) {
+        finalBonus = parsedNum;
+        isValid = true;
+      }
+    }
+
+    if (isValid) {
+      const oldBonusNum = Number(oldValue) || 0;
+      const newBonusNum = Number(finalBonus) || 0;
+      const delta = newBonusNum - oldBonusNum;
+
+      const currentAct = fGetGridValue("Act", "ActTot", true);
+      if (!isNaN(currentAct)) {
+        const newActTotal = currentAct + delta;
+        fSetGridValue("Act", "ActTot", newActTotal);
+      }
+
+      gUI.arr[r][c] = finalBonus;
+      fUpdateCustomDataIndicator(r, c);
+      fHandleAutoSaveTextToFirestore();
+    } else {
+      fRevertCellDOM(r, c, oldValue);
+    }
+  } // End function fHandleActCellEdit
+
   /** function fHandleGridCellEdit
    * Purpose: Main dispatcher for the 'blur' event on editable cells.
    * Assumptions: Routes the event to specialized handlers based on the cell's context.
@@ -1820,6 +1912,10 @@
         c === tag.cs.game.c.GearPlusMR.index) ||
       (r === tag.cs.game.r.GearPlusCarry.index &&
         c === tag.cs.game.c.GearPlusCarry.index);
+    const isLuckPlusCell =
+      r === tag.cs.game.r.LuckPlus.index && c === tag.cs.game.c.LuckBox.index;
+    const isActPlusCell =
+      r === tag.cs.game.r.ActPlus.index && c === tag.cs.game.c.ActTot.index;
 
     if (isMetaCell) {
       await fHandleMetaCellEdit(r, c, newValue, oldValue);
@@ -1829,6 +1925,10 @@
       await fHandleVitalityCellEdit(r, c, newValue, oldValue);
     } else if (isMrCarryCell) {
       await fHandleMrCarryCellEdit(r, c, newValue, oldValue);
+    } else if (isLuckPlusCell) {
+      await fHandleLuckCellEdit(r, c, newValue, oldValue);
+    } else if (isActPlusCell) {
+      await fHandleActCellEdit(r, c, newValue, oldValue);
     } else {
       await fHandleGenericCellEdit(r, c, newValue, oldValue);
     }
@@ -4704,10 +4804,17 @@
       return;
     }
     menuBar.addEventListener("click", (event) => {
-      const target = event.target.closest("a[data-action]");
+      const target = event.target.closest(".dropdown-content a");
       if (!target) return;
+
       event.preventDefault();
+
       const action = target.dataset.action;
+      if (!action) {
+        fMyConsoleLog("ℹ️ Menu item with no action clicked (submenu header).");
+        return;
+      }
+
       fMyConsoleLog(`🎬 Menu Action Clicked: ${action}`);
       fCloseAllDropdowns();
       switch (action) {
