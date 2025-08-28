@@ -720,6 +720,62 @@
     }
   } // End function fCheckMorphMetaCost
 
+  /** function fExecuteAbilityRoll
+   * Purpose: Executes the main ability roll sequence.
+   * Assumptions: This is the primary action when an ability checkbox is selected.
+   * @returns {Promise<void>}
+   */
+  async function fExecuteAbilityRoll() {
+    await fMain_AbilityRoll();
+  } // End function fExecuteAbilityRoll
+
+  /** function fExecuteChaosGemRoll
+   * Purpose: Executes a Chaos Gem roll and resets the button state.
+   * Assumptions: Context is determined by the focused cell.
+   * @param {number} r - The 0-based row index of the focused cell.
+   * @param {number} c - The 0-based column index of the focused cell.
+   * @returns {Promise<boolean>} True if the action was handled.
+   */
+  async function fExecuteChaosGemRoll(r, c) {
+    const handled = await fHandleChaosGemClick(r, c);
+    if (handled) {
+      fSetButtonOrMenuState(null); // Reset state for one-off action
+    }
+    return handled;
+  } // End function fExecuteChaosGemRoll
+
+  /** function fExecuteAdHocRoll
+   * Purpose: Executes an ad-hoc roll based on focused cell text, with a fallback to a checked ability.
+   * Assumptions: Context is determined by the focused cell.
+   * @param {number} r - The 0-based row index of the focused cell.
+   * @param {number} c - The 0-based column index of the focused cell.
+   * @returns {Promise<boolean>} True if an action was handled.
+   */
+  async function fExecuteAdHocRoll(r, c) {
+    const cellElement = gUI.grid2D?.[r]?.[c];
+    if (!cellElement) return false;
+
+    const cellText = cellElement.textContent?.trim() ?? "";
+    gUI.cellClickInfo.focusText = cellText; // For error messages
+
+    let handled = await fHandleAdHocRoll(cellText);
+    if (handled) {
+      fSetButtonOrMenuState(null); // Reset state for successful one-off action
+      return true;
+    }
+
+    // Fallback logic if ad-hoc roll fails but an ability is checked
+    if (gUI.currentSkRadioChecked.r !== null) {
+      fMyConsoleLog(
+        `   -> Ad-Hoc roll failed for "${cellText}". Falling back to checked ability.`
+      );
+      await fMain_AbilityRoll();
+      return true;
+    }
+
+    return false;
+  } // End function fExecuteAdHocRoll
+
   /** function fMain_AbilityRoll
    * Purpose: Top-level controller for initiating an ability/gear roll.
    * Assumptions: Orchestrates validation, cost-checking, execution, and logging by calling helper functions.

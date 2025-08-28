@@ -4935,6 +4935,66 @@
     await fMain_AbilityRoll();
   } // End function fHandleNishButtonClick
 
+  /** function fHandleRollButtonClick
+   * Purpose: Main controller for the 'Roll' button, determining context and dispatching the action.
+   * @param {MouseEvent} event - The click event from the button.
+   * @returns {Promise<void>}
+   */
+  async function fHandleRollButtonClick(event) {
+    if (event) event.stopPropagation();
+    fCloseAllDropdowns();
+    fSetButtonOrMenuState("Roll");
+
+    const { r: lastClickR, c: lastClickC } = gUI.cellClickInfo;
+    const { r: checked_r } = gUI.currentSkRadioChecked;
+    let handled = false;
+
+    // Primary Logic: Context is determined by the last clicked cell, if one exists.
+    if (lastClickR !== null) {
+      const abilityContextRanges = [
+        ...(gUI.range?.abilityTable || []),
+        ...(gUI.range?.gearTable || []),
+      ];
+
+      if (fIsCellInRangeArray(lastClickR, lastClickC, gUI.range.chaosGems)) {
+        // Priority 1: Chaos Gem click
+        handled = await fExecuteChaosGemRoll(lastClickR, lastClickC);
+      } else if (
+        fIsCellInRangeArray(lastClickR, lastClickC, abilityContextRanges)
+      ) {
+        // Priority 2: Click within Ability/Gear table requires a checkbox
+        if (checked_r !== null) {
+          await fExecuteAbilityRoll();
+          handled = true;
+        } else {
+          await fShowMessage(
+            "ℹ️ Please select an ability checkbox (Sk1 or Sk2) to roll."
+          );
+          handled = true;
+        }
+      } else {
+        // Priority 3: Default to Ad-Hoc roll (which has its own fallback to a checked ability)
+        handled = await fExecuteAdHocRoll(lastClickR, lastClickC);
+      }
+    } else if (checked_r !== null) {
+      // Fallback Logic: No cell is focused, but a checkbox is checked.
+      await fExecuteAbilityRoll();
+      handled = true;
+    }
+
+    // If no action could be determined, show a message.
+    if (!handled) {
+      const adHocAttemptedButFailed = gUI.cellClickInfo.focusText !== null;
+      const message = adHocAttemptedButFailed
+        ? `ℹ️ Nothing rollable found in cell "${
+            gUI.cellClickInfo.focusText || ""
+          }"`
+        : "ℹ️ Please click a cell to establish context for the roll, or check an ability box.";
+      await fShowMessage(message);
+      fSetButtonOrMenuState(null); // Reset state if no action was taken
+    }
+  } // End function fHandleRollButtonClick
+
   /** function fSetupMenuButtonListeners
    * Purpose -> Adds click event listeners to the main menu bar buttons, defining the logic for each click.
    * Assumptions: The button and dropdown elements exist in the DOM.
@@ -4960,112 +5020,7 @@
   ) {
     btnNish.addEventListener("click", fHandleNishButtonClick);
 
-    btnRoll.addEventListener("click", async (event) => {
-      event.stopPropagation();
-      fCloseAllDropdowns();
-      fSetButtonOrMenuState("Roll");
-
-      const { r: lastClickR, c: lastClickC } = gUI.cellClickInfo;
-      const { r: checked_r, c: checked_c } = gUI.currentSkRadioChecked;
-      let handled = false;
-
-      // Combine the specific ability and gear table ranges for a precise context check.
-      const abilityContextRanges = [
-        ...(gUI.range?.abilityTable || []),
-        ...(gUI.range?.gearTable || []),
-      ];
-
-      if (lastClickR === null || lastClickC === null) {
-        if (checked_r !== null) {
-          fMyConsoleLog(
-            "   -> <Roll> Click: No cell focus, but an ability is checked. Running ability roll..."
-          );
-          await fMain_AbilityRoll();
-          handled = true;
-        }
-      } else {
-        const isAbilityOrGearTableClick = fIsCellInRangeArray(
-          lastClickR,
-          lastClickC,
-          abilityContextRanges
-        );
-        const isChaosTableClick = fIsCellInRangeArray(
-          lastClickR,
-          lastClickC,
-          gUI.range.chaosGems
-        );
-
-        // --- Precedence 1: Ability/Gear Table Context ---
-        if (isAbilityOrGearTableClick) {
-          fMyConsoleLog(
-            `   -> <Roll> Click: Context is Ability/Gear Table [${lastClickR}, ${lastClickC}]. Ad-hoc roll is disabled.`
-          );
-          if (checked_r !== null) {
-            fMyConsoleLog(
-              `   -> Active Sk checkbox found [${checked_r}, ${checked_c}]. Running ability roll...`
-            );
-            await fMain_AbilityRoll();
-            handled = true;
-          } else {
-            await fShowMessage(
-              "ℹ️ Please select an ability checkbox (Sk1 or Sk2) to roll."
-            );
-            handled = true;
-            fSetButtonOrMenuState(null);
-          }
-        }
-        // --- Precedence 2: Chaos Gem Context ---
-        else if (isChaosTableClick) {
-          fMyConsoleLog(
-            `   -> <Roll> Click: Context is Chaos Gem Table [${lastClickR}, ${lastClickC}].`
-          );
-          handled = await fHandleChaosGemClick(lastClickR, lastClickC);
-          if (handled) fSetButtonOrMenuState(null);
-        }
-        // --- Precedence 3: Ad-Hoc Context (with fallback) ---
-        else {
-          fMyConsoleLog(
-            `   -> <Roll> Click: Context is Ad-Hoc [${lastClickR}, ${lastClickC}]. Attempting ad-hoc roll...`
-          );
-          const cellElement = gUI.grid2D?.[lastClickR]?.[lastClickC];
-          if (cellElement) {
-            const currentCellTextForAdHoc =
-              cellElement.textContent?.trim() ?? "";
-            gUI.cellClickInfo.focusText = currentCellTextForAdHoc;
-            handled = await fHandleAdHocRoll(currentCellTextForAdHoc);
-
-            if (!handled && checked_r !== null) {
-              fMyConsoleLog(
-                `   -> Ad-Hoc roll failed for "${currentCellTextForAdHoc}". Falling back to checked ability [${checked_r}, ${checked_c}].`
-              );
-              await fMain_AbilityRoll();
-              handled = true;
-            } else if (handled) {
-              fSetButtonOrMenuState(null);
-            }
-          }
-        }
-      }
-
-      if (!handled) {
-        fMyConsoleLog(
-          "   -> <Roll> Click: No valid action could be determined."
-        );
-        const adHocAttemptedButFailed = gUI.cellClickInfo.focusText !== null;
-        if (adHocAttemptedButFailed) {
-          await fShowMessage(
-            `ℹ️ Nothing rollable found in cell "${
-              gUI.cellClickInfo.focusText || ""
-            }"`
-          );
-        } else {
-          await fShowMessage(
-            "ℹ️ Please click a cell to establish context for the roll, or check an ability box."
-          );
-        }
-        fSetButtonOrMenuState(null);
-      }
-    });
+    btnRoll.addEventListener("click", fHandleRollButtonClick);
 
     btnFree.addEventListener("click", (event) => {
       event.stopPropagation();
