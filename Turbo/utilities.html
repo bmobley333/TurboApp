@@ -559,41 +559,20 @@
     return value;
   } // End function fGetGridValue
 
-  /** function fSetGridValue
-   * Purpose -> Updates a value in the data model (gUI.arr) and the corresponding DOM cell.
-   * Assumptions: The grid is rendered. gUI.headerButtonCoords is populated.
-   * @param {string|number} rowRef - Row tag or 0-based index.
-   * @param {string|number} colRef - Column tag or 0-based index.
-   * @param {any} newValue - The new value to set.
-   * @returns {boolean} True if the update was successful, false if resolution failed.
+  /** function fUpdateCellContent
+   * Purpose: Updates the DOM content of a single grid cell based on its type (text, checkbox, etc.).
+   * Assumptions: This is a helper function for fSetGridValue.
+   * @param {HTMLElement} cell - The cell's DOM element.
+   * @param {any} newValue - The new value to display in the cell.
+   * @returns {void}
    */
-  function fSetGridValue(rowRef, colRef, newValue) {
-    const r = fResolveRow(rowRef);
-    const c = fResolveCol(colRef);
-    if (isNaN(r) || isNaN(c)) {
-      console.warn(
-        `fSetGridValue: Could not resolve (${rowRef}, ${colRef}) to valid indices [${r}, ${c}].`
-      );
-      return false;
-    }
-    if (gUI.headerButtonCoords.has(`${r},${c}`)) {
-      return true;
-    }
-    if (!gUI.arr?.[r]) {
-      console.warn(`fSetGridValue: Row ${r} does not exist in gUI.arr.`);
-      return false;
-    }
-    gUI.arr[r][c] = newValue;
-    const cell = gUI.grid2D?.[r]?.[c];
-    if (!cell) {
-      console.warn(
-        `fSetGridValue: Cell element not found at [${r}, ${c}]. Data model updated, DOM not.`
-      );
-      return true;
-    }
+  function fUpdateCellContent(cell, newValue) {
+    if (!cell) return;
+
     const valueStr = String(newValue ?? "").trim();
     const isUrl =
       valueStr.startsWith("http://") || valueStr.startsWith("https://");
+
     if (isUrl) {
       cell.classList.add("url-link");
       cell.dataset.url = valueStr;
@@ -618,8 +597,10 @@
       delete cell.dataset.url;
       delete cell.dataset.imageSrc;
     }
+
     const checkbox = cell.querySelector('input[type="checkbox"]');
     const dropdown = cell.querySelector("select.grid-dropdown");
+
     if (checkbox) {
       const valUpper = String(newValue).toUpperCase();
       checkbox.checked = newValue === true || valUpper === "TRUE";
@@ -635,6 +616,45 @@
       const textSpan = document.createElement("span");
       textSpan.textContent = text ?? "";
       cell.appendChild(textSpan);
+    }
+  } // End function fUpdateCellContent
+
+  /** function fSetGridValue
+   * Purpose -> Updates a value in the data model (gUI.arr) and delegates the DOM update.
+   * Assumptions: The grid is rendered. gUI.headerButtonCoords is populated.
+   * @param {string|number} rowRef - Row tag or 0-based index.
+   * @param {string|number} colRef - Column tag or 0-based index.
+   * @param {any} newValue - The new value to set.
+   * @returns {boolean} True if the update was successful, false if resolution failed.
+   */
+  function fSetGridValue(rowRef, colRef, newValue) {
+    const r = fResolveRow(rowRef);
+    const c = fResolveCol(colRef);
+    if (isNaN(r) || isNaN(c)) {
+      console.warn(
+        `fSetGridValue: Could not resolve (${rowRef}, ${colRef}) to valid indices [${r}, ${c}].`
+      );
+      return false;
+    }
+    if (gUI.headerButtonCoords.has(`${r},${c}`)) {
+      return true;
+    }
+    if (!gUI.arr?.[r]) {
+      console.warn(`fSetGridValue: Row ${r} does not exist in gUI.arr.`);
+      return false;
+    }
+
+    // Update the data model
+    gUI.arr[r][c] = newValue;
+
+    // Delegate the DOM update
+    const cell = gUI.grid2D?.[r]?.[c];
+    if (cell) {
+      fUpdateCellContent(cell, newValue);
+    } else {
+      console.warn(
+        `fSetGridValue: Cell element not found at [${r}, ${c}]. Data model updated, DOM not.`
+      );
     }
     return true;
   } // End function fSetGridValue
