@@ -1940,9 +1940,14 @@
     } else {
       const validationListKey = colTag === "MetaCost" ? "Meta" : colTag;
       const validationList = gUI.validationLists?.[validationListKey] || [];
-      if (validationList.includes(trimmedNewValue)) {
+      const matchedValue = validationList.find(
+        (validOption) =>
+          String(validOption).toLowerCase() === trimmedNewValue.toLowerCase()
+      );
+
+      if (matchedValue !== undefined) {
         isValid = true;
-        finalValueToStore = trimmedNewValue;
+        finalValueToStore = matchedValue;
       } else if (colTag === "Rng") {
         // Special case for Rng: any integer >= 1 is also valid
         const numValue = parseInt(trimmedNewValue, 10);
@@ -1962,6 +1967,13 @@
         `   -> Valid edit for ${colTag} at [${r}, ${c}]. New value: "${finalValueToStore}"`
       );
       gUI.arr[r][c] = finalValueToStore;
+
+      // Auto-correct the casing in the DOM
+      const cell = gUI.grid2D?.[r]?.[c];
+      if (cell && cell.textContent !== String(finalValueToStore ?? "")) {
+        cell.textContent = finalValueToStore ?? "";
+      }
+
       fFlagAbilityAsCustom(r);
       fHandleAutoSaveTextToFirestore();
     } else {
