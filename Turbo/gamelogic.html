@@ -294,6 +294,88 @@
     };
   } // End function fBuildInitialRollLogHeader
 
+  /** function fPerformPlayerCombatRoll
+   * Purpose: Generic controller for handling combat rolls (Atk, Def, Dmg, AR) against monsters.
+   * Assumptions: A configuration object provides the specific logic for the roll type.
+   * @param {string} initialLogHtml - Pre-built HTML log header.
+   * @param {string} initialLogText - Pre-built Plain Text log header.
+   * @param {object} config - Configuration object defining the roll's specific behavior.
+   * @returns {Promise<object>} An object with { logHtml, logText, success }.
+   */
+  async function fPerformPlayerCombatRoll(
+    initialLogHtml,
+    initialLogText,
+    config
+  ) {
+    const { success, targets, allTargetedRows_R } = await fGetMonsterTargets(
+      config.monsterStatTag
+    );
+    if (!success) return { success: false };
+
+    if (targets.length === 0) {
+      await fShowMessage(config.noTargetsMessage);
+      gUI.roll.resDif = "";
+      const { finalLogHtml, finalLogText } = fPerformMultiRolls(
+        initialLogHtml,
+        initialLogText
+      );
+      return { logHtml: finalLogHtml, logText: finalLogText, success: true };
+    }
+
+    let isOverallFirstRoll = true;
+    const monsterLogLinesHtml = [];
+    const monsterLogLinesText = [];
+
+    for (const target of targets) {
+      config.initializeTarget(target);
+      const monsterHeader = config.getMonsterHeader(target);
+      monsterLogLinesHtml.push("↓", monsterHeader.html);
+      monsterLogLinesText.push("↓", monsterHeader.text);
+      gUI.roll.resDif = target.statValue;
+
+      for (let rollNum = 1; rollNum <= target.numRolls; rollNum++) {
+        fCalcGUIRollResSk();
+        fCalcGUIRollRoll();
+        fCalcGUIRollResRoll();
+        config.processRoll(target);
+        const { html: rollLineHtml, plainText: rollLineText } =
+          fBuildSidebarHTMLAndSimpleText(
+            rollNum,
+            target.numRolls,
+            isOverallFirstRoll
+          );
+        monsterLogLinesHtml.push(rollLineHtml);
+        monsterLogLinesText.push(rollLineText);
+        isOverallFirstRoll = false;
+      }
+      const monsterSummary = config.getMonsterSummary(target);
+      if (monsterSummary) {
+        monsterLogLinesHtml.push(monsterSummary.html);
+        monsterLogLinesText.push(monsterSummary.text);
+      }
+    }
+
+    let finalLogHtml =
+      initialLogHtml + "<br>" + monsterLogLinesHtml.join("<br>");
+    let finalLogText = initialLogText + "\n" + monsterLogLinesText.join("\n");
+
+    const results = config.getResults(targets);
+    const rollId = "prep_" + Date.now();
+    const finalizedLog = config.finalizeLog(
+      finalLogHtml,
+      finalLogText,
+      results,
+      rollId,
+      allTargetedRows_R
+    );
+
+    return {
+      logHtml: finalizedLog.logHtml,
+      logText: finalizedLog.logText,
+      success: true,
+    };
+  } // End function fPerformPlayerCombatRoll
+
   /** function fDispatchAndPerformRolls
    * Purpose: Selects and executes the correct roll type based on gUI.roll state.
    * Assumptions: gUI.roll is finalized.
@@ -307,18 +389,149 @@
     const resTypLower = (resTyp || "").toLowerCase();
     let finalLogResult = null;
 
-    const rollTypeMap = {
-      atk: fPerformPlayerAttackRolls,
-      def: fPerformPlayerDefenseRolls,
-      dmg: fPerformPlayerDamageRolls,
-      ar: fPerformPlayerArmorRolls,
+    const configs = {
+      atk: {
+        monsterStatTag: "MonDef",
+        noTargetsMessage:
+          "ℹ️ No valid monsters found. Performing standard attack roll.",
+        initializeTarget: (target) => {
+          target.numSuccesses = 0;
+        },
+        getMonsterHeader: (target) => ({
+          html: `--- <span style="color: purple; font-weight: bold;">Mon: ${target.monName}</span> (Def: ${target.statValue}) ---`,
+          text: `--- Mon: ${target.monName} (Def: ${target.statValue}) ---`,
+        }),
+        processRoll: (target) => {
+          if (gUI.roll.resRoll >= gUI.roll.resDif) target.numSuccesses++;
+        },
+        getMonsterSummary: () => null,
+        getResults: (targets) =>
+          targets
+            .filter((t) => t.numSuccesses > 0)
+            .map((t) => ({
+              mon_R: t.mon_R,
+              monName: t.monName,
+              numSuccesses: t.numSuccesses,
+            })),
+        finalizeLog: (logHtml, logText, results, rollId, allTargetedRows_R) => {
+          if (results.length > 0) {
+            gUI.monsterRollResultsHistory[rollId] = {
+              results,
+              originalAbilityRow: gUI.roll.ability_R,
+              allTargetedRows_R,
+            };
+            logHtml += ` <button class="prep-dmg-btn" data-roll-id="${rollId}">Prep Dmg</button>`;
+            logText += ` [Prep Dmg Available]`;
+          }
+          return { logHtml, logText };
+        },
+      },
+      def: {
+        monsterStatTag: "MonAtk",
+        noTargetsMessage:
+          "ℹ️ No valid monsters found with Attack values. Performing standard defense roll.",
+        initializeTarget: (target) => {
+          target.numFailures = 0;
+        },
+        getMonsterHeader: (target) => ({
+          html: `--- <span style="color: purple; font-weight: bold;">Mon: ${target.monName}</span> (Atk: ${target.statValue}) ---`,
+          text: `--- Mon: ${target.monName} (Atk: ${target.statValue}) ---`,
+        }),
+        processRoll: (target) => {
+          if (gUI.roll.resRoll < gUI.roll.resDif) target.numFailures++;
+        },
+        getMonsterSummary: () => null,
+        getResults: (targets) =>
+          targets
+            .filter((t) => t.numFailures > 0)
+            .map((t) => ({
+              mon_R: t.mon_R,
+              monName: t.monName,
+              numFailures: t.numFailures,
+            })),
+        finalizeLog: (logHtml, logText, results, rollId, allTargetedRows_R) => {
+          if (results.length > 0) {
+            gUI.monsterRollResultsHistory[rollId] = {
+              results,
+              originalAbilityRow: gUI.roll.ability_R,
+              allTargetedRows_R,
+            };
+            logHtml += ` <button class="prep-ar-btn" data-roll-id="${rollId}">Prep AR</button>`;
+            logText += ` [Prep AR Available]`;
+          }
+          return { logHtml, logText };
+        },
+      },
+      dmg: {
+        monsterStatTag: "MonAR",
+        noTargetsMessage:
+          "ℹ️ No valid monsters found with Armor values. Performing standard damage roll.",
+        initializeTarget: (target) => {
+          target.totalWounds = 0;
+          target.statValue = Math.max(1, target.statValue / 10).toFixed(1); // Convert MonAR to calculated Armor
+        },
+        getMonsterHeader: (target) => ({
+          html: `--- <span style="color: purple; font-weight: bold;">Mon: ${target.monName}</span> (AR: ${target.statValue}) ---`,
+          text: `--- Mon: ${target.monName} (AR: ${target.statValue}) ---`,
+        }),
+        processRoll: (target) => {
+          const woundsDealt = Math.max(
+            0,
+            Math.round(gUI.roll.resRoll / gUI.roll.resDif)
+          );
+          target.totalWounds += woundsDealt;
+        },
+        getMonsterSummary: (target) => ({
+          html: `<span style="font-weight:bold;">${target.monName} Total Wounds = +${target.totalWounds}</span>`,
+          text: `${target.monName} Total Wounds = +${target.totalWounds}`,
+        }),
+        getResults: () => [],
+        finalizeLog: (logHtml, logText) => ({ logHtml, logText }),
+      },
+      ar: {
+        monsterStatTag: "MonDmg",
+        noTargetsMessage:
+          "ℹ️ No valid monsters found with Damage values. Performing standard armor roll.",
+        initializeTarget: (target) => {
+          target.totalWounds = 0;
+        },
+        getMonsterHeader: (target) => ({
+          html: `--- <span style="color: purple; font-weight: bold;">Mon: ${target.monName}</span> (Dmg: ${target.statValue}) ---`,
+          text: `--- Mon: ${target.monName} (Dmg: ${target.statValue}) ---`,
+        }),
+        processRoll: (target) => {
+          const woundsDealt =
+            gUI.roll.resRoll !== 0
+              ? Math.min(0, Math.round(-(gUI.roll.resDif / gUI.roll.resRoll)))
+              : 0;
+          target.totalWounds += woundsDealt;
+        },
+        getMonsterSummary: (target) => ({
+          html: `<span style="font-weight:bold;">${target.monName} Wounds to PC = ${target.totalWounds}</span>`,
+          text: `${target.monName} Wounds to PC = ${target.totalWounds}`,
+        }),
+        getResults: (targets) => targets,
+        finalizeLog: (logHtml, logText, results) => {
+          const totalWoundsOverall = results.reduce(
+            (sum, t) => sum + t.totalWounds,
+            0
+          );
+          const positiveWoundAmount = Math.abs(totalWoundsOverall);
+          logHtml +=
+            "<br>↓<br>" +
+            `<span class="red-bold">Total Wounds to PC = ${totalWoundsOverall}</span> <button class="apply-wounds-btn" data-wound-amount="${positiveWoundAmount}">Apply</button>`;
+          logText += `\n↓\nTotal Wounds to PC = ${totalWoundsOverall}`;
+          return { logHtml, logText };
+        },
+      },
     };
 
-    if (rollTypeMap[resTypLower] && !hasDifficultyMorph) {
+    if (configs[resTypLower] && !hasDifficultyMorph) {
       fMyConsoleLog(`⚔️ Performing Player ${resTyp} Rolls...`);
-      finalLogResult = await rollTypeMap[resTypLower](
+      finalLogResult = await fPerformPlayerCombatRoll(
         logHeader.logHtml,
-        logHeader.logText
+        logHeader.logText,
+        configs[resTypLower]
       );
     } else {
       fMyConsoleLog("🎯 Performing Standard Roll(s)...");
@@ -1591,341 +1804,6 @@
     );
     return { success: true, targets: monsterTargets, allTargetedRows_R };
   } // End function fGetMonsterTargets
-
-  /** function fPerformPlayerAttackRolls
-   * Purpose: Handles 'Atk' rolls against monsters.
-   * Assumptions: Validates targets, performs rolls, and builds log entries, adding a "Prep Dmg" button on success.
-   * @param {string} initialLogHtml - Pre-built HTML log header.
-   * @param {string} initialLogText - Pre-built Plain Text log header.
-   * @returns {Promise<object>} An object with { logHtml, logText, success }.
-   */
-  async function fPerformPlayerAttackRolls(initialLogHtml, initialLogText) {
-    const { success, targets, allTargetedRows_R } = await fGetMonsterTargets(
-      tag.cs.game.c.MonDef.label
-    );
-    if (!success) return { success: false };
-
-    if (targets.length === 0) {
-      await fShowMessage(
-        "ℹ️ No valid monsters found. Performing standard attack roll."
-      );
-      gUI.roll.resDif = "";
-      const { finalLogHtml, finalLogText } = fPerformMultiRolls(
-        initialLogHtml,
-        initialLogText
-      );
-      return { logHtml: finalLogHtml, logText: finalLogText, success: true };
-    }
-
-    let isOverallFirstRoll = true;
-    const monsterLogLinesHtml = [];
-    const monsterLogLinesText = [];
-    const currentAttackResults = [];
-
-    for (const target of targets) {
-      target.numSuccesses = 0;
-      monsterLogLinesHtml.push("↓");
-      monsterLogLinesText.push("↓");
-      monsterLogLinesHtml.push(
-        `--- <span style="color: purple; font-weight: bold;">Mon: ${target.monName}</span> (Def: ${target.statValue}) ---`
-      );
-      monsterLogLinesText.push(
-        `--- Mon: ${target.monName} (Def: ${target.statValue}) ---`
-      );
-      gUI.roll.resDif = target.statValue;
-
-      for (let rollNum = 1; rollNum <= target.numRolls; rollNum++) {
-        fCalcGUIRollResSk();
-        fCalcGUIRollRoll();
-        fCalcGUIRollResRoll();
-        if (gUI.roll.resRoll >= gUI.roll.resDif) {
-          target.numSuccesses++;
-        }
-        const { html: rollLineHtml, plainText: rollLineText } =
-          fBuildSidebarHTMLAndSimpleText(
-            rollNum,
-            target.numRolls,
-            isOverallFirstRoll
-          );
-        monsterLogLinesHtml.push(rollLineHtml);
-        monsterLogLinesText.push(rollLineText);
-        if (isOverallFirstRoll) isOverallFirstRoll = false;
-      }
-
-      if (target.numSuccesses > 0) {
-        currentAttackResults.push({
-          mon_R: target.mon_R,
-          monName: target.monName,
-          numSuccesses: target.numSuccesses,
-        });
-      }
-    }
-
-    let finalLogHtml =
-      initialLogHtml + "<br>" + monsterLogLinesHtml.join("<br>");
-    let finalLogText = initialLogText + "\n" + monsterLogLinesText.join("\n");
-
-    if (currentAttackResults.length > 0) {
-      const rollId = "prep_" + Date.now();
-      gUI.monsterRollResultsHistory[rollId] = {
-        results: currentAttackResults,
-        originalAbilityRow: gUI.roll.ability_R,
-        allTargetedRows_R,
-      };
-      finalLogHtml += ` <button class="prep-dmg-btn" data-roll-id="${rollId}">Prep Dmg</button>`;
-      finalLogText += ` [Prep Dmg Available]`;
-    }
-
-    return { logHtml: finalLogHtml, logText: finalLogText, success: true };
-  } // End function fPerformPlayerAttackRolls
-
-  /** function fPerformPlayerDamageRolls
-   * Purpose: Handles 'Dmg' rolls against monsters.
-   * Assumptions: Uses 'MonAR' for difficulty, calculates wounds, and builds log entries.
-   * @param {string} initialLogHtml - Pre-built HTML log header.
-   * @param {string} initialLogText - Pre-built Plain Text log header.
-   * @returns {Promise<object>} An object with { logHtml, logText, success }.
-   */
-  async function fPerformPlayerDamageRolls(initialLogHtml, initialLogText) {
-    const { success, targets } = await fGetMonsterTargets(
-      tag.cs.game.c.MonAR.label
-    );
-    if (!success) return { success: false };
-
-    if (targets.length === 0) {
-      await fShowMessage(
-        "ℹ️ No valid monsters found with Armor values. Performing standard damage roll."
-      );
-      gUI.roll.resDif = "";
-      const { finalLogHtml, finalLogText } = fPerformMultiRolls(
-        initialLogHtml,
-        initialLogText
-      );
-      return { logHtml: finalLogHtml, logText: finalLogText, success: true };
-    }
-
-    let isOverallFirstRoll = true;
-    const monsterLogLinesHtml = [];
-    const monsterLogLinesText = [];
-
-    for (const target of targets) {
-      const calculatedArmor = Math.max(1, target.statValue / 10).toFixed(1);
-      let totalWoundsPerMonster = 0;
-      monsterLogLinesHtml.push("↓");
-      monsterLogLinesText.push("↓");
-      monsterLogLinesHtml.push(
-        `--- <span style="color: purple; font-weight: bold;">Mon: ${target.monName}</span> (AR: ${calculatedArmor}) ---`
-      );
-      monsterLogLinesText.push(
-        `--- Mon: ${target.monName} (AR: ${calculatedArmor}) ---`
-      );
-      gUI.roll.resDif = Number(calculatedArmor);
-
-      for (let rollNum = 1; rollNum <= target.numRolls; rollNum++) {
-        fCalcGUIRollResSk();
-        fCalcGUIRollRoll();
-        fCalcGUIRollResRoll();
-        const woundsDealt = Math.max(
-          0,
-          Math.round(gUI.roll.resRoll / gUI.roll.resDif)
-        );
-        totalWoundsPerMonster += woundsDealt;
-        const { html: rollLineHtml, plainText: rollLineText } =
-          fBuildSidebarHTMLAndSimpleText(
-            rollNum,
-            target.numRolls,
-            isOverallFirstRoll
-          );
-        monsterLogLinesHtml.push(rollLineHtml);
-        monsterLogLinesText.push(rollLineText);
-        if (isOverallFirstRoll) isOverallFirstRoll = false;
-      }
-
-      monsterLogLinesHtml.push(
-        `<span style="font-weight:bold;">${target.monName} Total Wounds = +${totalWoundsPerMonster}</span>`
-      );
-      monsterLogLinesText.push(
-        `${target.monName} Total Wounds = +${totalWoundsPerMonster}`
-      );
-    }
-
-    const finalLogHtml =
-      initialLogHtml + "<br>" + monsterLogLinesHtml.join("<br>");
-    const finalLogText = initialLogText + "\n" + monsterLogLinesText.join("\n");
-    return { logHtml: finalLogHtml, logText: finalLogText, success: true };
-  } // End function fPerformPlayerDamageRolls
-
-  /** function fPerformPlayerDefenseRolls
-   * Purpose: Handles 'Def' rolls against monsters.
-   * Assumptions: Uses 'MonAtk' for difficulty, counts failures, and adds a "Prep AR" button on failure.
-   * @param {string} initialLogHtml - Pre-built HTML log header.
-   * @param {string} initialLogText - Pre-built Plain Text log header.
-   * @returns {Promise<object>} An object with { logHtml, logText, success }.
-   */
-  async function fPerformPlayerDefenseRolls(initialLogHtml, initialLogText) {
-    const { success, targets, allTargetedRows_R } = await fGetMonsterTargets(
-      tag.cs.game.c.MonAtk.label
-    );
-    if (!success) return { success: false };
-
-    if (targets.length === 0) {
-      await fShowMessage(
-        "ℹ️ No valid monsters found with Attack values. Performing standard defense roll."
-      );
-      gUI.roll.resDif = "";
-      const { finalLogHtml, finalLogText } = fPerformMultiRolls(
-        initialLogHtml,
-        initialLogText
-      );
-      return { logHtml: finalLogHtml, logText: finalLogText, success: true };
-    }
-
-    let isOverallFirstRoll = true;
-    const monsterLogLinesHtml = [];
-    const monsterLogLinesText = [];
-    const currentDefenseResults = [];
-
-    for (const target of targets) {
-      target.numFailures = 0;
-      monsterLogLinesHtml.push("↓");
-      monsterLogLinesText.push("↓");
-      monsterLogLinesHtml.push(
-        `--- <span style="color: purple; font-weight: bold;">Mon: ${target.monName}</span> (Atk: ${target.statValue}) ---`
-      );
-      monsterLogLinesText.push(
-        `--- Mon: ${target.monName} (Atk: ${target.statValue}) ---`
-      );
-      gUI.roll.resDif = target.statValue;
-
-      for (let rollNum = 1; rollNum <= target.numRolls; rollNum++) {
-        fCalcGUIRollResSk();
-        fCalcGUIRollRoll();
-        fCalcGUIRollResRoll();
-        if (gUI.roll.resRoll < gUI.roll.resDif) {
-          target.numFailures++;
-        }
-        const { html: rollLineHtml, plainText: rollLineText } =
-          fBuildSidebarHTMLAndSimpleText(
-            rollNum,
-            target.numRolls,
-            isOverallFirstRoll
-          );
-        monsterLogLinesHtml.push(rollLineHtml);
-        monsterLogLinesText.push(rollLineText);
-        if (isOverallFirstRoll) isOverallFirstRoll = false;
-      }
-
-      if (target.numFailures > 0) {
-        currentDefenseResults.push({
-          mon_R: target.mon_R,
-          monName: target.monName,
-          numFailures: target.numFailures,
-        });
-      }
-    }
-
-    let finalLogHtml =
-      initialLogHtml + "<br>" + monsterLogLinesHtml.join("<br>");
-    let finalLogText = initialLogText + "\n" + monsterLogLinesText.join("\n");
-
-    if (currentDefenseResults.length > 0) {
-      const rollId = "prep_" + Date.now();
-      gUI.monsterRollResultsHistory[rollId] = {
-        results: currentDefenseResults,
-        originalAbilityRow: gUI.roll.ability_R,
-        allTargetedRows_R,
-      };
-      finalLogHtml += ` <button class="prep-ar-btn" data-roll-id="${rollId}">Prep AR</button>`;
-      finalLogText += ` [Prep AR Available]`;
-    }
-
-    return { logHtml: finalLogHtml, logText: finalLogText, success: true };
-  } // End function fPerformPlayerDefenseRolls
-
-  /** function fPerformPlayerArmorRolls
-   * Purpose: Handles 'AR' rolls against monsters.
-   * Assumptions: Uses 'MonDmg' for difficulty, calculates wounds, and adds an "Apply Wounds" button.
-   * @param {string} initialLogHtml - Pre-built HTML log header.
-   * @param {string} initialLogText - Pre-built Plain Text log header.
-   * @returns {Promise<object>} An object with { logHtml, logText, success }.
-   */
-  async function fPerformPlayerArmorRolls(initialLogHtml, initialLogText) {
-    const { success, targets } = await fGetMonsterTargets(
-      tag.cs.game.c.MonDmg.label
-    );
-    if (!success) return { success: false };
-
-    if (targets.length === 0) {
-      await fShowMessage(
-        "ℹ️ No valid monsters found with Damage values. Performing standard armor roll."
-      );
-      gUI.roll.resDif = "";
-      const { finalLogHtml, finalLogText } = fPerformMultiRolls(
-        initialLogHtml,
-        initialLogText
-      );
-      return { logHtml: finalLogHtml, logText: finalLogText, success: true };
-    }
-
-    let isOverallFirstRoll = true;
-    const monsterLogLinesHtml = [];
-    const monsterLogLinesText = [];
-    let totalWoundsOverall = 0;
-
-    for (const target of targets) {
-      let totalWoundsPerMonster = 0;
-      monsterLogLinesHtml.push("↓");
-      monsterLogLinesText.push("↓");
-      monsterLogLinesHtml.push(
-        `--- <span style="color: purple; font-weight: bold;">Mon: ${target.monName}</span> (Dmg: ${target.statValue}) ---`
-      );
-      monsterLogLinesText.push(
-        `--- Mon: ${target.monName} (Dmg: ${target.statValue}) ---`
-      );
-      gUI.roll.resDif = target.statValue;
-
-      for (let rollNum = 1; rollNum <= target.numRolls; rollNum++) {
-        fCalcGUIRollResSk();
-        fCalcGUIRollRoll();
-        fCalcGUIRollResRoll();
-        const woundsDealt =
-          gUI.roll.resRoll !== 0
-            ? Math.min(0, Math.round(-(gUI.roll.resDif / gUI.roll.resRoll)))
-            : 0;
-        totalWoundsPerMonster += woundsDealt;
-        totalWoundsOverall += woundsDealt;
-        const { html: rollLineHtml, plainText: rollLineText } =
-          fBuildSidebarHTMLAndSimpleText(
-            rollNum,
-            target.numRolls,
-            isOverallFirstRoll
-          );
-        monsterLogLinesHtml.push(rollLineHtml);
-        monsterLogLinesText.push(rollLineText);
-        if (isOverallFirstRoll) isOverallFirstRoll = false;
-      }
-
-      monsterLogLinesHtml.push(
-        `<span style="font-weight:bold;">${target.monName} Wounds to PC = ${totalWoundsPerMonster}</span>`
-      );
-      monsterLogLinesText.push(
-        `${target.monName} Wounds to PC = ${totalWoundsPerMonster}`
-      );
-    }
-
-    monsterLogLinesHtml.push("↓");
-    monsterLogLinesText.push("↓");
-    const positiveWoundAmount = Math.abs(totalWoundsOverall);
-    monsterLogLinesHtml.push(
-      `<span class="red-bold">Total Wounds to PC = ${totalWoundsOverall}</span> <button class="apply-wounds-btn" data-wound-amount="${positiveWoundAmount}">Apply</button>`
-    );
-    monsterLogLinesText.push(`Total Wounds to PC = ${totalWoundsOverall}`);
-
-    const finalLogHtml =
-      initialLogHtml + "<br>" + monsterLogLinesHtml.join("<br>");
-    const finalLogText = initialLogText + "\n" + monsterLogLinesText.join("\n");
-    return { logHtml: finalLogHtml, logText: finalLogText, success: true };
-  } // End function fPerformPlayerArmorRolls
 
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   // End - Roll Execution
