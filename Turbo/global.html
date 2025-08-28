@@ -38,13 +38,6 @@
   };
 
   const gUI = {
-    // === Runtime Defaults / Constants (safe fallbacks) ===
-    isDebugMode: false, // flip to true to see status logs
-    ROW_HEIGHT_PX: 20, // must match CSS #grid grid-auto-rows
-    HOVER_DELAY_MS: 400, // tooltip delay
-    TOOLTIP_OFFSET_X: 12,
-    TOOLTIP_OFFSET_Y: 14,
-
     // === Logging / Perf timers ===
     startTime:
       typeof performance !== "undefined" ? performance.now() : Date.now(),
@@ -284,32 +277,16 @@
         c2: "LastC",
         edges: "br",
       },
-      // Add { style: '1px solid #888' } to specific objects if dark grey is desired
     ],
-    initialHiddenCols: [
-      // Defines columns initially hidden on load from c1 to c2 (if one column both c1 and c2 should be same value)
-      { c1: "Key", c2: "Key" },
-      // { c1: 0, c2: 0 }, // Example: Single column using index
-    ],
-    gearTblCols: [
-      // Defines columns belonging to the Gear section (for toggling)
-      { c1: "PossNum", c2: "PossAPTot" },
-    ],
+    initialHiddenCols: [{ c1: "Key", c2: "Key" }],
+    gearTblCols: [{ c1: "PossNum", c2: "PossAPTot" }],
     permMorphCols: [
-      // Defines columns belonging to the PermMorph section (for toggling)
       { c1: "PermMorph1", c2: "PermMorph1" },
       { c1: "PermMorph2", c2: "PermMorph2" },
     ],
-    initialHiddenRows: [
-      // Defines rows initially hidden on load
-      { r1: "Agi", r2: "Arc" },
-      // { r1: 0, r2: 1 } // Example: Range using indices
-    ],
+    initialHiddenRows: [{ r1: "Agi", r2: "Arc" }],
     dropDownBox: [
-      // Defines ranges for dropdown cells and their choices
-      // NOTE: The dropdown abilityNames are created dynamically by fFetchAndApplyAbilityDropdowns
       {
-        // Is On column
         choices: [
           "",
           "Y",
@@ -333,7 +310,6 @@
         ranges: [{ r1: "NishAtr_R", c1: "On", r2: "AbilTblEnd_R", c2: "On" }],
       },
       {
-        // Monster # column
         choices: [
           "",
           1,
@@ -373,7 +349,6 @@
       },
     ],
     fontColorRange: [
-      // Defines ranges for applying specific font colors post-render
       {
         color: "#FF0000", // Red
         ranges: [
@@ -398,9 +373,6 @@
         ranges: [{ r1: "FrozenHeader", c1: "B", r2: "FrozenHeader", c2: "B" }],
       },
     ],
-
-    // Range //////////////////////////////////////////////////////////////////////
-    // Named ranges for easy access to specific cells/areas
     range: {
       abilityTable: [
         {
@@ -430,7 +402,6 @@
           c2: "PossAPTot",
         },
       ],
-      // entireAbilityNGearTables below is a NECESSARY total table of the above two tables abilityTable and gearTable
       entireAbilityNGearTables: [
         { r1: "AbilTblStartR", c1: 0, r2: "AbilTblEnd_R", c2: "LastC" },
         {
@@ -475,7 +446,6 @@
         },
       ],
       sk1sk2CheckBoxes: [
-        // Defines the Sk1/Sk2 checkbox columns (treated as radio buttons)
         {
           r1: "NishAtr_R",
           c1: "Sk1ChkBox",
@@ -635,8 +605,7 @@
       },
     },
     list: {
-      // Static lists and values
-      skTyp: ["Atr", "Sk", "Atk", "DMG", "Def", "AR", "Str", "TC"], // Note free, luck, un, unSk are not skill Types and dealth with elsewhere
+      skTyp: ["Atr", "Sk", "Atk", "DMG", "Def", "AR", "Str", "TC"],
       metaColor: ["R", "O", "Y", "G", "B"],
       metaFull: [5, 4, 3, 2, 1], // Maximums for each meta color
       luckBoxMax: 5,
@@ -694,9 +663,6 @@
     promptNoButton: null, // Reference to #promptNoButton button
 
     // === Async/Timing State ===
-    startTime: 0, // Timestamp for tracking load/render time
-    lastLogTime: 0, // Timestamp for tracking delta time between logs
-    tooltipTimeoutId: null, // Stores the timeout ID for the hover delay
     messagePromiseResolve: null, // Function to resolve the message promise
     promptPromiseResolve: null, // Function to resolve the prompt promise
     promptPromiseReject: null, // Function to reject the prompt promise
