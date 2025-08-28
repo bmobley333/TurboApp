@@ -1555,6 +1555,7 @@
     const r = parseInt(cell.dataset.r, 10);
     const c = parseInt(cell.dataset.c, 10);
     if (isNaN(r) || isNaN(c)) return;
+
     const editableCols = [
       "Ability",
       "Sk1Typ",
@@ -1564,14 +1565,24 @@
       "Act",
       "Dur",
       "Rng",
-      "Meta",
+      "MetaCost",
     ];
-    const colTag = Object.keys(gUI.colTag).find((tag) => gUI.colTag[tag] === c);
-    if (!editableCols.includes(colTag)) {
+
+    const allTagsForCol = [];
+    for (const tagName in gUI.colTag) {
+      if (gUI.colTag[tagName] === c) {
+        allTagsForCol.push(tagName);
+      }
+    }
+
+    const primaryTag = editableCols.find((tag) => allTagsForCol.includes(tag));
+
+    if (!primaryTag) {
       return;
     }
+
     event.preventDefault();
-    if (colTag === "Ability") {
+    if (primaryTag === "Ability") {
       fMyConsoleLog(`⚡ Edit Name Prompt triggered for cell [${r}, ${c}]`);
       const currentName = String(gUI.arr[r]?.[c] ?? "")
         .replace(/^⚡\s*/, "")
@@ -1591,9 +1602,11 @@
         fShowMessage("⚠️ Empty ability name. Please edit a named ability.");
         return;
       }
-      fMyConsoleLog(`⚡ Edit Mode triggered for ${colTag} cell [${r}, ${c}]`);
+      fMyConsoleLog(
+        `⚡ Edit Mode triggered for ${primaryTag} cell [${r}, ${c}]`
+      );
       fTransformAbilityCellToInput(cell);
-      fShowValidationTooltip(cell, colTag, event);
+      fShowValidationTooltip(cell, primaryTag, event);
     }
   } // End function fHandleGridDblClick
 
@@ -1867,6 +1880,111 @@
     }
   } // End function fHandleActCellEdit
 
+  /** function fHandleAbilityStatCellEdit
+   * Purpose: Validates and saves an edit within a double-clicked ability/gear stat cell.
+   * Assumptions: Helper for fHandleGridCellEdit. The gUI.validationLists object is populated.
+   * Notes: If the edit is valid, it flags the ability as custom (⚡).
+   * @param {number} r - The 0-based row index.
+   * @param {number} c - The 0-based column index.
+   * @param {string} newValue - The new text content of the cell.
+   * @param {any} oldValue - The original value from the data model.
+   * @returns {Promise<void>}
+   */
+  async function fHandleAbilityStatCellEdit(r, c, newValue, oldValue) {
+    const funcName = "fHandleAbilityStatCellEdit";
+    const trimmedNewValue = newValue.trim();
+
+    const editableCols = [
+      "Sk1Typ",
+      "Sk1",
+      "Sk2Typ",
+      "Sk2",
+      "Act",
+      "Dur",
+      "Rng",
+      "MetaCost",
+    ];
+    const allTagsForCol = [];
+    for (const tagName in gUI.colTag) {
+      if (gUI.colTag[tagName] === c) {
+        allTagsForCol.push(tagName);
+      }
+    }
+    const colTag = editableCols.find((tag) => allTagsForCol.includes(tag));
+
+    let isValid = false;
+    let finalValueToStore = oldValue;
+
+    if (!colTag) {
+      console.error(
+        `${funcName}: Could not resolve an editable column tag for index ${c}.`
+      );
+      fRevertCellDOM(r, c, oldValue);
+      return;
+    }
+
+    // Allow blanking out any field
+    if (trimmedNewValue === "") {
+      isValid = true;
+      finalValueToStore = "";
+    } else if (colTag === "Sk1" || colTag === "Sk2") {
+      const numValue = parseInt(trimmedNewValue, 10);
+      if (
+        !isNaN(numValue) &&
+        numValue >= 1 &&
+        String(numValue) === trimmedNewValue
+      ) {
+        isValid = true;
+        finalValueToStore = numValue;
+      }
+    } else {
+      const validationListKey = colTag === "MetaCost" ? "Meta" : colTag;
+      const validationList = gUI.validationLists?.[validationListKey] || [];
+      if (validationList.includes(trimmedNewValue)) {
+        isValid = true;
+        finalValueToStore = trimmedNewValue;
+      } else if (colTag === "Rng") {
+        // Special case for Rng: any integer >= 1 is also valid
+        const numValue = parseInt(trimmedNewValue, 10);
+        if (
+          !isNaN(numValue) &&
+          numValue >= 1 &&
+          String(numValue) === trimmedNewValue
+        ) {
+          isValid = true;
+          finalValueToStore = numValue;
+        }
+      }
+    }
+
+    if (isValid) {
+      fMyConsoleLog(
+        `   -> Valid edit for ${colTag} at [${r}, ${c}]. New value: "${finalValueToStore}"`
+      );
+      gUI.arr[r][c] = finalValueToStore;
+      fFlagAbilityAsCustom(r);
+      fHandleAutoSaveTextToFirestore();
+    } else {
+      const validationListKey = colTag === "MetaCost" ? "Meta" : colTag;
+      const validationList = gUI.validationLists?.[validationListKey] || [];
+      let errorMsg = `❌ Invalid input for ${colTag}.`;
+      if (colTag === "Sk1" || colTag === "Sk2") {
+        errorMsg +=
+          "<br><br>Allowed: Blank or an integer greater than or equal to 1.";
+      } else if (validationList.length > 0) {
+        errorMsg += `<br><br>Allowed: Blank, ${validationList.join(", ")}`;
+        if (colTag === "Rng") {
+          errorMsg += ", or any integer greater than or equal to 1.";
+        }
+      }
+      fMyConsoleLog(
+        `   -> Invalid edit for ${colTag} at [${r}, ${c}]. Value: "${newValue}". Reverting.`
+      );
+      await fShowMessage(errorMsg);
+      fRevertCellDOM(r, c, oldValue);
+    }
+  } // End function fHandleAbilityStatCellEdit
+
   /** function fHandleGridCellEdit
    * Purpose: Main dispatcher for the 'blur' event on editable cells.
    * Assumptions: Routes the event to specialized handlers based on the cell's context.
@@ -1895,6 +2013,28 @@
       return; // No change
     }
 
+    // Get all tags for the edited column to handle multi-tagged columns correctly.
+    const allTagsForCol = [];
+    for (const tagName in gUI.colTag) {
+      if (gUI.colTag[tagName] === c) {
+        allTagsForCol.push(tagName);
+      }
+    }
+
+    const abilityStatCols = [
+      "Sk1Typ",
+      "Sk1",
+      "Sk2Typ",
+      "Sk2",
+      "Act",
+      "Dur",
+      "Rng",
+      "MetaCost",
+    ];
+    const isAbilityStatCell =
+      abilityStatCols.some((tag) => allTagsForCol.includes(tag)) &&
+      fIsCellInRangeArray(r, c, gUI.resolvedRanges.entireAbilityNGearTables);
+
     const isMetaCell = fIsCellInRangeArray(r, c, [
       gUI.resolvedRanges?.meta,
       gUI.resolvedRanges?.metaChannel,
@@ -1917,7 +2057,9 @@
     const isActPlusCell =
       r === tag.cs.game.r.ActPlus.index && c === tag.cs.game.c.ActTot.index;
 
-    if (isMetaCell) {
+    if (isAbilityStatCell) {
+      await fHandleAbilityStatCellEdit(r, c, newValue, oldValue);
+    } else if (isMetaCell) {
       await fHandleMetaCellEdit(r, c, newValue, oldValue);
     } else if (isGearInputCell) {
       await fHandleGearStatCellEdit(r, c, newValue, oldValue);
@@ -2728,12 +2870,12 @@
 
   /** function fHandleCellHover
    * Purpose: Delegated mouseover handler for grid cells that starts a timer to show a tooltip.
-   * Assumptions: `gUI.tooltipElement` is cached.
+   * Assumptions: `gUI.tooltipElement` is cached. Ignores hover if a validation tooltip is active.
    * @param {MouseEvent} event - The mouseover event.
    * @returns {void}
    */
   function fHandleCellHover(event) {
-    if (!gUI.tooltipElement) return;
+    if (gUI.isValidationTooltipActive || !gUI.tooltipElement) return;
     const cell = fGetValidTargetCell(event);
     if (!cell) {
       fHideTooltip();
@@ -2744,11 +2886,12 @@
 
   /** function fHandleCellMouseOut
    * Purpose: Handles mouseout events delegated from the grid to hide the tooltip.
-   * Assumptions: Clears any pending tooltip display timeout.
+   * Assumptions: Clears any pending tooltip display timeout. Does not hide active validation tooltips.
    * @param {MouseEvent} event - The mouseout event object.
    * @returns {void}
    */
   function fHandleCellMouseOut(event) {
+    if (gUI.isValidationTooltipActive) return; // Do not hide pinned validation tooltips
     clearTimeout(gUI.tooltipTimeoutId);
     gUI.tooltipTimeoutId = null;
     if (gUI.tooltipElement) {
@@ -3877,8 +4020,13 @@
   function fShowValidationTooltip(cell, colTag, event) {
     const funcName = "fShowValidationTooltip";
     if (!gUI.tooltipElement || !cell || !colTag || !event) return;
+
+    gUI.isValidationTooltipActive = true; // Set the flag to pin the tooltip
+
     let tooltipText = "<b>Allowed:</b> ";
-    const validationList = gUI.validationLists?.[colTag];
+    const validationListKey = colTag === "MetaCost" ? "Meta" : colTag;
+    const validationList = gUI.validationLists?.[validationListKey];
+
     if (validationList && validationList.length > 0) {
       tooltipText += "Blank, " + validationList.join(", ");
       if (colTag === "Rng") {
@@ -3890,21 +4038,30 @@
       console.warn(
         `${funcName}: No validation list found for tag '${colTag}'. Please check the 'MyCS/List' sheet for valid data under the corresponding header.`
       );
+      gUI.isValidationTooltipActive = false; // Reset flag on failure
       return;
     }
+
     const tooltip = gUI.tooltipElement;
     tooltip.innerHTML = tooltipText;
     tooltip.style.visibility = "hidden";
     tooltip.style.display = "block";
+
+    const onBlurHandler = () => {
+      fHideTooltip();
+      gUI.isValidationTooltipActive = false; // Reset the flag
+    };
+
     setTimeout(() => {
       if (document.activeElement !== cell) {
         tooltip.style.display = "none";
         tooltip.style.visibility = "visible";
+        gUI.isValidationTooltipActive = false; // Reset flag if focus is already lost
         return;
       }
       fConfineNotesTooltipBox(tooltip, event);
       tooltip.style.visibility = "visible";
-      cell.addEventListener("blur", fHideTooltip, { once: true });
+      cell.addEventListener("blur", onBlurHandler, { once: true });
       fMyConsoleLog(`   -> ${funcName}: Showing tooltip for '${colTag}'.`);
     }, 10);
   } // End function fShowValidationTooltip
