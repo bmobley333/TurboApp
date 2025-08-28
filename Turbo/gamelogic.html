@@ -4369,125 +4369,151 @@
   // Start - Character Stat Calculations
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-  /** function fCalculatesEnc_MR_AP
-   * Purpose: Calculates Movement Rate (MR) and Carry Capacity, updates the grid, and recalculates total AP.
-   * Assumptions: Relies on various values and range definitions in the gUI object. The `tag` object is populated.
-   * Notes: This is a core calculation function triggered after gear or stat changes.
-   * @returns {Promise<void>} Resolves when calculations and updates are complete.
+  /** function fReadBaseEncStats
+   * Purpose: Reads and validates all base stats required for MR and Encumbrance calculations.
+   * @returns {object} { success: boolean, stats?: object, errorMsg?: string }
    */
-  async function fCalculatesEnc_MR_AP() {
-    fMyConsoleLog("⚙️ Calculating Movement Rate and Encumbrance...");
+  function fReadBaseEncStats() {
+    const stats = {
+      agility: fGetGridValue(
+        tag.cs.game.r.Agi.index,
+        tag.cs.game.c.Sk1.index,
+        true
+      ),
+      strength: fGetGridValue(
+        tag.cs.game.r.Str.index,
+        tag.cs.game.c.Sk1.index,
+        true
+      ),
+      plusMR:
+        fGetGridValue(
+          tag.cs.game.r.GearPlusMR.index,
+          tag.cs.game.c.GearPlusMR.index,
+          true
+        ) || 0,
+      plusCarry:
+        fGetGridValue(
+          tag.cs.game.r.GearPlusCarry.index,
+          tag.cs.game.c.GearPlusCarry.index,
+          true
+        ) || 0,
+      currentEnc: fCalcTotalEnc() || 0,
+    };
+
+    let errorParts = [];
+    if (isNaN(stats.agility)) errorParts.push("Agility ('Agi', 'Sk1')");
+    if (isNaN(stats.strength)) errorParts.push("Strength ('Str', 'Sk1')");
+    if (isNaN(stats.currentEnc)) errorParts.push("Current Encumbrance");
+
+    if (errorParts.length > 0) {
+      return {
+        success: false,
+        errorMsg: `Invalid number(s) for: ${errorParts.join(", ")}.`,
+      };
+    }
+
+    fMyConsoleLog(
+      `   -> Base Stats Read: Agi=${stats.agility}, Str=${stats.strength}, +MR=${stats.plusMR}, +Carry=${stats.plusCarry}, CurrentEnc=${stats.currentEnc}`
+    );
+    return { success: true, stats };
+  } // End function fReadBaseEncStats
+
+  /** function fUpdateMrCarryTable
+   * Purpose: Calculates and updates the 6-level MR and Carry capacity table in the grid.
+   * @param {object} stats - The stats object from fReadBaseEncStats.
+   * @returns {number[] | null} An array of the 6 carry capacities, or null on error.
+   */
+  function fUpdateMrCarryTable(stats) {
     const movementMultipliers = [1, 0.9, 0.8, 0.65, 0.5, 0.25];
     const carryMultipliers = [1, 2, 4, 8, 12, 16];
     const mrColumnTags = [
-      tag.cs.game.c.GearMRCol1.label,
-      tag.cs.game.c.GearMRCol2.label,
-      tag.cs.game.c.GearMRCol3.label,
-      tag.cs.game.c.GearMRCol4.label,
-      tag.cs.game.c.GearMRCol5.label,
-      tag.cs.game.c.GearMRCol6.label,
+      "GearMRCol1",
+      "GearMRCol2",
+      "GearMRCol3",
+      "GearMRCol4",
+      "GearMRCol5",
+      "GearMRCol6",
     ];
     const MR_TABLE_ROW = tag.cs.game.r.GearMRTbl.index;
     const CARRY_TABLE_ROW = tag.cs.game.r.GearCarryTbl.index;
     const CHECKBOX_ROW = tag.cs.game.r.GearMRCheckBox.index;
-    let errorMsg = "";
 
-    const agilityValue = fGetGridValue(
-      tag.cs.game.r.Agi.index,
-      tag.cs.game.c.Sk1.index,
-      true
-    );
-    const strengthValue = fGetGridValue(
-      tag.cs.game.r.Str.index,
-      tag.cs.game.c.Sk1.index,
-      true
-    );
-    const plusMRValue =
-      fGetGridValue(
-        tag.cs.game.r.GearPlusMR.index,
-        tag.cs.game.c.GearPlusMR.index,
-        true
-      ) || 0;
-    const plusCarryValue =
-      fGetGridValue(
-        tag.cs.game.r.GearPlusCarry.index,
-        tag.cs.game.c.GearPlusCarry.index,
-        true
-      ) || 0;
-    const currentEncumbrance = fCalcTotalEnc() || 0;
-
-    if (isNaN(agilityValue))
-      errorMsg += "Agility ('Agi', 'Sk1') is not a valid number. ";
-    if (isNaN(strengthValue))
-      errorMsg += "Strength ('Str', 'Sk1') is not a valid number. ";
-    if (isNaN(currentEncumbrance))
-      errorMsg +=
-        "Current Encumbrance ('PossEncTot', 'PossEncTot') is not a valid number.";
-
-    if (errorMsg) {
-      console.error(
-        `fCalculatesEnc_MR_AP: Input validation failed: ${errorMsg}`
-      );
-      fMyConsoleLog(`❌ MR/Enc Calc Failed: ${errorMsg}`);
-      await fShowMessage(`❌ Error calculating MR/Enc: ${errorMsg}`);
-      return;
-    }
-    fMyConsoleLog(
-      `   -> Inputs: Agi=${agilityValue}, Str=${strengthValue}, +MR=${plusMRValue}, +Carry=${plusCarryValue}, CurrentEnc=${currentEncumbrance}`
-    );
-
-    let updateSuccess = true;
-    updateSuccess &&= fSetGridValue(
-      tag.cs.game.r.GearSpe.index,
-      tag.cs.game.c.GearSpeAndStr.index,
-      agilityValue
-    );
-    updateSuccess &&= fSetGridValue(
-      tag.cs.game.r.GearStr.index,
-      tag.cs.game.c.GearSpeAndStr.index,
-      strengthValue
-    );
-    if (!updateSuccess) {
-      fMyConsoleLog(
-        "   -> ⚠️ Warning: Failed to update GearSpe/GearStr overview cells."
-      );
-    }
-
-    let foundActiveMRLevel = false;
-    let finalMovementRate = 0;
+    const carryCapacities = [];
     let calculationErrors = false;
+
     for (let i = 0; i < mrColumnTags.length; i++) {
       const colTag = mrColumnTags[i];
       const movementRate = Math.round(
-        (6 + agilityValue / 5 + plusMRValue) * movementMultipliers[i]
+        (6 + stats.agility / 5 + stats.plusMR) * movementMultipliers[i]
       );
       const carryCapacity = Math.round(
-        (50 + strengthValue + plusCarryValue) * carryMultipliers[i]
+        (50 + stats.strength + stats.plusCarry) * carryMultipliers[i]
       );
+      carryCapacities.push(carryCapacity);
+
       let mrSet = fSetGridValue(MR_TABLE_ROW, colTag, movementRate);
       let carrySet = fSetGridValue(CARRY_TABLE_ROW, colTag, carryCapacity);
-      let cbSetInitial = fSetGridValue(CHECKBOX_ROW, colTag, false);
-      if (!mrSet || !carrySet || !cbSetInitial) {
+      let cbReset = fSetGridValue(CHECKBOX_ROW, colTag, false);
+
+      if (!mrSet || !carrySet || !cbReset) {
         fMyConsoleLog(
           `   -> ⚠️ Error setting MR/Carry/Checkbox values for column ${colTag}.`
         );
         calculationErrors = true;
       }
-      if (!foundActiveMRLevel && currentEncumbrance <= carryCapacity) {
+    }
+
+    return calculationErrors ? null : carryCapacities;
+  } // End function fUpdateMrCarryTable
+
+  /** function fFindActiveEncumbranceLevel
+   * Purpose: Finds the active encumbrance level based on current weight and capacity.
+   * @param {number[]} carryCapacities - An array of the 6 carry capacities.
+   * @param {number} currentEnc - The character's current encumbrance.
+   * @returns {number} The 0-based index of the active level, or -1 if over-encumbered.
+   */
+  function fFindActiveEncumbranceLevel(carryCapacities, currentEnc) {
+    for (let i = 0; i < carryCapacities.length; i++) {
+      if (currentEnc <= carryCapacities[i]) {
         fMyConsoleLog(
-          `   -> Active MR Level Found: Col '${colTag}' (Enc ${currentEncumbrance} <= Carry ${carryCapacity})`
+          `   -> Active MR Level Found: Index ${i} (Enc ${currentEnc} <= Carry ${carryCapacities[i]})`
         );
-        if (!fSetGridValue(CHECKBOX_ROW, colTag, true)) {
-          fMyConsoleLog(
-            `   -> ⚠️ Error setting Checkbox to TRUE for column ${colTag}.`
-          );
-          calculationErrors = true;
-        } else {
-          foundActiveMRLevel = true;
-          finalMovementRate = movementRate;
-          fMyConsoleLog(`   -> Final MR set to: ${finalMovementRate}`);
-        }
+        return i;
       }
+    }
+    return -1; // Over-encumbered
+  } // End function fFindActiveEncumbranceLevel
+
+  /** function fUpdateMrCheckboxesAndFinalMR
+   * Purpose: Updates the MR checkboxes and the final MR value based on the active encumbrance level.
+   * @param {number} activeIndex - The 0-based index of the active encumbrance level (-1 if none).
+   * @param {number} agility - The character's Agility stat.
+   * @param {number} plusMR - The character's +MR bonus.
+   * @returns {number} The final calculated movement rate.
+   */
+  function fUpdateMrCheckboxesAndFinalMR(activeIndex, agility, plusMR) {
+    const movementMultipliers = [1, 0.9, 0.8, 0.65, 0.5, 0.25];
+    const mrColumnTags = [
+      "GearMRCol1",
+      "GearMRCol2",
+      "GearMRCol3",
+      "GearMRCol4",
+      "GearMRCol5",
+      "GearMRCol6",
+    ];
+    const CHECKBOX_ROW = tag.cs.game.r.GearMRCheckBox.index;
+    let finalMovementRate = 0;
+
+    if (activeIndex !== -1) {
+      const activeColTag = mrColumnTags[activeIndex];
+      if (!fSetGridValue(CHECKBOX_ROW, activeColTag, true)) {
+        fMyConsoleLog(
+          `   -> ⚠️ Error setting Checkbox to TRUE for column ${activeColTag}.`
+        );
+      }
+      finalMovementRate = Math.round(
+        (6 + agility / 5 + plusMR) * movementMultipliers[activeIndex]
+      );
     }
 
     if (
@@ -4498,20 +4524,68 @@
       )
     ) {
       fMyConsoleLog("   -> ⚠️ Error setting final MR value in ('MR', 'MR').");
-      calculationErrors = true;
     }
-    if (!foundActiveMRLevel || finalMovementRate === 0) {
+
+    fMyConsoleLog(`   -> Final MR set to: ${finalMovementRate}`);
+    return finalMovementRate;
+  } // End function fUpdateMrCheckboxesAndFinalMR
+
+  /** function fCalculatesEnc_MR_AP
+   * Purpose: Main controller to calculate Movement Rate (MR) and Carry Capacity.
+   * @returns {Promise<void>}
+   */
+  async function fCalculatesEnc_MR_AP() {
+    fMyConsoleLog("⚙️ Calculating Movement Rate and Encumbrance...");
+
+    const baseStatsResult = fReadBaseEncStats();
+    if (!baseStatsResult.success) {
+      console.error(
+        `fCalculatesEnc_MR_AP: Input validation failed: ${baseStatsResult.errorMsg}`
+      );
+      fMyConsoleLog(`❌ MR/Enc Calc Failed: ${baseStatsResult.errorMsg}`);
+      await fShowMessage(
+        `❌ Error calculating MR/Enc: ${baseStatsResult.errorMsg}`
+      );
+      return;
+    }
+
+    const { stats } = baseStatsResult;
+
+    // Update display cells for Agi and Str in the gear section
+    fSetGridValue(
+      tag.cs.game.r.GearSpe.index,
+      tag.cs.game.c.GearSpeAndStr.index,
+      stats.agility
+    );
+    fSetGridValue(
+      tag.cs.game.r.GearStr.index,
+      tag.cs.game.c.GearSpeAndStr.index,
+      stats.strength
+    );
+
+    const carryCapacities = fUpdateMrCarryTable(stats);
+    if (carryCapacities === null) {
+      fMyConsoleLog(
+        "❌ MR/Enc Calc aborted due to errors updating the MR/Carry table."
+      );
+      return;
+    }
+
+    const activeIndex = fFindActiveEncumbranceLevel(
+      carryCapacities,
+      stats.currentEnc
+    );
+
+    fUpdateMrCheckboxesAndFinalMR(activeIndex, stats.agility, stats.plusMR);
+
+    if (activeIndex === -1) {
       fMyConsoleLog("   -> 🚨 Character is over-encumbered!");
       await fShowMessage("⚠️ You are over encumbered, MR is 0.");
     }
 
     fCalcTotalAP();
 
-    if (calculationErrors) {
-      fMyConsoleLog("❌ MR/Enc/AP Calc Completed with errors.");
-    } else {
-      fMyConsoleLog("✅ MR/Enc/AP Calc Completed successfully.");
-    }
+    fMyConsoleLog("✅ MR/Enc/AP Calc Completed successfully.");
   } // End function fCalculatesEnc_MR_AP
 
   /** function fCalcTotalEnc
