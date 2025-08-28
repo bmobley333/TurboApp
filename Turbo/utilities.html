@@ -11,6 +11,44 @@
   // Start - Tag Management
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+  /** function fIsValidMorphComponent
+   * Purpose: Validates if a single string component is a valid morph keyword or pattern.
+   * Assumptions: Uses regexes from fParseMorphComponents and lists from gUI.list.
+   * @param {string} component - The single morph component string to validate.
+   * @returns {boolean} True if the component is a valid morph, false otherwise.
+   */
+  function fIsValidMorphComponent(component) {
+    if (typeof component !== "string" || component === "") return false;
+
+    const lower = component.toLowerCase();
+
+    // Keyword checks
+    const keywords = ["free", "luck", "un", "unsk"];
+    if (keywords.includes(lower)) return true;
+
+    // List checks (SkTyp and MetaColor)
+    if ((gUI.list?.skTyp || []).some((t) => t.toLowerCase() === lower))
+      return true;
+    if ((gUI.list?.metaColor || []).includes(component.toUpperCase()))
+      return true;
+
+    // Regex checks
+    const regexes = [
+      /^([-+])(\d+)$/, // plusMinusRegex
+      /^\d+$/, // numberOnlyRegex
+      /^(?:(\+\+)|(--))(\d+)$/, // plusPlusMinusMinusRegex
+      /^([*\/])(\d+(\.\d+)?)$/, // multDivRegex
+      /^(?:(\*\*)|(\/\/))(\d+(\.\d+)?)$/, // multMultDivDivRegex
+      /^=(\d+)$/, // equalsRegex
+      /^==(\d+)$/, // equalsEqualsRegex
+      /^\^(\d+)$/, // caretRegex
+      /^([-+])(\d+)([dct])$/i, // dctRegex
+      /^#(\d+)$/, // multiRollRegex
+    ];
+
+    return regexes.some((regex) => regex.test(component));
+  } // End function fIsValidMorphComponent
+
   /** function fBuildTagObject
    * Purpose: Parses a 2D data array to populate a specific namespace within the global `tag` object.
    * Assumptions: The global `tag` object exists. Row tags are in column 0, and column tags are in row 0.

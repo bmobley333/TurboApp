@@ -1997,6 +1997,142 @@
     }
   } // End function fHandleAbilityStatCellEdit
 
+  /** function fCreateMorphCaseMap
+   * Purpose: Creates a lookup map for correct morph component capitalization.
+   * Assumptions: Runs once at startup after caches are loaded. Uses MyCS/List cache.
+   * @returns {void}
+   */
+  function fCreateMorphCaseMap() {
+    const funcName = "fCreateMorphCaseMap";
+    fMyConsoleLog(`⚙️ ${funcName}: Building morph capitalization map...`);
+    gUI.morphCaseMap = {};
+    const listCache = gUI.myCSListFSData;
+    if (!listCache) {
+      fMyConsoleLog(
+        `   -> ⚠️ ${funcName}: myCSListFSData cache not found. Map will be empty.`
+      );
+      return;
+    }
+
+    const colTag = "PermSk1Morph";
+    const colIndex = listCache.colTagsMap?.[colTag];
+    const startRowIndex = listCache.rowTagsMap?.["TableFirstRow"];
+
+    if (typeof colIndex !== "number" || typeof startRowIndex !== "number") {
+      fMyConsoleLog(
+        `   -> ⚠️ ${funcName}: Could not resolve '${colTag}' column or 'TableFirstRow'.`
+      );
+      return;
+    }
+
+    const morphSet = new Set();
+    for (let r = startRowIndex; r < listCache.text.length; r++) {
+      const cellValue = listCache.text[r]?.[colIndex];
+      if (typeof cellValue === "string" && cellValue.trim()) {
+        cellValue.split(",").forEach((m) => morphSet.add(m.trim()));
+      }
+    }
+
+    // Add other known keywords
+    [
+      "Free",
+      "Luck",
+      "Un",
+      "UnSk",
+      ...gUI.list.skTyp,
+      ...gUI.list.metaColor,
+    ].forEach((k) => morphSet.add(k));
+
+    morphSet.forEach((morph) => {
+      if (morph) {
+        gUI.morphCaseMap[morph.toLowerCase()] = morph;
+      }
+    });
+
+    fMyConsoleLog(
+      `   -> ✅ Morph case map created with ${
+        Object.keys(gUI.morphCaseMap).length
+      } entries.`
+    );
+  } // End function fCreateMorphCaseMap
+
+  /** function fHandleMorphCellEdit
+   * Purpose: Validates, cleans, and saves an edit within a morph cell.
+   * Assumptions: Helper for fHandleGridCellEdit.
+   * @param {number} r - The 0-based row index.
+   * @param {number} c - The 0-based column index.
+   * @param {string} newValue - The new text content of the cell.
+   * @param {any} oldValue - The original value from the data model.
+   * @returns {Promise<void>}
+   */
+  async function fHandleMorphCellEdit(r, c, newValue, oldValue) {
+    const funcName = "fHandleMorphCellEdit";
+    fMyConsoleLog(
+      `   -> ${funcName}: Validating morph edit for [${r}, ${c}]...`
+    );
+
+    // 1. Prerequisite Check
+    const abilityName = fGetGridValue(r, "Ability");
+    if (!String(abilityName || "").trim()) {
+      await fShowMessage(
+        "ℹ️ An ability name is required before adding morphs."
+      );
+      fRevertCellDOM(r, c, "");
+      gUI.arr[r][c] = "";
+      return;
+    }
+
+    // 2. Normalize Separators
+    const normalizedString = newValue
+      .trim()
+      .replace(/\s+/g, ",")
+      .replace(/,+/g, ",")
+      .replace(/^,|,$/g, "");
+
+    const components = normalizedString.split(",");
+    const validComponents = [];
+    const invalidComponents = [];
+
+    // 3. Validation
+    components.forEach((component) => {
+      if (fIsValidMorphComponent(component)) {
+        validComponents.push(component);
+      } else if (component !== "") {
+        invalidComponents.push(component);
+      }
+    });
+
+    // 4. Capitalization
+    const standardizedComponents = validComponents.map((comp) => {
+      const lower = comp.toLowerCase();
+      return gUI.morphCaseMap?.[lower] || comp;
+    });
+
+    const finalString = standardizedComponents.join(",");
+
+    // 5. Feedback & Final Update
+    if (invalidComponents.length > 0) {
+      await fShowMessage(
+        `⚠️ The following invalid morphs were removed:<br><br>${invalidComponents.join(
+          ", "
+        )}`
+      );
+    }
+
+    gUI.arr[r][c] = finalString;
+    const cell = gUI.grid2D?.[r]?.[c];
+    if (cell) {
+      cell.textContent = finalString;
+    }
+    fHandleAutoSaveTextToFirestore();
+    fMyConsoleLog(
+      `   -> Morph cell [${r}, ${c}] cleaned and saved as: "${finalString}"`
+    );
+
+    // Trigger Part 2: Pre-emptive Meta Cost Check
+    await fCheckMorphMetaCost(r, c);
+  } // End function fHandleMorphCellEdit
+
   /** function fHandleGridCellEdit
    * Purpose: Main dispatcher for the 'blur' event on editable cells.
    * Assumptions: Routes the event to specialized handlers based on the cell's context.
@@ -2047,6 +2183,11 @@
       abilityStatCols.some((tag) => allTagsForCol.includes(tag)) &&
       fIsCellInRangeArray(r, c, gUI.resolvedRanges.entireAbilityNGearTables);
 
+    const morphCols = ["PermMorph1", "Morph1", "PermMorph2", "Morph2"];
+    const isMorphCell =
+      morphCols.some((tag) => allTagsForCol.includes(tag)) &&
+      fIsCellInRangeArray(r, c, gUI.resolvedRanges.entireAbilityNGearTables);
+
     const isMetaCell = fIsCellInRangeArray(r, c, [
       gUI.resolvedRanges?.meta,
       gUI.resolvedRanges?.metaChannel,
@@ -2069,7 +2210,9 @@
     const isActPlusCell =
       r === tag.cs.game.r.ActPlus.index && c === tag.cs.game.c.ActTot.index;
 
-    if (isAbilityStatCell) {
+    if (isMorphCell) {
+      await fHandleMorphCellEdit(r, c, newValue, oldValue);
+    } else if (isAbilityStatCell) {
       await fHandleAbilityStatCellEdit(r, c, newValue, oldValue);
     } else if (isMetaCell) {
       await fHandleMetaCellEdit(r, c, newValue, oldValue);
@@ -5607,6 +5750,7 @@
     const cachesLoaded = await fBulkCacheFSData();
 
     if (cachesLoaded) {
+      fCreateMorphCaseMap(); // Create the morph capitalization map
       fRenderGridWithFinalData();
     } else {
       fMyConsoleLog(

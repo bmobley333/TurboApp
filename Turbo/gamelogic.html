@@ -181,6 +181,81 @@
     return { success: true, headers: allHeaders };
   } // End function fVerifyAndProcessAllCosts
 
+  /** function fSimulateMetaSpend
+   * Purpose: Simulates spending Meta costs without altering the grid, to check for affordability.
+   * Assumptions: Helper for fCheckMorphMetaCost.
+   * @param {string[]} costs - An array of Meta color tags to spend (e.g., ['B', 'R']).
+   * @param {object} currentMetaPools - A map of current meta values { R: val, O: val, ... }.
+   * @returns {object} An object { success: boolean, failedCost?: string }.
+   */
+  function fSimulateMetaSpend(costs, currentMetaPools) {
+    const metaColors = gUI.list?.metaColor || [];
+    if (costs.length === 0) return { success: true };
+
+    const tempPools = { ...currentMetaPools };
+    const sortedCosts = [...costs].sort(
+      (a, b) => metaColors.indexOf(b) - metaColors.indexOf(a)
+    );
+
+    for (const cost of sortedCosts) {
+      let costPaid = false;
+      const startIndex = metaColors.indexOf(cost);
+      if (startIndex === -1) continue; // Invalid cost tag, ignore
+
+      for (let i = startIndex; i < metaColors.length; i++) {
+        const colorToCheck = metaColors[i];
+        if (tempPools[colorToCheck] > 0) {
+          tempPools[colorToCheck]--;
+          costPaid = true;
+          break;
+        }
+      }
+      if (!costPaid) {
+        return { success: false, failedCost: cost };
+      }
+    }
+    return { success: true };
+  } // End function fSimulateMetaSpend
+
+  /** function fGetCleanedMorphStringForDisplay
+   * Purpose: Cleans a morph string for display in the roll log, ensuring only the highest Focus Meta is shown.
+   * Assumptions: Helper for fBuildInitialRollLogHeader.
+   * @param {string} morphString - The raw, combined morph string.
+   * @returns {string} The cleaned morph string for display.
+   */
+  function fGetCleanedMorphStringForDisplay(morphString) {
+    if (!morphString) return "";
+    const components = morphString
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const metaColors = gUI.list?.metaColor || [];
+
+    const metaComponents = components.filter((c) =>
+      metaColors.includes(c.toUpperCase())
+    );
+    const otherComponents = components.filter(
+      (c) => !metaColors.includes(c.toUpperCase())
+    );
+
+    let highestMeta = null;
+    if (metaComponents.length > 0) {
+      highestMeta = metaComponents.reduce((highest, current) =>
+        metaColors.indexOf(current.toUpperCase()) >
+        metaColors.indexOf(highest.toUpperCase())
+          ? current
+          : highest
+      );
+    }
+
+    const finalComponents = [...otherComponents];
+    if (highestMeta) {
+      finalComponents.push(highestMeta);
+    }
+
+    return finalComponents.join(",");
+  } // End function fGetCleanedMorphStringForDisplay
+
   /** function fBuildInitialRollLogHeader
    * Purpose: Constructs the initial HTML and plain text header for the sidebar log entry.
    * Assumptions: gUI.roll is populated.
@@ -207,10 +282,10 @@
       titleText += ` (now ${gUI.roll.resTyp})`;
     }
 
-    const morph = (gUI.roll.skMorph || "").replace(/,/g, " ").trim();
-    if (morph) {
-      titleHtml += `<br>morph: ${morph}`;
-      titleText += `\nmorph: ${morph}`;
+    const displayMorph = fGetCleanedMorphStringForDisplay(gUI.roll.skMorph);
+    if (displayMorph) {
+      titleHtml += `<br>morph: ${displayMorph}`;
+      titleText += `\nmorph: ${displayMorph}`;
     }
 
     return {
@@ -341,6 +416,96 @@
       );
     }
   } // End function fApplyFinalNishRollValue
+
+  /** function fCheckMorphMetaCost
+   * Purpose: Performs a pre-emptive check for Meta availability after a morph cell is edited.
+   * Assumptions: Called from fHandleMorphCellEdit.
+   * @param {number} r - The 0-based row index of the edited morph cell.
+   * @param {number} c - The 0-based column index of the edited morph cell.
+   * @returns {Promise<void>}
+   */
+  async function fCheckMorphMetaCost(r, c) {
+    const funcName = "fCheckMorphMetaCost";
+
+    // Correct multi-tag resolution
+    const allTagsForCol = [];
+    for (const tagName in gUI.colTag) {
+      if (gUI.colTag[tagName] === c) {
+        allTagsForCol.push(tagName);
+      }
+    }
+    const morphCols = ["PermMorph1", "Morph1", "PermMorph2", "Morph2"];
+    const colTag = morphCols.find((tag) => allTagsForCol.includes(tag));
+
+    const isSk1Pair = colTag === "PermMorph1" || colTag === "Morph1";
+    const isSk2Pair = colTag === "PermMorph2" || colTag === "Morph2";
+
+    if (!isSk1Pair && !isSk2Pair) return;
+
+    const pMorphTag = isSk1Pair ? "PermMorph1" : "PermMorph2";
+    const tMorphTag = isSk1Pair ? "Morph1" : "Morph2";
+
+    const pMorphVal = fGetGridValue(r, pMorphTag) || "";
+    const tMorphVal = fGetGridValue(r, tMorphTag) || "";
+    const combinedMorphs = `${pMorphVal},${tMorphVal}`;
+    const morphComponents = combinedMorphs
+      .split(",")
+      .map((m) => m.trim())
+      .filter(Boolean);
+
+    const metaColors = gUI.list?.metaColor || [];
+    const focusMetaTags = morphComponents.filter((m) =>
+      metaColors.includes(m.toUpperCase())
+    );
+
+    let highestFocusTag = null;
+    if (focusMetaTags.length > 0) {
+      highestFocusTag = focusMetaTags.reduce((highest, current) => {
+        return metaColors.indexOf(current.toUpperCase()) >
+          metaColors.indexOf(highest.toUpperCase())
+          ? current
+          : highest;
+      });
+    }
+
+    const abilityCostTag = isSk1Pair ? fGetGridValue(r, "MetaCost") : null;
+
+    const costsToPay = [];
+    if (highestFocusTag) costsToPay.push(highestFocusTag.toUpperCase());
+    if (abilityCostTag) costsToPay.push(abilityCostTag.toUpperCase());
+
+    if (costsToPay.length === 0) {
+      fMyConsoleLog(
+        `   -> ${funcName}: No Meta costs found for row ${r}. Skipping check.`
+      );
+      return;
+    }
+
+    fMyConsoleLog(
+      `   -> ${funcName}: Checking affordability for costs: [${costsToPay.join(
+        ", "
+      )}]`
+    );
+
+    const currentPools = {};
+    metaColors.forEach((color) => {
+      const mainVal = fGetGridValue("meta", color, true) || 0;
+      const chnlVal = fGetGridValue("chnl", color, true) || 0;
+      currentPools[color] = mainVal + chnlVal;
+    });
+
+    const simulationResult = fSimulateMetaSpend(costsToPay, currentPools);
+
+    if (!simulationResult.success) {
+      let errorMsg = `⚠️ Insufficient Meta. Costs:`;
+      if (highestFocusTag) errorMsg += `<br>- Focus: ${highestFocusTag}`;
+      if (abilityCostTag) errorMsg += `<br>- Ability: ${abilityCostTag}`;
+      errorMsg += `<br><br>Cannot afford the <span class="red-bold">${simulationResult.failedCost}</span> cost.`;
+      await fShowMessage(errorMsg);
+    } else {
+      fMyConsoleLog(`   -> ${funcName}: All Meta costs are affordable.`);
+    }
+  } // End function fCheckMorphMetaCost
 
   /** function fMain_AbilityRoll
    * Purpose: Top-level controller for initiating an ability/gear roll.
@@ -621,9 +786,19 @@
         acc.lastResTypMatch = component;
         acc.foundResTyp = true;
       }
-      const focusTag = lower.toUpperCase();
-      if ((gUI.list?.metaColor || []).includes(focusTag)) {
-        acc.lastFocusTag = focusTag;
+      const metaColors = gUI.list?.metaColor || [];
+      const upperComponent = component.toUpperCase();
+      if (metaColors.includes(upperComponent)) {
+        const currentHighest = acc.lastFocusTag
+          ? acc.lastFocusTag.toUpperCase()
+          : null;
+        if (
+          !currentHighest ||
+          metaColors.indexOf(upperComponent) >
+            metaColors.indexOf(currentHighest)
+        ) {
+          acc.lastFocusTag = component;
+        }
       }
       const multiRollMatch = component.match(multiRollRegex);
       if (multiRollMatch) {
@@ -1910,9 +2085,6 @@
       gUI.roll.resMultMult !== ""
     ) {
       currentResRoll *= gUI.roll.resMultMult;
-    }
-    if (typeof gUI.roll.resdctMult === "number" && gUI.roll.resdctMult !== "") {
-      currentResRoll *= gUI.roll.resdctMult;
     }
     if (
       typeof gUI.roll.resPlusPlus === "number" &&
