@@ -135,9 +135,6 @@
       isFreeRoll: false, // Flag: true if 'free' morph or Free button used
       isLuckedRoll: false, // Flag: true if 'luck' morph or Luck button used
       multiRollCount: 1, // Number of times to roll (defaults to 1)
-
-      // --- Output Formatting ---
-      htmlHeader: "", // Stores the header HTML string for the roll log entry
     },
 
     // === Background Data Caches ===
@@ -151,8 +148,6 @@
 
     // === Configuration & Definitions ===
     manualBorderSections: [
-      // Defines sections for applying manual borders post-render
-      // Each object: { r1, c1, r2, c2 (tags/indices), edges ('t'op, 'b'ottom, 'l'eft, 'r'ight), style? (CSS string) }
       { r1: "Nish", c1: "ULNish", r2: "Nish", c2: "Nish", edges: "br" },
       { r1: "MR", c1: "ULMR", r2: "MR", c2: "MR", edges: "br" },
       { r1: "meta", c1: "ULMeta", r2: "chnl", c2: "B", edges: "r" },
@@ -594,7 +589,7 @@
         c1: "AbilitiesNameID",
         r2: "Calc_LastRow",
         c2: "AbilitiesNameID",
-      }, // Calc_LastRow is a flag not a tag
+      },
     },
     rangeDB: {
       monstersDB: {
