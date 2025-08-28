@@ -38,51 +38,46 @@
   };
 
   const gUI = {
-    // === Logging / Perf timers ===
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Start - Constants & Settings
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    GMSCREEN_LOG_MAX_CHARS: 40000, // Max characters for GMScreen log cell
+    HOVER_DELAY_MS: 300, // Delay before showing tooltip (milliseconds)
+    isDebugMode: true, // Turns console logging on (true) or off (false)
+    ROW_HEIGHT_PX: 20, // Matches grid-auto-rows in style.html, used for sticky offset calculation
+    TOOLTIP_OFFSET_X: 10, // Tooltip horizontal offset from cursor (px)
+    TOOLTIP_OFFSET_Y: 15, // Tooltip vertical offset from cursor (px)
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Start - Performance & Logging
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     startTime:
       typeof performance !== "undefined" ? performance.now() : Date.now(),
     lastLogTime:
       typeof performance !== "undefined" ? performance.now() : Date.now(),
-
-    // === Tooltip runtime cache ===
-    tooltipElement: null,
-    tooltipTimeoutId: null,
-
-    // === Core Data Arrays ===
-    arr: [], // 2D array of data from the sheet
-    rowTag: {}, // Map of row tags to 0-based row indices
-    colTag: {}, // Map of column tags to 0-based column indices
-    format: {}, // Object containing formatting arrays (bg, fonts, borders, merges, etc.)
-    notes: [],
-    customNotes: [], // 2D array for user-editable notes, persists to Firestore
-    grid2D: [],
-    // 2D array holding references to the created cell DOM elements
-
-    // === State Management ===
-    pendingChangesMap: {}, // Holds { 'r,c': newValue } during ability roll cost verification steps
-    cellClickInfo: { r: null, c: null, text: null, focusText: null }, // Info about the last clicked cell
-    monsterRollResultsHistory: {}, // Stores { rollId: { results: [...], originalAbilityRow: r, allTargetedRows_R: [...] } }
-    currentSkRadioChecked: { r: null, c: null }, // Tracks coords of the single checked Sk1/Sk2 box
-    buttonOrMenu: {
-      // Tracks the source of the current button or
-      // menu action
-      morphCaseMap: {}, // Holds correct casing for morph components
-      isValidationTooltipActive: false, // Flag to keep validation tooltips open
-      isNish: false, // Nish button pressed
-      isRoll: false, // Standard Roll button pressed
-      isFree: false, // Free button pressed
-      isLuck: false, // Luck button pressed
-    },
-    hiddenColumns: new Set(), // Stores indices of currently hidden columns
-    hiddenRows: new Set(), // Stores indices of currently hidden rows
     plainTextLogEntries: [], // Array to store plain text log entries for GMScreen update
-    isSendingLog: false, // Flag/Lock to prevent concurrent log sends
-    isDesignerMode: false, // Flag for designer mode access >>>
-    isCurrentMessageModalUserCloseable: true, // ADDED: Tracks if the message modal can be closed by user action
-    headerButtonCoords: new Set(), // Set to store "r,c" strings of button cells
 
-    //
-    // === Character RaceClass Info ===
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Start - Core Data Structures
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    arr: [], // 2D array of data from the sheet
+    colTag: {}, // Map of column tags to 0-based column indices
+    customNotes: [], // 2D array for user-editable notes, persists to Firestore
+    format: {}, // Object containing formatting arrays (bg, fonts, borders, merges, etc.)
+    grid2D: [], // 2D array holding references to the created cell DOM elements
+    notes: [],
+    rowTag: {}, // Map of row tags to 0-based row indices
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Start - Application State
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    buttonOrMenu: {
+      isNish: false,
+      isRoll: false,
+      isFree: false,
+      isLuck: false,
+    },
+    cellClickInfo: { r: null, c: null, text: null, focusText: null },
     characterInfo: {
       slotNum: "",
       raceClass: "",
@@ -90,54 +85,59 @@
       playerName: "",
       charName: "",
     },
+    currentSkRadioChecked: { r: null, c: null },
+    headerButtonCoords: new Set(),
+    hiddenColumns: new Set(),
+    hiddenRows: new Set(),
+    isCurrentMessageModalUserCloseable: true,
+    isDesignerMode: false,
+    isSendingLog: false,
+    isValidationTooltipActive: false, // Flag to keep validation tooltips open
+    monsterRollResultsHistory: {},
+    pendingChangesMap: {},
 
-    // === Roll Object State ===
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Start - Roll State Object
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     roll: {
-      // --- Input values from Sheet (populated by fClearAndSetGUIRoll) ---
-      sk1CB: false, // Flag: True if roll originated from Sk1 CheckBox column, false if Sk2
-      ability_R: "", // 0-based row index of the ability/gear being rolled
-      skMorph: "", // Raw COMBINED morph string for roll calculations
-      permMorph: "", // Raw permanent morph string for logging
-      tempMorph: "", // Raw temporary morph string for logging
-      skTyp: "", // Base skill type string ('Sk', 'Atr', 'Atk', etc.) from sheet ('Sk1Typ' or 'Sk2Typ' col)
-      skSk: "", // Base skill value (numeric >= 1 or '') from sheet ('Sk1' or 'Sk2' col)
-
-      skIsOn: "", // Raw 'Is On' status from sheet
-      skNameID: "", // Raw ability/gear name from sheet, may include ID ('Ability' col)
+      sk1CB: false,
+      ability_R: "",
+      skMorph: "",
+      permMorph: "",
+      tempMorph: "",
+      skTyp: "",
+      skSk: "",
+      skIsOn: "",
+      skNameID: "",
       skName: "",
-      skAct: "", // Action Point cost
-      skDur: "", // Raw duration value from sheet
-
-      skMeta: "", // Raw Meta cost value from sheet
-      skUses: "", // Remaining uses (numeric >= 0 or '') from sheet
-
-      // --- Result values calculated after processing morphs (fProcessMorph, fApplyMorphResults) ---
-      resTyp: "", // Resulting roll type after morphs (defaults to skTyp)
-      resSk: "", // Resulting skill value after skill morphs (base for roll calculation)
-      resFlatBase: "", // Skill override value from '=' morph
-      resFlatResult: "", // Final roll result override from '==' morph
-      resDif: "", // Difficulty value from '^' morph
-      resFocus: "", // Raw Focus Meta color tag ('R'...'B')
-      resPlus: "", // Sum of '+/-[num]' morphs (additive modifier to resSk)
-      resPlusPlus: "", // Sum of '++/--[num]' morphs (additive modifier to final roll)
+      skAct: "",
+      skDur: "",
+      skMeta: "",
+      skUses: "",
+      resTyp: "",
+      resSk: "",
+      resFlatBase: "",
+      resFlatResult: "",
+      resDif: "",
+      resFocus: "",
+      resPlus: "",
+      resPlusPlus: "",
       resdctMult: "",
-      resMult: "", // Cumulative multiplier from '* / /[num]' morphs (applies to resSk)
-      resMultMult: "", // Cumulative multiplier from '** // //[num]' morphs (applies to final roll)
-      resCombine: "", // Combined skill value calculated from numeric morphs + skSk
-
-      // --- Dice roll results (calculated by fCalcGUIRollRoll, fCalcGUIRollResRoll) ---
-      roll: "", // Raw dice roll result based on resSk and resTyp
-      resRoll: "", // Final roll result after applying roll morphs or override
-
-      // --- Flags & Multi-Roll ---
-      isNish: false, // Flag: true if Nish roll
-      isUnSk: false, // Flag: true if 'un' or 'unsk' morph was present
-      isFreeRoll: false, // Flag: true if 'free' morph or Free button used
-      isLuckedRoll: false, // Flag: true if 'luck' morph or Luck button used
-      multiRollCount: 1, // Number of times to roll (defaults to 1)
+      resMult: "",
+      resMultMult: "",
+      resCombine: "",
+      roll: "",
+      resRoll: "",
+      isNish: false,
+      isUnSk: false,
+      isFreeRoll: false,
+      isLuckedRoll: false,
+      multiRollCount: 1,
     },
 
-    // === Background Data Caches ===
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Start - Background Data Caches
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     dbElementsFSData: null,
     dbAbilitiesFSData: null,
     dbCritFSData: null,
@@ -146,7 +146,151 @@
     myCSListFSData: null,
     myKLKnownAbilitiesFSData: null,
 
-    // === Configuration & Definitions ===
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Start - Configuration Definitions
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    cachesToLoadOnStartup: [
+      { key: "myCSRaceClassFSData", label: "MyCS/RaceClass" },
+      { key: "myCSListFSData", label: "MyCS/List" },
+      { key: "myKLKnownAbilitiesFSData", label: "MyKL/KnownAbilities" },
+      { key: "dbAbilitiesFSData", label: "DB/Abilities" },
+      { key: "dbCritFSData", label: "DB/Crit" },
+      { key: "dbElementsFSData", label: "DB/Elements" },
+      { key: "dbGearFSData", label: "DB/Gear" },
+    ],
+    dropDownBox: [
+      {
+        choices: [
+          "",
+          "Y",
+          "N",
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          "P",
+          "I",
+          "~",
+          "E",
+          "*",
+        ],
+        ranges: [{ r1: "NishAtr_R", c1: "On", r2: "AbilTblEnd_R", c2: "On" }],
+      },
+      {
+        choices: [
+          "",
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+        ],
+        ranges: [
+          { r1: "CustMon", c1: "NumMon", r2: "LastMon_R", c2: "NumMon" },
+        ],
+      },
+    ],
+    fontColorRange: [
+      {
+        color: "#FF0000",
+        ranges: [
+          { r1: "FrozenHeader", c1: "R", r2: "FrozenHeader", c2: "R" },
+          { r1: "ULMonsterTbl", c1: "MonAtk", r2: "LastMon_R", c2: "MonDmg" },
+        ],
+      },
+      {
+        color: "#FFA500",
+        ranges: [{ r1: "FrozenHeader", c1: "O", r2: "FrozenHeader", c2: "O" }],
+      },
+      {
+        color: "#fcba03",
+        ranges: [{ r1: "FrozenHeader", c1: "Y", r2: "FrozenHeader", c2: "Y" }],
+      },
+      {
+        color: "#008000",
+        ranges: [{ r1: "FrozenHeader", c1: "G", r2: "FrozenHeader", c2: "G" }],
+      },
+      {
+        color: "#0000FF",
+        ranges: [{ r1: "FrozenHeader", c1: "B", r2: "FrozenHeader", c2: "B" }],
+      },
+    ],
+    gearTblCols: [{ c1: "PossNum", c2: "PossAPTot" }],
+    initialHiddenCols: [{ c1: "Key", c2: "Key" }],
+    initialHiddenRows: [{ r1: "Agi", r2: "Arc" }],
+    list: {
+      skTyp: ["Atr", "Sk", "Atk", "DMG", "Def", "AR", "Str", "TC"],
+      metaColor: ["R", "O", "Y", "G", "B"],
+      metaFull: [5, 4, 3, 2, 1],
+      luckBoxMax: 5,
+      actMax: 5,
+      clearAbilityColTags_EmptyString: [
+        "PermMorph1",
+        "Morph1",
+        "Sk1Typ",
+        "Sk1",
+        "On",
+        "Ability",
+        "Sk2",
+        "Sk2Typ",
+        "Morph2",
+        "PermMorph2",
+        "Ver",
+        "Notes",
+        "Pic",
+        "Act",
+        "Dur",
+        "Rng",
+        "MetaCost",
+        "Uses",
+        "Regain",
+        "PossNum",
+        "PossName",
+        "PossEnc",
+        "PossCrEa",
+        "PossPerOff",
+        "PossCrTot",
+        "PossAPEa",
+        "PossAPTot",
+      ],
+      clearAbilityColTags_False: [
+        "Sk1ChkBox",
+        "Sk2ChkBox",
+        "PossWorn",
+        "PossIsArtifact",
+      ],
+    },
     manualBorderSections: [
       { r1: "Nish", c1: "ULNish", r2: "Nish", c2: "Nish", edges: "br" },
       { r1: "MR", c1: "ULMR", r2: "MR", c2: "MR", edges: "br" },
@@ -215,7 +359,6 @@
         c2: "LastC",
         edges: "br",
       },
-
       {
         r1: "GearTblHeaderStartR",
         c1: "PermMorph1",
@@ -273,100 +416,10 @@
         edges: "br",
       },
     ],
-    initialHiddenCols: [{ c1: "Key", c2: "Key" }],
-    gearTblCols: [{ c1: "PossNum", c2: "PossAPTot" }],
+    morphCaseMap: {},
     permMorphCols: [
       { c1: "PermMorph1", c2: "PermMorph1" },
       { c1: "PermMorph2", c2: "PermMorph2" },
-    ],
-    initialHiddenRows: [{ r1: "Agi", r2: "Arc" }],
-    dropDownBox: [
-      {
-        choices: [
-          "",
-          "Y",
-          "N",
-          1,
-          2,
-          3,
-          4,
-          5,
-          6,
-          7,
-          8,
-          9,
-          10,
-          "P",
-          "I",
-          "~",
-          "E",
-          "*",
-        ],
-        ranges: [{ r1: "NishAtr_R", c1: "On", r2: "AbilTblEnd_R", c2: "On" }],
-      },
-      {
-        choices: [
-          "",
-          1,
-          2,
-          3,
-          4,
-          5,
-          6,
-          7,
-          8,
-          9,
-          10,
-          11,
-          12,
-          13,
-          14,
-          15,
-          16,
-          17,
-          18,
-          19,
-          20,
-          21,
-          22,
-          23,
-          24,
-          25,
-          26,
-          27,
-          28,
-          29,
-          30,
-        ],
-        ranges: [
-          { r1: "CustMon", c1: "NumMon", r2: "LastMon_R", c2: "NumMon" },
-        ],
-      },
-    ],
-    fontColorRange: [
-      {
-        color: "#FF0000", // Red
-        ranges: [
-          { r1: "FrozenHeader", c1: "R", r2: "FrozenHeader", c2: "R" },
-          { r1: "ULMonsterTbl", c1: "MonAtk", r2: "LastMon_R", c2: "MonDmg" },
-        ],
-      },
-      {
-        color: "#FFA500", // Orange
-        ranges: [{ r1: "FrozenHeader", c1: "O", r2: "FrozenHeader", c2: "O" }],
-      },
-      {
-        color: "#fcba03", // Gold
-        ranges: [{ r1: "FrozenHeader", c1: "Y", r2: "FrozenHeader", c2: "Y" }],
-      },
-      {
-        color: "#008000", // Green
-        ranges: [{ r1: "FrozenHeader", c1: "G", r2: "FrozenHeader", c2: "G" }],
-      },
-      {
-        color: "#0000FF", // Blue
-        ranges: [{ r1: "FrozenHeader", c1: "B", r2: "FrozenHeader", c2: "B" }],
-      },
     ],
     range: {
       abilityTable: [
@@ -399,12 +452,7 @@
       ],
       entireAbilityNGearTables: [
         { r1: "AbilTblStartR", c1: 0, r2: "AbilTblEnd_R", c2: "LastC" },
-        {
-          r1: "GearTblHeaderStartR",
-          c1: 0,
-          r2: "GearTblEnd_R",
-          c2: "LastC",
-        },
+        { r1: "GearTblHeaderStartR", c1: 0, r2: "GearTblEnd_R", c2: "LastC" },
       ],
       morphs: [
         { r1: "AbilTblStartR", c1: "Morph1", r2: "AbilTblEnd_R", c2: "Morph1" },
@@ -582,7 +630,7 @@
         },
       ],
     },
-    resolvedRanges: {}, // Populated at runtime by fResolveAllRanges
+    resolvedRanges: {}, // Populated at runtime
     rangeCSList: {
       abilitiesNameID: {
         r1: "TableFirstRow",
@@ -599,85 +647,29 @@
         c2: "Notes",
       },
     },
-    list: {
-      skTyp: ["Atr", "Sk", "Atk", "DMG", "Def", "AR", "Str", "TC"],
-      metaColor: ["R", "O", "Y", "G", "B"],
-      metaFull: [5, 4, 3, 2, 1], // Maximums for each meta color
-      luckBoxMax: 5,
-      actMax: 5,
-      clearAbilityColTags_EmptyString: [
-        "PermMorph1",
-        "Morph1",
-        "Sk1Typ",
-        "Sk1",
-        "On",
-        "Ability",
-        "Condition",
-        "Sk2",
-        "Sk2Typ",
-        "Morph2",
-        "PermMorph2",
-        "Ver",
-        "Notes",
-        "Pic",
-        "Act",
-        "Dur",
-        "Rng",
-        "MetaCost",
-        "Uses",
-        "Regain",
-        "PossNum",
-        "PossName",
-        "PossEnc",
-        "PossCrEa",
-        "PossPerOff",
-        "PossCrTot",
-        "PossAPEa",
-        "PossAPTot",
-      ],
-      clearAbilityColTags_False: [
-        "Sk1ChkBox",
-        "Sk2ChkBox",
-        "PossWorn",
-        "PossIsArtifact",
-      ],
-    },
 
-    // === UI Element References ===
-    tooltipElement: null, // Reference to the #cell-tooltip div
-    modalElement: null, // Reference to #image-modal container
-    modalImageElement: null, // Reference to #modal-image img tag
-    modalCloseBtn: null, // Reference to #modal-close-btn span
-    modalBackdrop: null, // Reference to #modal-backdrop div
-    messageModalOverlay: null, // Reference to #messageModal div
-    messageModalText: null, // Reference to #messageText p tag
-    messageModalCloseButton: null, // Reference to #closeMessageModal button
-    promptModalOverlay: null, // Reference to #promptModal div
-    promptModalText: null, // Reference to #promptText p tag
-    promptYesButton: null, // Reference to #promptYesButton button
-    promptNoButton: null, // Reference to #promptNoButton button
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Start - UI Element Cache
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    messageModalCloseButton: null,
+    messageModalOverlay: null,
+    messageModalText: null,
+    modalBackdrop: null,
+    modalCloseBtn: null,
+    modalElement: null,
+    modalImageElement: null,
+    promptModalOverlay: null,
+    promptModalText: null,
+    promptNoButton: null,
+    promptYesButton: null,
+    tooltipElement: null,
 
-    // === Async/Timing State ===
-    messagePromiseResolve: null, // Function to resolve the message promise
-    promptPromiseResolve: null, // Function to resolve the prompt promise
-    promptPromiseReject: null, // Function to reject the prompt promise
-
-    // === Constants & Settings ===
-    HOVER_DELAY_MS: 300, // Delay before showing tooltip (milliseconds)
-    TOOLTIP_OFFSET_Y: 15, // Tooltip vertical offset from cursor (px)
-    TOOLTIP_OFFSET_X: 10, // Tooltip horizontal offset from cursor (px)
-    ROW_HEIGHT_PX: 20, // Matches grid-auto-rows in style.html, used for sticky offset calculation
-    isDebugMode: true, // Turns console logging on (true) or off (false)
-    GMSCREEN_LOG_MAX_CHARS: 40000, // Max characters for GMScreen log cell
-
-    cachesToLoadOnStartup: [
-      { key: "myCSRaceClassFSData", label: "MyCS/RaceClass" },
-      { key: "myCSListFSData", label: "MyCS/List" },
-      { key: "myKLKnownAbilitiesFSData", label: "MyKL/KnownAbilities" },
-      { key: "dbAbilitiesFSData", label: "DB/Abilities" },
-      { key: "dbCritFSData", label: "DB/Crit" },
-      { key: "dbElementsFSData", label: "DB/Elements" },
-      { key: "dbGearFSData", label: "DB/Gear" },
-    ],
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Start - Promise & Timing State
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    messagePromiseResolve: null,
+    promptPromiseReject: null,
+    promptPromiseResolve: null,
+    tooltipTimeoutId: null,
   };
 </script>
