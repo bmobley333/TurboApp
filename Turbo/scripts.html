@@ -6,6 +6,39 @@
   // Start - Core Rendering Pipeline
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+  /** function fPrecomputeMergedCells
+   * Purpose: Populates a lookup Set (gUI.coveredCellsByMerge) with coordinates of all cells hidden by a merge.
+   * Assumptions: gUI.format.merges is available. Called once before the rendering loop begins.
+   * Notes: This pre-computation allows the rendering loop to skip creating DOM elements that would be hidden.
+   * @param {} - No parameters.
+   * @returns {void}
+   */
+  function fPrecomputeMergedCells() {
+    fMyConsoleLog("⚙️ Pre-computing merged cell locations...");
+    gUI.coveredCellsByMerge = new Set();
+    const merges = gUI.format?.merges || [];
+
+    for (const mergeInfo of merges) {
+      const r = mergeInfo.row;
+      const c = "col" in mergeInfo ? mergeInfo.col : mergeInfo.column; // Handle potential legacy property name
+      const rs = mergeInfo.rowspan;
+      const cs = mergeInfo.colspan;
+
+      // Loop through the area covered by the merge
+      for (let rSub = r; rSub < r + rs; rSub++) {
+        for (let cSub = c; cSub < c + cs; cSub++) {
+          // Add to the set if it's not the top-left anchor cell
+          if (rSub !== r || cSub !== c) {
+            gUI.coveredCellsByMerge.add(`${rSub},${cSub}`);
+          }
+        }
+      }
+    }
+    fMyConsoleLog(
+      `✅ Found ${gUI.coveredCellsByMerge.size} cells covered by merges.`
+    );
+  } // End function fPrecomputeMergedCells
+
   /** function fRenderTurbosFullGrid
    * Purpose: Main controller function to render the entire grid dynamically.
    * Assumptions: Renders cells in chunks using requestAnimationFrame for performance.
@@ -24,6 +57,7 @@
     const numCols = gameArr[0].length;
     fSetGridColumnWidths(grid, format, numCols);
     fSetGridTagsFromHeaders();
+    fPrecomputeMergedCells(); // Pre-calculate which cells to skip
     gUI.grid2D = Array.from(
       {
         length: numRows,
@@ -183,7 +217,7 @@
 
   /** function fAppendRowCells
    * Purpose: Creates all cell elements for a single row and appends them to a document fragment.
-   * Assumptions: This is called within the chunked rendering loop.
+   * Assumptions: This is called within the chunked rendering loop. Skips creating cells hidden by merges.
    * @param {DocumentFragment} fragment - Fragment to append created cells to.
    * @param {number} rowIdx - 0-based index of the row being rendered.
    * @param {any[]} rowData - Array of values for the current row.
@@ -193,6 +227,11 @@
    */
   function fAppendRowCells(fragment, rowIdx, rowData, rowFormat, numCols) {
     for (let c = 0; c < numCols; c++) {
+      // Optimization: Do not create DOM elements for cells hidden by a merge.
+      if (gUI.coveredCellsByMerge.has(`${rowIdx},${c}`)) {
+        gUI.grid2D[rowIdx][c] = null; // Ensure the grid2D slot is null
+        continue;
+      }
       const value = rowData?.[c];
       const cell = fCreateAndFormatCell(rowIdx, c, value, rowFormat);
       gUI.grid2D[rowIdx][c] = cell;
@@ -464,15 +503,35 @@
   // Start - Post-Render Formatting
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+  /** function fRunDeferredFormatting
+   * Purpose: Runs non-critical post-render tasks when the browser is idle.
+   * Assumptions: This function is scheduled by fRunPostRenderFormatting.
+   * Notes: Improves perceived performance by deferring heavy tasks like dropdown creation and overflow checks.
+   * @param {} - No parameters.
+   * @returns {void}
+   */
+  function fRunDeferredFormatting() {
+    fMyConsoleLog("🚀 Applying Deferred Post-Render Formatting...");
+    fApplyInitialCustomDataIndicators();
+    fApplyDropdownsToGrid();
+    fFetchAndApplyAbilityDropdowns();
+    fCalculatesEnc_MR_AP();
+    setTimeout(() => fMarkGridOverflowingCells(), 500); // Keep this delay to ensure layout is final
+    fMyConsoleLog("✅ All Deferred Post-Render Formatting Done!");
+    fHideMessage();
+  } // End function fRunDeferredFormatting
+
   /** function fRunPostRenderFormatting
-   * Purpose: Orchestrates all post-render formatting and setup steps for the grid.
+   * Purpose: Orchestrates all critical post-render formatting and schedules deferred tasks.
    * Assumptions: `gUI.grid2D` is populated with DOM elements.
+   * Notes: This function runs immediately after the initial DOM render to make the grid structurally complete and interactive as quickly as possible.
    * @param {string} [parameter1=""] - Unused placeholder for signature stability.
    * @param {object} [parameter2={}] - Unused options placeholder.
    * @returns {boolean} True on completion.
    */
   function fRunPostRenderFormatting(parameter1 = "", parameter2 = {}) {
-    fMyConsoleLog("🚀 Applying Post-Render Formatting...");
+    fMyConsoleLog("🚀 Applying Critical Post-Render Formatting...");
+    // --- Critical Path: Tasks needed immediately for layout and basic interaction ---
     fApplyGridDynamicMerges();
     fAddGridsHeaderRowButtons();
     fResizeHeaderButtonImages("", { scale: 0.9, minPx: 16, maxPx: 64 });
@@ -481,25 +540,27 @@
     fApplyGridManualColoring();
     fApplySpecialAlignments();
     fSetTurbosGridHeaderRows();
-    fApplyInitialCustomDataIndicators();
-    fApplyDropdownsToGrid();
-    fFetchAndApplyAbilityDropdowns();
     fClearSk1Sk2Checkboxes();
     const gridElement = document.getElementById("grid");
     fAttachGridListeners(gridElement);
     if (fModalElementsAvailable()) {
       fSetupModalListeners();
     }
-    fCalculatesEnc_MR_AP();
-    setTimeout(() => fMarkGridOverflowingCells(), 500);
-    fMyConsoleLog("✅ All Post-Render Formatting Done!");
-    fHideMessage();
+    fMyConsoleLog("✅ Critical Post-Render Formatting Done!");
+
+    // --- Schedule Deferred Tasks ---
+    if (window.requestIdleCallback) {
+      requestIdleCallback(fRunDeferredFormatting);
+    } else {
+      setTimeout(fRunDeferredFormatting, 1); // Fallback for older browsers
+    }
+
     return true;
   } // End function fRunPostRenderFormatting
 
   /** function fApplyGridDynamicMerges
    * Purpose: Applies cell merging based on the `gUI.format.merges` array.
-   * Assumptions: Sets grid-column/row span on the anchor cell and hides covered cells.
+   * Assumptions: Sets grid-column/row span on the anchor cell. Covered cells are no longer hidden here, they are skipped during creation.
    * @param {} - No parameters.
    * @returns {void}
    */
@@ -508,25 +569,20 @@
     const merges = gUI.format?.merges || [];
     for (const mergeInfo of merges) {
       const r = mergeInfo.row;
-      const c = mergeInfo.col;
+      const c = "col" in mergeInfo ? mergeInfo.col : mergeInfo.column;
       const rs = mergeInfo.rowspan;
       const cs = mergeInfo.colspan;
       const anchor = gUI.grid2D?.[r]?.[c];
+
       if (!anchor) {
+        // This can happen if the anchor cell itself is hidden or not rendered.
+        // It's not a critical error, just a warning.
         console.warn(`⚠️ Merge anchor cell not found at [${r},${c}]`);
         continue;
       }
+
       if (cs > 1) anchor.style.gridColumn = `span ${cs}`;
       if (rs > 1) anchor.style.gridRow = `span ${rs}`;
-      for (let rSub = r; rSub < r + rs; rSub++) {
-        for (let cSub = c; cSub < c + cs; cSub++) {
-          if (rSub === r && cSub === c) continue;
-          const cellToHide = gUI.grid2D?.[rSub]?.[cSub];
-          if (cellToHide) {
-            cellToHide.style.display = "none";
-          }
-        }
-      }
     }
     fMyConsoleLog("✅ Merges Applied");
   } // End function fApplyGridDynamicMerges
