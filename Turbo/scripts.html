@@ -610,6 +610,7 @@
   /** function fResizeHeaderButtonImages
    * Purpose: Resizes header button images to a consistent size based on their host cell's height.
    * Assumptions: Header icons use the class 'header-button-img'; merges are already applied.
+   * Notes: Calculates height from in-memory data (gUI.format.merges, gUI.ROW_HEIGHT_PX) to avoid layout thrashing.
    * @param {string} [parameter1=""] - Unused placeholder for signature stability.
    * @param {object} [parameter2={}] - Options object: { scale, minPx, maxPx }.
    * @returns {boolean} True on completion.
@@ -624,19 +625,31 @@
       const maxPx = Math.max(minPx, Number(parameter2?.maxPx) || 64);
       const imgs = document.querySelectorAll("#grid .header-button-img");
       let sized = 0;
+
+      const merges = gUI.format?.merges || [];
+
       imgs.forEach((img) => {
         const cell = img.closest(".cell");
         if (!cell) return;
-        const h = Math.max(
-          1,
-          Math.round(
-            cell.clientHeight ||
-              parseInt(getComputedStyle(cell).height) ||
-              gUI?.ROW_HEIGHT_PX ||
-              20
-          )
+
+        const r = parseInt(cell.dataset.r, 10);
+        const c = parseInt(cell.dataset.c, 10);
+        if (isNaN(r) || isNaN(c)) return;
+
+        let rowspan = 1;
+        const mergeInfo = merges.find(
+          (m) => m.row === r && m.col === c && m.rowspan > 1
         );
-        const target = Math.max(minPx, Math.min(maxPx, Math.round(h * scale)));
+        if (mergeInfo) {
+          rowspan = mergeInfo.rowspan;
+        }
+
+        const calculatedHeight = rowspan * (gUI.ROW_HEIGHT_PX || 20);
+        const target = Math.max(
+          minPx,
+          Math.min(maxPx, Math.round(calculatedHeight * scale))
+        );
+
         img.style.height = `${target}px`;
         img.style.maxHeight = `${target}px`;
         img.style.width = "auto";
@@ -644,8 +657,9 @@
         img.style.margin = "1px auto";
         sized++;
       });
+
       fMyConsoleLog?.(
-        `✅ Resized ${sized} header button image(s) to fit merged cell height (scale=${scale}).`
+        `✅ Resized ${sized} header button image(s) based on calculated cell height (scale=${scale}).`
       );
       return true;
     } catch (e) {
@@ -703,24 +717,21 @@
   /** function fApplyGridManualColoring
    * Purpose: Applies specific font colors to predefined ranges based on configuration.
    * Assumptions: Automatically applies a contrasting color if the font color matches the background. Uses `gUI.fontColorRange`, `gUI.grid2D`, `gUI.format.bg`.
+   * Notes: Reads background color from the in-memory gUI.format.bg object to avoid performance-killing DOM reads.
    * @param {} - No parameters.
    * @returns {void}
    */
   function fApplyGridManualColoring() {
     fMyConsoleLog("🎨 Applying Manual Font Colors...");
     const colorConfigArray = gUI.fontColorRange;
-    if (!Array.isArray(colorConfigArray)) {
-      fMyConsoleLog(
-        "ℹ️ Manual font color configuration (gUI.fontColorRange) is not an array or is missing."
-      );
+    if (!Array.isArray(colorConfigArray) || colorConfigArray.length === 0) {
+      fMyConsoleLog("ℹ️ Manual font color configuration is empty or missing.");
       return;
     }
-    if (colorConfigArray.length === 0) {
-      fMyConsoleLog("ℹ️ Manual font color configuration is empty.");
-      return;
-    }
+
     let colorsAppliedCount = 0;
     let contrastAppliedCount = 0;
+
     colorConfigArray.forEach((colorDef, index) => {
       if (
         !colorDef ||
@@ -733,8 +744,10 @@
         );
         return;
       }
+
       const cssColor = colorDef.color;
       const ranges = colorDef.ranges;
+
       ranges.forEach((range) => {
         if (!fDoesObjectHaveR1C1R2C2Properties(range)) {
           console.warn(
@@ -743,6 +756,7 @@
           );
           return;
         }
+
         const resolved = fConvertsR1C1R2C2TagOrNumToIndices(range);
         if ([resolved.r1, resolved.c1, resolved.r2, resolved.c2].some(isNaN)) {
           console.warn(
@@ -751,40 +765,21 @@
           );
           return;
         }
+
         const rMin = Math.min(resolved.r1, resolved.r2);
         const rMax = Math.max(resolved.r1, resolved.r2);
         const cMin = Math.min(resolved.c1, resolved.c2);
         const cMax = Math.max(resolved.c1, resolved.c2);
+
         for (let r = rMin; r <= rMax; r++) {
           for (let c = cMin; c <= cMax; c++) {
             const cell = gUI.grid2D?.[r]?.[c];
             if (!cell || cell.style.display === "none") continue;
-            let cellBgColor = window.getComputedStyle(cell).backgroundColor;
-            if (cellBgColor && cellBgColor.startsWith("rgb")) {
-              try {
-                const rgb = cellBgColor.match(/\d+/g).map(Number);
-                cellBgColor =
-                  "#" +
-                  rgb
-                    .map((x) => {
-                      const hex = x.toString(16);
-                      return hex.length === 1 ? "0" + hex : hex;
-                    })
-                    .join("");
-              } catch (e) {
-                cellBgColor =
-                  cell.style.backgroundColor ||
-                  gUI.format?.bg?.[r]?.[c] ||
-                  "#ffffff";
-              }
-            } else {
-              cellBgColor =
-                cell.style.backgroundColor ||
-                gUI.format?.bg?.[r]?.[c] ||
-                "#ffffff";
-            }
+
+            const cellBgColor = gUI.format?.bg?.[r]?.[c] || "#ffffff";
             const cleanBgColor = cellBgColor.toLowerCase();
             const intendedFontColor = cssColor.toLowerCase();
+
             if (intendedFontColor === cleanBgColor) {
               cell.style.color = fGetContrastColor(cleanBgColor);
               contrastAppliedCount++;
@@ -796,6 +791,7 @@
         }
       });
     });
+
     fMyConsoleLog(
       `✅ Manual Colors Applied (${colorsAppliedCount} direct, ${contrastAppliedCount} contrast).`
     );
