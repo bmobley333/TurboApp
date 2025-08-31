@@ -386,7 +386,7 @@
 
   /** function fCheckIfEditable
    * Purpose: Determines if a cell should be contentEditable.
-   * Assumptions: gUI.headerButtonCoords has been populated. This is the primary fix for the vanishing button bug.
+   * Assumptions: Cells in defined tables are handled by dblclick; only generic white cells are editable on load.
    * @param {number} r - 0-based row index of the cell.
    * @param {number} c - 0-based column index of the cell.
    * @param {string | null} bgColor - Background color hex string or null.
@@ -397,15 +397,14 @@
     if (gUI.headerButtonCoords.has(`${r},${c}`)) {
       return false;
     }
-    const isMetaRange =
-      gUI.resolvedRanges?.meta &&
-      fIsCellInRangeArray(r, c, [gUI.resolvedRanges.meta]);
-    const isMetaChannelRange =
-      gUI.resolvedRanges?.metaChannel &&
-      fIsCellInRangeArray(r, c, [gUI.resolvedRanges.metaChannel]);
-    if (isMetaRange || isMetaChannelRange) {
-      return true;
+
+    // If a cell is part of any of our special tables, it should NOT be editable by default.
+    // Our dblclick handler will make it editable on demand.
+    if (fIsCellInAnyDefinedTable(r, c)) {
+      return false;
     }
+
+    // This part of the logic remains for generic cells (like user notes)
     const isWhiteBg =
       !bgColor || bgColor.toLowerCase() === "#ffffff" || bgColor === "white";
     return isWhiteBg && !isCheckbox;
@@ -1603,15 +1602,21 @@
    */
   async function fHandleGridDblClick(event) {
     const cell = event.target.closest(".cell");
-    if (!cell) return;
+    if (!cell || cell.contentEditable === "true") return;
+
     const r = parseInt(cell.dataset.r, 10);
     const c = parseInt(cell.dataset.c, 10);
     if (isNaN(r) || isNaN(c)) return;
 
-    // Logic for Ability/Gear table cells
-    if (
-      fIsCellInRangeArray(r, c, gUI.resolvedRanges.entireAbilityNGearTables)
-    ) {
+    let tooltipKey = null;
+    const isAbilityGearTable = fIsCellInRangeArray(
+      r,
+      c,
+      gUI.resolvedRanges.entireAbilityNGearTables
+    );
+
+    // Determine the correct key for the tooltip and validation configs
+    if (isAbilityGearTable) {
       const editableCols = [
         "Ability",
         "Sk1Typ",
@@ -1622,187 +1627,72 @@
         "Dur",
         "Rng",
         "MetaCost",
+        "PossNum",
       ];
-
-      const allTagsForCol = [];
-      for (const tagName in gUI.colTag) {
-        if (gUI.colTag[tagName] === c) {
-          allTagsForCol.push(tagName);
-        }
-      }
-
-      const primaryTag = editableCols.find((tag) =>
-        allTagsForCol.includes(tag)
-      );
-      if (!primaryTag) {
-        return;
-      }
-
-      event.preventDefault();
-      if (primaryTag === "Ability") {
-        fMyConsoleLog(`⚡ Edit Name Prompt triggered for cell [${r}, ${c}]`);
-        const currentName = String(gUI.arr[r]?.[c] ?? "")
-          .replace(/^⚡\s*/, "")
-          .trim();
-        try {
-          const result = await fShowInputPrompt(
-            "Enter new custom ability/gear name:",
-            currentName
-          );
-          fHandleAbilityNameEdit(r, c, result);
-        } catch (error) {
-          console.error("Error showing input prompt:", error);
-        }
-      } else {
-        const abilityName = fGetGridValue(r, "Ability");
-        if (!String(abilityName || "").trim()) {
-          fShowMessage("⚠️ Empty ability name. Please edit a named ability.");
-          return;
-        }
-        fMyConsoleLog(
-          `⚡ Edit Mode triggered for ${primaryTag} cell [${r}, ${c}]`
-        );
-        fTransformAbilityCellToInput(cell);
-        fShowValidationTooltip(cell, primaryTag, event);
-      }
+      tooltipKey = editableCols.find((tag) => gUI.colTag[tag] === c);
     } else if (
       r === tag.cs.game.r.LuckPlus.index &&
       c === tag.cs.game.c.LuckBox.index
     ) {
-      // **NEW**: Logic for the +Luck cell
-      event.preventDefault();
-      fTransformAbilityCellToInput(cell);
-      fShowValidationTooltip(cell, "luckPlus", event);
+      tooltipKey = "luckPlus";
+    } else if (
+      r === tag.cs.game.r.ActPlus.index &&
+      c === tag.cs.game.c.ActTot.index
+    ) {
+      tooltipKey = "actPlus";
+    } else if (
+      r === tag.cs.game.r.VitTbl.index &&
+      c === tag.cs.game.c.vitPlus.index
+    ) {
+      tooltipKey = "vitMaxPlus";
+    } else if (fIsCellInRangeArray(r, c, [gUI.resolvedRanges?.vit1stTo3rd])) {
+      tooltipKey = "wounds";
+    } else if (
+      r === tag.cs.game.r.GearPlusMR.index &&
+      c === tag.cs.game.c.GearPlusMR.index
+    ) {
+      tooltipKey = "gearPlusMR";
+    } else if (
+      r === tag.cs.game.r.GearPlusCarry.index &&
+      c === tag.cs.game.c.GearPlusCarry.index
+    ) {
+      tooltipKey = "gearPlusCarry";
+    } else if (fIsCellInRangeArray(r, c, [gUI.resolvedRanges?.meta])) {
+      tooltipKey = "meta";
+    } else if (fIsCellInRangeArray(r, c, [gUI.resolvedRanges?.metaChannel])) {
+      tooltipKey = "metaChannel";
     }
+
+    if (!tooltipKey) return;
+
+    event.preventDefault();
+
+    if (tooltipKey === "Ability") {
+      fMyConsoleLog(`⚡ Edit Name Prompt triggered for cell [${r}, ${c}]`);
+      const currentName = String(gUI.arr[r]?.[c] ?? "")
+        .replace(/^⚡\s*/, "")
+        .trim();
+      try {
+        const result = await fShowInputPrompt(
+          "Enter new custom ability/gear name:",
+          currentName
+        );
+        fHandleAbilityNameEdit(r, c, result);
+      } catch (error) {
+        console.error("Error showing input prompt:", error);
+      }
+      return;
+    }
+
+    const abilityName = fGetGridValue(r, "Ability");
+    if (isAbilityGearTable && !String(abilityName || "").trim()) {
+      fShowMessage("⚠️ Empty ability name. Please edit a named ability.");
+      return;
+    }
+
+    fTransformAbilityCellToInput(cell);
+    fShowValidationTooltip(cell, tooltipKey, event);
   } // End function fHandleGridDblClick
-
-  /** function fHandleMetaCellEdit
-   * Purpose: Handles saving and validating an edit within a Meta or Meta Channel cell.
-   * Assumptions: Helper for fHandleGridCellEdit. Posts an alert to the sidebar on change.
-   * @param {number} r - The 0-based row index.
-   * @param {number} c - The 0-based column index.
-   * @param {string} newValue - The new text content of the cell.
-   * @param {any} oldValue - The original value from the data model.
-   * @returns {Promise<void>}
-   */
-  async function fHandleMetaCellEdit(r, c, newValue, oldValue) {
-    const trimmedNewValue = newValue.trim();
-    let finalValueToStore = oldValue;
-    let isValidInput = false;
-
-    if (trimmedNewValue === "") {
-      finalValueToStore = "";
-      isValidInput = true;
-    } else {
-      const parsedNum = parseInt(trimmedNewValue, 10);
-      if (
-        !isNaN(parsedNum) &&
-        parsedNum > 0 &&
-        String(parsedNum) === trimmedNewValue
-      ) {
-        if (fIsCellInRangeArray(r, c, [gUI.resolvedRanges?.meta])) {
-          const colorIndex = gUI.list.metaColor.findIndex(
-            (colorTag) => tag.cs.game.c[colorTag]?.index === c
-          );
-          const maxAllowed = gUI.list.metaFull?.[colorIndex];
-          if (typeof maxAllowed === "number" && parsedNum <= maxAllowed) {
-            finalValueToStore = parsedNum;
-            isValidInput = true;
-          }
-        } else {
-          // It's a Meta Channel cell
-          finalValueToStore = parsedNum;
-          isValidInput = true;
-        }
-      }
-    }
-
-    if (isValidInput && String(gUI.arr[r][c]) !== String(finalValueToStore)) {
-      gUI.arr[r][c] = finalValueToStore;
-      fUpdateCustomDataIndicator(r, c);
-      fHandleAutoSaveTextToFirestore();
-      const metaType = fIsCellInRangeArray(r, c, [gUI.resolvedRanges?.meta])
-        ? "Meta Color"
-        : "Meta Channel Color";
-      const colorTag =
-        gUI.list.metaColor.find(
-          (colorTag) => tag.cs.game.c[colorTag]?.index === c
-        ) || `Col${c}`;
-      const oldValueDisp =
-        oldValue === "" || oldValue === 0 || oldValue === null
-          ? "0"
-          : String(oldValue);
-      const newValueDisp =
-        finalValueToStore === "" || finalValueToStore === 0
-          ? "0"
-          : String(finalValueToStore);
-
-      const alertMsgHtml = `⚠️ <span class="red-bold">Alert:</span> ${metaType} ${colorTag} was changed from ${oldValueDisp} to ${newValueDisp}`;
-      const alertMsgText = `⚠️ Alert: ${metaType} ${colorTag} was changed from ${oldValueDisp} to ${newValueDisp}`;
-      fPostToSidebar(alertMsgHtml, alertMsgText);
-      fShowSidebar();
-      setTimeout(() => fSendLogToGMScreenAndPS(), 0);
-    }
-
-    fSetGridValue(r, c, gUI.arr[r][c]); // Re-sets the DOM to the final value (either new or reverted)
-  } // End function fHandleMetaCellEdit
-
-  /** function fHandleGearStatCellEdit
-   * Purpose: Handles saving an edit within a gear input cell and triggering recalculations.
-   * Assumptions: Helper for fHandleGridCellEdit.
-   * @param {number} r - The 0-based row index.
-   * @param {number} c - The 0-based column index.
-   * @param {string} newValue - The new text content of the cell.
-   * @param {any} oldValue - The original value from the data model.
-   * @returns {Promise<void>}
-   */
-  async function fHandleGearStatCellEdit(r, c, newValue, oldValue) {
-    const validatedValue = await fCalcGearLine(
-      r,
-      c,
-      newValue,
-      String(oldValue ?? "")
-    );
-    if (validatedValue !== null) {
-      gUI.arr[r][c] = validatedValue; // fCalcGearLine already calls fSetGridValue and save
-    }
-    // If validation fails, fCalcGearLine handles reverting the DOM.
-  } // End function fHandleGearStatCellEdit
-
-  /** function fHandleVitalityCellEdit
-   * Purpose: Handles saving an edit within a vitality cell and triggering recalculations.
-   * Assumptions: Helper for fHandleGridCellEdit.
-   * @param {number} r - The 0-based row index.
-   * @param {number} c - The 0-based column index.
-   * @param {string} newValue - The new text content of the cell.
-   * @param {any} oldValue - The original value from the data model.
-   * @returns {Promise<void>}
-   */
-  async function fHandleVitalityCellEdit(r, c, newValue, oldValue) {
-    const trimmedValue = newValue.trim();
-    let finalValue = oldValue;
-    let isValid = false;
-
-    if (trimmedValue === "") {
-      finalValue = ""; // Treat blank as 0
-      isValid = true;
-    } else {
-      const parsedNum = parseInt(trimmedValue, 10);
-      if (!isNaN(parsedNum) && String(parsedNum) === trimmedValue) {
-        finalValue = parsedNum;
-        isValid = true;
-      }
-    }
-
-    if (isValid) {
-      gUI.arr[r][c] = finalValue;
-      fUpdateCustomDataIndicator(r, c);
-      await fCalc_VitMaxNowPerc();
-      fHandleAutoSaveTextToFirestore();
-    } else {
-      fRevertCellDOM(r, c, oldValue);
-    }
-  } // End function fHandleVitalityCellEdit
 
   /** function fHandleGenericCellEdit
    * Purpose: Handles saving a generic editable cell.
@@ -1818,202 +1708,6 @@
     fUpdateCustomDataIndicator(r, c);
     fHandleAutoSaveTextToFirestore();
   } // End function fHandleGenericCellEdit
-
-  /** function fHandleMrCarryCellEdit
-   * Purpose: Handles saving and validating an edit for +MR or +Carry cells.
-   * Assumptions: Helper for fHandleGridCellEdit. Triggers MR/Enc recalculation.
-   * @param {number} r - The 0-based row index.
-   * @param {number} c - The 0-based column index.
-   * @param {string} newValue - The new text content of the cell.
-   * @param {any} oldValue - The original value from the data model.
-   * @returns {Promise<void>}
-   */
-  async function fHandleMrCarryCellEdit(r, c, newValue, oldValue) {
-    const trimmedValue = newValue.trim();
-    let finalValue = oldValue;
-    let isValid = false;
-
-    if (trimmedValue === "") {
-      finalValue = ""; // Treat blank as 0
-      isValid = true;
-    } else {
-      const parsedNum = parseInt(trimmedValue, 10);
-      if (!isNaN(parsedNum) && String(parsedNum) === trimmedValue) {
-        finalValue = parsedNum;
-        isValid = true;
-      }
-    }
-
-    if (isValid) {
-      gUI.arr[r][c] = finalValue;
-      fUpdateCustomDataIndicator(r, c);
-      fHandleAutoSaveTextToFirestore();
-      await fCalculatesEnc_MR_AP();
-    } else {
-      fRevertCellDOM(r, c, oldValue);
-    }
-  } // End function fHandleMrCarryCellEdit
-
-  /** function fHandleActCellEdit
-   * Purpose: Handles saving/validating an edit for the +Act cell and recalculating the main Act Total value.
-   * Assumptions: Helper for fHandleGridCellEdit.
-   * @param {number} r - The 0-based row index.
-   * @param {number} c - The 0-based column index.
-   * @param {string} newValue - The new text content of the cell.
-   * @param {any} oldValue - The original value from the data model.
-   * @returns {Promise<void>}
-   */
-  async function fHandleActCellEdit(r, c, newValue, oldValue) {
-    const trimmedValue = newValue.trim();
-    let finalBonus = oldValue;
-    let isValid = false;
-
-    if (trimmedValue === "") {
-      finalBonus = ""; // Store as blank, but calculate as 0
-      isValid = true;
-    } else {
-      const parsedNum = parseInt(trimmedValue, 10);
-      if (!isNaN(parsedNum) && String(parsedNum) === trimmedValue) {
-        finalBonus = parsedNum;
-        isValid = true;
-      }
-    }
-
-    if (isValid) {
-      const oldBonusNum = Number(oldValue) || 0;
-      const newBonusNum = Number(finalBonus) || 0;
-      const delta = newBonusNum - oldBonusNum;
-
-      const currentAct = fGetGridValue("Act", "ActTot", true);
-      if (!isNaN(currentAct)) {
-        const newActTotal = currentAct + delta;
-        fSetGridValue("Act", "ActTot", newActTotal);
-      }
-
-      gUI.arr[r][c] = finalBonus;
-      fUpdateCustomDataIndicator(r, c);
-      fHandleAutoSaveTextToFirestore();
-    } else {
-      fRevertCellDOM(r, c, oldValue);
-    }
-  } // End function fHandleActCellEdit
-
-  /** function fHandleAbilityStatCellEdit
-   * Purpose: Validates and saves an edit within a double-clicked ability/gear stat cell.
-   * Assumptions: Helper for fHandleGridCellEdit. The gUI.validationLists object is populated.
-   * Notes: If the edit is valid, it flags the ability as custom (⚡).
-   * @param {number} r - The 0-based row index.
-   * @param {number} c - The 0-based column index.
-   * @param {string} newValue - The new text content of the cell.
-   * @param {any} oldValue - The original value from the data model.
-   * @returns {Promise<void>}
-   */
-  async function fHandleAbilityStatCellEdit(r, c, newValue, oldValue) {
-    const funcName = "fHandleAbilityStatCellEdit";
-    const trimmedNewValue = newValue.trim();
-
-    const editableCols = [
-      "Sk1Typ",
-      "Sk1",
-      "Sk2Typ",
-      "Sk2",
-      "Act",
-      "Dur",
-      "Rng",
-      "MetaCost",
-    ];
-    const allTagsForCol = [];
-    for (const tagName in gUI.colTag) {
-      if (gUI.colTag[tagName] === c) {
-        allTagsForCol.push(tagName);
-      }
-    }
-    const colTag = editableCols.find((tag) => allTagsForCol.includes(tag));
-
-    let isValid = false;
-    let finalValueToStore = oldValue;
-
-    if (!colTag) {
-      console.error(
-        `${funcName}: Could not resolve an editable column tag for index ${c}.`
-      );
-      fRevertCellDOM(r, c, oldValue);
-      return;
-    }
-
-    // Allow blanking out any field
-    if (trimmedNewValue === "") {
-      isValid = true;
-      finalValueToStore = "";
-    } else if (colTag === "Sk1" || colTag === "Sk2") {
-      const numValue = parseInt(trimmedNewValue, 10);
-      if (
-        !isNaN(numValue) &&
-        numValue >= 1 &&
-        String(numValue) === trimmedNewValue
-      ) {
-        isValid = true;
-        finalValueToStore = numValue;
-      }
-    } else {
-      const validationListKey = colTag === "MetaCost" ? "Meta" : colTag;
-      const validationList = gUI.validationLists?.[validationListKey] || [];
-      const matchedValue = validationList.find(
-        (validOption) =>
-          String(validOption).toLowerCase() === trimmedNewValue.toLowerCase()
-      );
-
-      if (matchedValue !== undefined) {
-        isValid = true;
-        finalValueToStore = matchedValue;
-      } else if (colTag === "Rng") {
-        // Special case for Rng: any integer >= 1 is also valid
-        const numValue = parseInt(trimmedNewValue, 10);
-        if (
-          !isNaN(numValue) &&
-          numValue >= 1 &&
-          String(numValue) === trimmedNewValue
-        ) {
-          isValid = true;
-          finalValueToStore = numValue;
-        }
-      }
-    }
-
-    if (isValid) {
-      fMyConsoleLog(
-        `   -> Valid edit for ${colTag} at [${r}, ${c}]. New value: "${finalValueToStore}"`
-      );
-      gUI.arr[r][c] = finalValueToStore;
-
-      // Auto-correct the casing in the DOM
-      const cell = gUI.grid2D?.[r]?.[c];
-      if (cell && cell.textContent !== String(finalValueToStore ?? "")) {
-        cell.textContent = finalValueToStore ?? "";
-      }
-
-      fFlagAbilityAsCustom(r);
-      fHandleAutoSaveTextToFirestore();
-    } else {
-      const validationListKey = colTag === "MetaCost" ? "Meta" : colTag;
-      const validationList = gUI.validationLists?.[validationListKey] || [];
-      let errorMsg = `❌ Invalid input for ${colTag}.`;
-      if (colTag === "Sk1" || colTag === "Sk2") {
-        errorMsg +=
-          "<br><br>Allowed: Blank or an integer greater than or equal to 1.";
-      } else if (validationList.length > 0) {
-        errorMsg += `<br><br>Allowed: Blank, ${validationList.join(", ")}`;
-        if (colTag === "Rng") {
-          errorMsg += ", or any integer greater than or equal to 1.";
-        }
-      }
-      fMyConsoleLog(
-        `   -> Invalid edit for ${colTag} at [${r}, ${c}]. Value: "${newValue}". Reverting.`
-      );
-      await fShowMessage(errorMsg);
-      fRevertCellDOM(r, c, oldValue);
-    }
-  } // End function fHandleAbilityStatCellEdit
 
   /** function fCreateMorphCaseMap
    * Purpose: Creates a lookup map for correct morph component capitalization.
@@ -2175,84 +1869,74 @@
 
     const oldValue = gUI.arr[r]?.[c] ?? "";
     const newValue = cellDiv.textContent ?? "";
-    if (String(newValue) === String(oldValue)) {
-      return; // No change
-    }
 
-    const allTagsForCol = [];
-    for (const tagName in gUI.colTag) {
-      if (gUI.colTag[tagName] === c) {
-        allTagsForCol.push(tagName);
+    // The 'blur' event fires even if there's no change, so we must reset contentEditable.
+    // However, we only process a change if the value is different.
+    if (String(newValue) !== String(oldValue)) {
+      const colTag = Object.keys(gUI.colTag).find(
+        (tag) => gUI.colTag[tag] === c
+      );
+      const isAbilityGearTable = fIsCellInRangeArray(
+        r,
+        c,
+        gUI.resolvedRanges.entireAbilityNGearTables
+      );
+
+      let config = null;
+      if (isAbilityGearTable) {
+        if (["Sk1", "Sk2"].includes(colTag))
+          config = gUI.validationConfig.abilitySk;
+        else if (colTag === "Rng") config = gUI.validationConfig.abilityRng;
+        else if (colTag === "PossNum") config = gUI.validationConfig.possNum;
+        else if (
+          ["Sk1Typ", "Sk2Typ", "Act", "Dur", "MetaCost"].includes(colTag)
+        ) {
+          config = {
+            ...gUI.validationConfig.abilityLookup,
+            listKey: colTag === "MetaCost" ? "Meta" : colTag,
+          };
+        } else if (
+          ["PermMorph1", "Morph1", "PermMorph2", "Morph2"].includes(colTag)
+        ) {
+          await fHandleMorphCellEdit(r, c, newValue, oldValue);
+        }
+      } else if (
+        r === tag.cs.game.r.LuckPlus.index &&
+        c === tag.cs.game.c.LuckBox.index
+      )
+        config = gUI.validationConfig.luckPlus;
+      else if (
+        r === tag.cs.game.r.ActPlus.index &&
+        c === tag.cs.game.c.ActTot.index
+      )
+        config = gUI.validationConfig.actPlus;
+      else if (
+        (r === tag.cs.game.r.VitTbl.index &&
+          c === tag.cs.game.c.vitPlus.index) ||
+        fIsCellInRangeArray(r, c, [gUI.resolvedRanges?.vit1stTo3rd])
+      )
+        config = gUI.validationConfig.vitRecalc;
+      else if (
+        (r === tag.cs.game.r.GearPlusMR.index &&
+          c === tag.cs.game.c.GearPlusMR.index) ||
+        (r === tag.cs.game.r.GearPlusCarry.index &&
+          c === tag.cs.game.c.GearPlusCarry.index)
+      )
+        config = gUI.validationConfig.mrCarry;
+      else if (fIsCellInRangeArray(r, c, [gUI.resolvedRanges?.meta]))
+        config = gUI.validationConfig.meta;
+      else if (fIsCellInRangeArray(r, c, [gUI.resolvedRanges?.metaChannel]))
+        config = gUI.validationConfig.metaChannel;
+
+      if (config) {
+        await fValidateAndProcessCellEdit(r, c, newValue, oldValue, config);
+      } else {
+        await fHandleGenericCellEdit(r, c, newValue, oldValue);
       }
     }
 
-    const abilityStatCols = [
-      "Sk1Typ",
-      "Sk1",
-      "Sk2Typ",
-      "Sk2",
-      "Act",
-      "Dur",
-      "Rng",
-      "MetaCost",
-    ];
-    const isAbilityStatCell =
-      abilityStatCols.some((tag) => allTagsForCol.includes(tag)) &&
-      fIsCellInRangeArray(r, c, gUI.resolvedRanges.entireAbilityNGearTables);
-
-    const morphCols = ["PermMorph1", "Morph1", "PermMorph2", "Morph2"];
-    const isMorphCell =
-      morphCols.some((tag) => allTagsForCol.includes(tag)) &&
-      fIsCellInRangeArray(r, c, gUI.resolvedRanges.entireAbilityNGearTables);
-
-    const isMetaCell = fIsCellInRangeArray(r, c, [
-      gUI.resolvedRanges?.meta,
-      gUI.resolvedRanges?.metaChannel,
-    ]);
-    const isGearInputCell = fIsCellInRangeArray(r, c, [
-      ...(gUI.resolvedRanges?.gearNumCol || []),
-      ...(gUI.resolvedRanges?.gearPercOffCol || []),
-    ]);
-    const isVitalityRecalcCell = fIsCellInRangeArray(r, c, [
-      gUI.resolvedRanges?.vitMaxPlus,
-      gUI.resolvedRanges?.vit1stTo3rd,
-    ]);
-    const isMrCarryCell =
-      (r === tag.cs.game.r.GearPlusMR.index &&
-        c === tag.cs.game.c.GearPlusMR.index) ||
-      (r === tag.cs.game.r.GearPlusCarry.index &&
-        c === tag.cs.game.c.GearPlusCarry.index);
-    const isLuckPlusCell =
-      r === tag.cs.game.r.LuckPlus.index && c === tag.cs.game.c.LuckBox.index;
-    const isActPlusCell =
-      r === tag.cs.game.r.ActPlus.index && c === tag.cs.game.c.ActTot.index;
-
-    if (isLuckPlusCell) {
-      // **NEW**: Route +Luck edits to the new central validator
-      await fValidateAndProcessCellEdit(
-        r,
-        c,
-        newValue,
-        oldValue,
-        gUI.validationConfig.luckPlus
-      );
-    } else if (isMorphCell) {
-      await fHandleMorphCellEdit(r, c, newValue, oldValue);
-    } else if (isAbilityStatCell) {
-      await fHandleAbilityStatCellEdit(r, c, newValue, oldValue);
-    } else if (isMetaCell) {
-      await fHandleMetaCellEdit(r, c, newValue, oldValue);
-    } else if (isGearInputCell) {
-      await fHandleGearStatCellEdit(r, c, newValue, oldValue);
-    } else if (isVitalityRecalcCell) {
-      await fHandleVitalityCellEdit(r, c, newValue, oldValue);
-    } else if (isMrCarryCell) {
-      await fHandleMrCarryCellEdit(r, c, newValue, oldValue);
-    } else if (isActPlusCell) {
-      await fHandleActCellEdit(r, c, newValue, oldValue);
-    } else {
-      await fHandleGenericCellEdit(r, c, newValue, oldValue);
-    }
+    // **FIX:** Reset contentEditable to false after the edit is processed.
+    cellDiv.contentEditable = false;
   } // End function fHandleGridCellEdit
 
   /** function fHandleGridKeyDown
@@ -4202,7 +3886,6 @@
 
     const tooltipText = gUI.tooltipConfig?.[cellType];
     if (!tooltipText) {
-      // No tooltip configured for this cell type, which is fine.
       return;
     }
 
@@ -4218,12 +3901,11 @@
       gUI.isValidationTooltipActive = false; // Unpin
     };
 
-    // Delay positioning to ensure DOM is ready
     setTimeout(() => {
       if (document.activeElement !== cell) {
         tooltip.style.display = "none";
         tooltip.style.visibility = "visible";
-        gUI.isValidationTooltipActive = false; // Unpin if focus already lost
+        gUI.isValidationTooltipActive = false;
         return;
       }
       fConfineNotesTooltipBox(tooltip, event);

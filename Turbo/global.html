@@ -647,6 +647,11 @@
         c2: "Notes",
       },
     },
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Start - Validation/Tooltip
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
     validationConfig: {
       luckPlus: {
         type: "integer",
@@ -658,7 +663,6 @@
           const oldBonusNum = Number(oldValue) || 0;
           const newBonusNum = Number(newValue) || 0;
           const delta = newBonusNum - oldBonusNum;
-
           const currentLuck = fGetGridValue("LuckBox", "LuckBox", true);
           if (!isNaN(currentLuck)) {
             const newLuckTotal = currentLuck + delta;
@@ -666,9 +670,116 @@
           }
         },
       },
+      actPlus: {
+        type: "integer",
+        allowBlank: true,
+        errorMessage:
+          "❌ Invalid input for +Act. Value must be blank or a whole number.",
+        onSuccess: async (r, c, newValue, oldValue) => {
+          const oldBonusNum = Number(oldValue) || 0;
+          const newBonusNum = Number(newValue) || 0;
+          const delta = newBonusNum - oldBonusNum;
+          const currentAct = fGetGridValue("Act", "ActTot", true);
+          if (!isNaN(currentAct)) {
+            const newActTotal = currentAct + delta;
+            fSetGridValue("Act", "ActTot", newActTotal);
+          }
+        },
+      },
+      vitRecalc: {
+        type: "integer",
+        allowBlank: true,
+        errorMessage:
+          "❌ Invalid input. Value must be blank or a whole number.",
+        onSuccess: async () => {
+          await fCalc_VitMaxNowPerc();
+        },
+      },
+      mrCarry: {
+        type: "integer",
+        allowBlank: true,
+        errorMessage:
+          "❌ Invalid input. Value must be blank or a whole number.",
+        onSuccess: async () => {
+          await fCalculatesEnc_MR_AP();
+        },
+      },
+      abilitySk: {
+        type: "integer",
+        allowBlank: true,
+        min: 1,
+        errorMessage:
+          "❌ Invalid Skill value. Must be blank or an integer ≥ 1.",
+        onSuccess: (r) => fFlagAbilityAsCustom(r),
+      },
+      abilityLookup: {
+        type: "lookup",
+        allowBlank: true,
+        errorMessage:
+          "❌ Invalid input. Please enter a valid option for this column.", // Generic, can be overridden
+        onSuccess: (r) => fFlagAbilityAsCustom(r),
+      },
+      abilityRng: {
+        type: "lookupOrInteger",
+        allowBlank: true,
+        min: 1,
+        listKey: "Rng",
+        errorMessage:
+          "❌ Invalid Range. Must be a valid keyword (e.g., Touch), blank, or an integer ≥ 1.",
+        onSuccess: (r) => fFlagAbilityAsCustom(r),
+      },
+      possNum: {
+        type: "integer",
+        allowBlank: false,
+        min: 0,
+        errorMessage: "❌ Invalid input for #. Must be a whole number ≥ 0.",
+        onSuccess: async (r, c, newValue, oldValue) => {
+          await fCalcGearLine(r, c, newValue, oldValue);
+        },
+      },
+      meta: {
+        type: "integer",
+        allowBlank: true,
+        min: 1,
+        errorMessage:
+          "❌ Invalid input. Meta must be blank or a whole number ≥ 1.",
+        onSuccess: async (r, c, newValue, oldValue) => {
+          const colorIndex = gUI.list.metaColor.findIndex(
+            (colorTag) => tag.cs.game.c[colorTag]?.index === c
+          );
+          const maxAllowed = gUI.list.metaFull?.[colorIndex];
+          if (typeof maxAllowed === "number" && Number(newValue) > maxAllowed) {
+            fSetGridValue(r, c, maxAllowed); // Cap the value
+            await fShowMessage(`⚠️ Meta value capped at max of ${maxAllowed}.`);
+          }
+        },
+      },
+      metaChannel: {
+        type: "integer",
+        allowBlank: true,
+        min: 1,
+        errorMessage:
+          "❌ Invalid input. Channeled Meta must be blank or a whole number ≥ 1.",
+      },
     },
     tooltipConfig: {
-      luckPlus: "Enter a whole number greater than or equal to 0.",
+      luckPlus: "Enter a whole number ≥ 0.",
+      actPlus: "Enter any whole number (positive or negative).",
+      vitMaxPlus: "Enter any whole number to modify Max Vitality.",
+      wounds: "Enter the total wounds for this degree (a whole number ≥ 0).",
+      gearPlusMR: "Enter a whole number to modify Movement Rate.",
+      gearPlusCarry: "Enter a whole number to modify Carry Capacity.",
+      PossNum: "Enter the quantity of this item (a whole number ≥ 0).",
+      meta: "Enter a whole number from 1 to this color's max.",
+      metaChannel: "Enter any whole number ≥ 1.",
+      Sk1Typ: "Enter a valid Skill Type (e.g., Sk, Atk, Def).",
+      Sk1: "Enter the base Skill value (an integer ≥ 1).",
+      Sk2Typ: "Enter a valid Skill Type (e.g., Sk, Atk, Def).",
+      Sk2: "Enter the base Skill value (an integer ≥ 1).",
+      Act: "Enter the Action Point cost from the list.",
+      Dur: "Enter the Duration from the list (e.g., i, p, 1, 2).",
+      Rng: "Enter the Range from the list (e.g., Touch) or an integer ≥ 1.",
+      MetaCost: "Enter the Meta cost from the list (R, O, Y, G, B).",
     },
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

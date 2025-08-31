@@ -28,14 +28,12 @@
     let isValid = false;
     let finalValueToStore = oldValue;
 
-    // Step 1: Handle blank values
     if (trimmedValue === "") {
       if (config.allowBlank) {
         isValid = true;
-        finalValueToStore = ""; // Standardize blank to empty string
+        finalValueToStore = "";
       }
     } else {
-      // Step 2: Perform type-specific validation
       switch (config.type) {
         case "integer":
           const num = parseInt(trimmedValue, 10);
@@ -48,26 +46,43 @@
             }
           }
           break;
-        // More types ('lookup', 'morph', etc.) will be added in future phases
+
+        case "lookup":
+        case "lookupOrInteger":
+          const list = gUI.validationLists?.[config.listKey] || [];
+          const matchedValue = list.find(
+            (item) => String(item).toLowerCase() === trimmedValue.toLowerCase()
+          );
+          if (matchedValue !== undefined) {
+            isValid = true;
+            finalValueToStore = matchedValue; // Use correct casing
+          } else if (config.type === "lookupOrInteger") {
+            const numInt = parseInt(trimmedValue, 10);
+            if (!isNaN(numInt) && String(numInt) === trimmedValue) {
+              const minInt = config.min ?? -Infinity;
+              const maxInt = config.max ?? Infinity;
+              if (numInt >= minInt && numInt <= maxInt) {
+                isValid = true;
+                finalValueToStore = numInt;
+              }
+            }
+          }
+          break;
       }
     }
 
-    // Step 3: Process the result
     if (isValid) {
       if (String(gUI.arr[r][c]) !== String(finalValueToStore)) {
         gUI.arr[r][c] = finalValueToStore;
         fMyConsoleLog(
           `✅ ${funcName}: Valid edit for [${r}, ${c}]. New value: "${finalValueToStore}".`
         );
-
-        // Call the success callback if it exists
         if (typeof config.onSuccess === "function") {
           await config.onSuccess(r, c, finalValueToStore, oldValue);
         }
         fUpdateCustomDataIndicator(r, c);
         fHandleAutoSaveTextToFirestore();
       }
-      // Re-set the DOM to ensure formatting and capitalization are correct
       fSetGridValue(r, c, gUI.arr[r][c]);
     } else {
       fMyConsoleLog(
