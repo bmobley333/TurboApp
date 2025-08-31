@@ -1667,6 +1667,7 @@
 
     event.preventDefault();
 
+    // Special handling for the Ability name prompt
     if (tooltipKey === "Ability") {
       fMyConsoleLog(`⚡ Edit Name Prompt triggered for cell [${r}, ${c}]`);
       const currentName = String(gUI.arr[r]?.[c] ?? "")
@@ -1684,6 +1685,7 @@
       return;
     }
 
+    // Standard handling for all other editable cells
     const abilityName = fGetGridValue(r, "Ability");
     if (isAbilityGearTable && !String(abilityName || "").trim()) {
       fShowMessage("⚠️ Empty ability name. Please edit a named ability.");
@@ -1845,6 +1847,62 @@
     await fCheckMorphMetaCost(r, c);
   } // End function fHandleMorphCellEdit
 
+  /** function fGetValidationConfigForCell
+   * Purpose: Determines the correct validation config for a given cell.
+   * Assumptions: This is a helper for fHandleGridCellEdit to centralize lookup logic.
+   * @param {number} r - The 0-based row index.
+   * @param {number} c - The 0-based column index.
+   * @returns {object | null} The validation config object, or null if no specific config is found.
+   */
+  function fGetValidationConfigForCell(r, c) {
+    const colTag = Object.keys(gUI.colTag).find((tag) => gUI.colTag[tag] === c);
+    const isAbilityGearTable = fIsCellInRangeArray(
+      r,
+      c,
+      gUI.resolvedRanges.entireAbilityNGearTables
+    );
+
+    if (isAbilityGearTable) {
+      if (["Sk1", "Sk2"].includes(colTag))
+        return gUI.validationConfig.abilitySk;
+      if (colTag === "Rng") return gUI.validationConfig.abilityRng;
+      if (colTag === "PossNum") return gUI.validationConfig.possNum;
+      if (["Sk1Typ", "Sk2Typ", "Act", "Dur", "MetaCost"].includes(colTag)) {
+        return {
+          ...gUI.validationConfig.abilityLookup,
+          listKey: colTag === "MetaCost" ? "Meta" : colTag,
+        };
+      }
+    } else if (
+      r === tag.cs.game.r.LuckPlus.index &&
+      c === tag.cs.game.c.LuckBox.index
+    )
+      return gUI.validationConfig.luckPlus;
+    else if (
+      r === tag.cs.game.r.ActPlus.index &&
+      c === tag.cs.game.c.ActTot.index
+    )
+      return gUI.validationConfig.actPlus;
+    else if (
+      (r === tag.cs.game.r.VitTbl.index && c === tag.cs.game.c.vitPlus.index) ||
+      fIsCellInRangeArray(r, c, [gUI.resolvedRanges?.vit1stTo3rd])
+    )
+      return gUI.validationConfig.vitRecalc;
+    else if (
+      (r === tag.cs.game.r.GearPlusMR.index &&
+        c === tag.cs.game.c.GearPlusMR.index) ||
+      (r === tag.cs.game.r.GearPlusCarry.index &&
+        c === tag.cs.game.c.GearPlusCarry.index)
+    )
+      return gUI.validationConfig.mrCarry;
+    else if (fIsCellInRangeArray(r, c, [gUI.resolvedRanges?.meta]))
+      return gUI.validationConfig.meta;
+    else if (fIsCellInRangeArray(r, c, [gUI.resolvedRanges?.metaChannel]))
+      return gUI.validationConfig.metaChannel;
+
+    return null;
+  } // End function fGetValidationConfigForCell
+
   /** function fHandleGridCellEdit
    * Purpose: Main dispatcher for the 'blur' event on editable cells.
    * Assumptions: Routes the event to specialized handlers based on the cell's context.
@@ -1864,78 +1922,35 @@
     const r = parseInt(cellDiv.dataset.r, 10);
     const c = parseInt(cellDiv.dataset.c, 10);
     if (isNaN(r) || isNaN(c) || gUI.headerButtonCoords.has(`${r},${c}`)) {
+      cellDiv.contentEditable = false;
       return;
     }
 
     const oldValue = gUI.arr[r]?.[c] ?? "";
     const newValue = cellDiv.textContent ?? "";
 
-    // The 'blur' event fires even if there's no change, so we must reset contentEditable.
-    // However, we only process a change if the value is different.
     if (String(newValue) !== String(oldValue)) {
+      // Special handling for Morph cells, which have unique validation.
       const colTag = Object.keys(gUI.colTag).find(
         (tag) => gUI.colTag[tag] === c
       );
-      const isAbilityGearTable = fIsCellInRangeArray(
-        r,
-        c,
-        gUI.resolvedRanges.entireAbilityNGearTables
-      );
+      const isMorphCell =
+        ["PermMorph1", "Morph1", "PermMorph2", "Morph2"].includes(colTag) &&
+        fIsCellInRangeArray(r, c, gUI.resolvedRanges.entireAbilityNGearTables);
 
-      let config = null;
-      if (isAbilityGearTable) {
-        if (["Sk1", "Sk2"].includes(colTag))
-          config = gUI.validationConfig.abilitySk;
-        else if (colTag === "Rng") config = gUI.validationConfig.abilityRng;
-        else if (colTag === "PossNum") config = gUI.validationConfig.possNum;
-        else if (
-          ["Sk1Typ", "Sk2Typ", "Act", "Dur", "MetaCost"].includes(colTag)
-        ) {
-          config = {
-            ...gUI.validationConfig.abilityLookup,
-            listKey: colTag === "MetaCost" ? "Meta" : colTag,
-          };
-        } else if (
-          ["PermMorph1", "Morph1", "PermMorph2", "Morph2"].includes(colTag)
-        ) {
-          await fHandleMorphCellEdit(r, c, newValue, oldValue);
-        }
-      } else if (
-        r === tag.cs.game.r.LuckPlus.index &&
-        c === tag.cs.game.c.LuckBox.index
-      )
-        config = gUI.validationConfig.luckPlus;
-      else if (
-        r === tag.cs.game.r.ActPlus.index &&
-        c === tag.cs.game.c.ActTot.index
-      )
-        config = gUI.validationConfig.actPlus;
-      else if (
-        (r === tag.cs.game.r.VitTbl.index &&
-          c === tag.cs.game.c.vitPlus.index) ||
-        fIsCellInRangeArray(r, c, [gUI.resolvedRanges?.vit1stTo3rd])
-      )
-        config = gUI.validationConfig.vitRecalc;
-      else if (
-        (r === tag.cs.game.r.GearPlusMR.index &&
-          c === tag.cs.game.c.GearPlusMR.index) ||
-        (r === tag.cs.game.r.GearPlusCarry.index &&
-          c === tag.cs.game.c.GearPlusCarry.index)
-      )
-        config = gUI.validationConfig.mrCarry;
-      else if (fIsCellInRangeArray(r, c, [gUI.resolvedRanges?.meta]))
-        config = gUI.validationConfig.meta;
-      else if (fIsCellInRangeArray(r, c, [gUI.resolvedRanges?.metaChannel]))
-        config = gUI.validationConfig.metaChannel;
-
-      if (config) {
-        await fValidateAndProcessCellEdit(r, c, newValue, oldValue, config);
+      if (isMorphCell) {
+        await fHandleMorphCellEdit(r, c, newValue, oldValue);
       } else {
-        await fHandleGenericCellEdit(r, c, newValue, oldValue);
+        const config = fGetValidationConfigForCell(r, c);
+        if (config) {
+          await fValidateAndProcessCellEdit(r, c, newValue, oldValue, config);
+        } else {
+          await fHandleGenericCellEdit(r, c, newValue, oldValue);
+        }
       }
     }
 
-    // **FIX:** Reset contentEditable to false after the edit is processed.
+    // Reset contentEditable to false after the edit is processed.
     cellDiv.contentEditable = false;
   } // End function fHandleGridCellEdit
 
@@ -3987,7 +4002,10 @@
       gUI.resolvedRanges?.luckBoxPlus,
       gUI.resolvedRanges?.actTotal,
       gUI.resolvedRanges?.actPlus,
+      gUI.resolvedRanges?.vitMaxPlus,
       gUI.resolvedRanges?.vit1stTo3rd,
+      gUI.resolvedRanges?.gearPlusMR,
+      gUI.resolvedRanges?.gearPlusCarry,
       gUI.resolvedRanges?.chaosGems,
       gUI.resolvedRanges?.socketedGear,
       {
