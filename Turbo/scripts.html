@@ -1608,57 +1608,71 @@
     const c = parseInt(cell.dataset.c, 10);
     if (isNaN(r) || isNaN(c)) return;
 
-    const editableCols = [
-      "Ability",
-      "Sk1Typ",
-      "Sk1",
-      "Sk2Typ",
-      "Sk2",
-      "Act",
-      "Dur",
-      "Rng",
-      "MetaCost",
-    ];
+    // Logic for Ability/Gear table cells
+    if (
+      fIsCellInRangeArray(r, c, gUI.resolvedRanges.entireAbilityNGearTables)
+    ) {
+      const editableCols = [
+        "Ability",
+        "Sk1Typ",
+        "Sk1",
+        "Sk2Typ",
+        "Sk2",
+        "Act",
+        "Dur",
+        "Rng",
+        "MetaCost",
+      ];
 
-    const allTagsForCol = [];
-    for (const tagName in gUI.colTag) {
-      if (gUI.colTag[tagName] === c) {
-        allTagsForCol.push(tagName);
+      const allTagsForCol = [];
+      for (const tagName in gUI.colTag) {
+        if (gUI.colTag[tagName] === c) {
+          allTagsForCol.push(tagName);
+        }
       }
-    }
 
-    const primaryTag = editableCols.find((tag) => allTagsForCol.includes(tag));
-
-    if (!primaryTag) {
-      return;
-    }
-
-    event.preventDefault();
-    if (primaryTag === "Ability") {
-      fMyConsoleLog(`⚡ Edit Name Prompt triggered for cell [${r}, ${c}]`);
-      const currentName = String(gUI.arr[r]?.[c] ?? "")
-        .replace(/^⚡\s*/, "")
-        .trim();
-      try {
-        const result = await fShowInputPrompt(
-          "Enter new custom ability/gear name:",
-          currentName
-        );
-        fHandleAbilityNameEdit(r, c, result);
-      } catch (error) {
-        console.error("Error showing input prompt:", error);
-      }
-    } else {
-      const abilityName = fGetGridValue(r, "Ability");
-      if (!String(abilityName || "").trim()) {
-        fShowMessage("⚠️ Empty ability name. Please edit a named ability.");
+      const primaryTag = editableCols.find((tag) =>
+        allTagsForCol.includes(tag)
+      );
+      if (!primaryTag) {
         return;
       }
-      fMyConsoleLog(
-        `⚡ Edit Mode triggered for ${primaryTag} cell [${r}, ${c}]`
-      );
+
+      event.preventDefault();
+      if (primaryTag === "Ability") {
+        fMyConsoleLog(`⚡ Edit Name Prompt triggered for cell [${r}, ${c}]`);
+        const currentName = String(gUI.arr[r]?.[c] ?? "")
+          .replace(/^⚡\s*/, "")
+          .trim();
+        try {
+          const result = await fShowInputPrompt(
+            "Enter new custom ability/gear name:",
+            currentName
+          );
+          fHandleAbilityNameEdit(r, c, result);
+        } catch (error) {
+          console.error("Error showing input prompt:", error);
+        }
+      } else {
+        const abilityName = fGetGridValue(r, "Ability");
+        if (!String(abilityName || "").trim()) {
+          fShowMessage("⚠️ Empty ability name. Please edit a named ability.");
+          return;
+        }
+        fMyConsoleLog(
+          `⚡ Edit Mode triggered for ${primaryTag} cell [${r}, ${c}]`
+        );
+        fTransformAbilityCellToInput(cell);
+        fShowValidationTooltip(cell, primaryTag, event);
+      }
+    } else if (
+      r === tag.cs.game.r.LuckPlus.index &&
+      c === tag.cs.game.c.LuckBox.index
+    ) {
+      // **NEW**: Logic for the +Luck cell
+      event.preventDefault();
       fTransformAbilityCellToInput(cell);
-      fShowValidationTooltip(cell, primaryTag, event);
+      fShowValidationTooltip(cell, "luckPlus", event);
     }
   } // End function fHandleGridDblClick
 
@@ -1839,54 +1853,6 @@
       fRevertCellDOM(r, c, oldValue);
     }
   } // End function fHandleMrCarryCellEdit
-
-  /** function fHandleLuckCellEdit
-   * Purpose: Handles saving/validating an edit for the +Luck cell and recalculating the main LuckBox value.
-   * Assumptions: Helper for fHandleGridCellEdit.
-   * @param {number} r - The 0-based row index.
-   * @param {number} c - The 0-based column index.
-   * @param {string} newValue - The new text content of the cell.
-   * @param {any} oldValue - The original value from the data model.
-   * @returns {Promise<void>}
-   */
-  async function fHandleLuckCellEdit(r, c, newValue, oldValue) {
-    const trimmedValue = newValue.trim();
-    let finalBonus = oldValue;
-    let isValid = false;
-
-    if (trimmedValue === "") {
-      finalBonus = ""; // Store as blank, but calculate as 0
-      isValid = true;
-    } else {
-      const parsedNum = parseInt(trimmedValue, 10);
-      if (
-        !isNaN(parsedNum) &&
-        String(parsedNum) === trimmedValue &&
-        parsedNum >= 0
-      ) {
-        finalBonus = parsedNum;
-        isValid = true;
-      }
-    }
-
-    if (isValid) {
-      const oldBonusNum = Number(oldValue) || 0;
-      const newBonusNum = Number(finalBonus) || 0;
-      const delta = newBonusNum - oldBonusNum;
-
-      const currentLuck = fGetGridValue("LuckBox", "LuckBox", true);
-      if (!isNaN(currentLuck)) {
-        const newLuckTotal = currentLuck + delta;
-        fSetGridValue("LuckBox", "LuckBox", newLuckTotal);
-      }
-
-      gUI.arr[r][c] = finalBonus;
-      fUpdateCustomDataIndicator(r, c);
-      fHandleAutoSaveTextToFirestore();
-    } else {
-      fRevertCellDOM(r, c, oldValue);
-    }
-  } // End function fHandleLuckCellEdit
 
   /** function fHandleActCellEdit
    * Purpose: Handles saving/validating an edit for the +Act cell and recalculating the main Act Total value.
@@ -2213,7 +2179,6 @@
       return; // No change
     }
 
-    // Get all tags for the edited column to handle multi-tagged columns correctly.
     const allTagsForCol = [];
     for (const tagName in gUI.colTag) {
       if (gUI.colTag[tagName] === c) {
@@ -2262,7 +2227,16 @@
     const isActPlusCell =
       r === tag.cs.game.r.ActPlus.index && c === tag.cs.game.c.ActTot.index;
 
-    if (isMorphCell) {
+    if (isLuckPlusCell) {
+      // **NEW**: Route +Luck edits to the new central validator
+      await fValidateAndProcessCellEdit(
+        r,
+        c,
+        newValue,
+        oldValue,
+        gUI.validationConfig.luckPlus
+      );
+    } else if (isMorphCell) {
       await fHandleMorphCellEdit(r, c, newValue, oldValue);
     } else if (isAbilityStatCell) {
       await fHandleAbilityStatCellEdit(r, c, newValue, oldValue);
@@ -2274,8 +2248,6 @@
       await fHandleVitalityCellEdit(r, c, newValue, oldValue);
     } else if (isMrCarryCell) {
       await fHandleMrCarryCellEdit(r, c, newValue, oldValue);
-    } else if (isLuckPlusCell) {
-      await fHandleLuckCellEdit(r, c, newValue, oldValue);
     } else if (isActPlusCell) {
       await fHandleActCellEdit(r, c, newValue, oldValue);
     } else {
@@ -4217,59 +4189,47 @@
   } // End function fTransformAbilityCellToInput
 
   /** function fShowValidationTooltip
-   * Purpose: Displays a validation tooltip with allowed values for an editable cell.
-   * Assumptions: `gUI.tooltipElement` and `gUI.validationLists` are available.
+   * Purpose: Displays a validation tooltip with allowed values for an editable cell using a config.
+   * Assumptions: `gUI.tooltipElement` and `gUI.tooltipConfig` are available.
    * @param {HTMLElement} cell - The editable cell element.
-   * @param {string} colTag - The column tag of the cell.
+   * @param {string} cellType - The key for the cell type in gUI.tooltipConfig.
    * @param {MouseEvent} event - The dblclick event object for positioning.
    * @returns {void}
    */
-  function fShowValidationTooltip(cell, colTag, event) {
+  function fShowValidationTooltip(cell, cellType, event) {
     const funcName = "fShowValidationTooltip";
-    if (!gUI.tooltipElement || !cell || !colTag || !event) return;
+    if (!gUI.tooltipElement || !cell || !cellType || !event) return;
 
-    gUI.isValidationTooltipActive = true; // Set the flag to pin the tooltip
-
-    let tooltipText = "<b>Allowed:</b> ";
-    const validationListKey = colTag === "MetaCost" ? "Meta" : colTag;
-    const validationList = gUI.validationLists?.[validationListKey];
-
-    if (validationList && validationList.length > 0) {
-      tooltipText += "Blank, " + validationList.join(", ");
-      if (colTag === "Rng") {
-        tooltipText += ", or any Integer ≥ 1";
-      }
-    } else if (colTag === "Sk1" || colTag === "Sk2") {
-      tooltipText += "Blank or Integer ≥ 1";
-    } else {
-      console.warn(
-        `${funcName}: No validation list found for tag '${colTag}'. Please check the 'MyCS/List' sheet for valid data under the corresponding header.`
-      );
-      gUI.isValidationTooltipActive = false; // Reset flag on failure
+    const tooltipText = gUI.tooltipConfig?.[cellType];
+    if (!tooltipText) {
+      // No tooltip configured for this cell type, which is fine.
       return;
     }
 
+    gUI.isValidationTooltipActive = true; // Pin the tooltip
+
     const tooltip = gUI.tooltipElement;
-    tooltip.innerHTML = tooltipText;
-    tooltip.style.visibility = "hidden";
+    tooltip.innerHTML = `<b>Valid Input:</b><br>${tooltipText}`;
+    tooltip.style.visibility = "hidden"; // Hide until positioned
     tooltip.style.display = "block";
 
     const onBlurHandler = () => {
       fHideTooltip();
-      gUI.isValidationTooltipActive = false; // Reset the flag
+      gUI.isValidationTooltipActive = false; // Unpin
     };
 
+    // Delay positioning to ensure DOM is ready
     setTimeout(() => {
       if (document.activeElement !== cell) {
         tooltip.style.display = "none";
         tooltip.style.visibility = "visible";
-        gUI.isValidationTooltipActive = false; // Reset flag if focus is already lost
+        gUI.isValidationTooltipActive = false; // Unpin if focus already lost
         return;
       }
       fConfineNotesTooltipBox(tooltip, event);
       tooltip.style.visibility = "visible";
       cell.addEventListener("blur", onBlurHandler, { once: true });
-      fMyConsoleLog(`   -> ${funcName}: Showing tooltip for '${colTag}'.`);
+      fMyConsoleLog(`   -> ${funcName}: Showing tooltip for '${cellType}'.`);
     }, 10);
   } // End function fShowValidationTooltip
 

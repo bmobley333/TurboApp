@@ -11,6 +11,73 @@
   // Start - Tag Management
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+  /** function fValidateAndProcessCellEdit
+   * Purpose: Centralized handler to validate a cell edit based on a configuration object.
+   * Assumptions: The config object provides all necessary rules and callbacks.
+   * Notes: This is the core of the standardized validation system.
+   * @param {number} r - The 0-based row index of the edited cell.
+   * @param {number} c - The 0-based column index of the edited cell.
+   * @param {string} newValue - The new, proposed value from the cell's text content.
+   * @param {any} oldValue - The original value from the data model (gUI.arr).
+   * @param {object} config - The validation configuration object for this cell type.
+   * @returns {Promise<void>}
+   */
+  async function fValidateAndProcessCellEdit(r, c, newValue, oldValue, config) {
+    const funcName = "fValidateAndProcessCellEdit";
+    const trimmedValue = newValue.trim();
+    let isValid = false;
+    let finalValueToStore = oldValue;
+
+    // Step 1: Handle blank values
+    if (trimmedValue === "") {
+      if (config.allowBlank) {
+        isValid = true;
+        finalValueToStore = ""; // Standardize blank to empty string
+      }
+    } else {
+      // Step 2: Perform type-specific validation
+      switch (config.type) {
+        case "integer":
+          const num = parseInt(trimmedValue, 10);
+          if (!isNaN(num) && String(num) === trimmedValue) {
+            const min = config.min ?? -Infinity;
+            const max = config.max ?? Infinity;
+            if (num >= min && num <= max) {
+              isValid = true;
+              finalValueToStore = num;
+            }
+          }
+          break;
+        // More types ('lookup', 'morph', etc.) will be added in future phases
+      }
+    }
+
+    // Step 3: Process the result
+    if (isValid) {
+      if (String(gUI.arr[r][c]) !== String(finalValueToStore)) {
+        gUI.arr[r][c] = finalValueToStore;
+        fMyConsoleLog(
+          `✅ ${funcName}: Valid edit for [${r}, ${c}]. New value: "${finalValueToStore}".`
+        );
+
+        // Call the success callback if it exists
+        if (typeof config.onSuccess === "function") {
+          await config.onSuccess(r, c, finalValueToStore, oldValue);
+        }
+        fUpdateCustomDataIndicator(r, c);
+        fHandleAutoSaveTextToFirestore();
+      }
+      // Re-set the DOM to ensure formatting and capitalization are correct
+      fSetGridValue(r, c, gUI.arr[r][c]);
+    } else {
+      fMyConsoleLog(
+        `❌ ${funcName}: Invalid edit for [${r}, ${c}]. Value: "${newValue}". Reverting.`
+      );
+      await fShowMessage(config.errorMessage);
+      fRevertCellDOM(r, c, oldValue);
+    }
+  } // End function fValidateAndProcessCellEdit
+
   /** function fIsValidMorphComponent
    * Purpose: Validates if a single string component is a valid morph keyword or pattern.
    * Assumptions: Uses regexes from fParseMorphComponents and lists from gUI.list.

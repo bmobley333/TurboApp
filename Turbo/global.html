@@ -647,6 +647,29 @@
         c2: "Notes",
       },
     },
+    validationConfig: {
+      luckPlus: {
+        type: "integer",
+        allowBlank: true,
+        min: 0,
+        errorMessage:
+          "❌ Invalid input for +Luck. Value must be blank or a whole number greater than or equal to 0.",
+        onSuccess: async (r, c, newValue, oldValue) => {
+          const oldBonusNum = Number(oldValue) || 0;
+          const newBonusNum = Number(newValue) || 0;
+          const delta = newBonusNum - oldBonusNum;
+
+          const currentLuck = fGetGridValue("LuckBox", "LuckBox", true);
+          if (!isNaN(currentLuck)) {
+            const newLuckTotal = currentLuck + delta;
+            fSetGridValue("LuckBox", "LuckBox", newLuckTotal);
+          }
+        },
+      },
+    },
+    tooltipConfig: {
+      luckPlus: "Enter a whole number greater than or equal to 0.",
+    },
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Start - UI Element Cache
